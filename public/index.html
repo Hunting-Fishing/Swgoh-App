@@ -20,9 +20,9 @@
     <main>
       <section class="hero card">
         <div>
-          <div class="kicker">COMLINK + SWGOH STATS + AE2</div>
+          <div class="kicker">COMLINK + SWGOH STATS + GITHUB GAMEDATA + AE2</div>
           <h2>Load a current roster by Ally Code.</h2>
-          <p>No mock production roster is used. If the live pipeline is unavailable, the roster stays empty.</p>
+          <p>Player ownership is fetched live from Comlink. Static unit definitions are versioned separately so roster checks stay fast and lightweight.</p>
         </div>
         <form id="allyForm" class="ally-form">
           <label for="allyCode">Ally Code</label>
@@ -37,7 +37,12 @@
       <section id="profile" class="profile card hidden"></section>
 
       <section id="controls" class="controls card hidden">
-        <input id="search" placeholder="Search character, faction, role…">
+        <input id="search" placeholder="Search unit, faction, role…">
+        <select id="unitType">
+          <option value="All">Characters + Ships</option>
+          <option value="Character">Characters</option>
+          <option value="Ship">Ships</option>
+        </select>
         <select id="alignment">
           <option value="All">All alignments</option>
           <option value="Light">Light</option>
@@ -59,7 +64,7 @@
       <section id="empty" class="empty card">
         <div class="orb"></div>
         <h3>No live roster loaded</h3>
-        <p>Enter a 9-digit Ally Code to query the live SWGOH pipeline.</p>
+        <p>Enter a 9-digit Ally Code to query the live SWGOH player pipeline.</p>
       </section>
     </main>
   </div>
