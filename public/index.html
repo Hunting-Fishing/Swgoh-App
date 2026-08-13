@@ -33,42 +33,7 @@
           <div id="error" class="error hidden"></div>
         </form>
       </section>
-
-      <section class="database card">
-        <div class="database-heading">
-          <div>
-            <div class="kicker">STATIC GAME DATABASE</div>
-            <h3>All Player-Obtainable Units</h3>
-            <p>Characters, ships, factions, gear tiers and ability definitions are shared across every user and refreshed only when the game version changes.</p>
-          </div>
-          <div id="catalogStatus" class="status">Loading static game data…</div>
-        </div>
-        <div class="catalog-controls">
-          <input id="catalogSearch" placeholder="Search all characters, ships, factions…">
-          <select id="catalogType">
-            <option value="All">Characters + Ships</option>
-            <option value="Character">Characters</option>
-            <option value="Ship">Ships</option>
-          </select>
-          <select id="catalogAlignment">
-            <option value="All">All alignments</option>
-            <option value="Light">Light</option>
-            <option value="Dark">Dark</option>
-            <option value="Neutral">Neutral</option>
-            <option value="Unknown">Unknown</option>
-          </select>
-          <select id="catalogSort">
-            <option value="name">Name</option>
-            <option value="type">Unit type</option>
-            <option value="abilities">Ability count</option>
-          </select>
-          <span id="catalogCount" class="count"></span>
-        </div>
-        <div id="catalogGrid" class="catalog-grid"></div>
-        <button id="catalogMore" class="catalog-more hidden" type="button">Show More Units</button>
-      </section>
-
-      <section id="profile" class="profile card hidden"></section>
+<section id="profile" class="profile card hidden"></section>
 
       <section id="controls" class="controls card hidden">
         <input id="search" placeholder="Search owned unit, faction, role…">
@@ -99,8 +64,43 @@
       <section id="empty" class="empty card">
         <div class="orb"></div>
         <h3>No live roster loaded</h3>
-        <p>The static game database above is available to everyone. Enter a 9-digit Ally Code to overlay a current player's ownership, GP, relics and ability progression.</p>
+        <p>The static game database below is available to everyone. Enter a 9-digit Ally Code to overlay a current player's ownership, GP, relics and ability progression.</p>
       </section>
+
+<section class="database card">
+        <div class="database-heading">
+          <div>
+            <div class="kicker">STATIC GAME DATABASE</div>
+            <h3>All Player-Obtainable Units</h3>
+            <p>Characters, ships, factions, gear tiers and ability definitions are shared across every user and refreshed only when the game version changes.</p>
+          </div>
+          <div id="catalogStatus" class="status">Loading static game data…</div>
+        </div>
+        <div class="catalog-controls">
+          <input id="catalogSearch" placeholder="Search all characters, ships, factions…">
+          <select id="catalogType">
+            <option value="Character" selected>Characters</option>
+            <option value="Ship">Ships</option>
+            <option value="All">Characters + Ships</option>
+          </select>
+          <select id="catalogAlignment">
+            <option value="All">All alignments</option>
+            <option value="Light">Light</option>
+            <option value="Dark">Dark</option>
+            <option value="Neutral">Neutral</option>
+            <option value="Unknown">Unknown</option>
+          </select>
+          <select id="catalogSort">
+            <option value="name">Name</option>
+            <option value="type">Unit type</option>
+            <option value="abilities">Ability count</option>
+          </select>
+          <span id="catalogCount" class="count"></span>
+        </div>
+        <div id="catalogGrid" class="catalog-grid"></div>
+        <button id="catalogMore" class="catalog-more hidden" type="button">Show More Units</button>
+      </section>
+
     </main>
   </div>
 

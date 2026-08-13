@@ -129,7 +129,9 @@ function normalizeAbility(reference, skillMap, strings) {
 function normalizeUnit(unit, skillMap, strings) {
   const baseId = String(unit?.baseId || unit?.baseID || unit?.id || "").split(":")[0];
   const combatType = Number(unit?.combatType || 0);
-  if (!baseId || ![1, 2].includes(combatType) || unit?.obtainable === false) return null;
+  const obtainableTime = String(unit?.obtainableTime ?? "0");
+  if (!baseId || ![1, 2].includes(combatType) || unit?.obtainable !== true || obtainableTime !== "0") return null;
+
   const references = asArray(unit?.skillReference).concat(asArray(unit?.skillReferenceList)).concat(asArray(unit?.skills));
   const abilities = references.map((reference) => normalizeAbility(reference, skillMap, strings)).filter(Boolean);
   const categories = asArray(unit?.categoryId).map(String);
@@ -152,7 +154,7 @@ function normalizeUnit(unit, skillMap, strings) {
     maxRarity: Number(unit?.maxRarity || 7),
     maxLevel: Number(unit?.maxLevelOverride || 85),
     legend: Boolean(unit?.legend),
-    obtainable: unit?.obtainable !== false,
+    obtainable: true,
     thumbnailName,
     image: thumbnailName ? `${ASSET_BASE}/${encodeURIComponent(thumbnailName)}.png` : "",
     crew,
@@ -198,7 +200,9 @@ async function readManifest() {
 }
 
 function versionKey(versions) {
-  return [versions?.gameVersion, versions?.localeVersion, versions?.assetVersion].map((value) => String(value || "")).join("|");
+  return [versions?.gameVersion, versions?.localeVersion, versions?.assetVersion]
+    .map((value) => String(value || ""))
+    .join("|");
 }
 
 async function sync() {
@@ -212,24 +216,36 @@ async function sync() {
     return;
   }
 
-  console.log(`[static-data] building catalog for game ${versions.gameVersion || "unknown"}`);
-  const [unitsPayload, skillsPayload, localizationCompressed] = await Promise.all([
-    request(`${SOURCE}/units_gas.json`),
+  console.log(`[static-data] building player-obtainable catalog for game ${versions.gameVersion || "unknown"}`);
+
+  const [unitsCompressed, skillsPayload, localizationCompressed] = await Promise.all([
+    request(`${SOURCE}/units.json.br`, true),
     request(`${SOURCE}/skill.json`),
     request(`${SOURCE}/Loc_ENG_US.txt.json.br`, true),
   ]);
 
+  const unitsPayload = JSON.parse(brotliDecompressSync(unitsCompressed).toString("utf8"));
   const localizationPayload = JSON.parse(brotliDecompressSync(localizationCompressed).toString("utf8"));
   const strings = localizationMap(localizationPayload);
   const units = asArray(unitsPayload?.data || unitsPayload);
   const skills = asArray(skillsPayload?.data || skillsPayload);
-  const skillMap = new Map(skills.map((skill) => [String(skill?.id || skill?.skillId || ""), skill]).filter(([id]) => id));
-  const catalogUnits = units
-    .map((unit) => normalizeUnit(unit, skillMap, strings))
-    .filter(Boolean)
+  const skillMap = new Map(
+    skills
+      .map((skill) => [String(skill?.id || skill?.skillId || ""), skill])
+      .filter(([id]) => id)
+  );
+
+  const catalogByBaseId = new Map();
+  for (const unit of units) {
+    const normalized = normalizeUnit(unit, skillMap, strings);
+    if (!normalized || catalogByBaseId.has(normalized.baseId)) continue;
+    catalogByBaseId.set(normalized.baseId, normalized);
+  }
+
+  const catalogUnits = [...catalogByBaseId.values()]
     .sort((a, b) => a.name.localeCompare(b.name));
 
-  if (!catalogUnits.length) throw new Error("Static unit catalog normalized to zero units");
+  if (!catalogUnits.length) throw new Error("Static player-obtainable unit catalog normalized to zero units");
 
   const generatedAt = new Date().toISOString();
   const catalog = {
@@ -239,6 +255,7 @@ async function sync() {
     generatedAt,
     units: catalogUnits,
   };
+
   const nextManifest = {
     versionKey: currentKey,
     gameVersion: catalog.gameVersion,
@@ -248,12 +265,16 @@ async function sync() {
     unitCount: catalogUnits.length,
     characterCount: catalogUnits.filter((unit) => unit.unitType === "Character").length,
     shipCount: catalogUnits.filter((unit) => unit.unitType === "Ship").length,
-    source: "swgoh-utils/gamedata",
+    source: "swgoh-utils/gamedata:units.json.br",
   };
 
   await writeFile(CATALOG_PATH, JSON.stringify(catalog), "utf8");
   await writeFile(MANIFEST_PATH, `${JSON.stringify(nextManifest, null, 2)}\n`, "utf8");
-  console.log(`[static-data] wrote ${catalogUnits.length} units (${nextManifest.characterCount} characters, ${nextManifest.shipCount} ships)`);
+
+  console.log(
+    `[static-data] wrote ${catalogUnits.length} player-obtainable units ` +
+    `(${nextManifest.characterCount} characters, ${nextManifest.shipCount} ships)`
+  );
 }
 
 const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);

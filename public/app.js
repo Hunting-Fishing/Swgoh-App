@@ -7,7 +7,7 @@ const state = {
   lastBody: null,
   catalog: [],
   catalogMap: new Map(),
-  catalogShown: 48,
+  catalogShown: 24,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -163,7 +163,9 @@ async function loadCatalog() {
 
     state.catalog = body.units;
     state.catalogMap = new Map(body.units.map((unit) => [unit.baseId, unit]));
-    catalogStatus.textContent = `${number(body.units.length)} units · Game ${body.gameVersion || "current"}`;
+    const catalogCharacters = body.units.filter((unit) => unit.unitType === "Character").length;
+    const catalogShips = body.units.filter((unit) => unit.unitType === "Ship").length;
+    catalogStatus.textContent = `${number(catalogCharacters)} characters · ${number(catalogShips)} ships · ${number(body.units.length)} total · Game ${body.gameVersion || "current"}`;
     catalogStatus.className = "status ready";
     renderCatalog();
     applyCatalogToLiveRoster();
@@ -525,11 +527,11 @@ search.addEventListener("input", renderRoster);
 unitType.addEventListener("change", renderRoster);
 alignment.addEventListener("change", renderRoster);
 sort.addEventListener("change", renderRoster);
-catalogSearch.addEventListener("input", () => { state.catalogShown = 48; renderCatalog(); });
-catalogType.addEventListener("change", () => { state.catalogShown = 48; renderCatalog(); });
-catalogAlignment.addEventListener("change", () => { state.catalogShown = 48; renderCatalog(); });
-catalogSort.addEventListener("change", () => { state.catalogShown = 48; renderCatalog(); });
-catalogMore.addEventListener("click", () => { state.catalogShown += 48; renderCatalog(); });
+catalogSearch.addEventListener("input", () => { state.catalogShown = 24; renderCatalog(); });
+catalogType.addEventListener("change", () => { state.catalogShown = 24; renderCatalog(); });
+catalogAlignment.addEventListener("change", () => { state.catalogShown = 24; renderCatalog(); });
+catalogSort.addEventListener("change", () => { state.catalogShown = 24; renderCatalog(); });
+catalogMore.addEventListener("click", () => { state.catalogShown += 24; renderCatalog(); });
 details.addEventListener("click", (event) => {
   if (event.target === details) details.close();
 });
