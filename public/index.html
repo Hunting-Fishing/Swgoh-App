@@ -11,7 +11,7 @@
   <div class="shell">
     <header class="topbar">
       <div>
-        <div class="kicker">LIVE SWGOH INTELLIGENCE</div>
+        <div class="kicker">LIVE + STATIC SWGOH INTELLIGENCE</div>
         <h1>Roster Command</h1>
       </div>
       <div id="health" class="status">Checking gateway…</div>
@@ -20,9 +20,9 @@
     <main>
       <section class="hero card">
         <div>
-          <div class="kicker">COMLINK + SWGOH STATS + GITHUB GAMEDATA + AE2</div>
-          <h2>Load a current roster by Ally Code.</h2>
-          <p>Player ownership is fetched live from Comlink. Static unit definitions are versioned separately so roster checks stay fast and lightweight.</p>
+          <div class="kicker">COMLINK + SWGOH STATS + VERSIONED GAMEDATA + AE2</div>
+          <h2>One game database. Live player rosters on demand.</h2>
+          <p>The full player-obtainable unit catalog is built once from versioned SWGOH game data. Ally Code lookups then fetch only live player ownership and progression, keeping the app fast enough to scale.</p>
         </div>
         <form id="allyForm" class="ally-form">
           <label for="allyCode">Ally Code</label>
@@ -34,10 +34,44 @@
         </form>
       </section>
 
+      <section class="database card">
+        <div class="database-heading">
+          <div>
+            <div class="kicker">STATIC GAME DATABASE</div>
+            <h3>All Player-Obtainable Units</h3>
+            <p>Characters, ships, factions, gear tiers and ability definitions are shared across every user and refreshed only when the game version changes.</p>
+          </div>
+          <div id="catalogStatus" class="status">Loading static game data…</div>
+        </div>
+        <div class="catalog-controls">
+          <input id="catalogSearch" placeholder="Search all characters, ships, factions…">
+          <select id="catalogType">
+            <option value="All">Characters + Ships</option>
+            <option value="Character">Characters</option>
+            <option value="Ship">Ships</option>
+          </select>
+          <select id="catalogAlignment">
+            <option value="All">All alignments</option>
+            <option value="Light">Light</option>
+            <option value="Dark">Dark</option>
+            <option value="Neutral">Neutral</option>
+            <option value="Unknown">Unknown</option>
+          </select>
+          <select id="catalogSort">
+            <option value="name">Name</option>
+            <option value="type">Unit type</option>
+            <option value="abilities">Ability count</option>
+          </select>
+          <span id="catalogCount" class="count"></span>
+        </div>
+        <div id="catalogGrid" class="catalog-grid"></div>
+        <button id="catalogMore" class="catalog-more hidden" type="button">Show More Units</button>
+      </section>
+
       <section id="profile" class="profile card hidden"></section>
 
       <section id="controls" class="controls card hidden">
-        <input id="search" placeholder="Search unit, faction, role…">
+        <input id="search" placeholder="Search owned unit, faction, role…">
         <select id="unitType">
           <option value="All">Characters + Ships</option>
           <option value="Character">Characters</option>
@@ -55,6 +89,7 @@
           <option value="speed">Speed</option>
           <option value="relic">Relic</option>
           <option value="readiness">Readiness</option>
+          <option value="name">Name</option>
         </select>
         <span id="count" class="count"></span>
       </section>
@@ -64,7 +99,7 @@
       <section id="empty" class="empty card">
         <div class="orb"></div>
         <h3>No live roster loaded</h3>
-        <p>Enter a 9-digit Ally Code to query the live SWGOH player pipeline.</p>
+        <p>The static game database above is available to everyone. Enter a 9-digit Ally Code to overlay a current player's ownership, GP, relics and ability progression.</p>
       </section>
     </main>
   </div>

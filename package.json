@@ -1,10 +1,12 @@
 {
-  "name": "swgoh-roster-command",
-  "version": "0.1.0",
+  "name": "swgoh-live-app",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node server.mjs"
+    "sync:gamedata": "node scripts/sync-gamedata.mjs --allow-stale",
+    "start": "node scripts/sync-gamedata.mjs --allow-stale && node server.mjs",
+    "test": "node --test"
   },
   "engines": {
     "node": ">=20"
