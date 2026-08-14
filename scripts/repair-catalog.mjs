@@ -9,8 +9,8 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const CATALOG_PATH = path.join(ROOT, "public", "data", "catalog.json");
 const MANIFEST_PATH = path.join(ROOT, "public", "data", "manifest.json");
 const TIMEOUT_MS = Number(process.env.SWGOH_STATIC_SYNC_TIMEOUT_MS || 60_000);
-const SCHEMA_VERSION = 6;
-const REPAIR_VERSION = 1;
+const SCHEMA_VERSION = 7;
+const REPAIR_VERSION = 2;
 const ALLOW_STALE = process.argv.includes("--allow-stale");
 
 function asArray(value) {
@@ -99,6 +99,55 @@ function semanticMaterial(materialId, materialMap, strings) {
     strings[nameKey],
     strings[descKey],
   ].filter(Boolean).join(" ");
+}
+
+function materialAssetValue(material) {
+  return firstText(
+    material?.icon,
+    material?.iconKey,
+    material?.iconName,
+    material?.texture,
+    material?.textureName,
+    material?.thumbnailName,
+    material?.image,
+  );
+}
+
+function materialIconForKind(materials, kind, strings) {
+  const materialMap = materialMapOf(materials);
+  const target = compact(kind);
+  let best = null;
+
+  for (const [id, material] of materialMap.entries()) {
+    const icon = materialAssetValue(material);
+    if (!icon) continue;
+
+    const semantic = compact(semanticMaterial(id, materialMap, strings));
+    if (!semantic.includes(target)) continue;
+
+    const nameKey = firstText(material?.nameKey, material?.displayNameKey, material?.titleKey);
+    const localizedName = compact(localize(strings, nameKey, firstText(material?.name, material?.displayName)));
+    const compactId = compact(id);
+    const compactIcon = compact(icon);
+    let score = 1;
+    if (localizedName.includes(`abilitymaterial${target}`)) score += 12;
+    else if (localizedName.includes(target)) score += 8;
+    if (compactId.startsWith("abilitymaterial")) score += 6;
+    if (compactIcon.includes(target)) score += 5;
+    if (semantic.includes(`abilitymaterial${target}`)) score += 4;
+
+    if (!best || score > best.score) best = { score, icon };
+  }
+
+  return best ? assetUrl(best.icon) : "";
+}
+
+function materialIconsOf(materials, strings) {
+  return {
+    zeta: materialIconForKind(materials, "zeta", strings),
+    omega: materialIconForKind(materials, "omega", strings),
+    omicron: materialIconForKind(materials, "omicron", strings),
+  };
 }
 
 function ingredientIds(recipe) {
@@ -237,6 +286,7 @@ async function repair() {
   const abilityMap = new Map(abilities.map((item) => [firstText(item?.id, item?.abilityId), item]).filter(([id]) => id));
   const recipeMap = new Map(recipes.map((item) => [firstText(item?.id, item?.recipeId), item]).filter(([id]) => id));
   const materialMap = materialMapOf(materials);
+  const materialIcons = materialIconsOf(materials, strings);
 
   let repairedAbilityCount = 0;
   const units = asArray(catalog.units).map((unit) => ({
@@ -253,7 +303,13 @@ async function repair() {
     throw new Error(`ability metadata integrity failed: ${defenseUp}/${allAbilities.length} still resolve to DEFENSE UP`);
   }
 
-  const repairedCatalog = { ...catalog, schemaVersion: SCHEMA_VERSION, repairedAt: new Date().toISOString(), units };
+  const repairedCatalog = {
+    ...catalog,
+    schemaVersion: SCHEMA_VERSION,
+    repairedAt: new Date().toISOString(),
+    materialIcons,
+    units,
+  };
   const repairedManifest = {
     ...manifest,
     schemaVersion: SCHEMA_VERSION,
@@ -262,10 +318,11 @@ async function repair() {
     repairedAbilityCount,
     abilityDefinitionCount: abilities.length,
     materialDefinitionCount: materials.length,
+    materialIcons,
   };
   await writeFile(CATALOG_PATH, JSON.stringify(repairedCatalog), "utf8");
   await writeFile(MANIFEST_PATH, `${JSON.stringify(repairedManifest, null, 2)}\n`, "utf8");
-  console.log(`[catalog-repair] schema ${SCHEMA_VERSION}: repaired ${repairedAbilityCount} ability records`);
+  console.log(`[catalog-repair] schema ${SCHEMA_VERSION}: repaired ${repairedAbilityCount} ability records; material icons=${JSON.stringify(materialIcons)}`);
 }
 
 const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
@@ -277,4 +334,4 @@ if (isMain) {
   });
 }
 
-export { ingredientIds, localizationMap, materialMapOf, recipeHas, repairAbility, tierHas };
+export { ingredientIds, localizationMap, materialIconForKind, materialIconsOf, materialMapOf, recipeHas, repairAbility, tierHas };
