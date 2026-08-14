@@ -5,8 +5,9 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#0a0d16">
   <title>SWGOH Roster Command</title>
-  <link rel="stylesheet" href="/styles.css?v=20260815-omega4">
-  <link rel="stylesheet" href="/intelligence.css?v=20260815-omega4">
+  <link rel="stylesheet" href="/styles.css?v=20260815-integrity6">
+  <link rel="stylesheet" href="/intelligence.css?v=20260815-integrity6">
+  <link rel="stylesheet" href="/fixes.css?v=20260815-integrity6">
 </head>
 <body>
   <div class="shell">
@@ -36,32 +37,6 @@
       </section>
 
       <section id="profile" class="profile card hidden"></section>
-
-      <section id="controls" class="controls card hidden">
-        <input id="search" placeholder="Search owned unit, faction, role…">
-        <select id="unitType">
-          <option value="All">Characters + Ships</option>
-          <option value="Character">Characters</option>
-          <option value="Ship">Ships</option>
-        </select>
-        <select id="alignment">
-          <option value="All">All alignments</option>
-          <option value="Light">Light</option>
-          <option value="Dark">Dark</option>
-          <option value="Neutral">Neutral</option>
-          <option value="Unknown">Unknown</option>
-        </select>
-        <select id="sort">
-          <option value="power">Power</option>
-          <option value="speed">Speed</option>
-          <option value="relic">Relic</option>
-          <option value="readiness">Readiness</option>
-          <option value="name">Name</option>
-        </select>
-        <span id="count" class="count"></span>
-      </section>
-
-      <section id="roster" class="grid hidden"></section>
 
       <section id="intelligence" class="database card hidden">
         <div class="database-heading">
@@ -100,6 +75,32 @@
           </section>
         </div>
       </section>
+
+      <section id="controls" class="controls card hidden">
+        <input id="search" placeholder="Search owned unit, faction, role…">
+        <select id="unitType">
+          <option value="All">Characters + Ships</option>
+          <option value="Character">Characters</option>
+          <option value="Ship">Ships</option>
+        </select>
+        <select id="alignment">
+          <option value="All">All alignments</option>
+          <option value="Light">Light</option>
+          <option value="Dark">Dark</option>
+          <option value="Neutral">Neutral</option>
+          <option value="Unknown">Unknown</option>
+        </select>
+        <select id="sort">
+          <option value="power">Power</option>
+          <option value="speed">Speed</option>
+          <option value="relic">Relic</option>
+          <option value="readiness">Upgrade completion</option>
+          <option value="name">Name</option>
+        </select>
+        <span id="count" class="count"></span>
+      </section>
+
+      <section id="roster" class="grid hidden"></section>
 
       <section id="empty" class="empty card">
         <div class="orb"></div>
@@ -144,6 +145,7 @@
   </div>
 
   <dialog id="details" class="details"></dialog>
-  <script type="module" src="/app.js?v=20260815-omega4"></script>
+  <script type="module" src="/app.js?v=20260815-integrity6"></script>
+  <script type="module" src="/ui-fixes.js?v=20260815-integrity6"></script>
 </body>
 </html>
