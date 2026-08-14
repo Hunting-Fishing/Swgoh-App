@@ -24,9 +24,8 @@ export function mergeAbilityProgression(staticAbility = {}, liveAbility = {}) {
   const staticOmegas = appliedTierCount(staticAbility, displayTier, "omega");
   const staticOmicrons = appliedTierCount(staticAbility, displayTier, "omicron");
 
-  // The live gateway has already interpreted the current player's skill tier.
-  // A positive live flag must never be erased just because a static recipe
-  // classifier is temporarily stale or a CG recipe shape changes again.
+  // Live progression is authoritative for what the player owns. Static data
+  // supplies current player-facing move metadata and tier definitions.
   const liveZetas = liveAbility?.zeta === true || liveAbility?.hasZeta === true ? 1 : 0;
   const liveOmegas = liveAbility?.omega === true || liveAbility?.hasOmega === true ? 1 : 0;
   const liveOmicrons = liveAbility?.omicron === true || liveAbility?.hasOmicron === true ? 1 : 0;
@@ -36,11 +35,14 @@ export function mergeAbilityProgression(staticAbility = {}, liveAbility = {}) {
   const omicronCount = Math.max(staticOmicrons, liveOmicrons);
 
   return {
-    ...staticAbility,
     ...liveAbility,
+    ...staticAbility,
     id: staticAbility?.id || liveAbility?.id || "",
-    name: liveAbility?.name || staticAbility?.name || "Ability",
-    note: liveAbility?.note || staticAbility?.description || "",
+    // skill.json can contain generic DEFENSE UP placeholders. The repaired
+    // static catalog follows abilityReference -> ability.json, so prefer its
+    // player-facing name/description/icon while keeping live tier ownership.
+    name: staticAbility?.name || liveAbility?.name || "Ability",
+    note: staticAbility?.description || liveAbility?.note || "",
     description: staticAbility?.description || liveAbility?.note || "",
     tier: displayTier,
     rawTier: hasLiveTier ? rawTier : null,
