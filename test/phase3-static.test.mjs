@@ -1,20 +1,31 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { CATALOG_SCHEMA_VERSION, normalizeAbility, normalizeUnit, tierHas, versionKey } from "../scripts/sync-gamedata.mjs";
+import {
+  CATALOG_SCHEMA_VERSION,
+  normalizeAbility,
+  normalizeUnit,
+  recipeHasUpgradeMaterial,
+  tierHas,
+  versionKey,
+} from "../scripts/sync-gamedata.mjs";
 
-test("ability material recipes classify Omega/Zeta/Omicron tiers", () => {
+test("current CG ability_mat recipes classify Omega/Zeta/Omicron tiers", () => {
+  const omega = { id: "SKILLRECIPE_BASIC_T7", ingredients: [{ id: "GRIND" }, { id: "ability_mat_Omega", minQuantity: 3 }] };
+  const zeta = { id: "SKILLRECIPE_UNIQUE_T8", ingredients: [{ id: "ability_mat_Zeta", minQuantity: 20 }] };
+  const omicron = { id: "SKILLRECIPE_UNIQUE_T9", ingredients: [{ id: "ability_mat_Omicron", minQuantity: 20 }] };
   const recipes = new Map([
-    ["recipe_omega", { id: "recipe_omega", ingredients: [{ id: "abilitymaterial_omega", minQuantity: 3 }] }],
-    ["recipe_zeta", { id: "recipe_zeta", ingredients: [{ id: "abilitymaterial_zeta", minQuantity: 20 }] }],
-    ["recipe_omicron", { id: "recipe_omicron", ingredients: [{ id: "abilitymaterial_omicron", minQuantity: 20 }] }],
+    [omega.id, omega],
+    [zeta.id, zeta],
+    [omicron.id, omicron],
   ]);
 
+  assert.equal(recipeHasUpgradeMaterial(omega, "omega"), true);
+  assert.equal(recipeHasUpgradeMaterial(zeta, "zeta"), true);
+  assert.equal(recipeHasUpgradeMaterial(omicron, "omicron"), true);
+  assert.equal(tierHas({ recipeId: omega.id }, "omega", recipes), true);
+  assert.equal(tierHas({ recipeId: zeta.id }, "zeta", recipes), true);
+  assert.equal(tierHas({ recipeId: omicron.id }, "omicron", recipes), true);
   assert.equal(tierHas({ recipeId: "abilitymaterial_omega" }, "omega"), true);
-  assert.equal(tierHas({ recipeId: "abilitymaterial_zeta" }, "zeta"), true);
-  assert.equal(tierHas({ recipeId: "abilitymaterial_omicron" }, "omicron"), true);
-  assert.equal(tierHas({ recipeId: "recipe_omega" }, "omega", recipes), true);
-  assert.equal(tierHas({ recipeId: "recipe_zeta" }, "zeta", recipes), true);
-  assert.equal(tierHas({ recipeId: "recipe_omicron" }, "omicron", recipes), true);
   assert.equal(tierHas({ recipeId: "abilitymaterial_mk3" }, "omega", recipes), false);
 });
 
@@ -22,16 +33,16 @@ test("normalizeAbility preserves exact special-upgrade tiers from referenced rec
   const skills = new Map([["special_test", {
     id: "special_test",
     tier: [
-      { recipeId: "abilitymaterial_mk3" },
-      { recipeId: "recipe_omega" },
-      { isZetaTier: true, recipeId: "recipe_zeta" },
-      { isOmicronTier: true, recipeId: "recipe_omicron" },
+      { recipeId: "SKILLRECIPE_BASIC_T2" },
+      { recipeId: "SKILLRECIPE_BASIC_T7" },
+      { isZetaTier: true, recipeId: "SKILLRECIPE_UNIQUE_T8" },
+      { isOmicronTier: true, recipeId: "SKILLRECIPE_UNIQUE_T9" },
     ],
   }]]);
   const recipes = new Map([
-    ["recipe_omega", { id: "recipe_omega", ingredients: [{ id: "abilitymaterial_omega" }] }],
-    ["recipe_zeta", { id: "recipe_zeta", ingredients: [{ id: "abilitymaterial_zeta" }] }],
-    ["recipe_omicron", { id: "recipe_omicron", ingredients: [{ id: "abilitymaterial_omicron" }] }],
+    ["SKILLRECIPE_BASIC_T7", { id: "SKILLRECIPE_BASIC_T7", ingredients: [{ id: "ability_mat_Omega" }] }],
+    ["SKILLRECIPE_UNIQUE_T8", { id: "SKILLRECIPE_UNIQUE_T8", ingredients: [{ id: "ability_mat_Zeta" }] }],
+    ["SKILLRECIPE_UNIQUE_T9", { id: "SKILLRECIPE_UNIQUE_T9", ingredients: [{ id: "ability_mat_Omicron" }] }],
   ]);
   const ability = normalizeAbility({ skillId: "special_test" }, skills, {}, recipes);
   assert.equal(ability.omega, true);
@@ -53,6 +64,7 @@ test("catalog rejects non-player combat types and explicitly unobtainable units"
 });
 
 test("version key includes catalog schema and source versions", () => {
+  assert.equal(CATALOG_SCHEMA_VERSION, 3);
   const current = versionKey({ gameVersion: 1, localeVersion: 2, assetVersion: 3 });
   assert.equal(current, `${CATALOG_SCHEMA_VERSION}|1|2|3`);
   assert.notEqual(current, versionKey({ gameVersion: 1, localeVersion: 2, assetVersion: 4 }));
