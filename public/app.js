@@ -1,4 +1,5 @@
 import { describeGpQuality, selectProfileGp } from "./gp-policy.js";
+import { mergeAbilityProgression, progressionCounts } from "./progression-policy.js";
 
 const state = {
   characters: [],
@@ -72,34 +73,17 @@ function staticUnitFor(baseId) {
 }
 
 function appliedAbility(staticAbility, liveAbility) {
-  const rawTier = Number(liveAbility?.tier);
-  const hasLiveTier = Number.isFinite(rawTier);
-  const displayTier = hasLiveTier ? rawTier + 2 : 1;
-  const active = (staticAbility?.upgradeTiers || []).filter((tier) => Number(tier.tier || 0) <= displayTier);
-  const zetaCount = active.filter((tier) => tier.zeta).length;
-  const omegaCount = active.filter((tier) => tier.omega).length;
-  const omicronCount = active.filter((tier) => tier.omicron).length;
-  return {
-    ...staticAbility,
-    ...liveAbility,
-    id: staticAbility?.id || liveAbility?.id || "",
-    name: liveAbility?.name || staticAbility?.name || "Ability",
-    note: liveAbility?.note || staticAbility?.description || "",
-    description: staticAbility?.description || liveAbility?.note || "",
-    tier: displayTier,
-    rawTier: hasLiveTier ? rawTier : null,
-    zetaCount,
-    omegaCount,
-    omicronCount,
-    hasZeta: zetaCount > 0,
-    hasOmega: omegaCount > 0,
-    hasOmicron: omicronCount > 0,
-  };
+  return mergeAbilityProgression(staticAbility, liveAbility);
 }
 
 function enrichUnit(unit) {
   const staticUnit = staticUnitFor(unit.baseId);
-  if (!staticUnit) return { ...unit, omegas: Number(unit.omegas || 0) };
+  if (!staticUnit) return {
+    ...unit,
+    zetas: Number(unit.zetas || 0),
+    omegas: Number(unit.omegas || 0),
+    omicrons: Number(unit.omicrons || 0),
+  };
 
   const staticAbilities = staticUnit.abilities || [];
   const liveAbilities = unit.abilities || [];
@@ -108,9 +92,7 @@ function enrichUnit(unit) {
     ability,
     liveById.get(ability.id) || liveAbilities[index]
   ));
-  const zetas = mergedAbilities.reduce((sum, ability) => sum + Number(ability.zetaCount || 0), 0);
-  const omegas = mergedAbilities.reduce((sum, ability) => sum + Number(ability.omegaCount || 0), 0);
-  const omicrons = mergedAbilities.reduce((sum, ability) => sum + Number(ability.omicronCount || 0), 0);
+  const counts = progressionCounts(unit, mergedAbilities);
 
   return {
     ...staticUnit,
@@ -121,9 +103,7 @@ function enrichUnit(unit) {
     factions: Array.isArray(unit.factions) && unit.factions.length ? unit.factions : staticUnit.factions,
     image: unit.image || staticUnit.image,
     imageFallback: unit.image && staticUnit.image && unit.image !== staticUnit.image ? staticUnit.image : "",
-    zetas,
-    omegas,
-    omicrons,
+    ...counts,
     abilities: mergedAbilities.length ? mergedAbilities : liveAbilities,
   };
 }
