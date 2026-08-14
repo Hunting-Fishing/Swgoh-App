@@ -78,3 +78,21 @@ test("expired entries block for a new load", async () => {
   assert.equal(result.value.version, 2);
   assert.equal(loads, 2);
 });
+
+test("evicts least recently used entries at the configured memory bound", () => {
+  let now = 1_000;
+  const cache = new LiveRosterCache({ freshMs: 1_000, staleMs: 2_000, maxEntries: 2, now: () => now });
+  cache.set("a", { value: "a" });
+  now += 1;
+  cache.set("b", { value: "b" });
+  now += 1;
+
+  assert.equal(cache.inspect("a").state, "fresh");
+  now += 1;
+  cache.set("c", { value: "c" });
+
+  assert.equal(cache.entries.size, 2);
+  assert.equal(cache.inspect("a").state, "fresh");
+  assert.equal(cache.inspect("b").state, "miss");
+  assert.equal(cache.inspect("c").state, "fresh");
+});
