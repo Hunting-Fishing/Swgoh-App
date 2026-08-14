@@ -165,9 +165,12 @@ async function serveStatic(response, pathname) {
     if (info.isDirectory()) filePath = path.join(filePath, "index.html");
     const data = await readFile(filePath);
     const extension = path.extname(filePath).toLowerCase();
+    const activelyVersionedSource = [".html", ".js", ".css", ".json"].includes(extension);
     response.writeHead(200, {
       "Content-Type": mimeTypes.get(extension) || "application/octet-stream",
-      "Cache-Control": extension === ".html" ? "no-cache" : "public, max-age=3600",
+      // ES module dependencies were cached for an hour even when index.html's
+      // app.js URL changed. Revalidate source/data until we use hashed bundles.
+      "Cache-Control": activelyVersionedSource ? "no-cache" : "public, max-age=3600",
       "X-Content-Type-Options": "nosniff",
       "Referrer-Policy": "strict-origin-when-cross-origin",
     });
