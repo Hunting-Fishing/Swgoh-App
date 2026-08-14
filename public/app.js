@@ -1,3 +1,5 @@
+import { describeGpQuality, selectProfileGp } from "./gp-policy.js";
+
 const state = {
   characters: [],
   ships: [],
@@ -234,14 +236,10 @@ function renderProfile(body) {
   const player = body.player;
   const characters = state.characters;
   const ships = state.ships;
-  const characterGpFromUnits = sumPower(characters);
-  const shipGpFromUnits = sumPower(ships);
-  const rosterGp = characterGpFromUnits + shipGpFromUnits;
-  const displayedCharacterGp = characterGpFromUnits || Number(player.characterGalacticPower || 0);
-  const displayedShipGp = shipGpFromUnits || Number(player.shipGalacticPower || 0);
-  const reportedGp = Number(player.galacticPower || 0);
-  const displayedTotalGp = reportedGp || displayedCharacterGp + displayedShipGp;
-  const gpDifference = reportedGp && rosterGp ? rosterGp - reportedGp : 0;
+  const gp = selectProfileGp(player, characters, ships);
+  const displayedCharacterGp = gp.characterGp;
+  const displayedShipGp = gp.shipGp;
+  const displayedTotalGp = gp.totalGp;
   const sevenStarCharacters = characters.filter((unit) => Number(unit.stars) === 7).length;
   const sevenStarShips = ships.filter((unit) => Number(unit.stars) === 7).length;
   const relicCharacters = characters.filter((unit) => Number(unit.relic) > 0);
@@ -259,11 +257,7 @@ function renderProfile(body) {
   const arenaRank = Number(player.arenaRank || competitive.arenaRank || 0);
   const fleetArenaRank = Number(player.fleetArenaRank || competitive.fleetArenaRank || 0);
   const gacSkillRating = Number(player.gacSkillRating || competitive.gacSkillRating || 0);
-  const gpQuality = gpDifference === 0
-    ? "Roster unit GP reconciles with the reported total."
-    : reportedGp && rosterGp
-      ? `Roster-derived GP differs from reported GP by ${number(gpDifference)}; roster-derived split is shown.`
-      : "GP is derived from the calculated live roster units.";
+  const gpQuality = describeGpQuality(gp);
 
   profile.innerHTML = `
     <div class="profile-heading">
