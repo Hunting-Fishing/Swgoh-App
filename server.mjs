@@ -11,10 +11,12 @@ const gatewayApiKey = String(process.env.SWGOH_GATEWAY_API_KEY || "").trim();
 const requestTimeoutMs = positiveNumber(process.env.SWGOH_REQUEST_TIMEOUT_MS, 35000);
 const rosterCacheFreshMs = positiveNumber(process.env.SWGOH_CACHE_FRESH_SECONDS, 90) * 1000;
 const rosterCacheStaleMs = positiveNumber(process.env.SWGOH_CACHE_STALE_SECONDS, 600) * 1000;
+const rosterCacheMaxEntries = Math.max(1, Math.floor(positiveNumber(process.env.SWGOH_CACHE_MAX_ENTRIES, 500)));
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "public");
 const rosterCache = new LiveRosterCache({
   freshMs: rosterCacheFreshMs,
   staleMs: rosterCacheStaleMs,
+  maxEntries: rosterCacheMaxEntries,
 });
 
 const mimeTypes = new Map([
@@ -116,9 +118,10 @@ async function handleApi(request, response, url) {
         liveOnly: true,
         gateway,
         rosterCache: {
-          mode: "process-local-coalesced-swr",
+          mode: "process-local-coalesced-swr-lru",
           freshSeconds: Math.round(rosterCacheFreshMs / 1000),
           staleSeconds: Math.round(rosterCacheStaleMs / 1000),
+          maxEntries: rosterCacheMaxEntries,
           shared: false,
         },
       });
