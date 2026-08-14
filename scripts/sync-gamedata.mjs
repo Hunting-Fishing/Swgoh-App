@@ -11,7 +11,7 @@ const CATALOG_PATH = path.join(DATA_DIR, "catalog.json");
 const MANIFEST_PATH = path.join(DATA_DIR, "manifest.json");
 const TIMEOUT_MS = Number(process.env.SWGOH_STATIC_SYNC_TIMEOUT_MS || 60_000);
 const ALLOW_STALE = process.argv.includes("--allow-stale");
-const CATALOG_SCHEMA_VERSION = 3;
+const CATALOG_SCHEMA_VERSION = 4;
 
 function isRecord(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -99,6 +99,7 @@ function recipeIngredientIds(recipe) {
 }
 
 function recipeHasUpgradeMaterial(recipe, kind) {
+  if (!isRecord(recipe)) return false;
   const valid = kind === "omega"
     ? new Set(["abilitymatomega", "abilitymaterialomega"])
     : kind === "zeta"
@@ -106,10 +107,20 @@ function recipeHasUpgradeMaterial(recipe, kind) {
       : kind === "omicron"
         ? new Set(["abilitymatomicron", "abilitymaterialomicron"])
         : new Set();
+  if (!valid.size) return false;
 
-  return recipeIngredientIds(recipe)
+  const targets = [...valid];
+  const directMatch = recipeIngredientIds(recipe)
     .map(normalizeMaterialId)
-    .some((token) => valid.has(token) || [...valid].some((target) => token.endsWith(target)));
+    .some((token) => valid.has(token) || targets.some((target) => token.endsWith(target)));
+  if (directMatch) return true;
+
+  // Current CG recipe payloads can nest material references below ingredient
+  // bundles/entries instead of exposing them in the legacy top-level arrays.
+  // Scan the normalized recipe as a compatibility layer so those nested
+  // ability_mat_Omega/Zeta/Omicron references are not silently missed.
+  const compactRecipe = normalizeMaterialId(JSON.stringify(recipe));
+  return targets.some((target) => compactRecipe.includes(target));
 }
 
 function tierHas(tier, kind, recipeMap = new Map()) {
