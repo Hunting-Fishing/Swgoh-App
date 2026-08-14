@@ -3,12 +3,19 @@ import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { withCapabilityContract } from "./capability-contract.mjs";
+import { LiveRosterCache } from "./live-roster-cache.mjs";
 
 const port = positiveNumber(process.env.PORT, 8080);
 const gatewayUrl = trimUrl(process.env.SWGOH_GATEWAY_URL);
 const gatewayApiKey = String(process.env.SWGOH_GATEWAY_API_KEY || "").trim();
 const requestTimeoutMs = positiveNumber(process.env.SWGOH_REQUEST_TIMEOUT_MS, 35000);
+const rosterCacheFreshMs = positiveNumber(process.env.SWGOH_CACHE_FRESH_SECONDS, 90) * 1000;
+const rosterCacheStaleMs = positiveNumber(process.env.SWGOH_CACHE_STALE_SECONDS, 600) * 1000;
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "public");
+const rosterCache = new LiveRosterCache({
+  freshMs: rosterCacheFreshMs,
+  staleMs: rosterCacheStaleMs,
+});
 
 const mimeTypes = new Map([
   [".html", "text/html; charset=utf-8"],
@@ -86,6 +93,20 @@ async function requestGateway(pathname, includeKey) {
   }
 }
 
+function validLiveRoster(body) {
+  return body?.source === "live" && body?.player && Array.isArray(body?.units);
+}
+
+async function loadLiveRoster(allyCode) {
+  const body = await requestGateway(`/v1/player/${allyCode}`, true);
+  if (!validLiveRoster(body)) {
+    const error = new Error("The live gateway returned an unexpected roster response.");
+    error.status = 502;
+    throw error;
+  }
+  return withCapabilityContract(body);
+}
+
 async function handleApi(request, response, url) {
   if (url.pathname === "/api/health") {
     try {
@@ -94,6 +115,12 @@ async function handleApi(request, response, url) {
         status: gateway?.status === "configured" ? "ready" : "needs-configuration",
         liveOnly: true,
         gateway,
+        rosterCache: {
+          mode: "process-local-coalesced-swr",
+          freshSeconds: Math.round(rosterCacheFreshMs / 1000),
+          staleSeconds: Math.round(rosterCacheStaleMs / 1000),
+          shared: false,
+        },
       });
     } catch (error) {
       writeJson(response, error?.status || 502, {
@@ -109,12 +136,13 @@ async function handleApi(request, response, url) {
   if (!playerMatch) return false;
 
   try {
-    const body = await requestGateway(`/v1/player/${playerMatch[1]}`, true);
-    if (body?.source !== "live" || !body?.player || !Array.isArray(body?.units)) {
-      writeJson(response, 502, { error: "The live gateway returned an unexpected roster response." });
-      return true;
-    }
-    writeJson(response, 200, withCapabilityContract(body), { "X-Roster-Source": "comlink-live" });
+    const allyCode = playerMatch[1];
+    const cached = await rosterCache.getOrLoad(allyCode, () => loadLiveRoster(allyCode));
+    writeJson(response, 200, cached.value, {
+      "X-Roster-Source": "comlink-live",
+      "X-Roster-Cache": cached.cache,
+      Age: String(Math.max(0, Math.floor((cached.ageMs || 0) / 1000))),
+    });
   } catch (error) {
     const status = [400, 401, 404, 429, 503].includes(error?.status) ? error.status : 502;
     writeJson(response, status, {
