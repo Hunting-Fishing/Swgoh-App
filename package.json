@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "sync:gamedata": "node scripts/sync-gamedata.mjs --allow-stale",
+    "prestart": "node --test",
     "start": "node scripts/sync-gamedata.mjs --allow-stale && node server.mjs",
     "test": "node --test"
   },
