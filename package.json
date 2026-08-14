@@ -4,10 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "sync:gamedata": "node scripts/sync-gamedata.mjs --allow-stale; node scripts/repair-catalog.mjs --allow-stale",
-    "prestart": "node --test",
-    "start": "node scripts/sync-gamedata.mjs --allow-stale; node scripts/repair-catalog.mjs --allow-stale; node server.mjs",
-    "test": "node --test"
+    "start": "node server.mjs",
+    "test": "node --test",
+    "verify": "node --test",
+    "sync:gamedata": "node scripts/sync-gamedata.mjs --allow-stale && node scripts/repair-catalog.mjs --allow-stale"
   },
   "engines": {
     "node": ">=20"
