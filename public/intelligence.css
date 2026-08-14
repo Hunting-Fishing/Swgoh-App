@@ -1,0 +1,55 @@
+.intelligence-summary { margin-top: 18px; }
+.intelligence-columns { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(300px, .85fr); gap: 20px; margin-top: 22px; }
+.section-heading { display: flex; justify-content: space-between; gap: 16px; align-items: end; margin-bottom: 12px; }
+.section-heading h3, .profile-intelligence h3 { margin-bottom: 10px; }
+.squad-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.squad-card { border-radius: 16px; border: 1px solid #1f304d; background: #0b1222; padding: 14px; min-width: 0; }
+.squad-heading { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+.squad-heading span { display: block; color: #7787a4; font-size: .67rem; text-transform: uppercase; letter-spacing: .08em; }
+.squad-heading h4 { margin: 3px 0 0; font-size: 1.02rem; }
+.squad-heading > strong { color: #bff4ff; font-size: .82rem; text-align: right; }
+.squad-meta { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
+.squad-meta span { border-radius: 999px; border: 1px solid #223454; background: #111c31; color: #a7b8d3; padding: 4px 7px; font-size: .65rem; }
+.squad-members { display: grid; gap: 6px; }
+.squad-member { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 10px; text-align: left; border: 1px solid #223454; background: #101a2e; color: #edf4ff; padding: 9px 10px; }
+.squad-member span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.squad-member strong { color: #8fa5c5; font-size: .68rem; font-weight: 700; white-space: nowrap; }
+.profile-intelligence { display: grid; gap: 22px; align-content: start; }
+.profile-stat-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.profile-stat { border-radius: 12px; border: 1px solid #1e2c47; background: #0b1222; padding: 10px; min-width: 0; }
+.profile-stat span { display: block; color: #7787a4; font-size: .64rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.profile-stat strong { display: block; margin-top: 5px; font-size: .84rem; overflow-wrap: anywhere; }
+.season-grid { display: grid; gap: 8px; }
+.season-card { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; border: 1px solid #1e2c47; background: #0b1222; border-radius: 13px; padding: 10px; }
+.season-card div { min-width: 0; }
+.season-card span { display: block; color: #7787a4; font-size: .62rem; text-transform: uppercase; letter-spacing: .06em; }
+.season-card strong { display: block; margin-top: 4px; font-size: .82rem; overflow-wrap: anywhere; }
+.intel-empty { border: 1px dashed #2a3a58; border-radius: 13px; padding: 16px; color: #8999b4; background: rgba(10,16,32,.45); font-size: .82rem; line-height: 1.45; }
+.readiness-banner { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 16px 0; }
+.readiness-banner div { padding: 11px 12px; border: 1px solid #223454; border-radius: 12px; background: #0f182b; }
+.readiness-banner span { display: block; color: #7f8ca7; font-size: .67rem; text-transform: uppercase; letter-spacing: .08em; }
+.readiness-banner strong { display: block; margin-top: 4px; }
+.requirement-gaps, .purchased-abilities { list-style: none; margin: 0 0 22px; padding: 0; display: grid; gap: 7px; }
+.requirement-gap { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 11px; border: 1px solid #233653; background: #0f182b; }
+.requirement-gap strong { font-size: .84rem; }
+.requirement-gap span { color: #8494b0; font-size: .68rem; text-transform: uppercase; white-space: nowrap; }
+.requirement-gap.high { border-color: rgba(255,113,113,.32); }
+.requirement-gap.medium { border-color: rgba(255,199,92,.3); }
+.requirement-gap.low, .requirement-gap.complete { border-color: rgba(111,227,255,.24); }
+.purchased-abilities li { border: 1px solid #223454; border-radius: 10px; padding: 9px 10px; background: #101a2e; }
+.purchased-abilities code { color: #b8f1ff; overflow-wrap: anywhere; }
+
+@media (max-width: 1050px) {
+  .intelligence-columns { grid-template-columns: 1fr; }
+  .profile-intelligence { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 760px) {
+  .squad-grid, .profile-intelligence { grid-template-columns: 1fr; }
+  .readiness-banner { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 480px) {
+  .profile-stat-grid, .season-card, .readiness-banner { grid-template-columns: 1fr; }
+  .squad-member, .requirement-gap { align-items: flex-start; flex-direction: column; }
+}
