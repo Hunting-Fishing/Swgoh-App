@@ -2,7 +2,7 @@
 
 Live-only Star Wars: Galaxy of Heroes roster management app.
 
-Production roster data comes from the SWGOH Live Gateway backed by Comlink + SWGOH Stats, with AE2 used for live character artwork when available. No mock roster or fallback game data is permitted in production.
+Production roster data comes from the SWGOH Live Gateway backed by Comlink + SWGOH Stats, with AE2 used for live character and ship artwork when available. No mock roster or fallback player data is permitted in production.
 
 ## Live architecture
 
@@ -23,6 +23,16 @@ https://swgoh-live-gateway-production.up.railway.app
 ```
 
 The browser never receives `SWGOH_GATEWAY_API_KEY`. The Node server injects the key when it calls the live gateway.
+
+## Data authority rules
+
+- Comlink `/player` is authoritative for live player/account fields, including reported total, character and ship GP when present.
+- SWGOH Stats enriches calculated per-unit statistics. A per-unit calculated GP sum is diagnostic/fallback data and must not overwrite valid Comlink profile GP.
+- Versioned SWGOH game data supplies shared unit, skill, recipe and static portrait metadata.
+- AE2 supplies live extracted artwork when available; the versioned static portrait remains the image fallback.
+- Unavailable account-private inventory must never be represented as a fake zero balance.
+
+`GET /api/player/:allyCode` therefore includes a `capabilities` object describing which optional data classes are actually available. Current public-player limitations include materials, currency balances, unequipped gear and unequipped mods.
 
 ## App environment
 
@@ -51,7 +61,7 @@ If Comlink access/secret keys are enabled, also set `COMLINK_ACCESS_KEY` and `CO
 ## Routes
 
 - `GET /api/health` checks the public live gateway health endpoint.
-- `GET /api/player/:allyCode` securely proxies a live roster request without exposing the gateway secret to the browser.
+- `GET /api/player/:allyCode` securely proxies and normalizes a live roster request without exposing the gateway secret to the browser.
 - Static client files live in `public/`.
 
 ## Start
@@ -60,4 +70,10 @@ Requires Node.js 20 or newer.
 
 ```sh
 npm start
+```
+
+## Test
+
+```sh
+npm test
 ```
