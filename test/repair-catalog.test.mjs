@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { materialMapOf, recipeHas, repairAbility } from "../scripts/repair-catalog.mjs";
+import { materialIconsOf, materialMapOf, recipeHas, repairAbility } from "../scripts/repair-catalog.mjs";
 
 test("abilityReference replaces generic DEFENSE UP metadata with player-facing ability metadata", () => {
   const strings = {
@@ -42,4 +42,21 @@ test("opaque modern material ids are classified by current material metadata", (
   const recipe = { ingredients: [{ id: "abilitymaterial_mk7", quantity: 5 }] };
   assert.equal(recipeHas(recipe, "omega", materials, strings), true);
   assert.equal(recipeHas(recipe, "zeta", materials, strings), false);
+});
+
+test("upgrade material icons are derived from material metadata instead of guessed filenames", () => {
+  const strings = {
+    ZETA_NAME: "Ability Material Zeta",
+    OMEGA_NAME: "Ability Material Omega",
+    OMICRON_NAME: "Ability Material Omicron",
+  };
+  const materials = [
+    { id: "abilitymaterial_mk6", nameKey: "ZETA_NAME", icon: "tex.current_zeta" },
+    { id: "abilitymaterial_mk7", nameKey: "OMEGA_NAME", icon: "tex.current_omega" },
+    { id: "abilitymaterial_mk8", nameKey: "OMICRON_NAME", icon: "tex.current_omicron" },
+  ];
+  const icons = materialIconsOf(materials, strings);
+  assert.equal(icons.zeta, "https://game-assets.swgoh.gg/textures/tex.current_zeta.png");
+  assert.equal(icons.omega, "https://game-assets.swgoh.gg/textures/tex.current_omega.png");
+  assert.equal(icons.omicron, "https://game-assets.swgoh.gg/textures/tex.current_omicron.png");
 });
