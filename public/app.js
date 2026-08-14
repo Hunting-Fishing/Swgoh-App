@@ -1,5 +1,7 @@
 import { describeGpQuality, selectProfileGp } from "./gp-policy.js";
 import { mergeAbilityProgression, progressionCounts } from "./progression-policy.js";
+import { readinessAnalysis } from "./readiness-policy.js";
+import { buildFactionSquads, squadReadiness } from "./team-builder.js";
 
 const state = {
   characters: [],
@@ -23,6 +25,12 @@ const profile = $("profile");
 const controls = $("controls");
 const roster = $("roster");
 const empty = $("empty");
+const intelligence = $("intelligence");
+const intelligenceStatus = $("intelligenceStatus");
+const intelligenceSummary = $("intelligenceSummary");
+const squadGrid = $("squadGrid");
+const profileStatsGrid = $("profileStatsGrid");
+const seasonGrid = $("seasonGrid");
 const search = $("search");
 const unitType = $("unitType");
 const alignment = $("alignment");
@@ -46,10 +54,6 @@ function decimal(value, digits = 1) {
   return Number(value || 0).toFixed(digits);
 }
 
-function maybeNumber(value) {
-  return Number.isFinite(Number(value)) ? number(value) : "N/A";
-}
-
 function sanitizeAllyCode(value) {
   return String(value || "").replace(/\D/g, "").slice(0, 9);
 }
@@ -62,10 +66,6 @@ function formatAllyCode(value) {
 function showError(message) {
   errorBox.textContent = message;
   errorBox.classList.toggle("hidden", !message);
-}
-
-function sumPower(units) {
-  return Math.round(units.reduce((sum, unit) => sum + Number(unit.power || 0), 0));
 }
 
 function staticUnitFor(baseId) {
@@ -113,7 +113,10 @@ function applyCatalogToLiveRoster() {
   state.characters = state.characters.map(enrichUnit);
   state.ships = state.ships.map(enrichUnit);
   state.units = [...state.characters, ...state.ships];
-  if (state.lastBody) renderProfile(state.lastBody);
+  if (state.lastBody) {
+    renderProfile(state.lastBody);
+    renderIntelligence(state.lastBody);
+  }
   renderRoster();
 }
 
@@ -191,10 +194,12 @@ allyForm.addEventListener("submit", async (event) => {
 
     renderProfile(body);
     renderRoster();
+    renderIntelligence(body);
     empty.classList.add("hidden");
     profile.classList.remove("hidden");
     controls.classList.remove("hidden");
     roster.classList.remove("hidden");
+    intelligence.classList.remove("hidden");
   } catch (error) {
     state.player = null;
     state.lastBody = null;
@@ -204,6 +209,7 @@ allyForm.addEventListener("submit", async (event) => {
     profile.classList.add("hidden");
     controls.classList.add("hidden");
     roster.classList.add("hidden");
+    intelligence.classList.add("hidden");
     empty.classList.remove("hidden");
     showError(error.message || "Live SWGOH data is unavailable.");
   } finally {
@@ -257,7 +263,7 @@ function renderProfile(body) {
       <div><span>Ships</span><strong>${number(ships.length)}</strong><small>${number(sevenStarShips)} at 7★</small></div>
       <div><span>Relics</span><strong>${number(relicCharacters.length)}</strong><small>Avg R${decimal(avgRelic)}</small></div>
       <div><span>Zetas</span><strong>${number(zetas)}</strong></div>
-      <div><span>Omegas</span><strong>${state.catalogMap.size ? number(omegas) : "Loading…"}</strong></div>
+      <div><span>Omegas</span><strong>${number(omegas)}</strong></div>
       <div><span>Omicrons</span><strong>${number(omicrons)}</strong></div>
       <div><span>6-dot Mods</span><strong>${sixDotMods === null ? "N/A" : number(sixDotMods)}</strong></div>
       <div><span>Datacrons</span><strong>${datacrons === null ? "N/A" : number(datacrons)}</strong></div>
@@ -269,6 +275,85 @@ function renderProfile(body) {
     <div class="data-quality muted"><strong>Account inventory:</strong> Comlink does not expose unequipped materials, gear, mods, or player currency balances, so this app does not show fake zero balances.</div>
     <div class="freshness">Live player fetched ${escapeHtml(new Date(body.fetchedAt || player.updatedAt).toLocaleString())}</div>
   `;
+}
+
+function renderIntelligence(body) {
+  const summary = body.summary || {};
+  const competitive = body.competitive || {};
+  const capabilities = body.capabilities || {};
+  const squads = buildFactionSquads(state.characters, { size: 5, limit: 8 });
+  const profileStats = Array.isArray(body.profileStats) ? body.profileStats : [];
+  const seasons = Array.isArray(body.seasonStatus) ? body.seasonStatus : [];
+  const league = body.player?.gacLeague || competitive.gacLeague || "N/A";
+  const division = body.player?.gacDivision || competitive.gacDivision || "";
+
+  intelligenceStatus.textContent = capabilities.liveRoster === false ? "Limited live data" : "Live roster intelligence";
+  intelligenceStatus.className = capabilities.liveRoster === false ? "status warning" : "status ready";
+  intelligenceSummary.innerHTML = `
+    <div><span>Equipped Mods</span><strong>${capabilities.equippedMods === false ? "N/A" : number(summary.equippedMods)}</strong></div>
+    <div><span>6-dot Mods</span><strong>${capabilities.sixDotMods === false ? "N/A" : number(summary.sixDotMods)}</strong></div>
+    <div><span>Purchased Abilities</span><strong>${capabilities.purchasedAbilities === false ? "N/A" : number(summary.purchasedAbilities)}</strong></div>
+    <div><span>Unlocked Titles</span><strong>${capabilities.unlockedCosmetics === false ? "N/A" : number(summary.unlockedTitles)}</strong></div>
+    <div><span>Unlocked Portraits</span><strong>${capabilities.unlockedCosmetics === false ? "N/A" : number(summary.unlockedPortraits)}</strong></div>
+    <div><span>Datacrons</span><strong>${capabilities.datacrons === false ? "N/A" : number(summary.datacrons)}</strong></div>
+    <div><span>GAC League</span><strong>${escapeHtml(String(league))}${division ? ` ${escapeHtml(String(division))}` : ""}</strong></div>
+    <div><span>GAC Rating</span><strong>${number(competitive.gacSkillRating || body.player?.gacSkillRating)}</strong></div>
+  `;
+
+  if (squads.length) {
+    squadGrid.innerHTML = squads.map((squad) => {
+      const readiness = squadReadiness(squad);
+      const members = squad.members.map((member) => `
+        <button class="squad-member" data-squad-base-id="${escapeAttr(member.baseId)}" type="button">
+          <span>${escapeHtml(member.name)}</span>
+          <strong>${number(member.power)} GP · ${number(member.readiness)}%</strong>
+        </button>
+      `).join("");
+      return `
+        <article class="squad-card">
+          <div class="squad-heading">
+            <div><span>Faction</span><h4>${escapeHtml(squad.faction)}</h4></div>
+            <strong>${number(squad.totalPower)} GP</strong>
+          </div>
+          <div class="squad-meta">
+            <span>${number(squad.averageReadiness)}% avg readiness</span>
+            <span>${readiness.ready} ready · ${readiness.developing} developing · ${readiness.needsWork} needs work</span>
+            ${squad.benchCount ? `<span>${number(squad.benchCount)} additional owned</span>` : ""}
+          </div>
+          <div class="squad-members">${members}</div>
+        </article>
+      `;
+    }).join("");
+  } else {
+    squadGrid.innerHTML = `<div class="intel-empty">No five-character faction group could be built from the normalized owned roster.</div>`;
+  }
+
+  for (const button of squadGrid.querySelectorAll("button[data-squad-base-id]")) {
+    button.addEventListener("click", () => {
+      const unit = state.characters.find((candidate) => candidate.baseId === button.dataset.squadBaseId);
+      if (unit) showDetails(unit);
+    });
+  }
+
+  profileStatsGrid.innerHTML = profileStats.length
+    ? profileStats.slice(0, 12).map((stat) => `
+      <div class="profile-stat">
+        <span>${escapeHtml(stat.id || "Profile Stat")}</span>
+        <strong>${escapeHtml(String(stat.value ?? "N/A"))}</strong>
+      </div>
+    `).join("")
+    : `<div class="intel-empty">No public profile-stat entries returned for this player.</div>`;
+
+  seasonGrid.innerHTML = seasons.length
+    ? seasons.slice(0, 3).map((season) => `
+      <article class="season-card">
+        <div><span>Season</span><strong>${escapeHtml(season.seasonId || "Current")}</strong></div>
+        <div><span>League / Division</span><strong>${escapeHtml(String(season.league || league || "N/A"))}${season.division ? ` ${escapeHtml(String(season.division))}` : ""}</strong></div>
+        <div><span>Points</span><strong>${number(season.seasonPoints)}</strong></div>
+        <div><span>Rank</span><strong>${season.rank ? `#${number(season.rank)}` : "N/A"}</strong></div>
+      </article>
+    `).join("")
+    : `<div class="intel-empty">No public season-status entries returned for this player.</div>`;
 }
 
 function renderRoster() {
@@ -324,6 +409,7 @@ function cardHtml(unit) {
     ${unit.image ? `<img data-portrait${fallback} src="${escapeAttr(unit.image)}" alt="${escapeAttr(unit.name)}" loading="lazy">` : ""}
   `;
   const badge = unit.unitType === "Ship" ? "SHIP" : Number(unit.relic) > 0 ? `R${number(unit.relic)}` : `G${number(unit.gear)}`;
+  const readiness = readinessAnalysis(unit);
 
   return `
     <article class="unit-card">
@@ -334,7 +420,7 @@ function cardHtml(unit) {
         <div class="metrics">
           <div><span>Power</span><strong>${number(unit.power)}</strong></div>
           <div><span>Speed</span><strong>${number(unit.speed)}</strong></div>
-          <div><span>Ready</span><strong>${number(unit.readiness)}%</strong></div>
+          <div><span>${escapeHtml(readiness.band)}</span><strong>${number(unit.readiness)}%</strong></div>
         </div>
         <div class="upgrade-line">Z ${number(unit.zetas)} · Ω ${number(unit.omegas)} · Omi ${number(unit.omicrons)}</div>
         <div class="tags">${tags}</div>
@@ -357,6 +443,7 @@ function abilityFlags(ability) {
 }
 
 function showDetails(unit) {
+  const readiness = readinessAnalysis(unit);
   const abilities = (unit.abilities || []).map((ability) => `
     <li>
       <div class="ability-heading"><strong>${escapeHtml(ability.name || ability.type)}</strong><div class="ability-flags">${abilityFlags(ability)}</div></div>
@@ -364,22 +451,36 @@ function showDetails(unit) {
       <span>${escapeHtml(ability.note || ability.description || "")}</span>
     </li>
   `).join("");
+  const gaps = readiness.gaps.length
+    ? readiness.gaps.map((gap) => `<li class="requirement-gap ${escapeAttr(gap.severity)}"><strong>${escapeHtml(gap.label)}</strong><span>${escapeHtml(gap.severity)} priority</span></li>`).join("")
+    : `<li class="requirement-gap complete"><strong>Baseline development targets met</strong><span>No basic star, level, gear/relic or mod-slot gap detected.</span></li>`;
+  const purchasedAbilities = (unit.purchasedAbilityIds || []).map((id) => `<li><code>${escapeHtml(id)}</code></li>`).join("");
 
   details.innerHTML = `
     <button class="close" aria-label="Close">×</button>
     <div class="kicker">${escapeHtml(unit.unitType)} · ${escapeHtml(unit.baseId)}</div>
     <h2>${escapeHtml(unit.name)}</h2>
     <p>${escapeHtml(unit.role)} · ${escapeHtml(unit.alignment)}</p>
+    <div class="readiness-banner">
+      <div><span>Readiness</span><strong>${number(readiness.score)}%</strong></div>
+      <div><span>Status</span><strong>${escapeHtml(readiness.band)}</strong></div>
+      <div><span>Development Gaps</span><strong>${number(readiness.gapCount)}</strong></div>
+    </div>
     <div class="detail-metrics">
       <div><span>Power</span><strong>${number(unit.power)}</strong></div>
       <div><span>Speed</span><strong>${number(unit.speed)}</strong></div>
       <div><span>Stars</span><strong>${number(unit.stars)}</strong></div>
       <div><span>Gear</span><strong>${number(unit.gear)}</strong></div>
       <div><span>Relic</span><strong>${number(unit.relic)}</strong></div>
+      <div><span>Equipped Mods</span><strong>${number(unit.equippedMods)}</strong></div>
       <div><span>Zetas</span><strong>${number(unit.zetas)}</strong></div>
       <div><span>Omegas</span><strong>${number(unit.omegas)}</strong></div>
       <div><span>Omicrons</span><strong>${number(unit.omicrons)}</strong></div>
+      <div><span>Purchased Abilities</span><strong>${number(unit.purchasedAbilityIds?.length)}</strong></div>
     </div>
+    <h3>Development Gaps</h3>
+    <ul class="requirement-gaps">${gaps}</ul>
+    ${purchasedAbilities ? `<h3>Purchased Special Abilities</h3><ul class="purchased-abilities">${purchasedAbilities}</ul>` : ""}
     <h3>Abilities</h3>
     <ul class="abilities">${abilities || "<li>No ability detail returned.</li>"}</ul>
   `;
