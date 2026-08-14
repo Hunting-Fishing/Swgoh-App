@@ -50,3 +50,25 @@ test("derived static counts can enrich lower live counts", () => {
 
   assert.deepEqual(counts, { zetas: 2, omegas: 2, omicrons: 1 });
 });
+
+test("repaired static metadata wins over generic live placeholder labels", () => {
+  const ability = mergeAbilityProgression(
+    {
+      id: "basicskill_C3POLEGENDARY",
+      name: "Baffling Trick",
+      description: "Inflict Confuse.",
+      icon: "tex.ability_c3p0_basic",
+      maxTier: 8,
+    },
+    {
+      id: "basicskill_C3POLEGENDARY",
+      name: "DEFENSE UP",
+      tier: 6,
+    }
+  );
+
+  assert.equal(ability.name, "Baffling Trick");
+  assert.equal(ability.description, "Inflict Confuse.");
+  assert.equal(ability.icon, "tex.ability_c3p0_basic");
+  assert.equal(ability.tier, 8);
+});
