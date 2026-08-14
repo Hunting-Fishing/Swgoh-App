@@ -7,6 +7,14 @@ function memberScore(unit) {
   return numeric(unit.readiness) * 1000 + numeric(unit.power) + numeric(unit.speed) * 10;
 }
 
+export function isLeader(unit = {}) {
+  return (unit.abilities || []).some((ability) => {
+    const type = String(ability?.type || "").toLowerCase();
+    const id = String(ability?.id || "").toLowerCase();
+    return type === "leader" || type.includes("leader") || id.startsWith("leader_") || id.includes("_leader_");
+  });
+}
+
 export function buildFactionSquads(units = [], options = {}) {
   const size = Math.max(1, Number(options.size || 5));
   const limit = Math.max(1, Number(options.limit || 8));
@@ -25,14 +33,18 @@ export function buildFactionSquads(units = [], options = {}) {
   const suggestions = [];
   for (const [faction, members] of factions) {
     if (members.length < size) continue;
-    const selected = [...members]
-      .sort((a, b) => memberScore(b) - memberScore(a) || String(a.name).localeCompare(String(b.name)))
-      .slice(0, size);
+    const ranked = [...members]
+      .sort((a, b) => memberScore(b) - memberScore(a) || String(a.name).localeCompare(String(b.name)));
+    const leader = ranked.find(isLeader) || null;
+    const selected = leader
+      ? [leader, ...ranked.filter((unit) => unit !== leader)].slice(0, size)
+      : ranked.slice(0, size);
     const totalPower = selected.reduce((sum, unit) => sum + numeric(unit.power), 0);
     const averageReadiness = selected.reduce((sum, unit) => sum + numeric(unit.readiness), 0) / selected.length;
     suggestions.push({
       faction,
       members: selected,
+      ...(leader ? { leader, leaderBaseId: leader.baseId } : {}),
       totalPower: Math.round(totalPower),
       averageReadiness: Math.round(averageReadiness),
       benchCount: Math.max(0, members.length - size),
