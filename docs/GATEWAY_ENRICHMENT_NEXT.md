@@ -22,16 +22,16 @@ The secure gateway remains the only service that talks to Comlink and SWGOH Stat
    - 6-dot equipped mod count when mod definitions can be resolved
    - live Zeta, Omega and Omicron progression merged with versioned static ability definitions
 
+4. **Baseline capability contract**
+   - The Swgoh-App API proxy now adds a versioned `capabilities` object to every valid live player response.
+   - A supported value of `0` remains distinguishable from a field that is unavailable in the current public-player pipeline.
+   - Materials, currency balances, unequipped gear and unequipped mods are explicitly marked unavailable instead of being represented as fake zero balances.
+   - If the Live Gateway later supplies richer capability fields, its values override the proxy defaults.
+
 ## Next gateway changes
 
-1. **Capability contract**
-   Return an explicit `capabilities` object. Account-private data that Comlink `/player` does not expose must be marked unavailable rather than represented as fake zero values:
-   - unequipped mods
-   - materials
-   - unequipped gear inventory
-   - player currency balances
-
-   Also mark supported public-derived fields such as equipped mods, 6-dot mods, datacrons and competitive profile data.
+1. **Promote/enrich the capability contract upstream**
+   The Live Gateway should eventually emit the authoritative capability contract itself, including supported public-derived fields such as equipped mods, 6-dot mods, datacrons and competitive profile data. The app proxy should continue to provide backward-compatible defaults.
 
 2. **Additional public-player summary**
    Expose only fields actually present in the Comlink player payload:
