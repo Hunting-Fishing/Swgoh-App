@@ -29,6 +29,31 @@ test("current CG ability_mat recipes classify Omega/Zeta/Omicron tiers", () => {
   assert.equal(tierHas({ recipeId: "abilitymaterial_mk3" }, "omega", recipes), false);
 });
 
+test("nested current CG recipe material references are detected", () => {
+  const nestedOmega = {
+    id: "SKILLRECIPE_BASIC_T7",
+    ingredientBundle: {
+      entries: [
+        { materialReference: { id: "GRIND" }, quantity: 10 },
+        { materialReference: { id: "ability_mat_Omega" }, quantity: 3 },
+      ],
+    },
+  };
+  const nestedZeta = {
+    id: "SKILLRECIPE_UNIQUE_T8",
+    costs: { nested: [{ item: { definitionId: "ability_mat_Zeta" }, quantity: 20 }] },
+  };
+  const nestedOmicron = {
+    id: "SKILLRECIPE_UNIQUE_T9",
+    payload: { materials: { primary: { materialId: "ability_mat_Omicron" } } },
+  };
+
+  assert.equal(recipeHasUpgradeMaterial(nestedOmega, "omega"), true);
+  assert.equal(recipeHasUpgradeMaterial(nestedZeta, "zeta"), true);
+  assert.equal(recipeHasUpgradeMaterial(nestedOmicron, "omicron"), true);
+  assert.equal(recipeHasUpgradeMaterial(nestedOmega, "zeta"), false);
+});
+
 test("normalizeAbility preserves exact special-upgrade tiers from referenced recipes", () => {
   const skills = new Map([["special_test", {
     id: "special_test",
@@ -40,7 +65,10 @@ test("normalizeAbility preserves exact special-upgrade tiers from referenced rec
     ],
   }]]);
   const recipes = new Map([
-    ["SKILLRECIPE_BASIC_T7", { id: "SKILLRECIPE_BASIC_T7", ingredients: [{ id: "ability_mat_Omega" }] }],
+    ["SKILLRECIPE_BASIC_T7", {
+      id: "SKILLRECIPE_BASIC_T7",
+      ingredientBundle: { entries: [{ materialReference: { id: "ability_mat_Omega" } }] },
+    }],
     ["SKILLRECIPE_UNIQUE_T8", { id: "SKILLRECIPE_UNIQUE_T8", ingredients: [{ id: "ability_mat_Zeta" }] }],
     ["SKILLRECIPE_UNIQUE_T9", { id: "SKILLRECIPE_UNIQUE_T9", ingredients: [{ id: "ability_mat_Omicron" }] }],
   ]);
@@ -64,7 +92,7 @@ test("catalog rejects non-player combat types and explicitly unobtainable units"
 });
 
 test("version key includes catalog schema and source versions", () => {
-  assert.equal(CATALOG_SCHEMA_VERSION, 3);
+  assert.equal(CATALOG_SCHEMA_VERSION, 4);
   const current = versionKey({ gameVersion: 1, localeVersion: 2, assetVersion: 3 });
   assert.equal(current, `${CATALOG_SCHEMA_VERSION}|1|2|3`);
   assert.notEqual(current, versionKey({ gameVersion: 1, localeVersion: 2, assetVersion: 4 }));
