@@ -1,10 +1,12 @@
 const GAME_ASSET_BASE = "https://game-assets.swgoh.gg/textures";
 const SWGOH_GG_ASSET_BASE = "https://swgoh.gg/static/img/assets";
 
-const MATERIAL_ICONS = {
+const MATERIAL_ICON_FALLBACKS = {
   Omega: `${GAME_ASSET_BASE}/tex.skill_pentagon_gold.png`,
   Zeta: `${GAME_ASSET_BASE}/tex.skill_zeta.png`,
-  Omicron: `${GAME_ASSET_BASE}/tex.skill_hexagon_white.png`,
+  // Omicron intentionally has no guessed filename. Schema 7 derives it from
+  // current material.json metadata so we never display the wrong game asset.
+  Omicron: "",
 };
 
 const imageState = new WeakMap();
@@ -43,6 +45,11 @@ function materialKind(value) {
   if (label === "omega" || label === "omegas") return "Omega";
   if (label === "omicron" || label === "omicrons") return "Omicron";
   return "";
+}
+
+function materialIcon(kind) {
+  const derived = catalog?.materialIcons?.[kind.toLowerCase()];
+  return String(derived || MATERIAL_ICON_FALLBACKS[kind] || "").trim();
 }
 
 function baseIdForCard(element) {
@@ -134,7 +141,7 @@ function ensurePortraits(root = document) {
 }
 
 function prependMaterialIcon(element, kind) {
-  const src = MATERIAL_ICONS[kind];
+  const src = materialIcon(kind);
   if (!element || !src || element.querySelector("img[data-material-icon]")) return;
   const icon = document.createElement("img");
   icon.className = "ability-material-icon";
@@ -213,7 +220,7 @@ function decorateAbilityRows(details) {
   const statusLabel = details.querySelector(".readiness-banner > div:nth-child(2) span");
   if (statusLabel) statusLabel.textContent = "Upgrade State";
 
-  if (Number(catalog?.schemaVersion || 0) < 6 && rows.length > 1) {
+  if (Number(catalog?.schemaVersion || 0) < 7 && rows.length > 1) {
     const defenseRows = rows.filter((row) => row.querySelector(".ability-heading strong")?.textContent.trim() === "DEFENSE UP");
     if (defenseRows.length > 1) {
       for (const row of defenseRows) {
@@ -230,9 +237,9 @@ function showCatalogIntegrity() {
   const schema = Number(catalog.schemaVersion || 0);
   const suffix = ` · Schema ${schema || "legacy"}`;
   if (!status.textContent.includes("Schema")) status.textContent += suffix;
-  if (schema < 6) {
+  if (schema < 7) {
     status.className = "status warning";
-    status.title = "This catalog predates the ability localization/material integrity repair.";
+    status.title = "This catalog predates the current ability/material asset integrity repair.";
   }
 }
 
@@ -272,7 +279,7 @@ const observer = new MutationObserver((mutations) => {
 observer.observe(document.body, { childList: true, subtree: true });
 
 try {
-  const response = await fetch("/data/catalog.json?schema=6", { cache: "no-store" });
+  const response = await fetch("/data/catalog.json?schema=7", { cache: "no-store" });
   if (response.ok) {
     catalog = await response.json();
     if (Array.isArray(catalog?.units)) {
