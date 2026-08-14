@@ -2,6 +2,7 @@ import http from "node:http";
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { withCapabilityContract } from "./capability-contract.mjs";
 
 const port = positiveNumber(process.env.PORT, 8080);
 const gatewayUrl = trimUrl(process.env.SWGOH_GATEWAY_URL);
@@ -113,7 +114,7 @@ async function handleApi(request, response, url) {
       writeJson(response, 502, { error: "The live gateway returned an unexpected roster response." });
       return true;
     }
-    writeJson(response, 200, body, { "X-Roster-Source": "comlink-live" });
+    writeJson(response, 200, withCapabilityContract(body), { "X-Roster-Source": "comlink-live" });
   } catch (error) {
     const status = [400, 401, 404, 429, 503].includes(error?.status) ? error.status : 502;
     writeJson(response, status, {
