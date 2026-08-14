@@ -1,47 +1,54 @@
-# Gateway Enrichment — Next Safe Change
+# Gateway Enrichment — Current Safe Handoff
 
-The current secure gateway should remain the only service that talks to Comlink and SWGOH Stats. Do not move Comlink keys into the browser.
+The secure gateway remains the only service that talks to Comlink and SWGOH Stats. Do not move Comlink keys into the browser.
 
-## Immediate gateway changes
+## Completed / current behavior
 
-1. **Character and ship GP**
-   - Prefer the sum of calculated per-unit GP from the SWGOH Stats result for `characterGalacticPower` and `shipGalacticPower`.
-   - Set total GP to character GP + ship GP when all roster units normalized successfully.
-   - Keep the upstream/reported total only as a diagnostic comparison.
-   - The Phase 3 frontend already performs this reconciliation as a second safety check.
+1. **Authoritative player GP**
+   - Comlink `/player` profile totals are authoritative for `galacticPower`, `characterGalacticPower`, and `shipGalacticPower` when present.
+   - SWGOH Stats enriches per-unit statistics but must never replace valid Comlink account totals.
+   - The frontend displays the Comlink profile totals first and keeps summed per-unit GP only as a diagnostic/fallback.
+   - The recovery gateway preserves the complete raw Comlink roster when SWGOH Stats returns a partial calculated roster.
 
-2. **Ship portraits**
-   - The current gateway registers AE2 assets only when `type === CHARACTER_COMBAT_TYPE`.
-   - Remove that type restriction so ships can use the same `thumbnailName` -> AE2 asset path.
-   - Keep the frontend's static image fallback for resilience.
+2. **Character and ship portraits**
+   - Characters and ships may both register their `thumbnailName` / asset key with the AE2 proxy.
+   - The frontend keeps the versioned static image as a fallback when the live AE2 image is unavailable.
 
-3. **Public-player summary from `/player`**
-   Expose only fields that Comlink actually returns publicly:
-   - `datacron.length`
-   - `playerRating` / GAC skill rating, league, division
-   - `pvpProfile` squad/fleet arena ranks
-   - `profileStat` values
-   - unlocked title/portrait counts
-   - `seasonStatus` summary
-   - equipped mod count from each roster unit's `equippedStatMod`
-   - purchased special ability count from `purchasedAbilityId`
+3. **Current public-player enrichment**
+   - datacron count
+   - GAC skill rating when returned
+   - squad arena rank when returned
+   - fleet arena rank when returned
+   - 6-dot equipped mod count when mod definitions can be resolved
+   - live Zeta, Omega and Omicron progression merged with versioned static ability definitions
 
-4. **6-dot mods**
-   - Count equipped mods where the mod definition indicates 6+ pips.
-   - Return `summary.sixDotMods`.
+## Next gateway changes
 
-5. **Capability contract**
-   Return a `capabilities` object that explicitly marks these as unavailable:
+1. **Capability contract**
+   Return an explicit `capabilities` object. Account-private data that Comlink `/player` does not expose must be marked unavailable rather than represented as fake zero values:
    - unequipped mods
    - materials
    - unequipped gear inventory
    - player currency balances
 
-   Never return fake zero balances for unavailable account data.
+   Also mark supported public-derived fields such as equipped mods, 6-dot mods, datacrons and competitive profile data.
+
+2. **Additional public-player summary**
+   Expose only fields actually present in the Comlink player payload:
+   - equipped mod count from each roster unit's `equippedStatMod`
+   - purchased special ability count from `purchasedAbilityId`
+   - `profileStat` values
+   - unlocked title count
+   - unlocked portrait count
+   - `seasonStatus` summary
+   - GAC league/division when available
+
+3. **Response provenance**
+   Keep the existing `source: "live"` contract and add field-level provenance where useful so the UI can distinguish Comlink profile values, SWGOH Stats calculated values, static gamedata and AE2 artwork.
 
 ## Ability upgrades
 
-The Phase 3 frontend uses the static `skill.json` tier definitions plus the live roster skill tier to calculate applied Zeta, Omega and Omicron upgrades. This avoids depending on a single gateway counter and gives us a cross-check against live progression.
+The app uses versioned `skill` / recipe definitions plus each live roster skill tier to calculate applied Zeta, Omega and Omicron upgrades. Current CG `ability_mat_Omega`, `ability_mat_Zeta` and `ability_mat_Omicron` recipe ingredient IDs are recognized. Do not infer an applied upgrade from the ability name alone.
 
 ## Scale gate before tens of thousands of users
 
@@ -52,5 +59,6 @@ The gateway's current roster cache is process-local. Before horizontal scaling, 
 - only one upstream refresh per Ally Code at a time
 - static game data never fetched per player request
 - portraits cached at CDN/object-storage layer
+- cache only public roster/profile responses; never expose service credentials to clients
 
-This is the next infrastructure milestone after Phase 3 is deployed and verified against several known SWGOH.GG profiles.
+This is the next infrastructure milestone after the live response contract is stable and verified against several known player profiles.
