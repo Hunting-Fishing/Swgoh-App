@@ -4,9 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "sync:gamedata": "node scripts/sync-gamedata.mjs --allow-stale",
+    "sync:gamedata": "node scripts/sync-gamedata.mjs --allow-stale && node scripts/repair-catalog.mjs --allow-stale",
     "prestart": "node --test",
-    "start": "node scripts/sync-gamedata.mjs --allow-stale && node server.mjs",
+    "start": "node scripts/sync-gamedata.mjs --allow-stale && node scripts/repair-catalog.mjs --allow-stale && node server.mjs",
     "test": "node --test"
   },
   "engines": {
