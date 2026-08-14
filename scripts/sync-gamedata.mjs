@@ -11,7 +11,7 @@ const CATALOG_PATH = path.join(DATA_DIR, "catalog.json");
 const MANIFEST_PATH = path.join(DATA_DIR, "manifest.json");
 const TIMEOUT_MS = Number(process.env.SWGOH_STATIC_SYNC_TIMEOUT_MS || 60_000);
 const ALLOW_STALE = process.argv.includes("--allow-stale");
-const CATALOG_SCHEMA_VERSION = 2;
+const CATALOG_SCHEMA_VERSION = 3;
 
 function isRecord(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -79,6 +79,39 @@ function factionsOf(unit) {
     .slice(0, 20);
 }
 
+function normalizeMaterialId(value) {
+  return String(value || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+function recipeIngredientIds(recipe) {
+  if (!isRecord(recipe)) return [];
+  const ingredients = []
+    .concat(asArray(recipe.ingredients))
+    .concat(asArray(recipe.ingredient))
+    .concat(asArray(recipe.materialReference))
+    .concat(asArray(recipe.materials));
+
+  return ingredients.map((entry) => {
+    if (typeof entry === "string") return entry;
+    if (!isRecord(entry)) return "";
+    return String(entry.id || entry.materialId || entry.itemId || entry.definitionId || "");
+  }).filter(Boolean);
+}
+
+function recipeHasUpgradeMaterial(recipe, kind) {
+  const valid = kind === "omega"
+    ? new Set(["abilitymatomega", "abilitymaterialomega"])
+    : kind === "zeta"
+      ? new Set(["abilitymatzeta", "abilitymaterialzeta"])
+      : kind === "omicron"
+        ? new Set(["abilitymatomicron", "abilitymaterialomicron"])
+        : new Set();
+
+  return recipeIngredientIds(recipe)
+    .map(normalizeMaterialId)
+    .some((token) => valid.has(token) || [...valid].some((target) => token.endsWith(target)));
+}
+
 function tierHas(tier, kind, recipeMap = new Map()) {
   if (!isRecord(tier)) return false;
   const recipeId = String(tier.recipeId || tier.recipe?.id || tier.recipeReference || "");
@@ -87,7 +120,10 @@ function tierHas(tier, kind, recipeMap = new Map()) {
   if (kind === "zeta" && tier.isZetaTier === true) return true;
   if (kind === "omicron" && tier.isOmicronTier === true) return true;
   if (kind === "omega" && tier.isOmegaTier === true) return true;
+  if (recipe && recipeHasUpgradeMaterial(recipe, kind)) return true;
 
+  // Compatibility with older extracted datasets that encoded the material name
+  // directly in the tier/recipe identifier rather than in recipe ingredients.
   const searchable = [
     tier.powerAdditiveTag,
     tier.powerOverrideTag,
@@ -95,12 +131,12 @@ function tierHas(tier, kind, recipeMap = new Map()) {
     tier.id,
     tier.tierName,
     recipeId,
-    recipe ? JSON.stringify(recipe) : "",
   ].filter(Boolean).join(" ");
+  const compact = normalizeMaterialId(searchable);
 
-  if (kind === "zeta") return /abilitymaterial[_-]?zeta|\bzeta\b/i.test(searchable);
-  if (kind === "omega") return /abilitymaterial[_-]?omega|\bomega\b/i.test(searchable);
-  if (kind === "omicron") return /abilitymaterial[_-]?omicron|\bomicron\b/i.test(searchable);
+  if (kind === "zeta") return compact.includes("abilitymatzeta") || compact.includes("abilitymaterialzeta");
+  if (kind === "omega") return compact.includes("abilitymatomega") || compact.includes("abilitymaterialomega");
+  if (kind === "omicron") return compact.includes("abilitymatomicron") || compact.includes("abilitymaterialomicron");
   return false;
 }
 
@@ -310,4 +346,13 @@ if (isMain) {
   });
 }
 
-export { CATALOG_SCHEMA_VERSION, normalizeAbility, normalizeUnit, tierHas, versionKey };
+export {
+  CATALOG_SCHEMA_VERSION,
+  normalizeAbility,
+  normalizeMaterialId,
+  normalizeUnit,
+  recipeHasUpgradeMaterial,
+  recipeIngredientIds,
+  tierHas,
+  versionKey,
+};
