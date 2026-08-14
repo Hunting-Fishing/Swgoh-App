@@ -11,6 +11,7 @@ const CATALOG_PATH = path.join(DATA_DIR, "catalog.json");
 const MANIFEST_PATH = path.join(DATA_DIR, "manifest.json");
 const TIMEOUT_MS = Number(process.env.SWGOH_STATIC_SYNC_TIMEOUT_MS || 60_000);
 const ALLOW_STALE = process.argv.includes("--allow-stale");
+const CATALOG_SCHEMA_VERSION = 2;
 
 function isRecord(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -78,27 +79,36 @@ function factionsOf(unit) {
     .slice(0, 20);
 }
 
-function tierHas(tier, kind) {
+function tierHas(tier, kind, recipeMap = new Map()) {
   if (!isRecord(tier)) return false;
-  const recipeId = String(tier.recipeId || "").toLowerCase();
-  if (kind === "zeta" && (tier.isZetaTier === true || recipeId === "abilitymaterial_zeta")) return true;
-  if (kind === "omicron" && (tier.isOmicronTier === true || recipeId === "abilitymaterial_omicron")) return true;
-  if (kind === "omega" && (tier.isOmegaTier === true || recipeId === "abilitymaterial_omega")) return true;
-  return new RegExp(kind, "i").test([
+  const recipeId = String(tier.recipeId || tier.recipe?.id || tier.recipeReference || "");
+  const recipe = recipeId ? recipeMap.get(recipeId) : null;
+
+  if (kind === "zeta" && tier.isZetaTier === true) return true;
+  if (kind === "omicron" && tier.isOmicronTier === true) return true;
+  if (kind === "omega" && tier.isOmegaTier === true) return true;
+
+  const searchable = [
     tier.powerAdditiveTag,
     tier.powerOverrideTag,
     tier.name,
     tier.id,
     tier.tierName,
-    tier.recipeId,
-  ].filter(Boolean).join(" "));
+    recipeId,
+    recipe ? JSON.stringify(recipe) : "",
+  ].filter(Boolean).join(" ");
+
+  if (kind === "zeta") return /abilitymaterial[_-]?zeta|\bzeta\b/i.test(searchable);
+  if (kind === "omega") return /abilitymaterial[_-]?omega|\bomega\b/i.test(searchable);
+  if (kind === "omicron") return /abilitymaterial[_-]?omicron|\bomicron\b/i.test(searchable);
+  return false;
 }
 
 function skillTiers(skill) {
   return asArray(skill?.tier).concat(asArray(skill?.tierList)).concat(asArray(skill?.tiers));
 }
 
-function normalizeAbility(reference, skillMap, strings) {
+function normalizeAbility(reference, skillMap, strings, recipeMap = new Map()) {
   const skillId = String(reference?.skillId || reference?.id || "").trim();
   if (!skillId) return null;
   const skill = skillMap.get(skillId) || {};
@@ -106,9 +116,9 @@ function normalizeAbility(reference, skillMap, strings) {
   const omicronMode = Number(skill?.omicronMode || 0);
   const upgradeTiers = tiers.map((tier, index) => ({
     tier: index + 2,
-    zeta: tierHas(tier, "zeta"),
-    omega: tierHas(tier, "omega"),
-    omicron: tierHas(tier, "omicron"),
+    zeta: tierHas(tier, "zeta", recipeMap),
+    omega: tierHas(tier, "omega", recipeMap),
+    omicron: tierHas(tier, "omicron", recipeMap),
   }));
 
   return {
@@ -126,14 +136,14 @@ function normalizeAbility(reference, skillMap, strings) {
   };
 }
 
-function normalizeUnit(unit, skillMap, strings) {
+function normalizeUnit(unit, skillMap, strings, recipeMap = new Map()) {
   const baseId = String(unit?.baseId || unit?.baseID || unit?.id || "").split(":")[0];
   const combatType = Number(unit?.combatType || 0);
   const obtainableTime = String(unit?.obtainableTime ?? "0");
   if (!baseId || ![1, 2].includes(combatType) || unit?.obtainable !== true || obtainableTime !== "0") return null;
 
   const references = asArray(unit?.skillReference).concat(asArray(unit?.skillReferenceList)).concat(asArray(unit?.skills));
-  const abilities = references.map((reference) => normalizeAbility(reference, skillMap, strings)).filter(Boolean);
+  const abilities = references.map((reference) => normalizeAbility(reference, skillMap, strings, recipeMap)).filter(Boolean);
   const categories = asArray(unit?.categoryId).map(String);
   const crew = asArray(unit?.crew).map((entry) => {
     if (typeof entry === "string") return entry.split(":")[0];
@@ -200,7 +210,7 @@ async function readManifest() {
 }
 
 function versionKey(versions) {
-  return [versions?.gameVersion, versions?.localeVersion, versions?.assetVersion]
+  return [CATALOG_SCHEMA_VERSION, versions?.gameVersion, versions?.localeVersion, versions?.assetVersion]
     .map((value) => String(value || ""))
     .join("|");
 }
@@ -218,9 +228,10 @@ async function sync() {
 
   console.log(`[static-data] building player-obtainable catalog for game ${versions.gameVersion || "unknown"}`);
 
-  const [unitsCompressed, skillsPayload, localizationCompressed] = await Promise.all([
+  const [unitsCompressed, skillsPayload, recipesPayload, localizationCompressed] = await Promise.all([
     request(`${SOURCE}/units.json.br`, true),
     request(`${SOURCE}/skill.json`),
+    request(`${SOURCE}/recipe.json`),
     request(`${SOURCE}/Loc_ENG_US.txt.json.br`, true),
   ]);
 
@@ -229,15 +240,21 @@ async function sync() {
   const strings = localizationMap(localizationPayload);
   const units = asArray(unitsPayload?.data || unitsPayload);
   const skills = asArray(skillsPayload?.data || skillsPayload);
+  const recipes = asArray(recipesPayload?.data || recipesPayload);
   const skillMap = new Map(
     skills
       .map((skill) => [String(skill?.id || skill?.skillId || ""), skill])
       .filter(([id]) => id)
   );
+  const recipeMap = new Map(
+    recipes
+      .map((recipe) => [String(recipe?.id || recipe?.recipeId || ""), recipe])
+      .filter(([id]) => id)
+  );
 
   const catalogByBaseId = new Map();
   for (const unit of units) {
-    const normalized = normalizeUnit(unit, skillMap, strings);
+    const normalized = normalizeUnit(unit, skillMap, strings, recipeMap);
     if (!normalized || catalogByBaseId.has(normalized.baseId)) continue;
     catalogByBaseId.set(normalized.baseId, normalized);
   }
@@ -252,12 +269,14 @@ async function sync() {
     gameVersion: String(versions.gameVersion || unitsPayload?.version || ""),
     localeVersion: String(versions.localeVersion || localizationPayload?.version || ""),
     assetVersion: versions.assetVersion == null ? "" : String(versions.assetVersion),
+    schemaVersion: CATALOG_SCHEMA_VERSION,
     generatedAt,
     units: catalogUnits,
   };
 
   const nextManifest = {
     versionKey: currentKey,
+    schemaVersion: CATALOG_SCHEMA_VERSION,
     gameVersion: catalog.gameVersion,
     localeVersion: catalog.localeVersion,
     assetVersion: catalog.assetVersion,
@@ -265,7 +284,8 @@ async function sync() {
     unitCount: catalogUnits.length,
     characterCount: catalogUnits.filter((unit) => unit.unitType === "Character").length,
     shipCount: catalogUnits.filter((unit) => unit.unitType === "Ship").length,
-    source: "swgoh-utils/gamedata:units.json.br",
+    recipeCount: recipes.length,
+    source: "swgoh-utils/gamedata:units.json.br+skill.json+recipe.json",
   };
 
   await writeFile(CATALOG_PATH, JSON.stringify(catalog), "utf8");
@@ -273,7 +293,7 @@ async function sync() {
 
   console.log(
     `[static-data] wrote ${catalogUnits.length} player-obtainable units ` +
-    `(${nextManifest.characterCount} characters, ${nextManifest.shipCount} ships)`
+    `(${nextManifest.characterCount} characters, ${nextManifest.shipCount} ships; ${nextManifest.recipeCount} recipes)`
   );
 }
 
@@ -290,4 +310,4 @@ if (isMain) {
   });
 }
 
-export { normalizeAbility, normalizeUnit, tierHas, versionKey };
+export { CATALOG_SCHEMA_VERSION, normalizeAbility, normalizeUnit, tierHas, versionKey };
