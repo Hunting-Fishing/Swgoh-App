@@ -37,6 +37,14 @@ function swgohGgAssetUrl(value) {
   return name ? `${SWGOH_GG_ASSET_BASE}/${encodeURIComponent(name)}.png` : "";
 }
 
+function materialKind(value) {
+  const label = String(value || "").trim().toLowerCase();
+  if (label === "zeta" || label === "zetas") return "Zeta";
+  if (label === "omega" || label === "omegas") return "Omega";
+  if (label === "omicron" || label === "omicrons") return "Omicron";
+  return "";
+}
+
 function baseIdForCard(element) {
   const card = element.closest(".unit-card, .catalog-unit");
   if (!card) return "";
@@ -125,19 +133,40 @@ function ensurePortraits(root = document) {
   }
 }
 
+function prependMaterialIcon(element, kind) {
+  const src = MATERIAL_ICONS[kind];
+  if (!element || !src || element.querySelector("img[data-material-icon]")) return;
+  const icon = document.createElement("img");
+  icon.className = "ability-material-icon";
+  icon.dataset.materialIcon = kind.toLowerCase();
+  icon.src = src;
+  icon.alt = "";
+  icon.setAttribute("aria-hidden", "true");
+  element.prepend(icon);
+}
+
 function decorateMaterialFlags(root = document) {
   for (const flag of root.querySelectorAll?.(".ability-flags em") || []) {
-    const label = flag.textContent.trim();
-    const src = MATERIAL_ICONS[label];
-    if (!src || flag.querySelector("img")) continue;
+    const kind = materialKind(flag.textContent);
+    if (!kind) continue;
+    prependMaterialIcon(flag, kind);
+    flag.classList.add(`material-${kind.toLowerCase()}`);
+  }
+}
 
-    const icon = document.createElement("img");
-    icon.className = "ability-material-icon";
-    icon.src = src;
-    icon.alt = "";
-    icon.setAttribute("aria-hidden", "true");
-    flag.prepend(icon);
-    flag.classList.add(`material-${label.toLowerCase()}`);
+function decorateMaterialMetrics(root = document) {
+  const selectors = [
+    "#profile .collection-summary > div",
+    "#profile .detail-metrics > div",
+    ".details .detail-metrics > div",
+  ];
+  for (const metric of root.querySelectorAll?.(selectors.join(",")) || []) {
+    const label = metric.querySelector("span");
+    if (!label) continue;
+    const kind = materialKind(label.textContent);
+    if (!kind) continue;
+    prependMaterialIcon(label, kind);
+    label.classList.add("material-metric-label");
   }
 }
 
@@ -177,6 +206,7 @@ function decorateAbilityRows(details) {
   }
 
   decorateMaterialFlags(details);
+  decorateMaterialMetrics(details);
 
   const readinessLabel = details.querySelector(".readiness-banner > div:first-child span");
   if (readinessLabel) readinessLabel.textContent = "Upgrade Completion";
@@ -209,6 +239,7 @@ function showCatalogIntegrity() {
 function decorate(root = document) {
   ensurePortraits(root);
   decorateMaterialFlags(root);
+  decorateMaterialMetrics(root);
   const details = document.getElementById("details");
   if (details?.children.length) decorateAbilityRows(details);
   showCatalogIntegrity();
