@@ -20,8 +20,20 @@ const state = {
   allyCode: "",
   fetchedAt: 0,
   renderTimer: 0,
-  observer: null,
+  rendering: false,
+  rerender: false,
+  pendingForce: false,
 };
+
+function journeyMapVisible() {
+  const farm = $("workspace-farm");
+  const map = $("farmJourneyMap");
+  return Boolean(
+    farm && !farm.hidden &&
+    map && !map.hidden &&
+    map.querySelector(".journey-map-toolbar")
+  );
+}
 
 async function loadCatalog() {
   if (state.catalog.length) return state.catalog;
@@ -113,8 +125,6 @@ function selectorCard(plan) {
   const profile = plan.profile;
   const target = targetUnit(profile);
   const cardTone = tone(plan);
-  const best = plan.bestFive;
-  const poolRows = plan.candidates;
   return `
     <article class="journey-eligibility-card tone-${cardTone}" data-eligibility-profile="${escapeAttr(profile.id)}">
       <header class="journey-eligibility-head">
@@ -141,13 +151,13 @@ function selectorCard(plan) {
           <div><span>PROGRESSION / GP ORDER</span><h5>Best progressed legal 5</h5></div>
           <b>${plan.ownedCount} owned · ${plan.poolSize} verified pool</b>
         </div>
-        ${best.length
-          ? `<div class="journey-eligibility-best-grid">${best.map((candidate) => compactCandidate(candidate, profile.targetStars)).join("")}</div>`
+        ${plan.bestFive.length
+          ? `<div class="journey-eligibility-best-grid">${plan.bestFive.map((candidate) => compactCandidate(candidate, profile.targetStars)).join("")}</div>`
           : '<div class="journey-eligibility-no-roster">Load/own verified event characters to rank your legal roster choices.</div>'}
       </section>
       <details class="journey-eligibility-details">
         <summary><span>All verified event candidates</span><b>${plan.poolSize}</b></summary>
-        <div class="journey-eligibility-pool">${poolRows.map((candidate) => allCandidate(candidate, profile.targetStars)).join("")}</div>
+        <div class="journey-eligibility-pool">${plan.candidates.map((candidate) => allCandidate(candidate, profile.targetStars)).join("")}</div>
         ${plan.verificationWarnings.length ? `<div class="journey-eligibility-warning">${plan.verificationWarnings.map(escapeHtml).join(" ")}</div>` : ""}
         <p class="journey-eligibility-source">Checked event pool ∩ versioned catalog faction/category. New faction-tagged characters fail closed until event eligibility is reverified. Current account unlock progression can also include Legacy Story Token / quest-chain gates; this card models the event squad itself, not those separate account gates.</p>
       </details>
@@ -162,20 +172,15 @@ function currentSearch() {
   return String($("journeyMapSearch")?.value || "").trim().toLowerCase();
 }
 
-function matchesSearch(plan, search) {
-  if (!search) return true;
-  return [
-    plan.profile.name,
-    plan.profile.faction,
-    ...plan.candidates.map((candidate) => candidate.name),
-  ].join(" ").toLowerCase().includes(search);
-}
-
 function visiblePlans(plans) {
   const filter = currentFilter();
   const search = currentSearch();
   return plans.filter((plan) => {
-    if (!matchesSearch(plan, search)) return false;
+    if (search && ![
+      plan.profile.name,
+      plan.profile.faction,
+      ...plan.candidates.map((candidate) => candidate.name),
+    ].join(" ").toLowerCase().includes(search)) return false;
     if (filter === "tracked") return false;
     if (filter === "ready") return plan.complete;
     if (filter === "incomplete") return !plan.complete;
@@ -186,11 +191,7 @@ function visiblePlans(plans) {
 function versionState() {
   const expected = String(JOURNEY_EVENT_PROFILES[0]?.verification?.gameDataVersion || "");
   const current = String(state.manifest?.gameVersion || "");
-  return {
-    expected,
-    current,
-    valid: !expected || !current || current.startsWith(expected),
-  };
+  return { expected, current, valid: !expected || !current || current.startsWith(expected) };
 }
 
 function versionGate(version) {
@@ -199,11 +200,17 @@ function versionGate(version) {
 }
 
 async function renderEligibility(force = false) {
+  if (!journeyMapVisible()) return;
   const map = $("farmJourneyMap");
   const toolbar = map?.querySelector(".journey-map-toolbar");
-  if (!map || !toolbar) return;
+  if (!toolbar) return;
+
   await Promise.all([loadCatalog(), loadManifest()]);
+  if (!journeyMapVisible()) return;
+
   const body = await loadLive(force);
+  if (!journeyMapVisible()) return;
+
   const liveUnits = body ? [...(body.units || []), ...(body.ships || [])] : [];
   const plans = JOURNEY_EVENT_PROFILES.map((profile) => buildEventCandidatePlan(profile, state.catalog, liveUnits));
   const visible = visiblePlans(plans);
@@ -236,34 +243,52 @@ async function renderEligibility(force = false) {
   toolbar.insertAdjacentElement("afterend", section);
 }
 
-function schedule(delay = 80, force = false) {
+function schedule(delay = 100, force = false) {
+  if (force) state.pendingForce = true;
   clearTimeout(state.renderTimer);
-  state.renderTimer = setTimeout(() => renderEligibility(force).catch(() => {}), delay);
+  state.renderTimer = setTimeout(async () => {
+    if (!journeyMapVisible()) return;
+    if (state.rendering) {
+      state.rerender = true;
+      return;
+    }
+    state.rendering = true;
+    const useForce = state.pendingForce;
+    state.pendingForce = false;
+    try {
+      await renderEligibility(useForce);
+    } catch {
+      // Eligibility is supplemental; never block workspace navigation.
+    } finally {
+      state.rendering = false;
+      if (state.rerender) {
+        state.rerender = false;
+        schedule(120, false);
+      }
+    }
+  }, delay);
 }
 
 function init() {
   document.addEventListener("click", (event) => {
-    if (event.target.closest?.("[data-journey-map-filter], [data-farm-view='map']")) schedule(120, false);
+    if (event.target.closest?.("[data-farm-view='map']")) schedule(220, false);
+    if (event.target.closest?.("[data-journey-map-filter]")) schedule(120, false);
+    if (event.target.closest?.("[data-track-journey], [data-untrack-journey]")) schedule(320, false);
+    if (event.target.closest?.("[data-workspace-tab='farm']")) schedule(260, false);
   });
   document.addEventListener("input", (event) => {
-    if (event.target.id === "journeyMapSearch") schedule(160, false);
+    if (event.target.id === "journeyMapSearch") schedule(180, false);
   });
   $("allyForm")?.addEventListener("submit", () => {
     state.body = null;
     state.fetchedAt = 0;
-    schedule(720, true);
+    if (journeyMapVisible()) schedule(800, true);
   });
+  window.addEventListener("hashchange", () => schedule(260, false));
 
-  const farm = $("workspace-farm");
-  if (!farm) {
-    setTimeout(init, 100);
-    return;
-  }
-  state.observer = new MutationObserver(() => {
-    if ($("farmJourneyMap")?.querySelector(".journey-map-toolbar") && !$("journeyEventEligibilityBand")) schedule(30, false);
-  });
-  state.observer.observe(farm, { childList: true, subtree: true });
-  schedule(250, false);
+  // Deliberately no broad MutationObserver. The previous subtree observer could
+  // repeatedly rebuild a large hidden eligibility DOM and starve tab navigation.
+  if (journeyMapVisible()) schedule(250, false);
 }
 
 init();
