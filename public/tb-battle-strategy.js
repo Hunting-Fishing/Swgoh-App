@@ -1,0 +1,151 @@
+import { buildTeamCapabilityIndex } from "./mission-mechanic-intelligence.js";
+import { battleStrategyForMission, battleStrategySources } from "./tb-battle-strategy-data.js";
+
+const normalized = (value) => String(value || "").trim().toLowerCase();
+
+function memberBaseId(member) {
+  return String(member?.unit?.baseId || member?.baseId || member?.staticUnit?.baseId || "");
+}
+
+function memberName(member) {
+  return String(member?.unit?.name || member?.name || member?.staticUnit?.name || memberBaseId(member) || "Unknown");
+}
+
+function abilityRows(member) {
+  return Array.isArray(member?.abilities)
+    ? member.abilities
+    : Array.isArray(member?.staticUnit?.abilities)
+      ? member.staticUnit.abilities
+      : [];
+}
+
+function capabilitySources(check, capabilities) {
+  if (check?.evidenceType === "mechanic") return capabilities.mechanics.get(check.evidenceKey) || [];
+  if (check?.evidenceType === "buff") return capabilities.buffs.get(check.evidenceKey) || [];
+  if (check?.evidenceType === "debuff") return capabilities.debuffs.get(check.evidenceKey) || [];
+  return [];
+}
+
+function abilityMatch(member, check) {
+  const wanted = normalized(check?.abilityName);
+  if (!wanted) return null;
+  return abilityRows(member).find((ability) => normalized(ability?.name) === wanted || normalized(ability?.id) === wanted) || null;
+}
+
+function priorityRank(value) {
+  const order = { critical: 0, high: 1, setup: 2, helpful: 3, info: 4 };
+  return order[normalized(value)] ?? 5;
+}
+
+export function evaluateBattleStrategy(analysis, mission = null) {
+  const strategy = battleStrategyForMission(analysis?.missionId || mission?.id);
+  if (!strategy) {
+    return {
+      available: false,
+      status: "pending",
+      label: "STRATEGY PENDING",
+      missionId: String(analysis?.missionId || mission?.id || ""),
+      evidenceBoundary: "No sourced battle-strategy pack has been published for this mission yet.",
+    };
+  }
+
+  const members = Array.isArray(analysis?.members) ? analysis.members : [];
+  const selectedIds = members.map(memberBaseId).filter(Boolean);
+  const selected = new Set(selectedIds);
+  const byId = new Map(members.map((member) => [memberBaseId(member), member]).filter(([id]) => id));
+  const capabilities = buildTeamCapabilityIndex(members);
+
+  const leaderCheck = strategy.requiredLeaderBaseId
+    ? {
+        type: "leader",
+        id: strategy.requiredLeaderBaseId,
+        label: "Required leader",
+        required: true,
+        ready: selectedIds[0] === strategy.requiredLeaderBaseId,
+        current: selectedIds[0] || "",
+        expected: strategy.requiredLeaderBaseId,
+      }
+    : null;
+
+  const unitChecks = (strategy.keyUnits || []).map((check) => ({
+    type: "unit",
+    id: check.baseId,
+    label: check.name || check.baseId,
+    importance: check.importance || "helpful",
+    required: check.importance === "critical",
+    ready: selected.has(String(check.baseId)),
+    reason: check.reason || "",
+  }));
+
+  const mechanicChecks = (strategy.requiredMechanics || []).map((check) => {
+    const sources = capabilitySources(check, capabilities);
+    return {
+      type: "mechanic",
+      id: check.id,
+      label: check.label || check.id,
+      importance: check.importance || "high",
+      required: ["critical", "high"].includes(normalized(check.importance)),
+      ready: sources.length > 0,
+      sources,
+      expected: check.evidenceKey || check.id,
+    };
+  });
+
+  const abilityChecks = (strategy.keyAbilities || []).map((check) => {
+    const member = byId.get(String(check.baseId));
+    const ability = member ? abilityMatch(member, check) : null;
+    return {
+      type: "ability",
+      id: `${check.baseId}:${check.abilityName}`,
+      baseId: check.baseId,
+      unitName: member ? memberName(member) : check.baseId,
+      label: check.abilityName,
+      importance: check.importance || "high",
+      required: check.importance === "critical",
+      ready: Boolean(ability),
+      abilityId: String(ability?.id || ""),
+      installedTier: ability?.tier == null ? null : Number(ability.tier),
+      expected: check.expected || "",
+      reason: check.reason || "",
+    };
+  });
+
+  const checks = [leaderCheck, ...unitChecks, ...mechanicChecks, ...abilityChecks].filter(Boolean)
+    .sort((a, b) => priorityRank(a.importance || (a.required ? "critical" : "helpful")) - priorityRank(b.importance || (b.required ? "critical" : "helpful")));
+
+  const blockers = checks.filter((check) => check.required && !check.ready);
+  const warnings = checks.filter((check) => !check.required && !check.ready);
+  const label = blockers.length ? "STRATEGY GAP" : warnings.length ? "PLAN READY · ADVISORIES" : "PLAN READY";
+  const status = blockers.length ? "blocked" : warnings.length ? "warning" : "ready";
+
+  return {
+    available: true,
+    status,
+    label,
+    missionId: strategy.missionId,
+    strategyId: strategy.id,
+    title: strategy.title,
+    confidence: strategy.confidence,
+    strategyStatus: strategy.status,
+    lastVerified: strategy.lastVerified,
+    summary: strategy.summary,
+    sources: battleStrategySources(strategy),
+    checks,
+    blockers,
+    warnings,
+    stages: (strategy.stages || []).map((entry) => ({
+      ...entry,
+      steps: [...(entry.steps || [])].sort((a, b) => priorityRank(a.priority) - priorityRank(b.priority)),
+    })),
+    targetPriorities: [...(strategy.targetPriorities || [])].sort((a, b) => priorityRank(a.priority) - priorityRank(b.priority)),
+    failureRisks: strategy.failureRisks || [],
+    evidenceBoundary: strategy.evidenceBoundary || "Strategy guidance is source-scoped and does not represent a guaranteed win.",
+  };
+}
+
+export function battleStrategyStatus(strategyAnalysis) {
+  if (!strategyAnalysis?.available) return { level: "unknown", label: "STRATEGY PENDING" };
+  if (strategyAnalysis.status === "blocked") return { level: "blocked", label: strategyAnalysis.label };
+  if (strategyAnalysis.status === "warning") return { level: "warning", label: strategyAnalysis.label };
+  return { level: "ready", label: strategyAnalysis.label };
+}

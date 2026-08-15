@@ -1,4 +1,5 @@
 import { analyzeTeamCombatPreparation, combatPreparationStatus, loadCombatCatalog, loadCombatKnowledge } from "./tb-combat-intelligence.js";
+import { battleStrategyMarkup } from "./tb-battle-strategy-ui.js";
 
 const escapeHtml = (value) => String(value ?? "")
   .replaceAll("&", "&amp;")
@@ -7,13 +8,17 @@ const escapeHtml = (value) => String(value ?? "")
   .replaceAll('"', "&quot;")
   .replaceAll("'", "&#039;");
 
-function ensureCss() {
-  const href = "/tb-combat-prep.css?v=20260815-tbcombat2";
+function ensureStyle(href) {
   if (document.querySelector(`link[href="${href}"]`)) return;
   const link = document.createElement("link");
   link.rel = "stylesheet";
   link.href = href;
   document.head.appendChild(link);
+}
+
+function ensureCss() {
+  ensureStyle("/tb-combat-prep.css?v=20260815-tbcombat2");
+  ensureStyle("/tb-battle-strategy.css?v=20260815-tbstrategy1");
 }
 
 function targetText(target = {}) {
@@ -93,7 +98,7 @@ function prepMarkup(analysis) {
   const activeOmiRows = analysis.tbOmicrons.rows;
   const coverageCount = (analysis.mechanicCoverage?.requirements?.length || 0) + (analysis.mechanicCoverage?.hazards?.length || 0);
   return `<section class="tbcp-card">
-    <header class="tbcp-head"><div><span>MISSION BATTLE PREPARATION</span><strong>Abilities · Zetas · TB Omicrons · Mods · Mechanics</strong></div><b class="${status.level}">${escapeHtml(status.label)}</b></header>
+    <header class="tbcp-head"><div><span>MISSION BATTLE PREPARATION</span><strong>Abilities · Mechanics · Strategy · Mods</strong></div><b class="${status.level}">${escapeHtml(status.label)}</b></header>
     <div class="tbcp-summary">
       <div><span>Zetas installed</span><strong>${analysis.zetas.installed}/${analysis.zetas.available}</strong></div>
       <div><span>TB-active Omicrons</span><strong>${analysis.tbOmicrons.installed}/${analysis.tbOmicrons.active}</strong></div>
@@ -103,6 +108,7 @@ function prepMarkup(analysis) {
     <details class="tbcp-details"><summary>Inspect battle preparation</summary>
       <div class="tbcp-members">${analysis.members.map(memberMarkup).join("")}</div>
       ${mechanicCoverageMarkup(analysis.mechanicCoverage)}
+      ${battleStrategyMarkup(analysis.battleStrategy)}
       ${interactionMarkup(analysis.interactionProfile)}
       <div class="tbcp-columns">
         <section><h6>TB Omicron activity</h6>${activeOmiRows.length ? activeOmiRows.map((row) => `<span class="tbcp-guidance"><b>${row.installed ? "INSTALLED" : "AVAILABLE"}</b>${escapeHtml(row.unitName)} · ${escapeHtml(row.name)} · ${escapeHtml(row.modeLabel)}</span>`).join("") : '<span class="tbcp-pending">No Omicron on this listed team is marked active for this mission type.</span>'}<p>This reports game-mode activation only. It does not claim the Omicron is worth purchasing for this specific battle.</p></section>
@@ -111,7 +117,7 @@ function prepMarkup(analysis) {
         <section><h6>Safer investment</h6><span class="tbcp-pending">${escapeHtml(targetText(analysis.targets.safer))}</span></section>
       </div>
       ${(analysis.mechanics.length || analysis.enemies.length || analysis.guidance.strategy.length) ? `<div class="tbcp-strategy"><h6>Source Battle Notes</h6>${analysis.mechanics.map((item) => `<p><b>MECHANIC</b> ${escapeHtml(item)}</p>`).join("")}${analysis.enemies.map((item) => `<p><b>ENEMY</b> ${escapeHtml(typeof item === "string" ? item : item?.name || item?.baseId || item?.definitionId || "Enemy")}</p>`).join("")}${analysis.guidance.strategy.map((item) => `<p><b>${escapeHtml(item.priority)}</b> ${escapeHtml(item.name)}${item.notes ? ` · ${escapeHtml(item.notes)}` : ""}</p>`).join("")}</div>` : ""}
-      <footer><button type="button" data-tbcp-open-mods>Open Mods Command</button><small>No win percentage is generated. A COVERED mechanic means the listed team exposes that mechanic in its indexed kit; it does not by itself prove the battle is safe.</small></footer>
+      <footer><button type="button" data-tbcp-open-mods>Open Mods Command</button><small>No win percentage is generated. Battle Strategy Intelligence reports source-backed or explicitly labeled community-tested execution guidance and fails closed when a mission has not been researched.</small></footer>
     </details>
   </section>`;
 }
