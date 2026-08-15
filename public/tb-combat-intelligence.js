@@ -1,7 +1,7 @@
 import { mergeAbilityProgression } from "./progression-policy.js";
 import { recommendationRosterFit } from "./tb-mission-intelligence.js";
 import { analyzeMissionMechanicCoverage } from "./mission-mechanic-intelligence.js";
-import { teamInteractionProfile } from "./interaction-graph.js";
+import { teamInteractionProfileFromCatalog } from "./interaction-graph.js";
 
 export const TB_OMICRON_MODES = Object.freeze({
   STRIKE: 5,
@@ -10,7 +10,7 @@ export const TB_OMICRON_MODES = Object.freeze({
 });
 
 let catalogPromise = null;
-let knowledgePromise = null;
+let enemyKnowledgePromise = null;
 
 export async function loadCombatCatalog() {
   if (window.__swgohStaticCatalog?.units?.length) return window.__swgohStaticCatalog;
@@ -32,7 +32,6 @@ export async function loadCombatCatalog() {
 async function optionalJson(path) {
   try {
     const response = await fetch(path, { cache: "force-cache" });
-    if (response.status === 404) return null;
     if (!response.ok) return null;
     return await response.json();
   } catch {
@@ -40,18 +39,14 @@ async function optionalJson(path) {
   }
 }
 
-export async function loadCombatKnowledge() {
-  if (window.__swgohCombatKnowledge) return window.__swgohCombatKnowledge;
-  knowledgePromise ||= Promise.all([
-    optionalJson("/data/enemy-kit-index.json"),
-    optionalJson("/data/interaction-index.json"),
-    optionalJson("/data/enemy-interaction-index.json"),
-  ]).then(([enemyKit, interactions, enemyInteractions]) => {
-    const value = { enemyKit, interactions, enemyInteractions };
-    window.__swgohCombatKnowledge = value;
-    return value;
-  }).catch(() => ({ enemyKit: null, interactions: null, enemyInteractions: null }));
-  return knowledgePromise;
+export async function loadCombatKnowledge({ needEnemy = false } = {}) {
+  if (!needEnemy) return { enemyKit: null };
+  if (window.__swgohEnemyKitKnowledge) return { enemyKit: window.__swgohEnemyKitKnowledge };
+  enemyKnowledgePromise ||= optionalJson("/data/enemy-kit-index.json").then((enemyKit) => {
+    window.__swgohEnemyKitKnowledge = enemyKit;
+    return enemyKit;
+  });
+  return { enemyKit: await enemyKnowledgePromise };
 }
 
 export function catalogUnitMap(catalog) {
@@ -152,9 +147,7 @@ export function analyzeTeamCombatPreparation(body, mission, recommendation, cata
   const saferTargetsDefined = [recommendation?.saferTarget?.gear, recommendation?.saferTarget?.relic, recommendation?.saferTarget?.speed].some((value) => value != null);
   const mechanicCoverage = analyzeMissionMechanicCoverage(mission, members, knowledge?.enemyKit || null);
   const selectedBaseIds = members.map((member) => member.unit?.baseId || member.baseId).filter(Boolean);
-  const interactionProfile = knowledge?.interactions
-    ? teamInteractionProfile(selectedBaseIds, knowledge.interactions)
-    : { baseIds: selectedBaseIds, foundUnitCount: 0, mechanics: [], activeInteractions: [], namedUnitLinks: [], factionLinks: [], evidenceBoundary: "Interaction index has not been generated for this game-data snapshot." };
+  const interactionProfile = teamInteractionProfileFromCatalog(selectedBaseIds, catalog);
 
   return {
     missionId: String(mission?.id || ""),

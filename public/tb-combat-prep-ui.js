@@ -82,8 +82,8 @@ function mechanicCoverageMarkup(coverage = {}) {
 function interactionMarkup(profile = {}) {
   const rows = (profile.activeInteractions || []).slice(0, 10);
   return `<section class="tbcp-interaction-panel">
-    <div class="tbcp-mechanic-head"><h6>Team Interaction Evidence</h6><span>${rows.length ? `${profile.activeInteractions.length} explicit links` : "index pending / no explicit links"}</span></div>
-    ${rows.length ? `<div class="tbcp-interaction-grid">${rows.map((item) => `<span><b>${escapeHtml(item.relationTypes?.join(" + ") || item.abilityType || "LINK")}</b>${escapeHtml(item.abilityName)} → ${escapeHtml(item.targetName)}<small>${escapeHtml(item.sentence)}</small></span>`).join("")}</div>` : '<span class="tbcp-pending">No generated interaction evidence is available for this selected team yet.</span>'}
+    <div class="tbcp-mechanic-head"><h6>Team Interaction Evidence</h6><span>${rows.length ? `${profile.activeInteractions.length} explicit links` : "no explicit in-team links"}</span></div>
+    ${rows.length ? `<div class="tbcp-interaction-grid">${rows.map((item) => `<span><b>${escapeHtml(item.relationTypes?.join(" + ") || item.abilityType || "LINK")}</b>${escapeHtml(item.abilityName)} → ${escapeHtml(item.targetName)}<small>${escapeHtml(item.sentence)}</small></span>`).join("")}</div>` : '<span class="tbcp-pending">No explicit named-unit or faction interaction was detected inside this selected team.</span>'}
     <small class="tbcp-evidence-boundary">${escapeHtml(profile.evidenceBoundary || "")}</small>
   </section>`;
 }
@@ -126,10 +126,12 @@ export async function hydrateCombatPreparation(root, body, missions) {
   if (!slots.length) return;
   ensureCss();
   const byMission = missionMap(missions);
+  const visibleMissionIds = new Set(slots.map((slot) => String(slot.dataset.tbCombatMission || "")).filter(Boolean));
+  const needEnemy = [...visibleMissionIds].some((id) => Array.isArray(byMission.get(id)?.enemies) && byMission.get(id).enemies.length > 0);
   let catalog;
   let knowledge;
   try {
-    [catalog, knowledge] = await Promise.all([loadCombatCatalog(), loadCombatKnowledge()]);
+    [catalog, knowledge] = await Promise.all([loadCombatCatalog(), loadCombatKnowledge({ needEnemy })]);
   } catch (error) {
     for (const slot of slots) slot.innerHTML = `<div class="tbcp-load-error">Battle preparation unavailable: ${escapeHtml(error?.message || "catalog error")}</div>`;
     return;

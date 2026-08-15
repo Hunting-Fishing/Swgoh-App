@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "start": "node server.mjs",
+    "build": "node scripts/build-production-data.mjs",
     "test": "node --test",
     "verify": "node --test",
     "build:interactions": "node scripts/build-interaction-index.mjs",

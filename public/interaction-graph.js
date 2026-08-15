@@ -1,3 +1,5 @@
+import { extractAbilitySemantics, summarizeUnitKit } from "./kit-semantics.js";
+
 const unique = (values) => [...new Set(values.filter(Boolean))];
 const escapeRegExp = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -21,8 +23,13 @@ function audienceOf(sentence) {
   return "unknown";
 }
 
+function semanticAbility(ability) {
+  return ability?.semantics ? ability : { ...ability, semantics: extractAbilitySemantics(ability) };
+}
+
 function relationKinds(ability, sentence) {
-  const semantics = ability?.semantics || {};
+  const semantic = semanticAbility(ability);
+  const semantics = semantic.semantics || {};
   const kinds = semantics.mechanics?.filter((item) => item?.sentence === sentence).map((item) => item.kind) || [];
   const output = [];
   if (kinds.includes("assist")) output.push("assist");
@@ -55,7 +62,8 @@ export function buildMentionIndexes(catalog = {}) {
 
 export function extractUnitInteractions(unit, indexes) {
   const interactions = [];
-  for (const ability of unit?.abilities || []) {
+  for (const rawAbility of unit?.abilities || []) {
+    const ability = semanticAbility(rawAbility);
     const description = String(ability?.description || "");
     for (const sentence of sentenceList(description)) {
       const audience = audienceOf(sentence);
@@ -102,21 +110,26 @@ export function extractUnitInteractions(unit, indexes) {
   return [...new Map(interactions.map((item) => [key(item), item])).values()];
 }
 
-export function buildInteractionIndex(catalog = {}, rawEffectIndex = null, mentionCatalog = catalog) {
-  const indexes = buildMentionIndexes(mentionCatalog);
-  const rawByBaseId = new Map((rawEffectIndex?.units || []).map((unit) => [String(unit.baseId), unit]));
-  const units = (catalog.units || []).map((unit) => ({
+function interactionNode(unit, indexes, rawByBaseId = new Map()) {
+  const kit = unit?.kit || summarizeUnitKit(unit);
+  return {
     baseId: unit.baseId,
     name: unit.name,
     unitType: unit.unitType,
     factions: unit.factions || [],
     role: unit.role || "",
-    mechanics: unit.kit?.mechanicKinds || [],
-    buffs: unit.kit?.buffs || [],
-    debuffs: unit.kit?.debuffs || [],
+    mechanics: kit?.mechanicKinds || [],
+    buffs: kit?.buffs || [],
+    debuffs: kit?.debuffs || [],
     interactions: extractUnitInteractions(unit, indexes),
     rawGraphAvailable: Boolean(rawByBaseId.get(String(unit.baseId))?.abilities?.some((ability) => ability.status === "linked")),
-  }));
+  };
+}
+
+export function buildInteractionIndex(catalog = {}, rawEffectIndex = null, mentionCatalog = catalog) {
+  const indexes = buildMentionIndexes(mentionCatalog);
+  const rawByBaseId = new Map((rawEffectIndex?.units || []).map((unit) => [String(unit.baseId), unit]));
+  const units = (catalog.units || []).map((unit) => interactionNode(unit, indexes, rawByBaseId));
 
   return {
     schemaVersion: 1,
@@ -161,4 +174,11 @@ export function teamInteractionProfile(baseIds, interactionIndex) {
     factionLinks: activeInteractions.filter((item) => item.targetType === "faction"),
     evidenceBoundary: "Interaction links are explicit text references; counts are not a universal synergy or win score.",
   };
+}
+
+export function teamInteractionProfileFromCatalog(baseIds, catalog = {}) {
+  const selected = new Set((baseIds || []).map(String));
+  const indexes = buildMentionIndexes(catalog);
+  const nodes = (catalog.units || []).filter((unit) => selected.has(String(unit.baseId))).map((unit) => interactionNode(unit, indexes));
+  return teamInteractionProfile([...selected], { units: nodes });
 }
