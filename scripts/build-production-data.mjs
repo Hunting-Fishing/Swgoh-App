@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const steps = [
+  { name: "validate battle strategy", args: ["scripts/validate-battle-strategy.mjs"], blocking: true },
   { name: "refresh catalog", args: ["scripts/sync-gamedata.mjs", "--allow-stale"] },
   { name: "repair catalog", args: ["scripts/repair-catalog.mjs", "--allow-stale"] },
   { name: "build kit index", args: ["scripts/enrich-kit-intelligence.mjs"] },
@@ -20,17 +21,23 @@ for (const step of steps) {
     stdio: "inherit",
   });
   const ok = result.status === 0;
-  results.push({ name: step.name, ok, status: result.status, optional: Boolean(step.optional) });
+  results.push({ name: step.name, ok, status: result.status, optional: Boolean(step.optional), blocking: Boolean(step.blocking) });
   if (!ok) {
-    console.warn(`[production-data] ${step.name} failed with exit ${result.status ?? "unknown"}; ${step.optional ? "optional enrichment will be omitted" : "committed static data will remain the fallback"}.`);
+    const consequence = step.blocking
+      ? "local code validation failed; deployment must stop"
+      : step.optional
+        ? "optional enrichment will be omitted"
+        : "committed static data will remain the fallback";
+    console.warn(`[production-data] ${step.name} failed with exit ${result.status ?? "unknown"}; ${consequence}.`);
   }
 }
 
 const succeeded = results.filter((result) => result.ok).length;
 const failed = results.filter((result) => !result.ok);
+const blockingFailures = failed.filter((result) => result.blocking);
 console.log(`[production-data] completed ${succeeded}/${results.length} build steps.`);
-if (failed.length) console.warn(`[production-data] fail-soft steps: ${failed.map((result) => result.name).join(", ")}`);
+if (failed.length) console.warn(`[production-data] failed steps: ${failed.map((result) => result.name).join(", ")}`);
 
-// Static intelligence is an enrichment layer. Do not block a live roster deployment
-// solely because an external versioned-data source is temporarily unavailable.
-process.exitCode = 0;
+// External static intelligence is an enrichment layer and remains fail-soft.
+// Local strategy/schema regressions are under our control and must block deployment.
+process.exitCode = blockingFailures.length ? 1 : 0;
