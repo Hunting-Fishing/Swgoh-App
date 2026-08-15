@@ -19,6 +19,8 @@ const state = {
   renderToken: 0,
 };
 let dsGeoModulePromise = null;
+let legacyRendererPromise = null;
+let geoLsDataPromise = null;
 
 function liveBody() {
   const digits = String($("allyCode")?.value || "").replace(/\D/g, "").slice(0, 9);
@@ -57,7 +59,7 @@ function rosterContext(tb) {
 
 function tbCard(tb) {
   const active = state.selected === tb.id;
-  const status = tb.id === "geo-separatist" ? "LIVE MAP" : tb.mapStatus === "live" ? "LIVE MAP" : tb.mapStatus === "reference-ready" ? "REFERENCE INGEST" : "MAP BUILD";
+  const status = tb.mapStatus === "live" ? "LIVE MAP" : tb.mapStatus === "reference-ready" ? "REFERENCE INGEST" : "MAP BUILD";
   return `<button type="button" class="tb-command-choice${active ? " active" : ""}" data-tb-select="${escapeAttr(tb.id)}" aria-pressed="${active ? "true" : "false"}">
     <span>${escapeHtml(tb.family)}</span>
     <strong>${escapeHtml(tb.shortName)}</strong>
@@ -79,7 +81,7 @@ function phaseNodes(tb) {
 
 function intelligencePipeline(tb) {
   const records = [
-    ["1", "Entry Rules", tb.id === "geo-separatist" || tb.mapStatus === "live" ? "ACTIVE" : "VERIFYING", "Named units, factions, stars, GP, gear/relic, alignment and forced-lineup rules."],
+    ["1", "Entry Rules", tb.mapStatus === "live" ? "ACTIVE" : "VERIFYING", "Named units, factions, stars, GP, gear/relic, alignment and forced-lineup rules."],
     ["2", "Proven Teams", tb.recommendationStatus === "community-reference" ? "REFERENCE" : "BUILDING", "Source-backed mission teams kept separate from simple roster strength."],
     ["3", "Your Roster Teams", "ENGINE", "Intersect verified legal teams with the loaded Ally Code and identify the strongest fieldable variants."],
     ["4", "Upgrade Priority", "ENGINE", "Rank the smallest upgrades that unlock a legal or materially stronger mission squad."],
@@ -126,20 +128,37 @@ function genericView(tb) {
     </section>`;
 }
 
-async function renderNonRote(host, tb, token) {
-  if (tb.id !== "geo-separatist") {
-    if (token === state.renderToken) host.innerHTML = genericView(tb);
-    return;
-  }
+async function renderDsGeo(host, token) {
   host.innerHTML = '<section class="card workspace-intro"><div class="workspace-note">Loading verified DS Geo territory and mission data…</div></section>';
+  dsGeoModulePromise ||= import("./ds-geo-command.js?v=20260815-dsgeo2");
+  const module = await dsGeoModulePromise;
+  if (token !== state.renderToken || state.selected !== "geo-separatist") return;
+  module.renderDsGeoCampaign(host, liveBody());
+}
+
+async function renderGeoLs(host, token) {
+  host.innerHTML = '<section class="card workspace-intro"><div class="workspace-note">Loading verified Republic Offensive territory and mission data…</div></section>';
+  legacyRendererPromise ||= import("./legacy-tb-command.js?v=20260815-legacy1");
+  geoLsDataPromise ||= import("./geo-ls-data.js?v=20260815-geols1");
+  const [renderer, data] = await Promise.all([legacyRendererPromise, geoLsDataPromise]);
+  if (token !== state.renderToken || state.selected !== "geo-republic") return;
+  renderer.renderLegacyTbCampaign(host, liveBody(), data.GEO_LS_CAMPAIGN);
+}
+
+async function renderNonRote(host, tb, token) {
   try {
-    dsGeoModulePromise ||= import("./ds-geo-command.js?v=20260815-dsgeo1");
-    const module = await dsGeoModulePromise;
-    if (token !== state.renderToken || state.selected !== "geo-separatist") return;
-    module.renderDsGeoCampaign(host, liveBody());
+    if (tb.id === "geo-separatist") {
+      await renderDsGeo(host, token);
+      return;
+    }
+    if (tb.id === "geo-republic") {
+      await renderGeoLs(host, token);
+      return;
+    }
+    if (token === state.renderToken) host.innerHTML = genericView(tb);
   } catch (error) {
     if (token !== state.renderToken) return;
-    host.innerHTML = `<section class="card workspace-intro"><div class="workspace-note danger">DS Geo map failed to load: ${escapeHtml(error?.message || "unknown error")}</div></section>`;
+    host.innerHTML = `<section class="card workspace-intro"><div class="workspace-note danger">${escapeHtml(tb.shortName)} map failed to load: ${escapeHtml(error?.message || "unknown error")}</div></section>`;
   }
 }
 
@@ -171,8 +190,10 @@ function applySelectedBattle() {
   if (subtitle) subtitle.textContent = isRote
     ? "ROTE has the live roster-aware planet map and Operations engine. Switch campaigns to browse Hoth / Geonosis in the same command framework."
     : tb.id === "geo-separatist"
-      ? "DS Geo now has a full roster-aware territory and mission map. Entry legality, community teams and upgrade gaps are intentionally shown as separate layers."
-      : "The shared engine is active. Exact territories and mission rules stay verification-gated until their source data is normalized.";
+      ? "DS Geo has a full roster-aware territory and mission map. Entry legality, community teams and upgrade gaps remain separate layers."
+      : tb.id === "geo-republic"
+        ? "Geo LS now uses the same mission engine with KAM, Galactic Republic, Jedi, Clone, 501st and fleet restrictions evaluated against the loaded Ally Code."
+        : "The shared engine is active. Exact territories and mission rules stay verification-gated until their source data is normalized.";
   localStorage.setItem(STORAGE_KEY, tb.id);
 }
 

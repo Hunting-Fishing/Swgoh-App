@@ -33,8 +33,12 @@ export function allRosterUnits(body) {
 }
 
 function normalizeMember(member) {
-  if (typeof member === "string") return { name: member, baseId: "" };
-  return { name: String(member?.name || ""), baseId: String(member?.baseId || "") };
+  if (typeof member === "string") return { name: member, baseId: "", bypassPool: false };
+  return {
+    name: String(member?.name || ""),
+    baseId: String(member?.baseId || ""),
+    bypassPool: Boolean(member?.bypassPool),
+  };
 }
 
 export function createMissionRecord(input = {}) {
@@ -54,6 +58,7 @@ export function createMissionRecord(input = {}) {
       gearMin: finiteOrNull(input.entry?.gearMin),
       starsMin: finiteOrNull(input.entry?.starsMin),
       powerMin: finiteOrNull(input.entry?.powerMin),
+      squadSize: finiteOrNull(input.entry?.squadSize),
       requiredBaseIds: Array.isArray(input.entry?.requiredBaseIds) ? [...input.entry.requiredBaseIds] : [],
       allowedBaseIds: Array.isArray(input.entry?.allowedBaseIds) ? [...input.entry.allowedBaseIds] : [],
       mandatoryMembers: Array.isArray(input.entry?.mandatoryMembers) ? input.entry.mandatoryMembers.map(normalizeMember) : [],
@@ -76,7 +81,7 @@ export function normalizeRecommendation(input = {}) {
   const baseIds = Array.isArray(input.baseIds) ? [...input.baseIds] : [];
   const members = Array.isArray(input.members)
     ? input.members.map(normalizeMember)
-    : baseIds.map((baseId) => ({ name: "", baseId: String(baseId) }));
+    : baseIds.map((baseId) => ({ name: "", baseId: String(baseId), bypassPool: false }));
   return {
     id: String(input.id || ""),
     name: String(input.name || "Team"),
@@ -130,9 +135,8 @@ function unitFactionSet(unit) {
   return new Set([...(unit?.factions || []), ...(unit?.categories || [])].map((value) => String(value).toLowerCase()));
 }
 
-export function rosterUnitMeetsEntry(unit, mission) {
-  if (!unit || !mission?.entry?.verified) return false;
-  const entry = mission.entry;
+function unitMeetsBaseThresholds(unit, entry) {
+  if (!unit) return false;
   if (entry.unitType && String(unit.unitType || "Character").toLowerCase() !== String(entry.unitType).toLowerCase()) return false;
   const alignment = String(unit.alignment || "").toLowerCase();
   if (entry.allowedAlignments.length) {
@@ -142,6 +146,10 @@ export function rosterUnitMeetsEntry(unit, mission) {
   if (entry.gearMin != null && Number(unit.gear || 0) < Number(entry.gearMin)) return false;
   if (entry.starsMin != null && Number(unit.stars || 0) < Number(entry.starsMin)) return false;
   if (entry.powerMin != null && Number(unit.power || 0) < Number(entry.powerMin)) return false;
+  return true;
+}
+
+function unitMeetsPoolRestrictions(unit, entry) {
   if (entry.requiredBaseIds.length && !entry.requiredBaseIds.includes(String(unit.baseId || ""))) return false;
   if (entry.allowedBaseIds.length && !entry.allowedBaseIds.includes(String(unit.baseId || ""))) return false;
   if (entry.requiredCategories.length) {
@@ -150,6 +158,19 @@ export function rosterUnitMeetsEntry(unit, mission) {
     if (entry.categoryMode === "any" ? !checks.some(Boolean) : !checks.every(Boolean)) return false;
   }
   return true;
+}
+
+export function rosterUnitMeetsEntry(unit, mission) {
+  if (!unit || !mission?.entry?.verified) return false;
+  const entry = mission.entry;
+  return unitMeetsBaseThresholds(unit, entry) && unitMeetsPoolRestrictions(unit, entry);
+}
+
+export function mandatoryUnitMeetsEntry(unit, mission, member = {}) {
+  if (!unit || !mission?.entry?.verified) return false;
+  const entry = mission.entry;
+  if (!unitMeetsBaseThresholds(unit, entry)) return false;
+  return member?.bypassPool ? true : unitMeetsPoolRestrictions(unit, entry);
 }
 
 export function resolveRosterMember(body, member) {
@@ -164,6 +185,21 @@ export function resolveRosterMember(body, member) {
   return units.find((unit) => normalizeRosterName(unit.name) === wanted) || null;
 }
 
+function memberMatches(member, unit, fallbackName = "") {
+  const memberId = String(member?.baseId || "");
+  const unitId = String(unit?.baseId || "");
+  if (memberId && unitId && memberId === unitId) return true;
+  const wanted = normalizeRosterName(member?.name || "");
+  const actual = normalizeRosterName(unit?.name || fallbackName || "");
+  return Boolean(wanted && actual && wanted === actual);
+}
+
+function matchingMandatoryMember(mission, member, unit) {
+  return (mission?.entry?.mandatoryMembers || []).find((mandatory) =>
+    memberMatches(mandatory, unit, member?.name)
+  ) || null;
+}
+
 export function mandatoryRosterStatus(body, mission) {
   const members = mission?.entry?.mandatoryMembers || [];
   const rows = members.map((member) => {
@@ -172,7 +208,7 @@ export function mandatoryRosterStatus(body, mission) {
       member,
       unit,
       owned: Boolean(unit),
-      legal: unit ? rosterUnitMeetsEntry(unit, mission) : false,
+      legal: unit ? mandatoryUnitMeetsEntry(unit, mission, member) : false,
       gap: entryGap(unit, mission),
     };
   });
@@ -187,16 +223,19 @@ export function mandatoryRosterStatus(body, mission) {
 export function recommendationRosterFit(body, mission, recommendation) {
   const members = Array.isArray(recommendation?.members) && recommendation.members.length
     ? recommendation.members
-    : (recommendation?.baseIds || []).map((baseId) => ({ baseId: String(baseId), name: "" }));
+    : (recommendation?.baseIds || []).map((baseId) => ({ baseId: String(baseId), name: "", bypassPool: false }));
   const rows = members.map((member) => {
     const unit = resolveRosterMember(body, member);
+    const mandatory = unit ? matchingMandatoryMember(mission, member, unit) : null;
+    const legal = unit ? (mandatory ? mandatoryUnitMeetsEntry(unit, mission, mandatory) : rosterUnitMeetsEntry(unit, mission)) : false;
     return {
       baseId: String(member?.baseId || unit?.baseId || ""),
       name: String(member?.name || unit?.name || member?.baseId || "Unknown"),
       unit,
       owned: Boolean(unit),
-      legal: unit ? rosterUnitMeetsEntry(unit, mission) : false,
+      legal,
       gap: entryGap(unit, mission),
+      mandatory: Boolean(mandatory),
     };
   });
   const mandatory = mandatoryRosterStatus(body, mission);
@@ -235,20 +274,24 @@ export function legalRosterCandidates(body, mission, limit = 0) {
   return limit > 0 ? rows.slice(0, limit) : rows;
 }
 
-export function missionRosterEntrySummary(body, mission, squadSize = 5) {
+export function missionRosterEntrySummary(body, mission, squadSize = null) {
   if (!mission?.entry?.verified) return { verified: false, ready: false, percent: 0, candidates: [], mandatory: mandatoryRosterStatus(body, mission) };
   const candidates = legalRosterCandidates(body, mission);
   const mandatory = mandatoryRosterStatus(body, mission);
-  const target = Math.max(1, Number(squadSize || 5));
-  const depthRatio = Math.min(1, candidates.length / target);
+  const target = Math.max(1, Number(squadSize || mission.entry.squadSize || 5));
+  const bypassCount = (mission.entry.mandatoryMembers || []).filter((member) => member.bypassPool).length;
+  const poolTarget = Math.max(0, target - bypassCount);
+  const depthRatio = poolTarget === 0 ? 1 : Math.min(1, candidates.length / poolTarget);
   const mandatoryRatio = mandatory.total ? mandatory.ready / mandatory.total : 1;
   const percent = Math.round((depthRatio * (mandatory.total ? 0.7 : 1) + (mandatory.total ? mandatoryRatio * 0.3 : 0)) * 100);
   return {
     verified: true,
-    ready: candidates.length >= target && mandatory.complete,
+    ready: candidates.length >= poolTarget && mandatory.complete,
     percent,
     candidates,
     mandatory,
+    squadSize: target,
+    poolTarget,
   };
 }
 
