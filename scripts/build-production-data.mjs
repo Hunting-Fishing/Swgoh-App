@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const steps = [
   { name: "validate battle strategy", args: ["scripts/validate-battle-strategy.mjs"], blocking: true },
+  { name: "validate Tatooine Mandalore unlock", args: ["scripts/validate-tatooine-mandalore-unlock.mjs"], blocking: true },
   { name: "refresh catalog", args: ["scripts/sync-gamedata.mjs", "--allow-stale"] },
   { name: "repair catalog", args: ["scripts/repair-catalog.mjs", "--allow-stale"] },
   { name: "build kit index", args: ["scripts/enrich-kit-intelligence.mjs"] },
