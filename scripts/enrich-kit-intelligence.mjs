@@ -1,7 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { enrichCatalogWithKitSemantics } from "./kit-semantics.mjs";
+import { enrichCatalogWithKitSemantics } from "../public/kit-semantics.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const DATA_DIR = path.join(ROOT, "public", "data");
