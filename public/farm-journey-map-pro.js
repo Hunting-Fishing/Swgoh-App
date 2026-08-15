@@ -23,6 +23,10 @@ const state = {
   mode: localStorage.getItem(MODE_KEY) === "map" ? "map" : "detail",
   filter: "all",
   search: "",
+  renderTimer: 0,
+  rendering: false,
+  rerender: false,
+  pendingForce: false,
 };
 
 const ADVANCED_IDS = new Set([
@@ -49,6 +53,16 @@ function trackedSet() {
   } catch {
     return new Set();
   }
+}
+
+function farmVisible() {
+  const farm = $("workspace-farm");
+  return Boolean(farm && !farm.hidden);
+}
+
+function journeyMapVisible() {
+  const map = $("farmJourneyMap");
+  return Boolean(farmVisible() && state.mode === "map" && map && !map.hidden);
 }
 
 async function loadCatalog() {
@@ -228,11 +242,13 @@ function applyMode() {
 }
 
 async function renderMap(force = false) {
-  const map = ensureViewShell();
+  if (!journeyMapVisible()) return;
+  const map = $("farmJourneyMap");
   if (!map) return;
-  applyMode();
   await loadCatalog();
+  if (!journeyMapVisible()) return;
   const body = await loadLive(force);
+  if (!journeyMapVisible()) return;
   const units = body ? [...(body.units || []), ...(body.ships || [])] : [];
   const liveMap = new Map(units.map((unit) => [String(unit.baseId), unit]));
   const tracked = trackedSet();
@@ -243,6 +259,7 @@ async function renderMap(force = false) {
     return [group.key, group];
   })).values()].sort((a, b) => a.order - b.order);
 
+  if (!journeyMapVisible()) return;
   map.innerHTML = `
     <section class="card journey-map-toolbar">
       <div>
@@ -266,15 +283,39 @@ async function renderMap(force = false) {
         </section>`;
     }).join("") : '<section class="card journey-map-empty">No Journey targets match the current filter.</section>'}
   `;
+  window.dispatchEvent(new CustomEvent("swgoh:journey-map-rendered"));
 }
 
 function showError(error) {
-  const map = ensureViewShell();
+  if (!journeyMapVisible()) return;
+  const map = $("farmJourneyMap");
   if (map) map.innerHTML = `<section class="card journey-map-empty">${escapeHtml(error?.message || "Journey Map is unavailable.")}</section>`;
 }
 
-function schedule(delay = 100, force = false) {
-  setTimeout(() => renderMap(force).catch(showError), delay);
+function schedule(delay = 120, force = false) {
+  if (force) state.pendingForce = true;
+  clearTimeout(state.renderTimer);
+  state.renderTimer = setTimeout(async () => {
+    if (!journeyMapVisible()) return;
+    if (state.rendering) {
+      state.rerender = true;
+      return;
+    }
+    state.rendering = true;
+    const useForce = state.pendingForce;
+    state.pendingForce = false;
+    try {
+      await renderMap(useForce);
+    } catch (error) {
+      showError(error);
+    } finally {
+      state.rendering = false;
+      if (state.rerender) {
+        state.rerender = false;
+        schedule(140, false);
+      }
+    }
+  }, delay);
 }
 
 function init() {
@@ -285,19 +326,21 @@ function init() {
   }
   state.initialized = true;
   const farm = $("workspace-farm");
+  applyMode();
 
   farm.addEventListener("click", (event) => {
     const view = event.target.closest("[data-farm-view]");
     if (view) {
       state.mode = view.dataset.farmView === "map" ? "map" : "detail";
       applyMode();
-      if (state.mode === "map") schedule(0, false);
+      window.dispatchEvent(new CustomEvent("swgoh:farm-view-changed", { detail: { mode: state.mode } }));
+      if (state.mode === "map") schedule(40, false);
       return;
     }
     const filter = event.target.closest("[data-journey-map-filter]");
     if (filter) {
       state.filter = filter.dataset.journeyMapFilter || "all";
-      schedule(0, false);
+      schedule(60, false);
       return;
     }
     if (event.target.closest("[data-track-journey], [data-untrack-journey]")) schedule(180, false);
@@ -306,20 +349,24 @@ function init() {
   farm.addEventListener("input", (event) => {
     if (event.target.id !== "journeyMapSearch") return;
     state.search = String(event.target.value || "").trim().toLowerCase();
-    schedule(120, false);
+    schedule(180, false);
   });
 
   $("allyForm")?.addEventListener("submit", () => {
     state.body = null;
     state.fetchedAt = 0;
-    schedule(650, true);
+    if (journeyMapVisible()) schedule(700, true);
   });
-  document.querySelector("[data-workspace-tab='farm']")?.addEventListener("click", () => schedule(50, false));
 
-  const observer = new MutationObserver(() => applyMode());
-  observer.observe(farm, { childList: true, subtree: false });
+  document.addEventListener("click", (event) => {
+    if (event.target.closest?.('button[data-workspace-tab="farm"]') && state.mode === "map") schedule(100, false);
+  });
+  window.addEventListener("hashchange", () => {
+    if (location.hash.toLowerCase() === "#farm" && state.mode === "map") schedule(100, false);
+  });
 
-  renderMap(false).catch(showError);
+  // No MutationObserver and no startup render. Journey Map is intentionally lazy.
+  if (journeyMapVisible()) schedule(100, false);
 }
 
 init();

@@ -9,6 +9,8 @@ const escapeHtml = (value) => String(value ?? "")
   .replaceAll('"', "&quot;")
   .replaceAll("'", "&#039;");
 
+let decorateTimer = 0;
+
 function numericText(value) {
   const match = String(value || "").replaceAll(",", "").match(/-?\d+(?:\.\d+)?/);
   return match ? Number(match[0]) : 0;
@@ -170,7 +172,7 @@ function openGearPlanner(button) {
 const normalizedJourneyIds = new Set();
 function decorateFarm() {
   const panel = $("workspace-farm");
-  if (!panel) return;
+  if (!panel || panel.hidden) return;
 
   for (const metric of panel.querySelectorAll(".farm-metric")) {
     const { label } = metricInfo(metric);
@@ -211,7 +213,17 @@ function decorateFarm() {
   }
 }
 
+function scheduleDecorate(delay = 0) {
+  clearTimeout(decorateTimer);
+  decorateTimer = setTimeout(() => {
+    const panel = $("workspace-farm");
+    if (panel && !panel.hidden) decorateFarm();
+  }, delay);
+}
+
 document.addEventListener("click", (event) => {
+  if (event.target.closest?.('button[data-workspace-tab="farm"]')) scheduleDecorate(180);
+
   const planner = event.target.closest("[data-farm-open-gear-plan]");
   if (planner) {
     event.preventDefault();
@@ -235,6 +247,11 @@ document.addEventListener("keydown", (event) => {
   openMetric(metric);
 }, true);
 
-const observer = new MutationObserver(decorateFarm);
-observer.observe(document.body, { childList: true, subtree: true });
-decorateFarm();
+window.addEventListener("swgoh:farm-rendered", () => scheduleDecorate(0));
+window.addEventListener("hashchange", () => {
+  if (location.hash.toLowerCase() === "#farm") scheduleDecorate(120);
+});
+
+// Deliberately no MutationObserver. Farm decoration is event-driven so hidden
+// workspace DOM changes cannot trigger whole-document rescans.
+if ($("workspace-farm") && !$("workspace-farm").hidden) scheduleDecorate(0);
