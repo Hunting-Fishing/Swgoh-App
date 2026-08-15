@@ -2,6 +2,7 @@ import { buildTeamCapabilityIndex } from "./mission-mechanic-intelligence.js";
 import { battleStrategyForMission, battleStrategySources } from "./tb-battle-strategy-data.js";
 import { watBattleStrategyForMission } from "./tb-battle-strategy-wat-data.js";
 import { rotePhaseOneBattleStrategyForMission } from "./tb-battle-strategy-rote-p1-data.js";
+import { roteMandaloreInquisitorStrategyForMission } from "./tb-battle-strategy-rote-mandalore-inquisitor-data.js";
 
 const normalized = (value) => String(value || "").trim().toLowerCase();
 
@@ -58,7 +59,8 @@ function priorityRank(value) {
 }
 
 function resolvedStrategy(missionId) {
-  return rotePhaseOneBattleStrategyForMission(missionId)
+  return roteMandaloreInquisitorStrategyForMission(missionId)
+    || rotePhaseOneBattleStrategyForMission(missionId)
     || watBattleStrategyForMission(missionId)
     || battleStrategyForMission(missionId);
 }
