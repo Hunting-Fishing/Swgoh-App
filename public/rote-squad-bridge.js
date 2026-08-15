@@ -19,7 +19,7 @@
       roteMissionPromise = null;
       console.error("ROTE exact mission intelligence failed to load", error);
     });
-    tbCombatPromise ||= import("/tb-combat-overlay.js?v=20260815-tbcombat3").catch((error) => {
+    tbCombatPromise ||= import("/tb-combat-overlay.js?v=20260815-tbcombat4").catch((error) => {
       tbCombatPromise = null;
       console.error("TB combat preparation failed to load", error);
     });
@@ -52,7 +52,6 @@
   window.addEventListener("swgoh:replace-squad", (event) => {
     const baseIds = Array.isArray(event.detail?.baseIds) ? event.detail.baseIds.map(String).filter(Boolean).slice(0, 5) : [];
     if (!baseIds.length) return;
-
     document.querySelector('button[data-workspace-tab="squads"]')?.click();
     setTimeout(() => {
       const size = document.getElementById("proSquadSize");
@@ -63,9 +62,7 @@
       }
       document.getElementById("proClearSquad")?.click();
       if (name) name.value = String(event.detail?.name || "TB Mission Core");
-      for (const baseId of baseIds) {
-        window.dispatchEvent(new CustomEvent("swgoh:add-to-squad", { detail: { baseId } }));
-      }
+      for (const baseId of baseIds) window.dispatchEvent(new CustomEvent("swgoh:add-to-squad", { detail: { baseId } }));
     }, 40);
   });
 })();
