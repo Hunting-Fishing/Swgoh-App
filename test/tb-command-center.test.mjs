@@ -24,6 +24,15 @@ test("all five current Territory Battle families are registered", () => {
   assert.equal(territoryBattleById("rote").phaseHours, 24);
 });
 
+test("current guild GP gates are pinned for Geo and ROTE", () => {
+  assert.equal(territoryBattleById("geo-separatist").requiredGuildGp, 80000000);
+  assert.equal(territoryBattleById("geo-separatist").recommendedGuildGp, 140000000);
+  assert.equal(territoryBattleById("geo-republic").requiredGuildGp, 100000000);
+  assert.equal(territoryBattleById("geo-republic").recommendedGuildGp, 150000000);
+  assert.equal(territoryBattleById("rote").requiredGuildGp, 200000000);
+  assert.equal(territoryBattleById("rote").recommendedGuildGp, 250000000);
+});
+
 test("phase scaffold follows the selected Territory Battle rather than assuming ROTE", () => {
   assert.equal(phaseScaffold("geo-separatist").length, 4);
   assert.equal(phaseScaffold("hoth-rebel").length, 6);
