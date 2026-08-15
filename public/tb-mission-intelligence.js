@@ -202,6 +202,7 @@ export function legalRosterCandidates(body, mission, limit = 0) {
 }
 
 export function recommendationUpgradeRows(body, mission, recommendation) {
+  if (!mission?.entry?.verified) return [];
   const fit = recommendationRosterFit(body, mission, recommendation);
   return fit.rows
     .filter((row) => !row.legal)
