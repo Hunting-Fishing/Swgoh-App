@@ -25,6 +25,11 @@ function checkDetail(check) {
     if (check.requiresOmicron) installed.push("Omicron installed");
     return `${check.unitName} · ${check.label}${installed.length ? ` · ${installed.join(" · ")}` : ""}`;
   }
+  if (check.type === "speed-order") {
+    const faster = check.fasterSpeed == null ? `${check.fasterName} speed unknown` : `${check.fasterName} ${check.fasterSpeed}`;
+    const slower = check.slowerSpeed == null ? `${check.slowerName} speed unknown` : `${check.slowerName} ${check.slowerSpeed}`;
+    return `${faster} > ${slower}${check.reason ? ` · ${check.reason}` : ""}`;
+  }
   return "";
 }
 
