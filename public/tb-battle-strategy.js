@@ -32,6 +32,24 @@ function abilityMatch(member, check) {
   return abilityRows(member).find((ability) => normalized(ability?.name) === wanted || normalized(ability?.id) === wanted) || null;
 }
 
+function abilityRequirementState(ability, check = {}) {
+  const hasAbility = Boolean(ability);
+  const minimumTier = Number.isFinite(Number(check.minimumTier)) ? Number(check.minimumTier) : null;
+  const tierReady = minimumTier == null || Number(ability?.tier || 0) >= minimumTier;
+  const zetaReady = check.requiresZeta !== true || ability?.hasZeta === true;
+  const omicronReady = check.requiresOmicron !== true || ability?.hasOmicron === true;
+  return {
+    hasAbility,
+    tierReady,
+    zetaReady,
+    omicronReady,
+    ready: hasAbility && tierReady && zetaReady && omicronReady,
+    minimumTier,
+    requiresZeta: check.requiresZeta === true,
+    requiresOmicron: check.requiresOmicron === true,
+  };
+}
+
 function priorityRank(value) {
   const order = { critical: 0, high: 1, setup: 2, helpful: 3, info: 4 };
   return order[normalized(value)] ?? 5;
@@ -94,6 +112,7 @@ export function evaluateBattleStrategy(analysis, mission = null) {
   const abilityChecks = (strategy.keyAbilities || []).map((check) => {
     const member = byId.get(String(check.baseId));
     const ability = member ? abilityMatch(member, check) : null;
+    const requirement = abilityRequirementState(ability, check);
     return {
       type: "ability",
       id: `${check.baseId}:${check.abilityName}`,
@@ -102,9 +121,18 @@ export function evaluateBattleStrategy(analysis, mission = null) {
       label: check.abilityName,
       importance: check.importance || "high",
       required: check.importance === "critical",
-      ready: Boolean(ability),
+      ready: requirement.ready,
+      hasAbility: requirement.hasAbility,
+      tierReady: requirement.tierReady,
+      zetaReady: requirement.zetaReady,
+      omicronReady: requirement.omicronReady,
+      requiresZeta: requirement.requiresZeta,
+      requiresOmicron: requirement.requiresOmicron,
+      minimumTier: requirement.minimumTier,
       abilityId: String(ability?.id || ""),
       installedTier: ability?.tier == null ? null : Number(ability.tier),
+      hasZeta: Boolean(ability?.hasZeta),
+      hasOmicron: Boolean(ability?.hasOmicron),
       expected: check.expected || "",
       reason: check.reason || "",
     };
