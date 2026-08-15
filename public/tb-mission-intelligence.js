@@ -45,6 +45,18 @@ function normalizeMember(member) {
   };
 }
 
+function normalizeMandatoryAnyGroup(group, index = 0) {
+  const source = Array.isArray(group) ? { members: group } : (group || {});
+  const members = Array.isArray(source.members) ? source.members.map(normalizeMember) : [];
+  const count = Math.max(1, Math.min(members.length || 1, Number(source.count || 1)));
+  return {
+    id: String(source.id || `mandatory-any-${index + 1}`),
+    label: String(source.label || "One of required units"),
+    count,
+    members,
+  };
+}
+
 export function createMissionRecord(input = {}) {
   return {
     id: String(input.id || ""),
@@ -66,6 +78,7 @@ export function createMissionRecord(input = {}) {
       requiredBaseIds: Array.isArray(input.entry?.requiredBaseIds) ? [...input.entry.requiredBaseIds] : [],
       allowedBaseIds: Array.isArray(input.entry?.allowedBaseIds) ? [...input.entry.allowedBaseIds] : [],
       mandatoryMembers: Array.isArray(input.entry?.mandatoryMembers) ? input.entry.mandatoryMembers.map(normalizeMember) : [],
+      mandatoryAnyGroups: Array.isArray(input.entry?.mandatoryAnyGroups) ? input.entry.mandatoryAnyGroups.map(normalizeMandatoryAnyGroup) : [],
       requiredCategories: Array.isArray(input.entry?.requiredCategories) ? [...input.entry.requiredCategories] : [],
       categoryMode: input.entry?.categoryMode === "any" ? "any" : "all",
       notes: String(input.entry?.notes || ""),
@@ -203,8 +216,15 @@ function memberMatches(member, unit, fallbackName = "") {
   return Boolean(wanted && actual && wanted === actual);
 }
 
+function allMandatoryMembers(mission) {
+  return [
+    ...(mission?.entry?.mandatoryMembers || []),
+    ...(mission?.entry?.mandatoryAnyGroups || []).flatMap((group) => group.members || []),
+  ];
+}
+
 function matchingMandatoryMember(mission, member, unit) {
-  return (mission?.entry?.mandatoryMembers || []).find((mandatory) => memberMatches(mandatory, unit, member?.name)) || null;
+  return allMandatoryMembers(mission).find((mandatory) => memberMatches(mandatory, unit, member?.name)) || null;
 }
 
 export function entryGap(unit, mission, member = null) {
@@ -218,13 +238,68 @@ export function entryGap(unit, mission, member = null) {
   return { missing: false, stars, power, gear, relic, score: stars * 100000 + relic * 10000 + gear * 1000 + power };
 }
 
+function mandatoryMemberRow(body, mission, member) {
+  const unit = resolveRosterMember(body, member);
+  return {
+    member,
+    unit,
+    owned: Boolean(unit),
+    legal: unit ? mandatoryUnitMeetsEntry(unit, mission, member) : false,
+    gap: entryGap(unit, mission, member),
+  };
+}
+
+export function mandatoryAnyRosterStatus(body, mission) {
+  const groups = (mission?.entry?.mandatoryAnyGroups || []).map((group) => {
+    const rows = (group.members || []).map((member) => mandatoryMemberRow(body, mission, member));
+    const legalRows = rows.filter((row) => row.legal);
+    const requiredCount = Math.max(1, Number(group.count || 1));
+    return {
+      group,
+      rows,
+      requiredCount,
+      readyCount: legalRows.length,
+      complete: legalRows.length >= requiredCount,
+      readyRows: legalRows.slice(0, requiredCount),
+    };
+  });
+  return {
+    groups,
+    total: groups.length,
+    ready: groups.filter((group) => group.complete).length,
+    complete: groups.every((group) => group.complete),
+  };
+}
+
 export function mandatoryRosterStatus(body, mission) {
   const members = mission?.entry?.mandatoryMembers || [];
-  const rows = members.map((member) => {
-    const unit = resolveRosterMember(body, member);
-    return { member, unit, owned: Boolean(unit), legal: unit ? mandatoryUnitMeetsEntry(unit, mission, member) : false, gap: entryGap(unit, mission, member) };
+  const rows = members.map((member) => mandatoryMemberRow(body, mission, member));
+  const anyGroups = mandatoryAnyRosterStatus(body, mission);
+  const fixedReady = rows.filter((row) => row.legal).length;
+  return {
+    rows,
+    total: rows.length,
+    ready: fixedReady,
+    anyGroups: anyGroups.groups,
+    anyGroupTotal: anyGroups.total,
+    anyGroupReady: anyGroups.ready,
+    requirementTotal: rows.length + anyGroups.total,
+    requirementReady: fixedReady + anyGroups.ready,
+    complete: rows.every((row) => row.legal) && anyGroups.complete,
+  };
+}
+
+function selectedIncludesMember(rows, member) {
+  return rows.some((row) => memberMatches(member, row.unit, row.name));
+}
+
+function selectedAnyGroupStatus(rows, mission) {
+  const groups = (mission?.entry?.mandatoryAnyGroups || []).map((group) => {
+    const selectedMembers = (group.members || []).filter((member) => selectedIncludesMember(rows, member));
+    const requiredCount = Math.max(1, Number(group.count || 1));
+    return { group, selectedMembers, requiredCount, complete: selectedMembers.length >= requiredCount };
   });
-  return { rows, total: rows.length, ready: rows.filter((row) => row.legal).length, complete: rows.every((row) => row.legal) };
+  return { groups, complete: groups.every((group) => group.complete) };
 }
 
 export function recommendationRosterFit(body, mission, recommendation) {
@@ -253,13 +328,16 @@ export function recommendationRosterFit(body, mission, recommendation) {
     const name = normalizeRosterName(row.unit?.name || row.member?.name || "");
     return (id && recommendationBaseIds.has(id)) || (name && recommendationNames.has(name));
   });
+  const selectedAnyGroups = selectedAnyGroupStatus(rows, mission);
   return {
     rows,
     owned: rows.filter((row) => row.owned).length,
     legal: rows.filter((row) => row.legal).length,
     mandatory,
     includesMandatory,
-    complete: rows.length > 0 && rows.every((row) => row.owned && row.legal) && mandatory.complete && includesMandatory,
+    includesMandatoryAnyGroups: selectedAnyGroups.complete,
+    mandatoryAnyGroups: selectedAnyGroups.groups,
+    complete: rows.length > 0 && rows.every((row) => row.owned && row.legal) && mandatory.complete && includesMandatory && selectedAnyGroups.complete,
   };
 }
 
@@ -276,11 +354,13 @@ export function missionRosterEntrySummary(body, mission, squadSize = null) {
   const candidates = legalRosterCandidates(body, mission);
   const mandatory = mandatoryRosterStatus(body, mission);
   const target = Math.max(1, Number(squadSize || mission.entry.squadSize || 5));
-  const bypassCount = (mission.entry.mandatoryMembers || []).filter((member) => member.bypassPool).length;
+  const bypassCount = (mission.entry.mandatoryMembers || []).filter((member) => member.bypassPool).length
+    + (mission.entry.mandatoryAnyGroups || []).reduce((sum, group) => sum + Math.min(Number(group.count || 1), (group.members || []).filter((member) => member.bypassPool).length), 0);
   const poolTarget = Math.max(0, target - bypassCount);
   const depthRatio = poolTarget === 0 ? 1 : Math.min(1, candidates.length / poolTarget);
-  const mandatoryRatio = mandatory.total ? mandatory.ready / mandatory.total : 1;
-  const percent = Math.round((depthRatio * (mandatory.total ? 0.7 : 1) + (mandatory.total ? mandatoryRatio * 0.3 : 0)) * 100);
+  const requirementTotal = mandatory.requirementTotal || 0;
+  const mandatoryRatio = requirementTotal ? mandatory.requirementReady / requirementTotal : 1;
+  const percent = Math.round((depthRatio * (requirementTotal ? 0.7 : 1) + (requirementTotal ? mandatoryRatio * 0.3 : 0)) * 100);
   return { verified: true, ready: candidates.length >= poolTarget && mandatory.complete, percent, candidates, mandatory, squadSize: target, poolTarget };
 }
 
@@ -299,6 +379,23 @@ export function recommendationUpgradeRows(body, mission, recommendation) {
       legal: false,
       gap: mandatoryRow.gap,
       mandatory: true,
+    });
+  }
+  for (const groupStatus of fit.mandatory.anyGroups || []) {
+    if (groupStatus.complete) continue;
+    const best = groupStatus.rows.slice().sort((a, b) => Number(a.gap?.score || 0) - Number(b.gap?.score || 0))[0];
+    if (!best) continue;
+    const duplicate = rows.some((row) => String(row.unit?.baseId || row.baseId || "") === String(best.unit?.baseId || best.member?.baseId || "") || normalizeRosterName(row.unit?.name || row.name) === normalizeRosterName(best.unit?.name || best.member?.name));
+    if (!duplicate) rows.push({
+      baseId: String(best.unit?.baseId || best.member?.baseId || ""),
+      name: String(best.unit?.name || best.member?.name || groupStatus.group?.label || "Required option"),
+      unit: best.unit,
+      owned: best.owned,
+      legal: false,
+      gap: best.gap,
+      mandatory: true,
+      mandatoryChoice: true,
+      mandatoryChoiceLabel: groupStatus.group?.label || "One of required units",
     });
   }
   return rows.slice().sort((a, b) => Number(b.mandatory) - Number(a.mandatory) || Number(b.gap?.missing) - Number(a.gap?.missing) || Number(b.gap?.score || 0) - Number(a.gap?.score || 0) || a.name.localeCompare(b.name));
