@@ -3,6 +3,7 @@ import { extractAbilitySemantics } from "../public/kit-semantics.js";
 import { battleStrategyForMission } from "../public/tb-battle-strategy-data.js";
 import { watBattleStrategyForMission } from "../public/tb-battle-strategy-wat-data.js";
 import { rotePhaseOneBattleStrategyForMission } from "../public/tb-battle-strategy-rote-p1-data.js";
+import { roteMandaloreInquisitorStrategyForMission } from "../public/tb-battle-strategy-rote-mandalore-inquisitor-data.js";
 import { evaluateBattleStrategy } from "../public/tb-battle-strategy.js";
 
 function member(baseId, name, abilities) {
@@ -57,6 +58,21 @@ for (const id of roteP1PackIds) {
   assert.ok(strategy.evidenceBoundary, `${id} evidence boundary missing`);
 }
 
+const mandaloreInquisitorPackIds = ["tatooine-mandalore-unlock", "mandalore-bkm", "mandalore-dtmg", "haven-reva"];
+for (const id of mandaloreInquisitorPackIds) {
+  const strategy = roteMandaloreInquisitorStrategyForMission(id);
+  assert.ok(strategy, `${id} Mandalore/Inquisitor strategy pack missing`);
+  assert.ok(Array.isArray(strategy.sources) && strategy.sources.length > 0, `${id} strategy sources missing`);
+  assert.ok(strategy.sources.some((source) => source.kind === "official" || source.kind === "current-reference"), `${id} authoritative source missing`);
+  assert.ok(strategy.evidenceBoundary, `${id} evidence boundary missing`);
+  assert.equal("winPercent" in strategy, false, `${id} must not invent win percentage`);
+  assert.equal("score" in strategy, false, `${id} must not invent strategy score`);
+}
+
+assert.equal(roteMandaloreInquisitorStrategyForMission("tatooine-mandalore-unlock")?.requiredLeaderBaseId, "MANDALORBOKATAN");
+assert.equal(roteMandaloreInquisitorStrategyForMission("mandalore-dtmg")?.requiredLeaderBaseId, "MOFFGIDEONS3");
+assert.equal(roteMandaloreInquisitorStrategyForMission("haven-reva")?.requiredLeaderBaseId, "THIRDSISTER");
+
 const statusSemantics = extractAbilitySemantics({ description: "Inflict Purge and Thermal Detonator on target enemy." });
 assert.ok(statusSemantics.debuffs.includes("Purge"), "Purge semantic recognition missing");
 assert.ok(statusSemantics.debuffs.includes("Thermal Detonator"), "Thermal Detonator semantic recognition missing");
@@ -89,4 +105,4 @@ assert.ok(wat.checks.some((check) => check.id === "ability_block" && check.ready
 assert.ok(wat.checks.some((check) => check.id === "tenacity_down" && check.ready), "Wat Tenacity Down setup missing");
 assert.equal("winPercent" in wat, false, "Wat strategy must not invent win probability");
 
-console.log(`[battle-strategy] validated ${corePackIds.length + 1 + roteP1PackIds.length} strategy packs, semantic gates, KAM installed upgrades, Wat control requirements and ROTE Phase 1 evidence boundaries`);
+console.log(`[battle-strategy] validated ${corePackIds.length + 1 + roteP1PackIds.length + mandaloreInquisitorPackIds.length} strategy packs, semantic gates, KAM installed upgrades, Wat control requirements, ROTE Phase 1 and Mandalore/Inquisitor evidence boundaries`);
