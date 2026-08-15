@@ -34,6 +34,13 @@ test("kit enrichment publishes a separate index instead of expanding catalog.jso
   assert.doesNotMatch(source, /writeFile\(CATALOG_PATH/);
 });
 
+test("raw graph build overlays separate kit semantics in memory for cross validation", () => {
+  const source = fs.readFileSync(new URL("../scripts/sync-raw-combat-data.mjs", import.meta.url), "utf8");
+  assert.match(source, /KIT_INDEX_PATH/);
+  assert.match(source, /withKitSemantics/);
+  assert.match(source, /catalog: semanticCatalog/);
+});
+
 test("TB combat UI only requests enemy knowledge when a visible mission names enemies", () => {
   const ui = fs.readFileSync(new URL("../public/tb-combat-prep-ui.js", import.meta.url), "utf8");
   const intelligence = fs.readFileSync(new URL("../public/tb-combat-intelligence.js", import.meta.url), "utf8");
@@ -57,5 +64,6 @@ test("production combat hardening modules parse", () => {
     new URL("../public/tb-combat-intelligence.js", import.meta.url),
     new URL("../public/tb-combat-prep-ui.js", import.meta.url),
     new URL("../scripts/build-production-data.mjs", import.meta.url),
+    new URL("../scripts/sync-raw-combat-data.mjs", import.meta.url),
   ]) execFileSync(process.execPath, ["--check", path.pathname]);
 });
