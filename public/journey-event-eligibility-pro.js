@@ -183,11 +183,19 @@ function visiblePlans(plans) {
   });
 }
 
-function versionWarning() {
+function versionState() {
   const expected = String(JOURNEY_EVENT_PROFILES[0]?.verification?.gameDataVersion || "");
   const current = String(state.manifest?.gameVersion || "");
-  if (!expected || !current || current.startsWith(expected)) return "";
-  return `<div class="journey-eligibility-version-warning"><strong>REVERIFY EVENT POOLS</strong><span>Eligibility was checked against game data ${escapeHtml(expected)}, but the local catalog is now ${escapeHtml(current)}. The allowlist remains fail-closed until reviewed.</span></div>`;
+  return {
+    expected,
+    current,
+    valid: !expected || !current || current.startsWith(expected),
+  };
+}
+
+function versionGate(version) {
+  if (version.valid) return "";
+  return `<div class="journey-eligibility-version-warning"><strong>REVERIFY EVENT POOLS</strong><span>Eligibility was checked against game data ${escapeHtml(version.expected)}, but the local catalog is now ${escapeHtml(version.current)}. Candidate recommendations are disabled until the pools are reviewed against the new game version.</span></div>`;
 }
 
 async function renderEligibility(force = false) {
@@ -199,9 +207,10 @@ async function renderEligibility(force = false) {
   const liveUnits = body ? [...(body.units || []), ...(body.ships || [])] : [];
   const plans = JOURNEY_EVENT_PROFILES.map((profile) => buildEventCandidatePlan(profile, state.catalog, liveUnits));
   const visible = visiblePlans(plans);
+  const version = versionState();
 
   $("journeyEventEligibilityBand")?.remove();
-  if (!visible.length) return;
+  if (!visible.length && version.valid) return;
 
   const section = document.createElement("section");
   section.id = "journeyEventEligibilityBand";
@@ -214,12 +223,12 @@ async function renderEligibility(force = false) {
         <p>Hard entry legality first. A faction tag alone is not enough to enter our suggestions.</p>
       </div>
       <div class="journey-eligibility-legend">
-        <strong>${visible.length} event${visible.length === 1 ? "" : "s"}</strong>
+        <strong>${version.valid ? `${visible.length} event${visible.length === 1 ? "" : "s"}` : "Verification paused"}</strong>
         <span>Final-tier ${JOURNEY_EVENT_PROFILES[0]?.targetStars || 7}★ check</span>
       </div>
     </header>
-    ${versionWarning()}
-    <div class="journey-eligibility-grid">${visible.map(selectorCard).join("")}</div>
+    ${versionGate(version)}
+    ${version.valid ? `<div class="journey-eligibility-grid">${visible.map(selectorCard).join("")}</div>` : ""}
     <footer>
       <strong>Battle intelligence comes next.</strong>
       <span>This release does not score ability synergy, enemy mechanics, forced lineups, mods, turn order or minimum relic investment. Those will be layered on top of this legal-entry foundation.</span>
