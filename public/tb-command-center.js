@@ -16,7 +16,9 @@ const state = {
   selected: localStorage.getItem(STORAGE_KEY) || "rote",
   selectedPhase: 1,
   body: null,
+  renderToken: 0,
 };
+let dsGeoModulePromise = null;
 
 function liveBody() {
   const digits = String($("allyCode")?.value || "").replace(/\D/g, "").slice(0, 9);
@@ -26,7 +28,10 @@ function liveBody() {
 }
 
 function alignmentPool(body, tb) {
-  const units = Array.isArray(body?.units) ? body.units : [];
+  const units = [
+    ...(Array.isArray(body?.units) ? body.units : []),
+    ...(Array.isArray(body?.ships) ? body.ships : []),
+  ];
   const wanted = String(tb.alignment || "Mixed").toLowerCase();
   return units.filter((unit) => {
     if (wanted === "mixed") return true;
@@ -52,7 +57,7 @@ function rosterContext(tb) {
 
 function tbCard(tb) {
   const active = state.selected === tb.id;
-  const status = tb.mapStatus === "live" ? "LIVE MAP" : tb.mapStatus === "reference-ready" ? "REFERENCE INGEST" : "MAP BUILD";
+  const status = tb.id === "geo-separatist" ? "LIVE MAP" : tb.mapStatus === "live" ? "LIVE MAP" : tb.mapStatus === "reference-ready" ? "REFERENCE INGEST" : "MAP BUILD";
   return `<button type="button" class="tb-command-choice${active ? " active" : ""}" data-tb-select="${escapeAttr(tb.id)}" aria-pressed="${active ? "true" : "false"}">
     <span>${escapeHtml(tb.family)}</span>
     <strong>${escapeHtml(tb.shortName)}</strong>
@@ -74,7 +79,7 @@ function phaseNodes(tb) {
 
 function intelligencePipeline(tb) {
   const records = [
-    ["1", "Entry Rules", tb.mapStatus === "live" ? "ACTIVE" : "VERIFYING", "Named units, factions, stars, GP, gear/relic, alignment and forced-lineup rules."],
+    ["1", "Entry Rules", tb.id === "geo-separatist" || tb.mapStatus === "live" ? "ACTIVE" : "VERIFYING", "Named units, factions, stars, GP, gear/relic, alignment and forced-lineup rules."],
     ["2", "Proven Teams", tb.recommendationStatus === "community-reference" ? "REFERENCE" : "BUILDING", "Source-backed mission teams kept separate from simple roster strength."],
     ["3", "Your Roster Teams", "ENGINE", "Intersect verified legal teams with the loaded Ally Code and identify the strongest fieldable variants."],
     ["4", "Upgrade Priority", "ENGINE", "Rank the smallest upgrades that unlock a legal or materially stronger mission squad."],
@@ -121,12 +126,30 @@ function genericView(tb) {
     </section>`;
 }
 
+async function renderNonRote(host, tb, token) {
+  if (tb.id !== "geo-separatist") {
+    if (token === state.renderToken) host.innerHTML = genericView(tb);
+    return;
+  }
+  host.innerHTML = '<section class="card workspace-intro"><div class="workspace-note">Loading verified DS Geo territory and mission data…</div></section>';
+  try {
+    dsGeoModulePromise ||= import("./ds-geo-command.js?v=20260815-dsgeo1");
+    const module = await dsGeoModulePromise;
+    if (token !== state.renderToken || state.selected !== "geo-separatist") return;
+    module.renderDsGeoCampaign(host, liveBody());
+  } catch (error) {
+    if (token !== state.renderToken) return;
+    host.innerHTML = `<section class="card workspace-intro"><div class="workspace-note danger">DS Geo map failed to load: ${escapeHtml(error?.message || "unknown error")}</div></section>`;
+  }
+}
+
 function applySelectedBattle() {
   const panel = $("workspace-rote");
   const host = $("tbCommandLegacyHost");
   if (!panel || !host) return;
   const tb = territoryBattleById(state.selected);
   const isRote = tb.id === "rote";
+  const token = ++state.renderToken;
   panel.classList.toggle("tb-non-rote", !isRote);
   const roteSwitcher = panel.querySelector(".rote-view-switcher");
   const roteMap = $("roteMapView");
@@ -135,7 +158,7 @@ function applySelectedBattle() {
   if (roteMap) roteMap.hidden = !isRote;
   if (roteOperations && !isRote) roteOperations.hidden = true;
   host.hidden = isRote;
-  if (!isRote) host.innerHTML = genericView(tb);
+  if (!isRote) void renderNonRote(host, tb, token);
 
   for (const button of panel.querySelectorAll("[data-tb-select]")) {
     const active = button.dataset.tbSelect === tb.id;
@@ -146,8 +169,10 @@ function applySelectedBattle() {
   const subtitle = $("tbCommandSubtitle");
   if (title) title.textContent = isRote ? "Territory Battle Command Center · ROTE" : `Territory Battle Command Center · ${tb.shortName}`;
   if (subtitle) subtitle.textContent = isRote
-    ? "ROTE has the live roster-aware planet map and Operations engine. Switch campaigns to browse the shared Hoth / Geonosis map framework."
-    : "The shared engine is active. Exact territories and mission rules stay verification-gated until their source data is normalized.";
+    ? "ROTE has the live roster-aware planet map and Operations engine. Switch campaigns to browse Hoth / Geonosis in the same command framework."
+    : tb.id === "geo-separatist"
+      ? "DS Geo now has a full roster-aware territory and mission map. Entry legality, community teams and upgrade gaps are intentionally shown as separate layers."
+      : "The shared engine is active. Exact territories and mission rules stay verification-gated until their source data is normalized.";
   localStorage.setItem(STORAGE_KEY, tb.id);
 }
 
@@ -203,7 +228,6 @@ function install() {
   window.addEventListener("swgoh:workspace-activated", (event) => {
     if (event.detail?.id !== "rote" || state.selected === "rote") return;
     applySelectedBattle();
-    setTimeout(applySelectedBattle, 0);
     setTimeout(applySelectedBattle, 500);
   });
 

@@ -4,6 +4,11 @@ export const TB_SOURCES = Object.freeze({
     label: "SWGOH.GG Territory Battles",
     kind: "current-reference",
   },
+  swgohWiki: {
+    id: "swgoh-wiki",
+    label: "SWGOH Wiki Territory Battle zone tables",
+    kind: "reference",
+  },
   eaForums: {
     id: "ea-forums",
     label: "EA / Capital Games Territory Battle posts",
@@ -70,9 +75,9 @@ export const TERRITORY_BATTLES = Object.freeze([
     requiredGuildGp: 80000000,
     recommendedGuildGp: 140000000,
     exclusiveReward: "Wat Tambor shards",
-    mapStatus: "reference-ready",
+    mapStatus: "live",
     recommendationStatus: "community-reference",
-    sourceIds: ["swgohgg", "genskaar-geo"],
+    sourceIds: ["swgohgg", "swgoh-wiki", "genskaar-geo"],
     theme: "geo-dark",
   },
   {
