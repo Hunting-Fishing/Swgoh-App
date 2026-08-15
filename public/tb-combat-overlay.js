@@ -1,4 +1,4 @@
-import { hydrateCombatPreparation } from "./tb-combat-prep-ui.js?v=20260815-tbcombat3";
+import { hydrateCombatPreparation } from "./tb-combat-prep-ui.js?v=20260815-tbcombat4";
 
 const STORAGE_KEY = "swgoh:tb-command:selected";
 const normalized = (value) => String(value || "").trim().toLowerCase();
@@ -16,23 +16,23 @@ async function campaignMissions(id) {
   if (dataPromises.has(id)) return dataPromises.get(id);
   const promise = (async () => {
     if (id === "geo-separatist") {
-      const data = await import("./ds-geo-data.js?v=20260815-tbcombat3");
+      const data = await import("./ds-geo-data.js?v=20260815-tbcombat4");
       return data.DS_GEO_TERRITORIES.flatMap((territory) => territory.missions);
     }
     if (id === "geo-republic") {
-      const data = await import("./geo-ls-data.js?v=20260815-tbcombat3");
+      const data = await import("./geo-ls-data.js?v=20260815-tbcombat4");
       return data.GEO_LS_TERRITORIES.flatMap((territory) => territory.missions);
     }
     if (id === "hoth-rebel") {
-      const data = await import("./hoth-ls-data.js?v=20260815-tbcombat3");
+      const data = await import("./hoth-ls-data.js?v=20260815-tbcombat4");
       return data.HOTH_LS_TERRITORIES.flatMap((territory) => territory.missions);
     }
     if (id === "hoth-imperial") {
-      const data = await import("./hoth-ds-data.js?v=20260815-tbcombat3");
+      const data = await import("./hoth-ds-data.js?v=20260815-tbcombat4");
       return data.HOTH_DS_TERRITORIES.flatMap((territory) => territory.missions);
     }
     if (id === "rote") {
-      const data = await import("./rote-mission-data.js?v=20260815-tbcombat3");
+      const data = await import("./rote-mission-data.js?v=20260815-tbcombat4");
       return Object.values(data.ROTE_MISSIONS_BY_PLANET).flat();
     }
     return [];
