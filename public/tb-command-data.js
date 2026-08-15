@@ -58,9 +58,9 @@ export const TERRITORY_BATTLES = Object.freeze([
     phases: 6,
     phaseHours: 24,
     exclusiveReward: "Imperial Probe Droid shards",
-    mapStatus: "framework",
-    recommendationStatus: "ingesting",
-    sourceIds: ["swgohgg"],
+    mapStatus: "live",
+    recommendationStatus: "planning",
+    sourceIds: ["swgohgg", "swgoh-wiki", "ea-forums"],
     theme: "hoth-dark",
   },
   {
