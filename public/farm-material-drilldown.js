@@ -167,7 +167,7 @@ function openGearPlanner(button) {
   setTimeout(selectWhenReady, 80);
 }
 
-let requestedInitialAll = false;
+const normalizedJourneyIds = new Set();
 function decorateFarm() {
   const panel = $("workspace-farm");
   if (!panel) return;
@@ -191,6 +191,7 @@ function decorateFarm() {
     const needs = controls.querySelector('[data-journey-filter="needs"]');
     const blockers = controls.querySelector('[data-journey-filter="far"]');
     const all = controls.querySelector('[data-journey-filter="all"]');
+    const journeyId = all?.dataset.journeyId || blockers?.dataset.journeyId || "";
     if (needs) needs.hidden = true;
     if (blockers && blockers.dataset.farmRelabeled !== "true") {
       const count = blockers.querySelector("span")?.textContent || "0";
@@ -198,8 +199,8 @@ function decorateFarm() {
       blockers.title = "Red and orange requirements: missing, far away, or still building";
       blockers.dataset.farmRelabeled = "true";
     }
-    if (!requestedInitialAll && needs?.classList.contains("active") && all) {
-      requestedInitialAll = true;
+    if (journeyId && !normalizedJourneyIds.has(journeyId) && needs?.classList.contains("active") && all) {
+      normalizedJourneyIds.add(journeyId);
       setTimeout(() => all.click(), 0);
     }
   }
