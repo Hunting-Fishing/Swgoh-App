@@ -6,6 +6,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const steps = [
   { name: "validate battle strategy", args: ["scripts/validate-battle-strategy.mjs"], blocking: true },
   { name: "validate ROTE entry contracts", args: ["scripts/validate-rote-entry-contract.mjs"], blocking: true },
+  { name: "validate Bracca one-of entry", args: ["scripts/validate-bracca-oneof-entry.mjs"], blocking: true },
   { name: "refresh catalog", args: ["scripts/sync-gamedata.mjs", "--allow-stale"] },
   { name: "repair catalog", args: ["scripts/repair-catalog.mjs", "--allow-stale"] },
   { name: "build kit index", args: ["scripts/enrich-kit-intelligence.mjs"] },
