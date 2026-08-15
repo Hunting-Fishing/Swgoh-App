@@ -1,6 +1,9 @@
 const CANONICAL_BASE_IDS = Object.freeze({
   BOKATANMANDALORE: "MANDALORBOKATAN",
   BESKARMANDO: "THEMANDALORIANBESKARARMOR",
+  DARKTROOPERMOFFGIDEON: "MOFFGIDEONS3",
+  L337: "L3_37",
+  "000": "TRIPLEZERO",
 });
 
 const canonicalId = (value) => CANONICAL_BASE_IDS[String(value || "")] || String(value || "");

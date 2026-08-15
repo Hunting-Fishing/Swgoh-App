@@ -4,10 +4,24 @@ import { normalizeRoteMissions } from "../public/rote-mission-overrides.js";
 import { rosterUnitMeetsEntry } from "../public/tb-mission-intelligence.js";
 import { rotePriorityBattleStrategyForMission } from "../public/tb-battle-strategy-rote-priority-data.js";
 
-const missions = normalizeRoteMissions(Object.values(ROTE_MISSIONS_BY_PLANET).flat());
-assert.equal(missions.length, Object.values(ROTE_MISSIONS_BY_PLANET).flat().length, "Overrides must not add or drop ROTE missions");
+const rawMissions = Object.values(ROTE_MISSIONS_BY_PLANET).flat();
+const missions = normalizeRoteMissions(rawMissions);
+const missionById = (id) => missions.find((mission) => mission.id === id);
+const mandatoryIds = (rows) => rows.flatMap((mission) => mission.entry?.mandatoryMembers || []).map((row) => row.baseId).filter(Boolean);
 
-const unlock = missions.find((mission) => mission.id === "tatooine-mandalore-unlock");
+assert.equal(missions.length, rawMissions.length, "Overrides must not add or drop ROTE missions");
+
+const staleAliases = ["BOKATANMANDALORE", "BESKARMANDO", "DARKTROOPERMOFFGIDEON", "L337", "000"];
+const canonicalIds = ["MANDALORBOKATAN", "THEMANDALORIANBESKARARMOR", "MOFFGIDEONS3", "L3_37", "TRIPLEZERO"];
+for (const staleId of staleAliases) {
+  assert.ok(!mandatoryIds(rawMissions).includes(staleId), `Raw ROTE mission catalog still contains stale mandatory baseId ${staleId}`);
+  assert.ok(!mandatoryIds(missions).includes(staleId), `Normalized ROTE mission catalog still contains stale mandatory baseId ${staleId}`);
+}
+for (const canonicalId of canonicalIds) {
+  assert.ok(mandatoryIds(missions).includes(canonicalId), `Normalized ROTE mission catalog is missing canonical baseId ${canonicalId}`);
+}
+
+const unlock = missionById("tatooine-mandalore-unlock");
 assert.ok(unlock, "Tatooine Mandalore unlock mission missing");
 assert.equal(unlock.entry.verified, true);
 assert.equal(unlock.entry.squadSize, 3, "Official Krayt unlock must be modeled as a three-unit mission");
@@ -48,9 +62,20 @@ assert.ok(strategy, "Existing Tatooine Krayt strategy pack must remain registere
 assert.equal(strategy.requiredLeaderBaseId, "MANDALORBOKATAN");
 assert.equal("winPercent" in strategy, false, "Entry-contract normalization must not introduce fabricated odds");
 
-const mandalore = missions.find((mission) => mission.id === "mandalore-bkm");
+const mandalore = missionById("mandalore-bkm");
 assert.ok(mandalore, "Mandalore BKM mission missing");
-assert.ok(mandalore.entry.mandatoryMembers.some((row) => row.baseId === "MANDALORBOKATAN"), "Mandalore BKM entry should expose the current BKM Base ID");
-assert.ok(!mandalore.entry.mandatoryMembers.some((row) => row.baseId === "BOKATANMANDALORE"), "Stale BKM Base ID must not survive normalization");
+assert.deepEqual(mandalore.entry.mandatoryMembers.map((row) => row.baseId), ["MANDALORBOKATAN"]);
 
-console.log("[rote-entry-contract] validated 3-unit Krayt gate, flexible Mandalorian third slot and canonical BKM/BAM IDs");
+const dtmg = missionById("mandalore-dtmg");
+assert.ok(dtmg, "Mandalore DTMG mission missing");
+assert.deepEqual(dtmg.entry.mandatoryMembers.map((row) => row.baseId), ["MOFFGIDEONS3"]);
+
+const kessel = missionById("kessel-qira-l3");
+assert.ok(kessel, "Kessel Qi'ra/L3-37 mission missing");
+assert.deepEqual(kessel.entry.mandatoryMembers.map((row) => row.baseId), ["QIRA", "L3_37"]);
+
+const hothAphra = missionById("hoth-aphra");
+assert.ok(hothAphra, "Hoth Aphra mission missing");
+assert.deepEqual(hothAphra.entry.mandatoryMembers.map((row) => row.baseId), ["DOCTORAPHRA", "BT1", "TRIPLEZERO"]);
+
+console.log("[rote-entry-contract] validated official Krayt gate plus canonical BKM/BAM, DTMG, L3-37 and 0-0-0 IDs across raw and normalized ROTE mission data");
