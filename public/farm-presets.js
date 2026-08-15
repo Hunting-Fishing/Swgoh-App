@@ -1,0 +1,187 @@
+export const JOURNEY_PRESETS = [
+  {
+    id: "JOURNEY_LORDVADER",
+    name: "Lord Vader",
+    category: "Galactic Legends",
+    targetBaseId: "LORDVADER",
+    requirements: [
+      ["BADBATCHHUNTER", "RELIC", 5], ["BADBATCHTECH", "RELIC", 5], ["BADBATCHWRECKER", "RELIC", 5],
+      ["TUSKENRAIDER", "RELIC", 5], ["PADMEAMIDALA", "RELIC", 8], ["EMBO", "RELIC", 5],
+      ["CT210408", "RELIC", 7], ["BADBATCHECHO", "RELIC", 5], ["COUNTDOOKU", "RELIC", 8],
+      ["ZAMWESELL", "RELIC", 7], ["YWINGCLONEWARS", "STAR", 7], ["GRANDMOFFTARKIN", "RELIC", 7],
+      ["ARCTROOPER501ST", "RELIC", 8], ["GENERALSKYWALKER", "RELIC", 8], ["NUTEGUNRAY", "RELIC", 7],
+    ],
+  },
+  {
+    id: "JOURNEY_JEDIMASTERKENOBI",
+    name: "Jedi Master Kenobi",
+    category: "Galactic Legends",
+    targetBaseId: "JEDIMASTERKENOBI",
+    requirements: [
+      ["GENERALKENOBI", "RELIC", 8], ["CAPITALNEGOTIATOR", "STAR", 6], ["MACEWINDU", "RELIC", 3],
+      ["AAYLASECURA", "RELIC", 3], ["BOKATAN", "RELIC", 5], ["QUIGONJINN", "RELIC", 3],
+      ["MAGNAGUARD", "RELIC", 5], ["CLONESERGEANTPHASEI", "RELIC", 5], ["WATTAMBOR", "RELIC", 7],
+      ["GRIEVOUS", "RELIC", 7], ["CADBANE", "RELIC", 5], ["CC2224", "RELIC", 5],
+      ["JANGOFETT", "RELIC", 7], ["SHAAKTI", "RELIC", 7], ["GRANDMASTERYODA", "RELIC", 8],
+    ],
+  },
+  {
+    id: "JOURNEY_JABBATHEHUTT",
+    name: "Jabba the Hutt",
+    category: "Galactic Legends",
+    targetBaseId: "JABBATHEHUTT",
+    requirements: [
+      ["KRRSANTAN", "RELIC", 5], ["HANSOLO", "RELIC", 8], ["GAMORREANGUARD", "RELIC", 3],
+      ["OUTRIDER", "STAR", 7], ["GREEDO", "RELIC", 6], ["UNDERCOVERLANDO", "RELIC", 5],
+      ["JEDIKNIGHTLUKE", "RELIC", 7], ["JAWA", "RELIC", 3], ["URORRURRR", "RELIC", 4],
+      ["C3POLEGENDARY", "RELIC", 7], ["BOUSHH", "RELIC", 5], ["AURRA_SING", "RELIC", 6],
+      ["FENNECSHAND", "RELIC", 7], ["BOBAFETT", "RELIC", 7], ["HUMANTHUG", "RELIC", 3],
+    ],
+  },
+  {
+    id: "JOURNEY_GRANDMASTERLUKE",
+    name: "Jedi Master Luke Skywalker",
+    category: "Galactic Legends",
+    targetBaseId: "GRANDMASTERLUKE",
+    requirements: [
+      ["OLDBENKENOBI", "RELIC", 5], ["REYJEDITRAINING", "RELIC", 7], ["C3POLEGENDARY", "RELIC", 5],
+      ["MONMOTHMA", "RELIC", 5], ["C3POCHEWBACCA", "RELIC", 5], ["JEDIKNIGHTLUKE", "RELIC", 7],
+      ["R2D2_LEGENDARY", "RELIC", 7], ["HANSOLO", "RELIC", 6], ["CHEWBACCALEGENDARY", "RELIC", 6],
+      ["YWINGREBEL", "STAR", 6], ["PRINCESSLEIA", "RELIC", 3], ["HERMITYODA", "RELIC", 5],
+      ["WEDGEANTILLES", "RELIC", 3], ["BIGGSDARKLIGHTER", "RELIC", 3], ["ADMINISTRATORLANDO", "RELIC", 5],
+    ],
+  },
+  {
+    id: "JOURNEY_SITHPALPATINE",
+    name: "Sith Eternal Emperor",
+    category: "Galactic Legends",
+    targetBaseId: "SITHPALPATINE",
+    requirements: [
+      ["EMPERORPALPATINE", "RELIC", 7], ["VADER", "RELIC", 7], ["ROYALGUARD", "RELIC", 3],
+      ["ADMIRALPIETT", "RELIC", 5], ["DIRECTORKRENNIC", "RELIC", 4], ["DARTHSIDIOUS", "RELIC", 7],
+      ["MAUL", "RELIC", 4], ["COUNTDOOKU", "RELIC", 6], ["SITHMARAUDER", "RELIC", 7],
+      ["TIEBOMBERIMPERIAL", "STAR", 6], ["ANAKINKNIGHT", "RELIC", 7], ["GRANDADMIRALTHRAWN", "RELIC", 6],
+      ["GRANDMOFFTARKIN", "RELIC", 3], ["VEERS", "RELIC", 3], ["COLONELSTARCK", "RELIC", 3],
+    ],
+  },
+  {
+    id: "JOURNEY_GLREY",
+    name: "Rey",
+    category: "Galactic Legends",
+    targetBaseId: "GLREY",
+    requirements: [
+      ["REYJEDITRAINING", "RELIC", 7], ["FINN", "RELIC", 5], ["RESISTANCETROOPER", "RELIC", 5],
+      ["REY", "RELIC", 7], ["RESISTANCEPILOT", "RELIC", 3], ["POE", "RELIC", 5],
+      ["EPIXFINN", "RELIC", 5], ["AMILYNHOLDO", "RELIC", 5], ["ROSETICO", "RELIC", 5],
+      ["EPIXPOE", "RELIC", 5], ["BB8", "RELIC", 7], ["SMUGGLERCHEWBACCA", "RELIC", 3],
+      ["CAPITALRADDUS", "STAR", 5],
+    ],
+  },
+  {
+    id: "JOURNEY_SUPREMELEADERKYLOREN",
+    name: "Supreme Leader Kylo Ren",
+    category: "Galactic Legends",
+    targetBaseId: "SUPREMELEADERKYLOREN",
+    requirements: [
+      ["KYLORENUNMASKED", "RELIC", 7], ["FIRSTORDERTROOPER", "RELIC", 5], ["FIRSTORDEROFFICERMALE", "RELIC", 5],
+      ["KYLOREN", "RELIC", 7], ["PHASMA", "RELIC", 5], ["FIRSTORDEREXECUTIONER", "RELIC", 5],
+      ["SMUGGLERHAN", "RELIC", 3], ["FOSITHTROOPER", "RELIC", 5], ["FIRSTORDERSPECIALFORCESPILOT", "RELIC", 3],
+      ["GENERALHUX", "RELIC", 5], ["FIRSTORDERTIEPILOT", "RELIC", 3], ["EMPERORPALPATINE", "RELIC", 7],
+      ["CAPITALFINALIZER", "STAR", 5],
+    ],
+  },
+  {
+    id: "JOURNEY_GLLEIA",
+    name: "Leia Organa",
+    category: "Galactic Legends",
+    targetBaseId: "GLLEIA",
+    requirements: [
+      ["CAPTAINREX", "RELIC", 7], ["PRINCESSKNEESAA", "RELIC", 7], ["WICKET", "RELIC", 3],
+      ["ADMINISTRATORLANDO", "RELIC", 5], ["ADMIRALACKBAR", "RELIC", 3], ["SCOUTTROOPER_V3", "RELIC", 7],
+      ["R2D2_LEGENDARY", "RELIC", 8], ["HOTHHAN", "RELIC", 5], ["HOTHLEIA", "RELIC", 5],
+      ["CHIEFCHIRPA", "RELIC", 3], ["CAPTAINDROGAN", "RELIC", 7], ["COMMANDERLUKESKYWALKER", "RELIC", 7],
+      ["BOUSHH", "RELIC", 5], ["C3POCHEWBACCA", "RELIC", 7], ["LOBOT", "RELIC", 3],
+    ],
+  },
+  {
+    id: "JOURNEY_CAPITALEXECUTOR",
+    name: "Executor",
+    category: "Journey Guide Fleets",
+    targetBaseId: "CAPITALEXECUTOR",
+    requirements: [
+      ["VADER", "RELIC", 7], ["ADMIRALPIETT", "RELIC", 8], ["BOBAFETT", "RELIC", 8],
+      ["DENGAR", "RELIC", 5], ["IG88", "RELIC", 5], ["BOSSK", "RELIC", 5], ["TIEFIGHTERPILOT", "RELIC", 5],
+      ["TIEADVANCED", "STAR", 4], ["TIEBOMBERIMPERIAL", "STAR", 4], ["HOUNDSTOOTH", "STAR", 4],
+      ["SLAVE1", "STAR", 4], ["IG2000", "STAR", 4], ["TIEFIGHTERIMPERIAL", "STAR", 4], ["RAZORCREST", "STAR", 5],
+    ],
+  },
+  {
+    id: "JOURNEY_CAPITALPROFUNDITY",
+    name: "Profundity",
+    category: "Journey Guide Fleets",
+    targetBaseId: "CAPITALPROFUNDITY",
+    requirements: [
+      ["ADMIRALRADDUS", "RELIC", 9], ["CASSIANANDOR", "RELIC", 8], ["DASHRENDAR", "RELIC", 7],
+      ["MONMOTHMA", "RELIC", 5], ["BISTAN", "RELIC", 5], ["JYNERSO", "RELIC", 5], ["HERASYNDULLAS3", "RELIC", 5],
+      ["OUTRIDER", "STAR", 4], ["UWINGROGUEONE", "STAR", 4], ["UWINGSCARIF", "STAR", 4], ["XWINGRED2", "STAR", 4],
+      ["XWINGRED3", "STAR", 4], ["YWINGREBEL", "STAR", 4], ["GHOST", "STAR", 4],
+    ],
+  },
+  {
+    id: "JOURNEY_CAPITALLEVIATHAN",
+    name: "Leviathan",
+    category: "Journey Guide Fleets",
+    targetBaseId: "CAPITALLEVIATHAN",
+    requirements: [
+      ["DARTHREVAN", "RELIC", 9], ["DARTHMALAK", "RELIC", 9], ["SITHTROOPER", "RELIC", 7],
+      ["FOSITHTROOPER", "RELIC", 7], ["MAUL", "RELIC", 7], ["HK47", "RELIC", 7], ["BASTILASHAN", "RELIC", 7],
+      ["SITHASSASSIN", "RELIC", 5], ["50RT", "RELIC", 5], ["FURYCLASSINTERCEPTOR", "STAR", 4],
+      ["SITHSUPREMACYCLASS", "STAR", 4], ["TIEDAGGER", "STAR", 4], ["SITHBOMBER", "STAR", 4],
+      ["SITHINFILTRATOR", "STAR", 4], ["SITHFIGHTER", "STAR", 4], ["EBONHAWK", "STAR", 4],
+    ],
+  },
+  {
+    id: "JOURNEY_GRANDINQUISITOR",
+    name: "Grand Inquisitor",
+    category: "Journey Guide",
+    targetBaseId: "GRANDINQUISITOR",
+    requirements: [
+      ["SECONDSISTER", "RELIC", 5], ["NINTHSISTER", "RELIC", 5], ["SEVENTHSISTER", "RELIC", 5],
+      ["EIGHTHBROTHER", "RELIC", 5], ["FIFTHBROTHER", "RELIC", 5],
+    ],
+  },
+  {
+    id: "JOURNEY_STARKILLER",
+    name: "Starkiller",
+    category: "Journey Guide",
+    targetBaseId: "STARKILLER",
+    requirements: [
+      ["DASHRENDAR", "RELIC", 5], ["KYLEKATARN", "RELIC", 5], ["DARTHTALON", "RELIC", 5], ["MARAJADE", "RELIC", 5],
+    ],
+  },
+  {
+    id: "JOURNEY_DOCTORAPHRA",
+    name: "Doctor Aphra",
+    category: "Journey Guide",
+    targetBaseId: "DOCTORAPHRA",
+    requirements: [
+      ["HONDO", "RELIC", 5], ["TRIPLEZERO", "RELIC", 5], ["BT1", "RELIC", 5], ["SANASTARROS", "RELIC", 5],
+    ],
+  },
+  {
+    id: "JOURNEY_JEDIKNIGHTCAL",
+    name: "Jedi Knight Cal Kestis",
+    category: "Journey Guide",
+    targetBaseId: "JEDIKNIGHTCAL",
+    requirements: [
+      ["CALKESTIS", "GEAR", 12], ["CEREJUNDA", "GEAR", 12], ["MERRIN", "GEAR", 12], ["TARFFUL", "GEAR", 12], ["SAWGERRERA", "GEAR", 12],
+    ],
+  },
+].map((event) => ({
+  ...event,
+  requirements: event.requirements.map(([baseId, type, tier]) => ({ baseId, type, tier })),
+}));
+
+export function journeyPresetById(id) {
+  return JOURNEY_PRESETS.find((event) => event.id === id) || null;
+}
