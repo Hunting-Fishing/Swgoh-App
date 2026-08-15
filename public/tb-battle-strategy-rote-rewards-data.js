@@ -163,14 +163,14 @@ export const ROTE_REWARD_BATTLE_STRATEGIES = Object.freeze({
   }),
 
   "vandor-yhan": Object.freeze({
-    id: "vandor-yhan-prepared-v1",
+    id: "vandor-yhan-prepared-v2",
     missionId: "vandor-yhan",
     title: "Vandor · Young Han + Vandor Chewbacca Special Mission",
     status: "kit-driven-conservative",
     confidence: "official-modifier-current-kit",
     lastVerified: "2026-08-15",
     sources: sources("cg-rote-details", "swgohgg-yhan", "swgohgg-vandor", "cg-yhan-vandor"),
-    summary: "Build this R9 special mission around the mandatory Young Han + Vandor Chewbacca Prepared engine. Vandor's Sabacc Shift favors timing damage around advantageous dice states; independently, Young Han can pass Prepared while ramping Speed and Vandor converts Prepared into stronger Freedom Fighter recovery/damage and preserves his Light Side Scoundrel revive condition while buffed. Because a stable current enemy script is not independently verified, target priority remains adaptive.",
+    summary: "Build this R9 special mission around the mandatory Young Han + Vandor Chewbacca Prepared engine while tracking Vandor's official Sabacc Shift and Boxed In modifiers. At the end of each character turn, Sabacc Shift can replace that character's Health Up/Health Down state with Health Up (35%) or Health Down (35%) for 2 turns. Boxed In gives enemies persistent Healing Immunity and accumulating modifier Damage Over Time, but an enemy that damages the indestructible Crate recovers 50% Health and Protection and removes those Boxed In Damage Over Time effects. Prepared sustain keeps the mandatory pair functional through those state changes.",
     requiredLeaderBaseId: null,
     keyUnits: [
       { baseId: "YOUNGHAN", name: "Young Han Solo", importance: "critical", reason: "Officially mandatory at R9 for the Vandor special mission and the Prepared-transfer/speed-ramp half of the core." },
@@ -184,29 +184,33 @@ export const ROTE_REWARD_BATTLE_STRATEGIES = Object.freeze({
     ],
     stages: [
       stage("prepared", "Opening · establish Prepared and buffs", [
-        step("upper-hand", "Use Upper Hand to begin Young Han's permanent Speed ramp while giving him Protection Up/Retribution.", { priority: "high", ability: "Upper Hand" }),
+        step("upper-hand", "Use Upper Hand to begin Young Han's permanent Speed ramp while giving him Protection Up and Retribution.", { priority: "high", ability: "Upper Hand" }),
         step("pass-prepared", "When Young Han is Prepared, use Just In Time to pass Prepared to Vandor when the revive/recovery engine needs to be primed.", { priority: "critical", ability: "Just In Time", target: "Vandor Chewbacca" }),
         step("keep-vandor-buffed", "Keep Vandor buffed where practical: his kit reduces enemy damage while he is buffed and his counter/protection-recovery loop helps him reach Prepared.", { priority: "critical" }),
-      ], { objective: "Prime Vandor's Prepared survival engine while Young Han starts his encounter-long speed ramp." }),
-      stage("sabacc", "Sabacc Shift · time the damage window", [
-        step("read-dice", "Use the live Sabacc Shift state when deciding whether to commit major damage. Do not hard-code a dice result; the mission modifier changes damage opportunity based on the current roll/state.", { priority: "critical" }),
-        step("prepared-freedom", "When Vandor is Prepared and the damage window is favorable, use Freedom Fighter to convert Prepared into increased damage, self/ally recovery and Protection Up.", { priority: "high", ability: "Freedom Fighter" }),
+      ], { objective: "Prime Vandor's Prepared survival engine while Young Han starts his encounter-long Speed ramp." }),
+      stage("sabacc-boxed", "Sabacc Shift + Boxed In · track Health state and Crate resets", [
+        step("track-health-shift", "At the end of each character turn, account for Sabacc Shift: that character may gain Health Up (35%) or Health Down (35%) for 2 turns, replacing other Health Up/Health Down effects gained from the modifier.", { priority: "critical" }),
+        step("enemy-dot-pressure", "Enemies begin with Healing Immunity and gain a Boxed In Damage Over Time effect at the start of enemy turns. Treat those effects as environmental attrition until that enemy uses the Crate reset.", { priority: "high" }),
+        step("crate-reset", "When an enemy damages the indestructible Crate, expect that enemy to recover 50% Health and Protection and remove all Boxed In Damage Over Time effects on itself. That recovery cannot be prevented, so immediately reassess target progress.", { priority: "critical", target: "Crate" }),
+        step("prepared-freedom", "When Vandor is Prepared, use Freedom Fighter when its damage, ally recovery and Protection Up materially strengthen the survival cycle.", { priority: "high", ability: "Freedom Fighter" }),
+      ], { objective: "Exploit Prepared sustain while accurately accounting for Sabacc Health-state changes and enemy Crate recovery." }),
+      stage("closeout", "Closeout · maintain Prepared through modifier resets", [
         step("preserve-revive", "Avoid consuming Vandor's Prepared state casually if a Light Side Scoundrel ally is at serious defeat risk; Prepared Vandor can revive a defeated Light Side Scoundrel ally.", { priority: "high" }),
-      ], { objective: "Synchronize Prepared resources with the mission's changing Sabacc damage state." }),
-      stage("closeout", "Closeout · maintain the engine", [
-        step("adaptive-target", "Focus the highest immediate enemy damage/control threat while keeping Young Han and Vandor alive; no universal current encounter kill order is asserted without independent encounter verification.", { priority: "high" }),
-        step("continue-ramp", "Continue Upper Hand/Prepared cycling as cooldowns permit so Young Han's speed and Vandor's recovery remain relevant through a long R9 fight.", { priority: "high" }),
-      ], { objective: "Win through Prepared sustain and favorable damage windows instead of an invented scripted target order." }),
+        step("adaptive-target", "Focus the highest immediate enemy damage/control threat, but re-evaluate after any Crate hit because that enemy has just restored 50% Health and Protection and removed its Boxed In Damage Over Time effects.", { priority: "critical" }),
+        step("continue-ramp", "Continue Upper Hand and Prepared cycling as cooldowns permit so Young Han's Speed and Vandor's recovery remain relevant through a long R9 fight.", { priority: "high" }),
+      ], { objective: "Finish through Prepared sustain without mistaking Crate recovery or Sabacc state changes for preventable effects." }),
     ],
     targetPriorities: [
-      { target: "Highest immediate damage/control threat", priority: "critical", when: "throughout", reason: "The mission-specific Sabacc mechanic is verified, but a stable current enemy script was not independently verified; target order remains adaptive." },
+      { target: "Highest immediate damage/control threat", priority: "critical", when: "throughout", reason: "A stable current enemy kill script is not independently verified, and Boxed In can materially reset an enemy after it damages the Crate; target order remains adaptive." },
+      { target: "Enemy that just damaged the Crate", priority: "info", when: "after a Crate hit", reason: "That enemy has recovered 50% Health/Protection and removed its modifier DOTs, so its effective progress must be recalculated before continuing focus." },
     ],
     failureRisks: [
-      "Using Prepared only as a damage buff can throw away Vandor's revive/recovery safety net.",
-      "Allowing Vandor to remain unbuffed weakens his mitigation, counter and Protection-recovery engine.",
+      "Do not assume Healing Immunity prevents the Crate recovery: Boxed In explicitly makes that 50% Health/Protection recovery unpreventable.",
+      "Do not assume Boxed In Damage Over Time effects persist after an enemy hits the Crate; that enemy removes all modifier DOTs on itself.",
+      "Using Prepared only as a damage amplifier can throw away Vandor's revive/recovery safety net.",
       "This conservative pack intentionally does not invent exact Vandor enemies or a fixed kill order when current encounter evidence is incomplete.",
     ],
-    evidenceBoundary: "Young Han/Vandor Chewbacca R9 entry and Vandor's Sabacc Shift are official ROTE information. Prepared, Upper Hand, Just In Time, Freedom Fighter and Vandor's revive/recovery interactions are official/current kit facts. Enemy-specific sequencing remains deliberately adaptive until independently verified; no win probability is generated.",
+    evidenceBoundary: "Young Han/Vandor Chewbacca R9 entry, Sabacc Shift, Boxed In and the Crate recovery/reset are official ROTE mechanics. Prepared, Upper Hand, Just In Time, Freedom Fighter and Vandor's revive/recovery interactions are official/current kit facts. Enemy-specific sequencing remains deliberately adaptive until independently verified; no win probability is generated.",
   }),
 });
 
