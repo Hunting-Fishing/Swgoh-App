@@ -110,11 +110,11 @@ function schedule(...delays) {
 }
 
 window.addEventListener("swgoh:workspace-activated", (event) => {
-  if (event.detail?.id === "rote") schedule(40, 350);
+  if (event.detail?.id === "rote") schedule(40, 350, 1000);
 });
 document.addEventListener("click", (event) => {
-  if (event.target.closest("[data-tb-select],[data-legacy-territory],[data-dsgeo-territory],[data-rote-planet]")) schedule(40, 300);
+  if (event.target.closest("[data-tb-select],[data-legacy-territory],[data-dsgeo-territory],[data-rote-planet]")) schedule(40, 300, 1000);
 }, true);
-document.getElementById("allyForm")?.addEventListener("submit", () => schedule(700));
+document.getElementById("allyForm")?.addEventListener("submit", () => schedule(700, 1300));
 
-schedule(250);
+schedule(250, 1200);
