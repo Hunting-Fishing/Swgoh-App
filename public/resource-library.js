@@ -1,7 +1,7 @@
 const NATIVE_TARGETS = [
   ["Farm Tracker", "LIVE", "Journey and Galactic Legend requirement tracking against the loaded Ally Code: unlock state, stars, level, gear, relic and completion percentage."],
   ["Journey Visualizer", "BUILDING", "Show prerequisite chains and which earlier Journey unlocks feed the selected target."],
-  ["Gear & Relic Planner", "NEXT", "Calculate remaining gear tiers, relic levels and prerequisite units from current live progression."],
+  ["Gear & Relic Planner", "LIVE", "Compare live gear/relic progression with a target and show remaining versioned gear-tier requirements without inventing private inventory balances."],
   ["Mods Optimizer", "NEXT", "Score equipped mods, compare current-game recommendations and build move plans from data we can actually access."],
   ["GAC Scout / Compare", "NEXT", "Player-vs-opponent roster differences, omicrons, team coverage and counter planning."],
   ["Ship Projection", "PLANNED", "Separate ship progression from pilot-driven stat contribution and fleet readiness."],
