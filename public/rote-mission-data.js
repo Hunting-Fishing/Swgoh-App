@@ -33,7 +33,7 @@ const SAW_RF = planning("rote-saw", "Saw Rebel Fighters", ["Saw Gerrera", "Chirr
 const CLONES = planning("rote-clones", "Clone Trooper planning core", ["Captain Rex", "ARC Trooper", "CT-7567 'Rex'", "CT-5555 'Fives'", "CT-21-0408 'Echo'"]);
 const PHOENIX = planning("rote-phoenix", "Phoenix planning core", ["Hera Syndulla", "Captain Rex", "Kanan Jarrus", "Chopper", "Ezra Bridger"]);
 const BKM = planning("rote-bkm", "Bo-Katan (Mand'alor) planning core", ["Bo-Katan (Mand'alor)", "The Mandalorian (Beskar Armor)", "Paz Vizsla", "IG-12 & Grogu", "The Armorer"]);
-const DTMG = planning("rote-dtmg", "Dark Trooper Moff Gideon planning core", ["Dark Trooper Moff Gideon", "Scout Trooper", "Moff Gideon", "Stormtrooper", "Dark Trooper"]);
+const DTMG = planning("rote-dtmg", "Dark Trooper Moff Gideon planning core", ["Dark Trooper Moff Gideon", "Scout Trooper", "Moff Gideon", "Stormtrooper", "Death Trooper"]);
 const MALACHOR_INQS = planning("rote-malachor-inqs", "Malachor required Inquisitors", ["Eighth Brother", "Fifth Brother", "Seventh Sister", "Grand Inquisitor", "Ninth Sister"]);
 const VANDOR = planning("rote-vandor", "Young Han + Vandor Chewbacca core", ["Young Han Solo", "Vandor Chewbacca", "Qi'ra", "L3-37", "Young Lando Calrissian"]);
 const ROGUE = planning("rote-rogue", "Rogue One planning core", ["Admiral Raddus", "Cassian Andor", "K-2SO", "Jyn Erso", "Bistan"]);
@@ -124,7 +124,7 @@ export const ROTE_MISSIONS_BY_PLANET = Object.freeze({
     mission("tatooine", 3, "tatooine-jabba", "Combat Mission — Jabba the Hutt", "combat", relicEntry(7, "Mixed", mandatory(member("Jabba the Hutt", "JABBATHEHUTT"))), { rewards: ["162,500 → 341,250 TP"], recommendations: [JABBA] }),
     mission("tatooine", 3, "tatooine-fennec", "Combat Mission — Fennec Shand", "combat", relicEntry(7, "Mixed", mandatory(member("Fennec Shand", "FENNECSHAND"))), { rewards: ["162,500 → 341,250 TP"] }),
     mission("tatooine", 3, "tatooine-reva", "Special Mission — Inquisitorius + Grand Inquisitor", "special", relicEntry(7, "Dark", { ...category("Inquisitorius"), ...mandatory(member("Grand Inquisitor", "GRANDINQUISITOR")) }), { rewards: ["1 Third Sister shard per clear"], recommendations: [INQUISITORS] }),
-    mission("tatooine", 3, "tatooine-mandalore-unlock", "Special Unlock — Mandalorians + Bo-Katan (Mand'alor) + Beskar Mando", "special", relicEntry(7, "Mixed", { ...category("Mandalorian"), ...mandatory(member("Bo-Katan (Mand'alor)", "BOKATANMANDALORE"), member("The Mandalorian (Beskar Armor)", "BESKARMANDO")), notes: "Mandalorians at R7; Bo-Katan (Mand'alor) and The Mandalorian (Beskar Armor) are mandatory. Twenty-five guild clears unlock Mandalore." }), { rewards: ["50 Mk II Guild Event Tokens per clear", "25 clears unlock Mandalore"] }),
+    mission("tatooine", 3, "tatooine-mandalore-unlock", "Special Unlock — Mandalorians + Bo-Katan (Mand'alor) + Beskar Mando", "special", relicEntry(7, "Mixed", { ...category("Mandalorian"), ...mandatory(member("Bo-Katan (Mand'alor)", "MANDALORBOKATAN"), member("The Mandalorian (Beskar Armor)", "THEMANDALORIANBESKARARMOR")), notes: "Mandalorians at R7; Bo-Katan (Mand'alor) and The Mandalorian (Beskar Armor) are mandatory. Twenty-five guild clears unlock Mandalore." }), { rewards: ["50 Mk II Guild Event Tokens per clear", "25 clears unlock Mandalore"] }),
     mission("tatooine", 3, "tatooine-fleet", "Fleet Mission — Executor", "fleet", fleetEntry(mandatory(member("Executor", "CAPITALEXECUTOR"))), { rewards: ["682,500 TP"] }),
   ],
   kashyyyk: [
@@ -152,7 +152,7 @@ export const ROTE_MISSIONS_BY_PLANET = Object.freeze({
     generic("kessel", 4, 8, "Mixed", 1, "219,375 → 493,594 TP"),
     generic("kessel", 4, 8, "Mixed", 2, "219,375 → 493,594 TP"),
     mission("kessel", 4, "kessel-jabba", "Combat Mission — Jabba the Hutt", "combat", relicEntry(8, "Mixed", mandatory(member("Jabba the Hutt", "JABBATHEHUTT"))), { rewards: ["219,375 → 493,594 TP"], recommendations: [JABBA] }),
-    mission("kessel", 4, "kessel-qira-l3", "Special Mission — Qi'ra + L3-37", "special", relicEntry(8, "Mixed", mandatory(member("Qi'ra", "QIRA"), member("L3-37", "L337"))), { rewards: ["20 Mk III Guild Event Tokens per clear"], recommendations: [QIRA_YHAN] }),
+    mission("kessel", 4, "kessel-qira-l3", "Special Mission — Qi'ra + L3-37", "special", relicEntry(8, "Mixed", mandatory(member("Qi'ra", "QIRA"), member("L3-37", "L3_37"))), { rewards: ["20 Mk III Guild Event Tokens per clear"], recommendations: [QIRA_YHAN] }),
     mission("kessel", 4, "kessel-fleet", "Fleet Mission — Ghost", "fleet", fleetEntry(mandatory(member("Ghost"))), { rewards: ["987,188 TP"] }),
   ],
   lothal: [
@@ -162,8 +162,8 @@ export const ROTE_MISSIONS_BY_PLANET = Object.freeze({
     mission("lothal", 4, "lothal-fleet", "Fleet Mission", "fleet", fleetEntry(), { rewards: ["987,188 TP"] }),
   ],
   mandalore: [
-    mission("mandalore", 4, "mandalore-bkm", "Combat Mission — Bo-Katan (Mand'alor)", "combat", relicEntry(8, "Mixed", mandatory(member("Bo-Katan (Mand'alor)", "BOKATANMANDALORE", { relicMin: 9 }))), { rewards: ["658,125 → 1,480,782 TP"], recommendations: [BKM], mechanics: ["Bo-Katan (Mand'alor) specifically requires R9 while the planet baseline is R8."] }),
-    mission("mandalore", 4, "mandalore-dtmg", "Combat Mission — Dark Trooper Moff Gideon", "combat", relicEntry(8, "Mixed", mandatory(member("Dark Trooper Moff Gideon", "DARKTROOPERMOFFGIDEON"))), { rewards: ["219,375 → 493,594 TP"], recommendations: [DTMG] }),
+    mission("mandalore", 4, "mandalore-bkm", "Combat Mission — Bo-Katan (Mand'alor)", "combat", relicEntry(8, "Mixed", mandatory(member("Bo-Katan (Mand'alor)", "MANDALORBOKATAN", { relicMin: 9 }))), { rewards: ["658,125 → 1,480,782 TP"], recommendations: [BKM], mechanics: ["Bo-Katan (Mand'alor) specifically requires R9 while the planet baseline is R8."] }),
+    mission("mandalore", 4, "mandalore-dtmg", "Combat Mission — Dark Trooper Moff Gideon", "combat", relicEntry(8, "Mixed", mandatory(member("Dark Trooper Moff Gideon", "MOFFGIDEONS3"))), { rewards: ["219,375 → 493,594 TP"], recommendations: [DTMG] }),
     generic("mandalore", 4, 8, "Mixed", 1, "219,375 → 493,594 TP"),
     mission("mandalore", 4, "mandalore-fleet", "Fleet Mission — Gauntlet Starfighter", "fleet", fleetEntry(mandatory(member("Gauntlet Starfighter"))), { rewards: ["987,188 TP"] }),
   ],
@@ -198,7 +198,7 @@ export const ROTE_MISSIONS_BY_PLANET = Object.freeze({
     generic("hoth", 6, 9, "Mixed", 1, "460,668 → 1,151,719 TP"),
     generic("hoth", 6, 9, "Mixed", 2, "460,668 → 1,151,719 TP"),
     mission("hoth", 6, "hoth-jabba", "Combat Mission — Jabba the Hutt", "combat", relicEntry(9, "Mixed", mandatory(member("Jabba the Hutt", "JABBATHEHUTT"))), { rewards: ["460,668 → 1,151,719 TP"], recommendations: [JABBA] }),
-    mission("hoth", 6, "hoth-aphra", "Special Mission — Doctor Aphra + BT-1 + 0-0-0", "special", relicEntry(9, "Mixed", mandatory(member("Doctor Aphra", "DOCTORAPHRA"), member("BT-1", "BT1"), member("0-0-0", "000"))), { rewards: ["460,668 → 1,151,719 TP"], recommendations: [APHRA] }),
+    mission("hoth", 6, "hoth-aphra", "Special Mission — Doctor Aphra + BT-1 + 0-0-0", "special", relicEntry(9, "Mixed", mandatory(member("Doctor Aphra", "DOCTORAPHRA"), member("BT-1", "BT1"), member("0-0-0", "TRIPLEZERO"))), { rewards: ["460,668 → 1,151,719 TP"], recommendations: [APHRA] }),
     mission("hoth", 6, "hoth-fleet", "Fleet Mission", "fleet", fleetEntry(), { rewards: ["2,303,438 TP"] }),
   ],
   scarif: [
