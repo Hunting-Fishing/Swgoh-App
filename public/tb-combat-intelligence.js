@@ -1,5 +1,7 @@
 import { mergeAbilityProgression } from "./progression-policy.js";
 import { recommendationRosterFit } from "./tb-mission-intelligence.js";
+import { analyzeMissionMechanicCoverage } from "./mission-mechanic-intelligence.js";
+import { teamInteractionProfile } from "./interaction-graph.js";
 
 export const TB_OMICRON_MODES = Object.freeze({
   STRIKE: 5,
@@ -8,6 +10,7 @@ export const TB_OMICRON_MODES = Object.freeze({
 });
 
 let catalogPromise = null;
+let knowledgePromise = null;
 
 export async function loadCombatCatalog() {
   if (window.__swgohStaticCatalog?.units?.length) return window.__swgohStaticCatalog;
@@ -24,6 +27,31 @@ export async function loadCombatCatalog() {
       throw error;
     });
   return catalogPromise;
+}
+
+async function optionalJson(path) {
+  try {
+    const response = await fetch(path, { cache: "force-cache" });
+    if (response.status === 404) return null;
+    if (!response.ok) return null;
+    return await response.json();
+  } catch {
+    return null;
+  }
+}
+
+export async function loadCombatKnowledge() {
+  if (window.__swgohCombatKnowledge) return window.__swgohCombatKnowledge;
+  knowledgePromise ||= Promise.all([
+    optionalJson("/data/enemy-kit-index.json"),
+    optionalJson("/data/interaction-index.json"),
+    optionalJson("/data/enemy-interaction-index.json"),
+  ]).then(([enemyKit, interactions, enemyInteractions]) => {
+    const value = { enemyKit, interactions, enemyInteractions };
+    window.__swgohCombatKnowledge = value;
+    return value;
+  }).catch(() => ({ enemyKit: null, interactions: null, enemyInteractions: null }));
+  return knowledgePromise;
 }
 
 export function catalogUnitMap(catalog) {
@@ -79,7 +107,7 @@ function normalizeGuidanceItem(item, fallbackPriority = "HELPFUL") {
   };
 }
 
-export function analyzeTeamCombatPreparation(body, mission, recommendation, catalog) {
+export function analyzeTeamCombatPreparation(body, mission, recommendation, catalog, knowledge = {}) {
   const fit = recommendationRosterFit(body || {}, mission, recommendation || {});
   const staticById = catalogUnitMap(catalog);
   const members = fit.rows.map((row) => {
@@ -95,9 +123,10 @@ export function analyzeTeamCombatPreparation(body, mission, recommendation, cata
       installed: Boolean(ability.hasOmicron),
     }));
     const activeTbOmicrons = omicrons.filter((ability) => ability.activeHere);
+    const semanticStaticUnit = staticUnit ? { ...staticUnit, abilities } : null;
     return {
       ...row,
-      staticUnit,
+      staticUnit: semanticStaticUnit,
       abilities,
       zetas: {
         available: zetas.length,
@@ -121,6 +150,11 @@ export function analyzeTeamCombatPreparation(body, mission, recommendation, cata
   const zetaInstalled = members.reduce((sum, member) => sum + member.zetas.installed, 0);
   const minimumTargetsDefined = [recommendation?.minimum?.gear, recommendation?.minimum?.relic, recommendation?.minimum?.speed].some((value) => value != null);
   const saferTargetsDefined = [recommendation?.saferTarget?.gear, recommendation?.saferTarget?.relic, recommendation?.saferTarget?.speed].some((value) => value != null);
+  const mechanicCoverage = analyzeMissionMechanicCoverage(mission, members, knowledge?.enemyKit || null);
+  const selectedBaseIds = members.map((member) => member.unit?.baseId || member.baseId).filter(Boolean);
+  const interactionProfile = knowledge?.interactions
+    ? teamInteractionProfile(selectedBaseIds, knowledge.interactions)
+    : { baseIds: selectedBaseIds, foundUnitCount: 0, mechanics: [], activeInteractions: [], namedUnitLinks: [], factionLinks: [], evidenceBoundary: "Interaction index has not been generated for this game-data snapshot." };
 
   return {
     missionId: String(mission?.id || ""),
@@ -146,6 +180,8 @@ export function analyzeTeamCombatPreparation(body, mission, recommendation, cata
       mods: (recommendation?.modTargets || []).map((item) => normalizeGuidanceItem(item, "HELPFUL")),
       strategy: (recommendation?.strategy || []).map((item) => normalizeGuidanceItem(item, "HELPFUL")),
     },
+    mechanicCoverage,
+    interactionProfile,
     mechanics: Array.isArray(mission?.mechanics) ? [...mission.mechanics] : [],
     enemies: Array.isArray(mission?.enemies) ? [...mission.enemies] : [],
   };
@@ -156,6 +192,7 @@ export function combatPreparationStatus(analysis) {
   if (!analysis.entryComplete) return { level: "blocked", label: "ENTRY BLOCKED" };
   const minimumMiss = analysis.members.some((member) => member.minimumGap?.ready === false);
   if (minimumMiss) return { level: "warning", label: "MINIMUM TARGET GAP" };
+  if (analysis.mechanicCoverage?.missing?.length) return { level: "warning", label: "MECHANIC GAP" };
   if (analysis.targets.minimumDefined) return { level: "ready", label: "MINIMUM READY" };
   return { level: "ready", label: "ENTRY READY" };
 }
