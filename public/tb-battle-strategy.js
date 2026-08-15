@@ -6,6 +6,7 @@ import { mandaloreBattleStrategyForMission } from "./tb-battle-strategy-mandalor
 import { rotePriorityBattleStrategyForMission } from "./tb-battle-strategy-rote-priority-data.js";
 import { roteFactionBattleStrategyForMission } from "./tb-battle-strategy-rote-factions-data.js";
 import { roteRewardBattleStrategyForMission } from "./tb-battle-strategy-rote-rewards-data.js";
+import { roteCombatExpansionStrategyForMission } from "./tb-battle-strategy-rote-combat-expansion-data.js";
 
 const normalized = (value) => String(value || "").trim().toLowerCase();
 
@@ -72,6 +73,7 @@ function resolvedStrategy(missionId) {
     || rotePriorityBattleStrategyForMission(missionId)
     || roteFactionBattleStrategyForMission(missionId)
     || roteRewardBattleStrategyForMission(missionId)
+    || roteCombatExpansionStrategyForMission(missionId)
     || rotePhaseOneBattleStrategyForMission(missionId)
     || watBattleStrategyForMission(missionId)
     || battleStrategyForMission(missionId);
