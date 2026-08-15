@@ -118,16 +118,16 @@ export const ROTE_JABBA_JKCK_STRATEGIES = Object.freeze({
   "kessel-jabba": jabbaPack({
     id: "kessel-jabba",
     title: "Kessel · Jabba the Hutt Combat Mission",
-    summary: "Confusing Tunnels punishes Special-ability spam. At 1 Confuse a character cannot gain buffs; at 2 it cannot counter, assist or gain bonus Turn Meter; at 3 its Basic increases cooldowns. Because Jabba's team relies on Specials, assists and an Ultimate that normally grants Hutt Cartel bonus Turn Meter, use the granted Recompute ability before Confuse suppresses a critical tempo window.",
+    summary: "Confusing Tunnels punishes Special-ability spam. At 1 Confuse a character cannot gain buffs; at 2 it cannot counter, assist or gain bonus Turn Meter; at 3 its Basic increases cooldowns. Because Jabba's team relies on Specials, assists and an Ultimate that normally grants Hutt Cartel bonus Turn Meter, use the granted Clear Head ability before Confuse suppresses a critical tempo window.",
     stages: [
       stage("confuse", "Opening · budget Specials and Confuse", [
         step("track", "Track Confuse separately on every character; each Special adds one stack up to 3.", { priority: "critical" }),
-        step("two", "At 2 Confuse, counter/assist/bonus-TM are disabled. Recompute before an important assist or Ultimate follow-up when practical.", { priority: "critical", ability: "Recompute" }),
-        step("three", "At 3 Confuse, a Basic increases cooldowns; clear the stacks instead of accepting a broken cooldown cycle.", { priority: "high", ability: "Recompute" }),
+        step("two", "At 2 Confuse, counter/assist/bonus-TM are disabled. Use Clear Head before an important assist or Ultimate follow-up when practical.", { priority: "critical", ability: "Clear Head" }),
+        step("three", "At 3 Confuse, a Basic increases cooldowns; clear the stacks instead of accepting a broken cooldown cycle.", { priority: "high", ability: "Clear Head" }),
       ], { objective: "Keep the Hutt assist/TM engine functional." }),
-      stage("ultimate", "Ultimate · check Confuse before conversion", [step("delete", "Before There Will Be No Bargain, check whether key Hutt allies are at 2 Confuse and unable to receive its bonus Turn Meter; Recompute first when that tempo matters.", { priority: "critical", ability: "Recompute" })]),
+      stage("ultimate", "Ultimate · check Confuse before conversion", [step("delete", "Before There Will Be No Bargain, check whether key Hutt allies are at 2 Confuse and unable to receive its bonus Turn Meter; use Clear Head first when that tempo matters.", { priority: "critical", ability: "Clear Head" })]),
     ],
-    failureRisks: ["Blind Special spam can push key Hutt units to 2-3 Confuse and disable assists, bonus Turn Meter or normal cooldown flow."],
+    failureRisks: ["Blind Special spam can push key Hutt units to 2-3 Confuse and disable assists, bonus Turn Meter or normal cooldown flow.", "Recompute is the ship version of the Confuse-clearing ability; Kessel ground characters use Clear Head."],
   }),
 
   "vandor-jabba": jabbaPack({
