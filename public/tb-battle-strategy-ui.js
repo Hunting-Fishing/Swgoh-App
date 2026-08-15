@@ -12,7 +12,19 @@ function checkDetail(check) {
     if (!check.ready) return `No explicit ${check.expected || check.label} source found on this listed team.`;
     return (check.sources || []).slice(0, 3).map((source) => `${source.unitName} · ${source.abilityName}`).join("; ");
   }
-  if (check.type === "ability") return check.ready ? `${check.unitName} · ${check.label}${check.installedTier == null ? "" : ` · tier ${check.installedTier}`}` : `${check.unitName || check.baseId} · ${check.label} not found on the current listed unit data`;
+  if (check.type === "ability") {
+    if (!check.hasAbility) return `${check.unitName || check.baseId} · ${check.label} not found on the current listed unit data`;
+    const missing = [];
+    if (check.minimumTier != null && !check.tierReady) missing.push(`tier ${check.minimumTier}+ required; current ${check.installedTier ?? "unknown"}`);
+    if (check.requiresZeta && !check.zetaReady) missing.push("Zeta required but not installed");
+    if (check.requiresOmicron && !check.omicronReady) missing.push("Omicron required but not installed");
+    if (missing.length) return `${check.unitName} · ${check.label} · ${missing.join(" · ")}`;
+    const installed = [];
+    if (check.installedTier != null) installed.push(`tier ${check.installedTier}`);
+    if (check.requiresZeta) installed.push("Zeta installed");
+    if (check.requiresOmicron) installed.push("Omicron installed");
+    return `${check.unitName} · ${check.label}${installed.length ? ` · ${installed.join(" · ")}` : ""}`;
+  }
   return "";
 }
 
