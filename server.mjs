@@ -10,10 +10,14 @@ const port = positiveNumber(process.env.PORT, 8080);
 const gatewayUrl = trimUrl(process.env.SWGOH_GATEWAY_URL);
 const gatewayApiKey = String(process.env.SWGOH_GATEWAY_API_KEY || "").trim();
 const requestTimeoutMs = positiveNumber(process.env.SWGOH_REQUEST_TIMEOUT_MS, 35000);
+const modRequestTimeoutMs = positiveNumber(process.env.SWGOH_MOD_REQUEST_TIMEOUT_MS, 45000);
 const guildRequestTimeoutMs = positiveNumber(process.env.SWGOH_GUILD_REQUEST_TIMEOUT_MS, 120000);
 const rosterCacheFreshMs = positiveNumber(process.env.SWGOH_CACHE_FRESH_SECONDS, 90) * 1000;
 const rosterCacheStaleMs = positiveNumber(process.env.SWGOH_CACHE_STALE_SECONDS, 600) * 1000;
 const rosterCacheMaxEntries = Math.max(1, Math.floor(positiveNumber(process.env.SWGOH_CACHE_MAX_ENTRIES, 500)));
+const modCacheFreshMs = positiveNumber(process.env.SWGOH_MOD_CACHE_FRESH_SECONDS, 300) * 1000;
+const modCacheStaleMs = positiveNumber(process.env.SWGOH_MOD_CACHE_STALE_SECONDS, 900) * 1000;
+const modCacheMaxEntries = Math.max(1, Math.floor(positiveNumber(process.env.SWGOH_MOD_CACHE_MAX_ENTRIES, 500)));
 const guildCacheFreshMs = positiveNumber(process.env.SWGOH_GUILD_CACHE_FRESH_SECONDS, 600) * 1000;
 const guildCacheStaleMs = positiveNumber(process.env.SWGOH_GUILD_CACHE_STALE_SECONDS, 1800) * 1000;
 const guildCacheMaxEntries = Math.max(1, Math.floor(positiveNumber(process.env.SWGOH_GUILD_CACHE_MAX_ENTRIES, 100)));
@@ -24,6 +28,11 @@ const rosterCache = new LiveRosterCache({
   freshMs: rosterCacheFreshMs,
   staleMs: rosterCacheStaleMs,
   maxEntries: rosterCacheMaxEntries,
+});
+const modCache = new LiveRosterCache({
+  freshMs: modCacheFreshMs,
+  staleMs: modCacheStaleMs,
+  maxEntries: modCacheMaxEntries,
 });
 const guildCache = new LiveRosterCache({
   freshMs: guildCacheFreshMs,
@@ -152,6 +161,10 @@ function validLiveRoster(body) {
   return body?.source === "live" && body?.player && Array.isArray(body?.units);
 }
 
+function validEquippedMods(body) {
+  return body?.source === "live" && body?.player && Array.isArray(body?.units) && body?.summary;
+}
+
 function validGuildRoster(body) {
   return body?.source === "live" && body?.guild && Array.isArray(body?.members);
 }
@@ -164,6 +177,16 @@ async function loadLiveRoster(allyCode) {
     throw error;
   }
   return withCapabilityContract(body);
+}
+
+async function loadEquippedMods(allyCode) {
+  const body = await requestGateway(`/v1/mods/by-player/${allyCode}`, true, modRequestTimeoutMs);
+  if (!validEquippedMods(body)) {
+    const error = new Error("The live gateway returned an unexpected equipped-mod response.");
+    error.status = 502;
+    throw error;
+  }
+  return body;
 }
 
 async function loadGuildRoster(allyCode) {
@@ -190,6 +213,14 @@ async function handleApi(request, response, url) {
           staleSeconds: Math.round(rosterCacheStaleMs / 1000),
           maxEntries: rosterCacheMaxEntries,
           shared: false,
+        },
+        equippedModCache: {
+          mode: "process-local-coalesced-swr-lru",
+          freshSeconds: Math.round(modCacheFreshMs / 1000),
+          staleSeconds: Math.round(modCacheStaleMs / 1000),
+          maxEntries: modCacheMaxEntries,
+          shared: false,
+          coldRequestTimeoutSeconds: Math.round(modRequestTimeoutMs / 1000),
         },
         guildRosterCache: {
           mode: "process-local-coalesced-swr-lru",
@@ -225,6 +256,25 @@ async function handleApi(request, response, url) {
     } catch (error) {
       writeJson(response, 502, {
         error: error?.name === "AbortError" ? "The ROTE game-data source timed out." : error?.message || "ROTE operations data is unavailable.",
+      });
+    }
+    return true;
+  }
+
+  const modMatch = url.pathname.match(/^\/api\/mods\/(\d{9})$/);
+  if (modMatch) {
+    try {
+      const allyCode = modMatch[1];
+      const cached = await modCache.getOrLoad(allyCode, () => loadEquippedMods(allyCode));
+      writeJson(response, 200, cached.value, {
+        "X-Mod-Source": "comlink-live-equipped",
+        "X-Mod-Cache": cached.cache,
+        Age: String(Math.max(0, Math.floor((cached.ageMs || 0) / 1000))),
+      });
+    } catch (error) {
+      const status = [400, 401, 404, 429, 503].includes(error?.status) ? error.status : 502;
+      writeJson(response, status, {
+        error: error?.name === "AbortError" ? "The live equipped-mod request timed out." : error?.message || "The live equipped-mod pipeline is unavailable.",
       });
     }
     return true;
