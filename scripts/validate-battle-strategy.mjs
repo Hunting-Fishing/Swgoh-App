@@ -5,6 +5,7 @@ import { watBattleStrategyForMission } from "../public/tb-battle-strategy-wat-da
 import { rotePhaseOneBattleStrategyForMission } from "../public/tb-battle-strategy-rote-p1-data.js";
 import { mandaloreBattleStrategyForMission } from "../public/tb-battle-strategy-mandalore-data.js";
 import { rotePriorityBattleStrategyForMission } from "../public/tb-battle-strategy-rote-priority-data.js";
+import { roteFactionBattleStrategyForMission } from "../public/tb-battle-strategy-rote-factions-data.js";
 import { evaluateBattleStrategy } from "../public/tb-battle-strategy.js";
 
 function member(baseId, name, abilities, speed = null) {
@@ -90,6 +91,26 @@ assert.equal(rotePriorityBattleStrategyForMission("tatooine-mandalore-unlock")?.
 assert.equal(rotePriorityBattleStrategyForMission("mandalore-dtmg")?.requiredLeaderBaseId, "MOFFGIDEONS3");
 assert.equal(rotePriorityBattleStrategyForMission("haven-reva")?.requiredLeaderBaseId, "THIRDSISTER");
 
+const roteFactionPackIds = ["lothal-phoenix", "dathomir-merrin"];
+for (const id of roteFactionPackIds) {
+  const strategy = roteFactionBattleStrategyForMission(id);
+  assert.ok(strategy, `${id} ROTE faction strategy pack missing`);
+  assert.ok(Array.isArray(strategy.sources) && strategy.sources.length > 0, `${id} strategy sources missing`);
+  assert.ok(strategy.sources.some((source) => source.kind === "official"), `${id} official source missing`);
+  assert.ok(strategy.sources.some((source) => source.kind === "current-reference"), `${id} current-kit source missing`);
+  assert.ok(strategy.evidenceBoundary, `${id} evidence boundary missing`);
+  assert.equal("winPercent" in strategy, false, `${id} must not invent win percentage`);
+  assert.equal("score" in strategy, false, `${id} must not invent strategy score`);
+}
+assert.equal(roteFactionBattleStrategyForMission("zeffo-clones"), null, "Existing Zeffo Clone strategy must retain mission ownership");
+assert.equal(roteFactionBattleStrategyForMission("lothal-phoenix")?.requiredLeaderBaseId, "HERASYNDULLAS3");
+assert.equal(roteFactionBattleStrategyForMission("dathomir-merrin")?.requiredLeaderBaseId, "DAKA");
+assert.ok(roteFactionBattleStrategyForMission("dathomir-merrin")?.keyUnits.some((row) => row.baseId === "MERRIN" && row.importance === "critical"), "Dathomir Merrin mission must keep Merrin as a critical strategy unit");
+const phoenixSuppressing = roteFactionBattleStrategyForMission("lothal-phoenix")?.keyAbilities.find((row) => row.abilityName === "Suppressing Fire");
+assert.ok(phoenixSuppressing, "Phoenix Suppressing Fire advisory missing");
+assert.doesNotMatch(phoenixSuppressing.expected, /Stun/i, "Suppressing Fire must not be mislabeled as a Stun ability");
+assert.ok(battleStrategyForMission("zeffo-clones")?.keyAbilities.some((row) => row.abilityName === "Master Marksman" && row.importance === "critical"), "Zeffo Clone pack must retain Master Marksman as its critical Stun source");
+
 const statusSemantics = extractAbilitySemantics({ description: "Inflict Purge, Thermal Detonator and Armor Shred on target enemy." });
 assert.ok(statusSemantics.debuffs.includes("Purge"), "Purge semantic recognition missing");
 assert.ok(statusSemantics.debuffs.includes("Thermal Detonator"), "Thermal Detonator semantic recognition missing");
@@ -134,4 +155,4 @@ assert.equal(reversed.status, "warning", "Reversed BKM/BAM speed order should be
 assert.equal(reversed.blockers.length, 0, "Speed-order recommendation must not be promoted to a hard mission gate");
 assert.ok(reversed.warnings.some((check) => check.type === "speed-order" && check.ready === false), "Reversed speed order should surface an advisory");
 
-console.log(`[battle-strategy] validated ${corePackIds.length + 2 + roteP1PackIds.length + rotePriorityPackIds.length} strategy packs, semantic gates, KAM/Wat controls, ROTE Phase 1 evidence, Mandalore speed order and remaining priority ROTE packs`);
+console.log(`[battle-strategy] validated ${corePackIds.length + 2 + roteP1PackIds.length + rotePriorityPackIds.length + roteFactionPackIds.length} strategy packs, semantic gates, KAM/Wat controls, ROTE Phase 1 evidence, Mandalore speed order, priority ROTE packs and Phoenix/Merrin faction packs`);
