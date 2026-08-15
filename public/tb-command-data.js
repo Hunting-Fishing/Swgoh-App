@@ -43,9 +43,9 @@ export const TERRITORY_BATTLES = Object.freeze([
     phases: 6,
     phaseHours: 24,
     exclusiveReward: "Rebel Officer Leia Organa shards",
-    mapStatus: "framework",
-    recommendationStatus: "ingesting",
-    sourceIds: ["swgohgg"],
+    mapStatus: "live",
+    recommendationStatus: "planning",
+    sourceIds: ["swgohgg", "swgoh-wiki"],
     theme: "hoth-light",
   },
   {
