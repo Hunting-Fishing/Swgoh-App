@@ -37,7 +37,7 @@ const GEONOSIANS = communityTeam("geonosians", "Geonosians", ["Geonosian Brood A
 const DOOKU_ASAJJ = communityTeam("dooku-asajj", "Count Dooku + Asajj core", ["Count Dooku", "Asajj Ventress"]);
 const DOOKU_SEPS = communityTeam("dooku-separatists", "Dooku + Separatists", ["Count Dooku", "General Grievous", "B2 Super Battle Droid", "B1 Battle Droid", "Droideka"], { verifiedLegal: true });
 const DOOKU_WAT = communityTeam("dooku-wat-seps", "Dooku + Wat Separatists", ["Count Dooku", "General Grievous", "B2 Super Battle Droid", "B1 Battle Droid", "Wat Tambor"], { verifiedLegal: true });
-const HUTT_CARTEL = communityTeam("hutt-cartel", "Hutt Cartel", ["Jabba the Hutt", "Krrsantan", "Boushh (Leia Organa)", "Skiff Guard (Lando Calrissian)", "Boba Fett"], { verifiedLegal: true });
+const HUTT_CARTEL = communityTeam("hutt-cartel", "Jabba Hutt Cartel", ["Jabba the Hutt", "Krrsantan", "Boushh (Leia Organa)", "Skiff Guard (Lando Calrissian)", "Boba Fett"], { verifiedLegal: true });
 
 const MALEVOLENCE = communityTeam("malevolence", "Malevolence Separatist Fleet", ["Malevolence", "Hyena Bomber", "Vulture Droid", "Sun Fac's Geonosian Starfighter", "Geonosian Spy's Starfighter"]);
 const EXECUTOR = communityTeam("executor", "Executor Bounty Hunter Fleet", ["Executor", "Hound's Tooth", "Xanadu Blood", "Slave I", "IG-2000"]);
@@ -88,7 +88,7 @@ export const DS_GEO_TERRITORIES = Object.freeze([
     x: 37, y: 50, starThresholds: [61025000, 95355000, 190710000], platoonTp: 166700,
     missions: [
       mission({ id: "c7", territoryId: "p2-middle", phase: 2, name: "Combat Mission 1", missionType: "combat", entry: { verified: true, unitType: "Character", allowedAlignments: ["Dark", "Neutral"], starsMin: 6 }, waves: [270000,420000,708000,1080000], recommendations: [SEE_SITH, FIRST_ORDER, IMP_TROOPERS, EMPIRE, BOUNTY_HUNTERS], community: true }),
-      mission({ id: "c8", territoryId: "p2-middle", phase: 2, name: "Restricted Combat — Dooku / Asajj reference", missionType: "combat", entry: { verified: false, unitType: "Character", starsMin: 6, powerMin: 16500, notes: "Current zone table verifies a 16,500+ power restriction. The Genskaar community map identifies Count Dooku + Asajj Ventress; that named-unit restriction remains intentionally unverified here." }, waves: [351000,546000,920400,1404000], recommendations: [DOOKU_ASAJJ], community: true }),
+      mission({ id: "c8", territoryId: "p2-middle", phase: 2, name: "Restricted Combat — Dooku / Asajj reference", missionType: "combat", entry: { verified: false, unitType: "Character", starsMin: 6, powerMin: 16500, notes: "The current zone table verifies a 16,500+ power restriction but does not expose the portrait-enforced names in parsed text. Genskaar identifies Count Dooku + Asajj Ventress; exact named-unit legality remains intentionally unverified here." }, waves: [351000,546000,920400,1404000], recommendations: [DOOKU_ASAJJ], community: true }),
       mission({ id: "c9", territoryId: "p2-middle", phase: 2, name: "Combat Mission 3", missionType: "combat", entry: { verified: true, unitType: "Character", allowedAlignments: ["Dark", "Neutral"], starsMin: 6 }, waves: [270000,420000,708000,1080000], recommendations: [FIRST_ORDER, SEE_SITH, IMP_TROOPERS, EMPIRE, BOUNTY_HUNTERS], community: true }),
     ],
   },
@@ -140,7 +140,7 @@ export const DS_GEO_TERRITORIES = Object.freeze([
       mission({ id: "c19", territoryId: "p4-middle", phase: 4, name: "Combat Mission 1", missionType: "combat", entry: { verified: true, unitType: "Character", allowedAlignments: ["Dark", "Neutral"], starsMin: 7 }, waves: [405000,675000,1038500,1564000], recommendations: lateCharacterTeams, community: true }),
       mission({ id: "c20", territoryId: "p4-middle", phase: 4, name: "Combat Mission 2", missionType: "combat", entry: { verified: true, unitType: "Character", allowedAlignments: ["Dark", "Neutral"], starsMin: 7 }, waves: [405000,675000,1038500,1564000], recommendations: lateCharacterTeams, community: true }),
       mission({ id: "c21", territoryId: "p4-middle", phase: 4, name: "Restricted Combat — Separatists", missionType: "combat", entry: { verified: true, unitType: "Character", starsMin: 7, powerMin: 16500, requiredCategories: ["Separatist"], notes: "Separatist characters at 16,500+ power." }, waves: [1350050,2033200], recommendations: [DOOKU_SEPS, DOOKU_WAT, SEP_DROIDS], community: true }),
-      mission({ id: "s5", territoryId: "p4-middle", phase: 4, name: "Special Mission — Hutt Cartel", missionType: "special", entry: { verified: true, unitType: "Character", starsMin: 7, powerMin: 16500, requiredCategories: ["Hutt Cartel"], notes: "Hutt Cartel characters at 16,500+ power." }, rewards: ["30 Mk II Guild Event Tokens"], recommendations: [HUTT_CARTEL], community: true }),
+      mission({ id: "s5", territoryId: "p4-middle", phase: 4, name: "Special Mission — Jabba + Hutt Cartel", missionType: "special", entry: { verified: true, unitType: "Character", starsMin: 7, powerMin: 16500, requiredCategories: ["Hutt Cartel"], mandatoryMembers: [{ name: "Jabba the Hutt", baseId: "JABBATHEHUTT" }], notes: "Jabba the Hutt is mandatory; remaining legal squad slots are Hutt Cartel characters at 16,500+ power." }, rewards: ["30 Mk II Guild Event Tokens"], recommendations: [HUTT_CARTEL], community: true }),
     ],
   },
   {
