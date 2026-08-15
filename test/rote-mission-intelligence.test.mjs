@@ -5,7 +5,9 @@ import { ROTE_PLANETS } from "../public/rote-map-data.js";
 import { ROTE_MISSIONS_BY_PLANET, ROTE_MISSION_COUNT, roteMissionsForPlanet } from "../public/rote-mission-data.js";
 import { mandatoryUnitMeetsEntry, missionRosterEntrySummary } from "../public/tb-mission-intelligence.js";
 
-const missionById = (id) => Object.values(ROTE_MISSIONS_BY_PLANET).flat().find((mission) => mission.id === id);
+const allMissions = () => Object.values(ROTE_MISSIONS_BY_PLANET).flat();
+const missionById = (id) => allMissions().find((mission) => mission.id === id);
+const mandatoryBaseIds = () => allMissions().flatMap((mission) => mission.entry?.mandatoryMembers || []).map((member) => member.baseId).filter(Boolean);
 
 test("ROTE exact mission catalog covers every map planet", () => {
   assert.equal(ROTE_PLANETS.length, 20);
@@ -36,24 +38,48 @@ test("Bracca Zeffo unlock requires Cere plus one legal Cal at R7", () => {
   assert.equal(missionRosterEntrySummary({ units: [cere, cal] }, mission).ready, true);
 });
 
-test("Mandalore Bo-Katan mission applies R9 to Bo while keeping R8 planet baseline", () => {
+test("Mandalore Bo-Katan mission applies R9 to the canonical BKM unit while keeping R8 planet baseline", () => {
   const mission = missionById("mandalore-bkm");
   const boRequirement = mission.entry.mandatoryMembers[0];
   assert.equal(mission.entry.relicMin, 8);
   assert.equal(boRequirement.relicMin, 9);
-  const boR8 = { baseId: "BOKATANMANDALORE", name: "Bo-Katan (Mand'alor)", unitType: "Character", alignment: "Light", stars: 7, relic: 8 };
+  assert.equal(boRequirement.baseId, "MANDALORBOKATAN");
+  const boR8 = { baseId: "MANDALORBOKATAN", name: "Bo-Katan (Mand'alor)", unitType: "Character", alignment: "Light", stars: 7, relic: 8 };
   const boR9 = { ...boR8, relic: 9 };
   assert.equal(mandatoryUnitMeetsEntry(boR8, mission, boRequirement), false);
   assert.equal(mandatoryUnitMeetsEntry(boR9, mission, boRequirement), true);
 });
 
-test("key ROTE special and named missions preserve exact mandatory units", () => {
+test("key ROTE special and named missions preserve canonical mandatory unit IDs", () => {
   assert.deepEqual(missionById("corellia-qira").entry.mandatoryMembers.map((member) => member.baseId), ["QIRA", "YOUNGHAN"]);
   assert.equal(missionById("tatooine-reva").entry.mandatoryMembers[0].baseId, "GRANDINQUISITOR");
+  assert.deepEqual(missionById("tatooine-mandalore-unlock").entry.mandatoryMembers.map((member) => member.baseId), ["MANDALORBOKATAN", "THEMANDALORIANBESKARARMOR"]);
+  assert.equal(missionById("mandalore-bkm").entry.mandatoryMembers[0].baseId, "MANDALORBOKATAN");
+  assert.equal(missionById("mandalore-dtmg").entry.mandatoryMembers[0].baseId, "MOFFGIDEONS3");
   assert.equal(missionById("haven-reva").entry.mandatoryMembers[0].baseId, "THIRDSISTER");
+  assert.deepEqual(missionById("kessel-qira-l3").entry.mandatoryMembers.map((member) => member.baseId), ["QIRA", "L3_37"]);
   assert.deepEqual(missionById("malachor-inqs").entry.mandatoryMembers.map((member) => member.baseId), ["EIGHTHBROTHER", "FIFTHBROTHER", "SEVENTHSISTER"]);
-  assert.deepEqual(missionById("hoth-aphra").entry.mandatoryMembers.map((member) => member.baseId), ["DOCTORAPHRA", "BT1", "000"]);
+  assert.deepEqual(missionById("hoth-aphra").entry.mandatoryMembers.map((member) => member.baseId), ["DOCTORAPHRA", "BT1", "TRIPLEZERO"]);
   assert.deepEqual(missionById("scarif-baze").entry.mandatoryMembers.map((member) => member.baseId), ["BAZEMALBUS", "CHIRRUTIMWE", "SCARIFREBEL"]);
+});
+
+test("ROTE mandatory-unit gates reject known stale aliases", () => {
+  const ids = mandatoryBaseIds();
+  for (const staleId of ["BOKATANMANDALORE", "BESKARMANDO", "DARKTROOPERMOFFGIDEON", "L337", "000"]) {
+    assert.ok(!ids.includes(staleId), `stale ROTE mandatory baseId must not return: ${staleId}`);
+  }
+  for (const canonicalId of ["MANDALORBOKATAN", "THEMANDALORIANBESKARARMOR", "MOFFGIDEONS3", "L3_37", "TRIPLEZERO"]) {
+    assert.ok(ids.includes(canonicalId), `canonical ROTE mandatory baseId missing: ${canonicalId}`);
+  }
+});
+
+test("canonical Tatooine Mandalore requirements match real roster base IDs", () => {
+  const mission = missionById("tatooine-mandalore-unlock");
+  const [bkmRequirement, bamRequirement] = mission.entry.mandatoryMembers;
+  const bkm = { baseId: "MANDALORBOKATAN", name: "Bo-Katan (Mand'alor)", unitType: "Character", alignment: "Light", stars: 7, relic: 7, factions: ["Mandalorian"] };
+  const bam = { baseId: "THEMANDALORIANBESKARARMOR", name: "The Mandalorian (Beskar Armor)", unitType: "Character", alignment: "Light", stars: 7, relic: 7, factions: ["Mandalorian"] };
+  assert.equal(mandatoryUnitMeetsEntry(bkm, mission, bkmRequirement), true);
+  assert.equal(mandatoryUnitMeetsEntry(bam, mission, bamRequirement), true);
 });
 
 test("Zeffo combat mechanics keep official Tomb Guardian stun warning", () => {
