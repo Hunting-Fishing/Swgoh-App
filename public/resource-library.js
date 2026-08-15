@@ -36,29 +36,61 @@ function targetCard([title, status, description]) {
   `;
 }
 
-function buildResourcesPanel() {
-  const panel = document.querySelector('[data-workspace-panel="resources"]');
-  if (!panel || panel.dataset.resourceLibraryReady === "true") return Boolean(panel);
-  panel.dataset.resourceLibraryReady = "true";
-  const section = document.createElement("section");
-  section.className = "card workspace-intro";
-  section.innerHTML = `
-    <div class="database-heading">
-      <div>
-        <div class="kicker">NATIVE FEATURE ROADMAP</div>
-        <h2>Roster Command capabilities</h2>
-        <p>Live means the feature operates from the current public player/game data available to this app. Planned items remain explicit instead of being simulated with mock data.</p>
+function replaceEventsPanel() {
+  const panel = document.querySelector('[data-workspace-panel="events"]');
+  if (!panel || panel.dataset.nativeEventsReady === "true") return false;
+  panel.dataset.nativeEventsReady = "true";
+  panel.innerHTML = `
+    <section class="card workspace-intro">
+      <div class="kicker">NATIVE EVENT PLANNING</div>
+      <h2>Events &amp; Guides</h2>
+      <p>Roster Command will keep event planning inside the app. Journey requirements are now handled in Farm Tracker; this workspace will add recurring-event schedules, eligibility and live roster readiness without sending the player to another site.</p>
+    </section>
+    <section class="card workspace-intro">
+      <div class="workspace-grid">
+        ${[
+          ["Journey Guide", "LIVE IN FARM TRACKER", "Choose an unlock target and compare its requirements with the loaded roster."],
+          ["ROTE Operations", "LIVE IN ROTE", "Current operation demand and exact player coverage are available in the dedicated ROTE workspace."],
+          ["Assault Battles", "NEXT", "Eligible factions, tiers and strongest qualifying teams."],
+          ["Proving Grounds", "PLANNED", "Event teams and readiness against the loaded roster."],
+          ["Conquest", "PLANNED", "Feat requirements mapped to owned characters and squads."],
+          ["Raids", "PLANNED", "Eligibility and raid-team progression."],
+          ["Recurring Calendar", "PLANNED", "One native view for scheduled and recurring game events."],
+        ].map(targetCard).join("")}
       </div>
-    </div>
-    <div class="resource-grid">${NATIVE_TARGETS.map(targetCard).join("")}</div>
+    </section>
   `;
-  panel.appendChild(section);
   return true;
 }
 
-if (!buildResourcesPanel()) {
+function replaceResourcesPanel() {
+  const panel = document.querySelector('[data-workspace-panel="resources"]');
+  if (!panel || panel.dataset.resourceLibraryReady === "true") return false;
+  panel.dataset.resourceLibraryReady = "true";
+  panel.innerHTML = `
+    <section class="card workspace-intro">
+      <div class="kicker">ROSTER COMMAND FEATURE LIBRARY</div>
+      <h2>Native tools we are building here</h2>
+      <p>The community tools we researched are now product references only. Players stay inside Roster Command; each high-value workflow becomes a native workspace backed by our live Comlink roster and versioned game database.</p>
+    </section>
+    <section class="card workspace-intro">
+      <div class="workspace-grid">
+        ${NATIVE_TARGETS.map(targetCard).join("")}
+      </div>
+    </section>
+  `;
+  return true;
+}
+
+function enhanceNativeWorkspaces() {
+  const eventsReady = replaceEventsPanel();
+  const resourcesReady = replaceResourcesPanel();
+  return eventsReady && resourcesReady;
+}
+
+if (!enhanceNativeWorkspaces()) {
   const observer = new MutationObserver(() => {
-    if (buildResourcesPanel()) observer.disconnect();
+    if (enhanceNativeWorkspaces()) observer.disconnect();
   });
   observer.observe(document.body, { childList: true, subtree: true });
 }
