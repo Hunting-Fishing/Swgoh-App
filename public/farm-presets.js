@@ -1,5 +1,59 @@
 export const JOURNEY_PRESETS = [
   {
+    id: "JOURNEY_GLHONDO",
+    name: "Pirate King Hondo Ohnaka",
+    shortName: "GL Hondo",
+    category: "Galactic Legends",
+    targetBaseId: "GLHONDO",
+    featured: true,
+    requirements: [
+      ["ITHANO", "RELIC", 3], ["HONDO", "RELIC", 9], ["SMUGGLERCHEWBACCA", "RELIC", 7], ["EZRABRIDGERS3", "RELIC", 6],
+      ["QUIGGOLD", "RELIC", 5], ["KIX", "RELIC", 6], ["GENERALSKYWALKER", "RELIC", 9], ["REY", "RELIC", 8],
+      ["BRUTUS", "RELIC", 7], ["VANE", "RELIC", 7], ["GENERALKENOBI", "RELIC", 9], ["CHIRRUTIMWE", "RELIC", 5],
+      ["CAPTAINSILVO", "RELIC", 7], ["COUNTDOOKU", "RELIC", 8], ["BOSSK", "RELIC", 8], ["MILLENNIUMFALCONEP7", "STAR", 7],
+    ],
+  },
+  {
+    id: "JOURNEY_GLAHSOKATANO",
+    name: "Galactic Legend Ahsoka Tano",
+    shortName: "GL Ahsoka Tano",
+    category: "Galactic Legends",
+    targetBaseId: "GLAHSOKATANO",
+    featured: true,
+    requirements: [
+      ["AHSOKATANO", "RELIC", 9], ["GENERALSKYWALKER", "RELIC", 8], ["ASAJJVENTRESS", "RELIC", 5], ["NIGHTTROOPER", "RELIC", 7],
+      ["COMMANDERAHSOKA", "RELIC", 9], ["CAPTAINENOCH", "RELIC", 7], ["DEATHTROOPERPERIDEA", "RELIC", 7], ["EZRABRIDGERS3", "RELIC", 5],
+      ["FULCRUMAHSOKA", "RELIC", 9], ["CT7567", "RELIC", 7], ["BARRISSOFFEE", "RELIC", 5], ["PADAWANSABINE", "RELIC", 7],
+      ["GENERALSYNDULLA", "RELIC", 5], ["PLOKOON", "RELIC", 8], ["HUYANG", "RELIC", 7], ["JEDISTARFIGHTERAHSOKATANO", "STAR", 7],
+    ],
+  },
+  {
+    id: "JOURNEY_GLLEIA",
+    name: "Leia Organa",
+    category: "Galactic Legends",
+    targetBaseId: "GLLEIA",
+    requirements: [
+      ["CAPTAINREX", "RELIC", 7], ["PRINCESSKNEESAA", "RELIC", 7], ["WICKET", "RELIC", 3],
+      ["ADMINISTRATORLANDO", "RELIC", 5], ["ADMIRALACKBAR", "RELIC", 3], ["SCOUTTROOPER_V3", "RELIC", 7],
+      ["R2D2_LEGENDARY", "RELIC", 8], ["HOTHHAN", "RELIC", 5], ["HOTHLEIA", "RELIC", 5],
+      ["CHIEFCHIRPA", "RELIC", 3], ["CAPTAINDROGAN", "RELIC", 7], ["COMMANDERLUKESKYWALKER", "RELIC", 7],
+      ["BOUSHH", "RELIC", 5], ["C3POCHEWBACCA", "RELIC", 7], ["LOBOT", "RELIC", 3],
+    ],
+  },
+  {
+    id: "JOURNEY_JABBATHEHUTT",
+    name: "Jabba the Hutt",
+    category: "Galactic Legends",
+    targetBaseId: "JABBATHEHUTT",
+    requirements: [
+      ["KRRSANTAN", "RELIC", 5], ["HANSOLO", "RELIC", 8], ["GAMORREANGUARD", "RELIC", 3],
+      ["OUTRIDER", "STAR", 7], ["GREEDO", "RELIC", 6], ["UNDERCOVERLANDO", "RELIC", 5],
+      ["JEDIKNIGHTLUKE", "RELIC", 7], ["JAWA", "RELIC", 3], ["URORRURRR", "RELIC", 4],
+      ["C3POLEGENDARY", "RELIC", 7], ["BOUSHH", "RELIC", 5], ["AURRA_SING", "RELIC", 6],
+      ["FENNECSHAND", "RELIC", 7], ["BOBAFETT", "RELIC", 7], ["HUMANTHUG", "RELIC", 3],
+    ],
+  },
+  {
     id: "JOURNEY_LORDVADER",
     name: "Lord Vader",
     category: "Galactic Legends",
@@ -23,19 +77,6 @@ export const JOURNEY_PRESETS = [
       ["MAGNAGUARD", "RELIC", 5], ["CLONESERGEANTPHASEI", "RELIC", 5], ["WATTAMBOR", "RELIC", 7],
       ["GRIEVOUS", "RELIC", 7], ["CADBANE", "RELIC", 5], ["CC2224", "RELIC", 5],
       ["JANGOFETT", "RELIC", 7], ["SHAAKTI", "RELIC", 7], ["GRANDMASTERYODA", "RELIC", 8],
-    ],
-  },
-  {
-    id: "JOURNEY_JABBATHEHUTT",
-    name: "Jabba the Hutt",
-    category: "Galactic Legends",
-    targetBaseId: "JABBATHEHUTT",
-    requirements: [
-      ["KRRSANTAN", "RELIC", 5], ["HANSOLO", "RELIC", 8], ["GAMORREANGUARD", "RELIC", 3],
-      ["OUTRIDER", "STAR", 7], ["GREEDO", "RELIC", 6], ["UNDERCOVERLANDO", "RELIC", 5],
-      ["JEDIKNIGHTLUKE", "RELIC", 7], ["JAWA", "RELIC", 3], ["URORRURRR", "RELIC", 4],
-      ["C3POLEGENDARY", "RELIC", 7], ["BOUSHH", "RELIC", 5], ["AURRA_SING", "RELIC", 6],
-      ["FENNECSHAND", "RELIC", 7], ["BOBAFETT", "RELIC", 7], ["HUMANTHUG", "RELIC", 3],
     ],
   },
   {
@@ -91,19 +132,6 @@ export const JOURNEY_PRESETS = [
     ],
   },
   {
-    id: "JOURNEY_GLLEIA",
-    name: "Leia Organa",
-    category: "Galactic Legends",
-    targetBaseId: "GLLEIA",
-    requirements: [
-      ["CAPTAINREX", "RELIC", 7], ["PRINCESSKNEESAA", "RELIC", 7], ["WICKET", "RELIC", 3],
-      ["ADMINISTRATORLANDO", "RELIC", 5], ["ADMIRALACKBAR", "RELIC", 3], ["SCOUTTROOPER_V3", "RELIC", 7],
-      ["R2D2_LEGENDARY", "RELIC", 8], ["HOTHHAN", "RELIC", 5], ["HOTHLEIA", "RELIC", 5],
-      ["CHIEFCHIRPA", "RELIC", 3], ["CAPTAINDROGAN", "RELIC", 7], ["COMMANDERLUKESKYWALKER", "RELIC", 7],
-      ["BOUSHH", "RELIC", 5], ["C3POCHEWBACCA", "RELIC", 7], ["LOBOT", "RELIC", 3],
-    ],
-  },
-  {
     id: "JOURNEY_CAPITALEXECUTOR",
     name: "Executor",
     category: "Journey Guide Fleets",
@@ -138,6 +166,36 @@ export const JOURNEY_PRESETS = [
       ["SITHASSASSIN", "RELIC", 5], ["50RT", "RELIC", 5], ["FURYCLASSINTERCEPTOR", "STAR", 4],
       ["SITHSUPREMACYCLASS", "STAR", 4], ["TIEDAGGER", "STAR", 4], ["SITHBOMBER", "STAR", 4],
       ["SITHINFILTRATOR", "STAR", 4], ["SITHFIGHTER", "STAR", 4], ["EBONHAWK", "STAR", 4],
+    ],
+  },
+  {
+    id: "JOURNEY_BOKATANMANDALOR",
+    name: "Bo-Katan (Mand'alor)",
+    category: "Journey Guide",
+    targetBaseId: "MANDALORBOKATAN",
+    featured: true,
+    requirements: [
+      ["THEMANDALORIANBESKARARMOR", "RELIC", 7], ["KELLERANBEQ", "RELIC", 7], ["IG12", "RELIC", 7], ["PAZVIZSLA", "RELIC", 7],
+    ],
+  },
+  {
+    id: "JOURNEY_BAYLANSKOLL",
+    name: "Baylan Skoll",
+    category: "Journey Guide",
+    targetBaseId: "BAYLANSKOLL",
+    featured: true,
+    requirements: [
+      ["GRANDADMIRALTHRAWN", "RELIC", 7], ["GREATMOTHERS", "RELIC", 7], ["MARROK", "RELIC", 7], ["MORGANELSBETH", "RELIC", 7], ["SHINHATI", "RELIC", 7],
+    ],
+  },
+  {
+    id: "JOURNEY_JARJARBINKS",
+    name: "Jar Jar Binks",
+    category: "Journey Guide",
+    targetBaseId: "JARJARBINKS",
+    featured: true,
+    requirements: [
+      ["BOSSNASS", "RELIC", 5], ["CAPTAINTARPALS", "RELIC", 5], ["BOOMADIER", "RELIC", 5], ["GUNGANPHALANX", "RELIC", 5],
     ],
   },
   {
