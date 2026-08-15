@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { extractAbilitySemantics } from "../public/kit-semantics.js";
 import { battleStrategyForMission } from "../public/tb-battle-strategy-data.js";
 import { watBattleStrategyForMission } from "../public/tb-battle-strategy-wat-data.js";
+import { rotePhaseOneBattleStrategyForMission } from "../public/tb-battle-strategy-rote-p1-data.js";
 import { evaluateBattleStrategy } from "../public/tb-battle-strategy.js";
 
 function member(baseId, name, abilities) {
@@ -48,6 +49,14 @@ const corePackIds = ["zeffo-clones", "tatooine-reva", "p3-kam"];
 for (const id of corePackIds) assert.ok(battleStrategyForMission(id), `${id} strategy pack missing`);
 assert.ok(watBattleStrategyForMission("s3"), "s3 Wat strategy pack missing");
 
+const roteP1PackIds = ["mustafar-lv", "corellia-jabba", "corellia-aphra", "coruscant-jedi"];
+for (const id of roteP1PackIds) {
+  const strategy = rotePhaseOneBattleStrategyForMission(id);
+  assert.ok(strategy, `${id} ROTE Phase 1 strategy pack missing`);
+  assert.ok(Array.isArray(strategy.sources) && strategy.sources.length > 0, `${id} strategy sources missing`);
+  assert.ok(strategy.evidenceBoundary, `${id} evidence boundary missing`);
+}
+
 const statusSemantics = extractAbilitySemantics({ description: "Inflict Purge and Thermal Detonator on target enemy." });
 assert.ok(statusSemantics.debuffs.includes("Purge"), "Purge semantic recognition missing");
 assert.ok(statusSemantics.debuffs.includes("Thermal Detonator"), "Thermal Detonator semantic recognition missing");
@@ -80,4 +89,4 @@ assert.ok(wat.checks.some((check) => check.id === "ability_block" && check.ready
 assert.ok(wat.checks.some((check) => check.id === "tenacity_down" && check.ready), "Wat Tenacity Down setup missing");
 assert.equal("winPercent" in wat, false, "Wat strategy must not invent win probability");
 
-console.log(`[battle-strategy] validated ${corePackIds.length + 1} strategy packs, semantic gates, KAM installed upgrades and Wat control requirements`);
+console.log(`[battle-strategy] validated ${corePackIds.length + 1 + roteP1PackIds.length} strategy packs, semantic gates, KAM installed upgrades, Wat control requirements and ROTE Phase 1 evidence boundaries`);

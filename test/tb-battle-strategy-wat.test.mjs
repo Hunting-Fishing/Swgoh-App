@@ -76,7 +76,9 @@ test("Wat strategy blocks when Soldier no longer exposes Tenacity Down", () => {
 test("Wat strategy intentionally avoids a universal four-wave exact script", () => {
   const text = JSON.stringify(WAT_BATTLE_STRATEGY);
   assert.match(text, /does not claim a universal exact four-wave turn script/i);
-  assert.doesNotMatch(text, /100% win|guaranteed clear|win probability/i);
+  assert.equal("winPercent" in WAT_BATTLE_STRATEGY, false);
+  assert.equal("score" in WAT_BATTLE_STRATEGY, false);
+  assert.doesNotMatch(text, /\b(?:9\d|100)%\s*(?:win|clear)/i);
 });
 
 test("Wat strategy modules parse", () => {
