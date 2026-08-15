@@ -8,6 +8,7 @@ import { roteFactionBattleStrategyForMission } from "./tb-battle-strategy-rote-f
 import { roteRewardBattleStrategyForMission } from "./tb-battle-strategy-rote-rewards-data.js";
 import { roteCombatExpansionStrategyForMission } from "./tb-battle-strategy-rote-combat-expansion-data.js";
 import { roteDeathStarStrategyForMission } from "./tb-battle-strategy-rote-deathstar-data.js";
+import { roteJabbaJkckStrategyForMission } from "./tb-battle-strategy-rote-jabba-jkck-data.js";
 
 const normalized = (value) => String(value || "").trim().toLowerCase();
 
@@ -75,6 +76,7 @@ function resolvedStrategy(missionId) {
     || roteFactionBattleStrategyForMission(missionId)
     || roteRewardBattleStrategyForMission(missionId)
     || roteDeathStarStrategyForMission(missionId)
+    || roteJabbaJkckStrategyForMission(missionId)
     || roteCombatExpansionStrategyForMission(missionId)
     || rotePhaseOneBattleStrategyForMission(missionId)
     || watBattleStrategyForMission(missionId)
