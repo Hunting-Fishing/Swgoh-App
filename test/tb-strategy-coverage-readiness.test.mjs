@@ -13,18 +13,7 @@ import {
 } from "../public/tb-roster-readiness.js";
 
 function unit(baseId, { relic = 5, speed = 320, name = baseId } = {}) {
-  return {
-    baseId,
-    name,
-    unitType: "Character",
-    alignment: "Light",
-    stars: 7,
-    gear: 13,
-    relic,
-    speed,
-    power: 30000,
-    factions: ["Test"],
-  };
+  return { baseId, name, unitType: "Character", alignment: "Light", stars: 7, gear: 13, relic, speed, power: 30000, factions: ["Test"] };
 }
 
 function readinessMission() {
@@ -35,21 +24,8 @@ function readinessMission() {
     phase: 1,
     name: "Readiness Test",
     missionType: "combat",
-    entry: {
-      verified: true,
-      unitType: "Character",
-      alignment: "Light",
-      starsMin: 7,
-      relicMin: 5,
-      squadSize: 2,
-      mandatoryMembers: [{ name: "Alpha", baseId: "ALPHA" }],
-    },
-    recommendations: [{
-      id: "alpha-beta",
-      name: "Alpha + Beta",
-      members: [{ name: "Alpha", baseId: "ALPHA" }, { name: "Beta", baseId: "BETA" }],
-      minimum: { speed: 300 },
-    }],
+    entry: { verified: true, unitType: "Character", alignment: "Light", starsMin: 7, relicMin: 5, squadSize: 2, mandatoryMembers: [{ name: "Alpha", baseId: "ALPHA" }] },
+    recommendations: [{ id: "alpha-beta", name: "Alpha + Beta", members: [{ name: "Alpha", baseId: "ALPHA" }, { name: "Beta", baseId: "BETA" }], minimum: { speed: 300 } }],
   });
 }
 
@@ -64,6 +40,13 @@ test("coverage classifies sourced, planning-only, and empty missions", () => {
 
   const missing = missionStrategyCoverage({ id: "fake-empty", tbId: "rote", missionType: "fleet", phase: 1 });
   assert.equal(missing.coverage, "missing");
+});
+
+test("explicit partial strategy status stays partial even when stages and sources exist", () => {
+  const mandalore = missionStrategyCoverage({ id: "mandalore-generic-1", tbId: "rote", territoryId: "mandalore", missionType: "combat", phase: 4 });
+  assert.equal(mandalore.strategyAvailable, true);
+  assert.equal(mandalore.coverage, "partial");
+  assert.match(`${mandalore.strategyStatus} ${mandalore.confidence}`, /partial/i);
 });
 
 test("coverage report preserves covered/partial/missing totals", () => {
@@ -119,17 +102,25 @@ test("readiness reports exact team READY and legal alternate depth READY WITH SU
   assert.ok(substitute.substituteCandidates.some((row) => row.baseId === "GAMMA"));
 });
 
-test("strategy evidence is independent from roster readiness", () => {
+test("verified strategy evidence is independent from roster readiness", () => {
   const mission = createMissionRecord({
-    id: "corellia-jabba",
-    tbId: "rote",
-    territoryId: "corellia",
-    phase: 1,
-    name: "Jabba",
-    missionType: "combat",
+    id: "corellia-jabba", tbId: "rote", territoryId: "corellia", phase: 1, name: "Jabba", missionType: "combat",
     entry: { verified: true, unitType: "Character", starsMin: 7, relicMin: 5, allowedAlignments: ["Light", "Dark"] },
   });
   const result = missionRosterReadiness({ units: Array.from({ length: 5 }, (_, i) => unit(`FLEX${i}`)) }, mission);
   assert.equal(result.label, ROSTER_READINESS.READY);
   assert.equal(result.strategy.label, STRATEGY_READINESS.AVAILABLE);
+  assert.equal(result.strategy.verified, true);
+});
+
+test("partial strategy evidence resolves internally but displays NO VERIFIED STRATEGY YET", () => {
+  const mission = createMissionRecord({
+    id: "mandalore-generic-1", tbId: "rote", territoryId: "mandalore", phase: 4, name: "Mandalore Open Combat", missionType: "combat",
+    entry: { verified: true, unitType: "Character", starsMin: 7, relicMin: 8, allowedAlignments: ["Light", "Dark"] },
+  });
+  const result = missionRosterReadiness({ units: Array.from({ length: 5 }, (_, i) => unit(`R8FLEX${i}`, { relic: 8 })) }, mission);
+  assert.equal(result.strategy.available, true);
+  assert.equal(result.strategy.verified, false);
+  assert.equal(result.strategy.label, STRATEGY_READINESS.MISSING);
+  assert.match(`${result.strategy.strategyStatus} ${result.strategy.confidence}`, /partial/i);
 });
