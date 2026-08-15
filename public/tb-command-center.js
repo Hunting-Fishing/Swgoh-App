@@ -22,6 +22,7 @@ let dsGeoModulePromise = null;
 let legacyRendererPromise = null;
 let geoLsDataPromise = null;
 let hothLsDataPromise = null;
+let hothDsDataPromise = null;
 
 function liveBody() {
   const digits = String($("allyCode")?.value || "").replace(/\D/g, "").slice(0, 9);
@@ -158,11 +159,20 @@ async function renderHothLs(host, token) {
   renderer.renderLegacyTbCampaign(host, liveBody(), data.HOTH_LS_CAMPAIGN);
 }
 
+async function renderHothDs(host, token) {
+  host.innerHTML = '<section class="card workspace-intro"><div class="workspace-note">Loading verified Hoth Imperial Retaliation territory and mission data…</div></section>';
+  hothDsDataPromise ||= import("./hoth-ds-data.js?v=20260815-hothds1");
+  const [renderer, data] = await Promise.all([legacyRenderer(), hothDsDataPromise]);
+  if (token !== state.renderToken || state.selected !== "hoth-imperial") return;
+  renderer.renderLegacyTbCampaign(host, liveBody(), data.HOTH_DS_CAMPAIGN);
+}
+
 async function renderNonRote(host, tb, token) {
   try {
     if (tb.id === "geo-separatist") return await renderDsGeo(host, token);
     if (tb.id === "geo-republic") return await renderGeoLs(host, token);
     if (tb.id === "hoth-rebel") return await renderHothLs(host, token);
+    if (tb.id === "hoth-imperial") return await renderHothDs(host, token);
     if (token === state.renderToken) host.innerHTML = genericView(tb);
   } catch (error) {
     if (token !== state.renderToken) return;
@@ -203,7 +213,9 @@ function applySelectedBattle() {
         ? "Geo LS uses the same mission engine with KAM, Galactic Republic, Jedi, Clone, 501st and fleet restrictions evaluated against the loaded Ally Code."
         : tb.id === "hoth-rebel"
           ? "Hoth Rebel Assault is mapped phase-by-phase with Phoenix, Rebel, Rogue One and named Hoth mission requirements tied to the loaded Ally Code."
-          : "The shared engine is active. Exact territories and mission rules stay verification-gated until their source data is normalized.";
+          : tb.id === "hoth-imperial"
+            ? "Hoth Imperial Retaliation now includes the IPD shard mission, named Hoth Hero requirements, Chimaera fleet gate and Jabba's added Rear Trenches battle."
+            : "The shared engine is active. Exact territories and mission rules stay verification-gated until their source data is normalized.";
   localStorage.setItem(STORAGE_KEY, tb.id);
 }
 
