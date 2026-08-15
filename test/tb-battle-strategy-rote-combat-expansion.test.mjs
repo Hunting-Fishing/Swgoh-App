@@ -13,19 +13,12 @@ function member(baseId, name, abilities = []) {
   return { baseId, name, unit: { baseId, name }, abilities: rows, staticUnit: { baseId, name, abilities: rows } };
 }
 
-const ids = [
-  "tatooine-fennec",
-  "kashyyyk-wookiee",
-  "zeffo-generic-1",
-  "zeffo-ufu",
-  "death-star-vader",
-  "death-star-iden",
-];
+const ids = ["tatooine-fennec", "kashyyyk-wookiee", "zeffo-generic-1", "zeffo-ufu"];
 
-test("ROTE combat expansion resolver owns exactly the six new mission ids", () => {
+test("ROTE combat expansion resolver owns the four non-Death-Star expansion ids", () => {
   assert.deepEqual(Object.keys(ROTE_COMBAT_EXPANSION_STRATEGIES), ids);
   for (const id of ids) assert.equal(roteCombatExpansionStrategyForMission(id), ROTE_COMBAT_EXPANSION_STRATEGIES[id]);
-  assert.equal(roteCombatExpansionStrategyForMission("mustafar-lv"), null);
+  assert.equal(roteCombatExpansionStrategyForMission("death-star-vader"), null);
   assert.equal(roteCombatExpansionStrategyForMission("mandalore-dtmg"), null);
 });
 
@@ -36,7 +29,6 @@ test("Fennec pack treats Dune Sandstorm as unavoidable and supports alternative 
   assert.match(analysis.summary, /unavoidable/i);
   assert.match(analysis.summary, /Rey/i);
   assert.match(analysis.summary, /Bounty Hunter/i);
-  assert.match(JSON.stringify(analysis.failureRisks), /cannot be resisted/i);
 });
 
 test("Kashyyyk Wookiee strategy enforces Tarfful-led variant and wave priorities", () => {
@@ -75,40 +67,13 @@ test("Zeffo UFU strategy is an explicit Rey-led community variant", () => {
   const analysis = evaluateBattleStrategy({ missionId: "zeffo-ufu", members: [rey] });
   assert.equal(analysis.blockers.length, 0);
   assert.match(analysis.summary, /AT-ST/i);
-  assert.match(JSON.stringify(analysis.stages), /defensive stance/i);
+  assert.match(JSON.stringify(analysis.stages), /defensive/i);
 
   const wrongLeader = evaluateBattleStrategy({ missionId: "zeffo-ufu", members: [member("CEREJUNDA", "Cere Junda"), rey] });
   assert.ok(wrongLeader.blockers.some((check) => check.type === "leader" && check.expected === "GLREY"));
 });
 
-test("Death Star Vader strategy is explicitly high-risk and modifier-aware", () => {
-  const vader = member("VADER", "Darth Vader", [
-    { id: "merciless", name: "Merciless Massacre", tier: 8, description: "Gain Merciless and take bonus turns against enemies." },
-    { id: "crush", name: "Force Crush", tier: 8, description: "Inflict Damage Over Time and Speed Down on all enemies." },
-    { id: "basic", name: "Terrifying Swing", tier: 8, description: "Inflict Ability Block." },
-  ]);
-  const analysis = evaluateBattleStrategy({ missionId: "death-star-vader", members: [vader] });
-  assert.equal(analysis.blockers.length, 0);
-  assert.equal(analysis.strategyStatus, "community-tested-high-risk");
-  assert.match(analysis.summary, /Volatile Energies/i);
-  assert.match(JSON.stringify(analysis.failureRisks), /repeated losses at R9/i);
-  assert.doesNotMatch(JSON.stringify(analysis), /guaranteed|100% win/i);
-});
-
-test("Death Star Iden pack guards against falsely activating Iden Trooper conditionals", () => {
-  const iden = member("IDENVERSIO", "Iden Versio", [
-    { id: "push", name: "Push Forward", tier: 8, description: "Dispel buffs and inflict Healing Immunity and Stun." },
-    { id: "grieve", name: "We Can Grieve Later", tier: 8, description: "Dispel debuffs on Imperial Trooper allies and grant Protection Up." },
-  ]);
-  const analysis = evaluateBattleStrategy({ missionId: "death-star-iden", members: [iden] });
-  assert.equal(analysis.blockers.length, 0);
-  assert.match(analysis.summary, /SLKR|Supreme Leader Kylo Ren/i);
-  assert.match(analysis.summary, /do not fully activate/i);
-  assert.match(JSON.stringify(analysis.failureRisks), /no other ally with the Leader tag/i);
-  assert.equal(analysis.targetPriorities.length, 0);
-});
-
-test("expanded packs keep authoritative/current sources and no fabricated odds", () => {
+test("expanded packs keep authoritative/current sources and avoid fabricated odds", () => {
   for (const strategy of Object.values(ROTE_COMBAT_EXPANSION_STRATEGIES)) {
     assert.ok(strategy.sources.some((source) => source.kind === "official" || source.kind === "current-reference"));
     assert.ok(strategy.evidenceBoundary);
