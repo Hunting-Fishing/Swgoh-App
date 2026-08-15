@@ -38,8 +38,12 @@ async function campaignMissions(id) {
     return [];
   })();
   dataPromises.set(id, promise);
-  try { return await promise; }
-  catch (error) { dataPromises.delete(id); throw error; }
+  try {
+    return await promise;
+  } catch (error) {
+    dataPromises.delete(id);
+    throw error;
+  }
 }
 
 function recommendationByCard(mission, card) {
@@ -54,6 +58,7 @@ function recommendationByCard(mission, card) {
 
 function decorateSlots(root, missions) {
   const byId = new Map(missions.map((mission) => [String(mission.id), mission]));
+
   for (const card of root.querySelectorAll(".dsgeo-team-card")) {
     const missionNode = card.closest("[data-legacy-mission-id],[data-dsgeo-mission-id]");
     const missionId = missionNode?.dataset?.legacyMissionId || missionNode?.dataset?.dsgeoMissionId || "";
@@ -61,10 +66,15 @@ function decorateSlots(root, missions) {
     const recommendation = recommendationByCard(mission, card);
     if (!mission || !recommendation) continue;
     let slot = card.querySelector(":scope > .tb-combat-slot");
-    if (!slot) { slot = document.createElement("div"); slot.className = "tb-combat-slot"; card.appendChild(slot); }
+    if (!slot) {
+      slot = document.createElement("div");
+      slot.className = "tb-combat-slot";
+      card.appendChild(slot);
+    }
     slot.dataset.tbCombatMission = mission.id;
     slot.dataset.tbCombatTeam = recommendation.id;
   }
+
   for (const card of root.querySelectorAll(".rote-exact-team")) {
     const missionNode = card.closest("[data-rote-exact-mission-card]");
     const missionId = missionNode?.dataset?.roteExactMissionCard || "";
@@ -72,7 +82,11 @@ function decorateSlots(root, missions) {
     const recommendation = recommendationByCard(mission, card);
     if (!mission || !recommendation) continue;
     let slot = card.querySelector(":scope > .tb-combat-slot");
-    if (!slot) { slot = document.createElement("div"); slot.className = "tb-combat-slot"; card.appendChild(slot); }
+    if (!slot) {
+      slot = document.createElement("div");
+      slot.className = "tb-combat-slot";
+      card.appendChild(slot);
+    }
     slot.dataset.tbCombatMission = mission.id;
     slot.dataset.tbCombatTeam = recommendation.id;
   }
@@ -91,8 +105,16 @@ async function decorateVisible() {
   await hydrateCombatPreparation(panel, body, missions);
 }
 
-function schedule(...delays) { for (const delay of delays) setTimeout(() => void decorateVisible(), delay); }
-window.addEventListener("swgoh:workspace-activated", (event) => { if (event.detail?.id === "rote") schedule(40, 350, 1000); });
-document.addEventListener("click", (event) => { if (event.target.closest("[data-tb-select],[data-legacy-territory],[data-dsgeo-territory],[data-rote-planet]")) schedule(40, 300, 1000); }, true);
+function schedule(...delays) {
+  for (const delay of delays) setTimeout(() => void decorateVisible(), delay);
+}
+
+window.addEventListener("swgoh:workspace-activated", (event) => {
+  if (event.detail?.id === "rote") schedule(40, 350, 1000);
+});
+document.addEventListener("click", (event) => {
+  if (event.target.closest("[data-tb-select],[data-legacy-territory],[data-dsgeo-territory],[data-rote-planet]")) schedule(40, 300, 1000);
+}, true);
 document.getElementById("allyForm")?.addEventListener("submit", () => schedule(700, 1300));
+
 schedule(250, 1200);
