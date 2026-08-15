@@ -1,12 +1,15 @@
 const NATIVE_TARGETS = [
+  ["Roster Commander", "LIVE", "Power-user filtering across live GP, progression, mods, ability investment, faction, role and current ROTE Operations demand with reusable saved views."],
+  ["Squad Workbench", "LIVE", "Build and save owned 3v3/5v5 squads, inspect composition metrics and jump from roster/ROTE demand directly into team construction."],
+  ["ROTE Player Readiness", "LIVE", "Compare the loaded Ally Code against current versioned ROTE Operations requirements phase by phase, including exact character relic and ship rarity gates."],
   ["Farm Tracker", "LIVE", "Journey and Galactic Legend requirement tracking against the loaded Ally Code: unlock state, stars, level, gear, relic and completion percentage."],
   ["Journey Visualizer", "BUILDING", "Show prerequisite chains and which earlier Journey unlocks feed the selected target."],
   ["Gear & Relic Planner", "LIVE", "Compare live gear/relic progression with a target and show remaining versioned gear-tier requirements without inventing private inventory balances."],
   ["Mods Optimizer", "NEXT", "Score equipped mods, compare current-game recommendations and build move plans from data we can actually access."],
   ["GAC Scout / Compare", "NEXT", "Player-vs-opponent roster differences, omicrons, team coverage and counter planning."],
+  ["Guild ROTE Operations", "NEXT", "Cache the public guild snapshot, evaluate every member against Operations demand and coordinate assignments without issuing one live request per member."],
   ["Ship Projection", "PLANNED", "Separate ship progression from pilot-driven stat contribution and fleet readiness."],
   ["Event Calendar", "PLANNED", "Current events, Proving Grounds, Assault Battles, recurring events and roster readiness in one native calendar."],
-  ["Guild Operations", "PLANNED", "Cached guild snapshot for member readiness, ROTE operations and Territory War planning."],
   ["Datacron Analyzer", "PLANNED", "Set, level and affix analysis when individual public datacron records are preserved by the gateway."],
   ["Conquest Planner", "PLANNED", "Sector/feat planning tied directly to characters the player owns and teams capable of completing each feat."],
   ["Raid Planner", "PLANNED", "Raid eligibility, teams, relic gates and score planning from the live roster."],
@@ -46,6 +49,7 @@ function replaceEventsPanel() {
       <div class="workspace-grid">
         ${[
           ["Journey Guide", "LIVE IN FARM TRACKER", "Choose an unlock target and compare its requirements with the loaded roster."],
+          ["ROTE Operations", "LIVE IN ROTE", "Current operation demand and exact player coverage are available in the dedicated ROTE workspace."],
           ["Assault Battles", "NEXT", "Eligible factions, tiers and strongest qualifying teams."],
           ["Proving Grounds", "PLANNED", "Event teams and readiness against the loaded roster."],
           ["Conquest", "PLANNED", "Feat requirements mapped to owned characters and squads."],
