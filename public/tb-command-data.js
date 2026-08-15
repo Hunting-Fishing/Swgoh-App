@@ -92,9 +92,9 @@ export const TERRITORY_BATTLES = Object.freeze([
     requiredGuildGp: 100000000,
     recommendedGuildGp: 150000000,
     exclusiveReward: "Ki-Adi-Mundi shards",
-    mapStatus: "reference-ready",
+    mapStatus: "live",
     recommendationStatus: "community-reference",
-    sourceIds: ["swgohgg", "genskaar-geo"],
+    sourceIds: ["swgohgg", "swgoh-wiki", "genskaar-geo"],
     theme: "geo-light",
   },
   {
