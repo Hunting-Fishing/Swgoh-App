@@ -19,6 +19,22 @@ export function unitMeetsRoteSlot(unit, slot) {
   return finite(unit.relic, 0) >= finite(slot.requiredRelic, 0);
 }
 
+export function roteProgressionGap(unit, requirement) {
+  const requiredStars = finite(requirement?.requiredRarity, 0);
+  const requiredRelic = requirement?.unitType === "Ship" ? 0 : finite(requirement?.requiredRelic, 0);
+  const currentStars = finite(unit?.stars ?? unit?.rarity, 0);
+  const currentGear = finite(unit?.gear, 0);
+  const currentRelic = finite(unit?.relic, 0);
+  const stars = Math.max(0, requiredStars - currentStars);
+  const gear = requirement?.unitType === "Character" && requiredRelic > 0 ? Math.max(0, 13 - currentGear) : 0;
+  const relic = Math.max(0, requiredRelic - currentRelic);
+  const owned = Boolean(unit);
+  const score = owned
+    ? stars * 100000 + gear * 1000 + relic * 10
+    : 1000000 + requiredStars * 100000 + requiredRelic * 10;
+  return { owned, stars, gear, relic, score };
+}
+
 function progressionSurplus(unit, slot) {
   if (slot.unitType === "Ship") return Math.max(0, finite(unit.stars, 0) - finite(slot.requiredRarity, 0));
   return Math.max(0, finite(unit.relic, 0) - finite(slot.requiredRelic, 0));
@@ -184,6 +200,53 @@ export function planGuildRoteAssignments(guildSnapshot, operations, options = {}
     if (scarcity.has(key)) scarcity.get(key).assigned += 1;
   }
 
+  const developmentTargets = [...scarcity.values()]
+    .filter((row) => row.eligibleOwners < row.demand)
+    .map((row) => {
+      const shortage = Math.max(0, row.demand - row.eligibleOwners);
+      const candidates = [];
+      let ownedCount = 0;
+      for (const state of memberStates) {
+        if (!state.member?.rosterAvailable) continue;
+        const unit = state.units.get(String(row.baseId));
+        if (unit) ownedCount += 1;
+        if (!unit || unitMeetsRoteSlot(unit, row)) continue;
+        const gap = roteProgressionGap(unit, row);
+        candidates.push({
+          member: {
+            playerId: state.member?.playerId || "",
+            allyCode: state.member?.allyCode || "",
+            name: state.member?.name || state.id,
+            galacticPower: finite(state.member?.galacticPower, 0),
+          },
+          current: {
+            stars: finite(unit?.stars, 0),
+            gear: finite(unit?.gear, 0),
+            relic: finite(unit?.relic, 0),
+          },
+          gap,
+        });
+      }
+      candidates.sort((a, b) => a.gap.score - b.gap.score || b.member.galacticPower - a.member.galacticPower || a.member.name.localeCompare(b.member.name));
+      return {
+        ...row,
+        shortage,
+        ownedCount,
+        belowRequirement: candidates.length,
+        missingOwnership: Math.max(0, memberStates.filter((state) => state.member?.rosterAvailable).length - ownedCount),
+        closest: candidates.slice(0, Math.max(5, shortage * 2)),
+      };
+    })
+    .sort((a, b) => {
+      if (a.shortage !== b.shortage) return b.shortage - a.shortage;
+      const aScore = a.closest[0]?.gap?.score ?? Number.MAX_SAFE_INTEGER;
+      const bScore = b.closest[0]?.gap?.score ?? Number.MAX_SAFE_INTEGER;
+      if (aScore !== bScore) return aScore - bScore;
+      const phaseDiff = phaseNumber(a.phase) - phaseNumber(b.phase);
+      if (phaseDiff) return phaseDiff;
+      return a.name.localeCompare(b.name);
+    });
+
   return {
     strategy: "scarcity-first-deterministic-draft",
     maxPerTerritory,
@@ -196,6 +259,7 @@ export function planGuildRoteAssignments(guildSnapshot, operations, options = {}
     unfilled: unfilled.sort((a, b) => phaseNumber(a.phase) - phaseNumber(b.phase) || (a.eligibleOwners - b.eligibleOwners) || a.baseId.localeCompare(b.baseId)),
     phases: [...phases.values()].sort((a, b) => phaseNumber(a.phase) - phaseNumber(b.phase)),
     memberLoads: [...memberLoads.values()].sort((a, b) => b.total - a.total || a.name.localeCompare(b.name)),
+    developmentTargets,
     scarcity: [...scarcity.values()].sort((a, b) => {
       const aMargin = a.eligibleOwners - a.demand;
       const bMargin = b.eligibleOwners - b.demand;
