@@ -5,7 +5,7 @@ const RULES = [
   ["dispel_enemy", /\bdispel(?:s|led|ling)?\b[^.]{0,80}\b(enemy|enemies|target)\b|\bremove(?:s|d)? all buffs\b/i],
   ["dispel_ally", /\bdispel(?:s|led|ling)?\b[^.]{0,80}\b(ally|allies)\b|\bcleanse(?:s|d)?\b/i],
   ["buff", /\b(gain|gains|grant|grants)\b[^.]{0,100}\b(offense up|defense up|speed up|critical chance up|critical damage up|tenacity up|potency up|foresight|advantage|stealth|taunt|retribution|health steal up|accuracy up|protection up|mastery)\b/i],
-  ["debuff", /\b(inflict|inflicts|apply|applies)\b[^.]{0,100}\b(ability block|stun|daze|shock|fear|fracture|expose|burning|damage over time|thermal detonator|purge|healing immunity|buff immunity|tenacity down|speed down|offense down|defense down|stagger|blind|marked|deathmark|target lock|breach)\b/i],
+  ["debuff", /\b(inflict|inflicts|apply|applies)\b[^.]{0,100}\b(ability block|armor shred|stun|daze|shock|fear|fracture|expose|burning|damage over time|thermal detonator|purge|healing immunity|buff immunity|tenacity down|speed down|offense down|defense down|stagger|blind|marked|deathmark|target lock|breach)\b/i],
   ["turn_meter_gain", /\b(gain|gains|grant|grants)\b[^.]{0,80}\bturn meter\b/i],
   ["turn_meter_remove", /\b(remove|removes|reduce|reduces|lose|loses)\b[^.]{0,80}\bturn meter\b/i],
   ["turn_meter_swap", /\bswap(?:s|ped)? turn meter\b|\bequalize(?:s|d)? turn meter\b/i],
@@ -36,7 +36,7 @@ const RULES = [
 ];
 
 const BUFFS = ["Accuracy Up","Advantage","Critical Chance Up","Critical Damage Up","Defense Up","Foresight","Health Steal Up","Offense Up","Potency Up","Protection Up","Retribution","Speed Up","Stealth","Taunt","Tenacity Up"];
-const DEBUFFS = ["Ability Block","Blind","Breach","Buff Immunity","Burning","Daze","Deathmark","Defense Down","Damage Over Time","Expose","Fear","Fracture","Healing Immunity","Marked","Offense Down","Purge","Shock","Speed Down","Stagger","Stun","Target Lock","Tenacity Down","Thermal Detonator"];
+const DEBUFFS = ["Ability Block","Armor Shred","Blind","Breach","Buff Immunity","Burning","Daze","Deathmark","Defense Down","Damage Over Time","Expose","Fear","Fracture","Healing Immunity","Marked","Offense Down","Purge","Shock","Speed Down","Stagger","Stun","Target Lock","Tenacity Down","Thermal Detonator"];
 
 function sentenceList(text) {
   return String(text || "").replace(/\s+/g, " ").trim().split(/(?<=[.!?])\s+/).map((value) => value.trim()).filter(Boolean);
