@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { withCapabilityContract } from "./capability-contract.mjs";
 import { LiveRosterCache } from "./live-roster-cache.mjs";
+import { aggregateRoteOperations } from "./rote-operations.mjs";
 
 const port = positiveNumber(process.env.PORT, 8080);
 const gatewayUrl = trimUrl(process.env.SWGOH_GATEWAY_URL);
@@ -12,12 +13,15 @@ const requestTimeoutMs = positiveNumber(process.env.SWGOH_REQUEST_TIMEOUT_MS, 35
 const rosterCacheFreshMs = positiveNumber(process.env.SWGOH_CACHE_FRESH_SECONDS, 90) * 1000;
 const rosterCacheStaleMs = positiveNumber(process.env.SWGOH_CACHE_STALE_SECONDS, 600) * 1000;
 const rosterCacheMaxEntries = Math.max(1, Math.floor(positiveNumber(process.env.SWGOH_CACHE_MAX_ENTRIES, 500)));
+const roteOperationsUrl = String(process.env.SWGOH_ROTE_OPERATIONS_URL || "https://raw.githubusercontent.com/swgoh-utils/gamedata/main/swgoh_rote_operations.json").trim();
+const roteCacheMs = positiveNumber(process.env.SWGOH_ROTE_CACHE_SECONDS, 21600) * 1000;
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "public");
 const rosterCache = new LiveRosterCache({
   freshMs: rosterCacheFreshMs,
   staleMs: rosterCacheStaleMs,
   maxEntries: rosterCacheMaxEntries,
 });
+const roteCache = { value: null, expiresAt: 0, promise: null };
 
 const mimeTypes = new Map([
   [".html", "text/html; charset=utf-8"],
@@ -95,6 +99,46 @@ async function requestGateway(pathname, includeKey) {
   }
 }
 
+async function loadRoteOperations() {
+  const now = Date.now();
+  if (roteCache.value && roteCache.expiresAt > now) return roteCache.value;
+  if (roteCache.promise) return roteCache.promise;
+
+  roteCache.promise = (async () => {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), Math.min(requestTimeoutMs, 20_000));
+    try {
+      const response = await fetch(roteOperationsUrl, {
+        headers: { Accept: "application/json", "User-Agent": "swgoh-roster-command" },
+        redirect: "error",
+        signal: controller.signal,
+      });
+      if (!response.ok) throw new Error(`ROTE game-data source returned HTTP ${response.status}.`);
+      const payload = await response.json();
+      const aggregated = aggregateRoteOperations(payload);
+      return {
+        ...aggregated,
+        fetchedAt: new Date().toISOString(),
+        cacheSeconds: Math.round(roteCacheMs / 1000),
+      };
+    } finally {
+      clearTimeout(timeout);
+    }
+  })();
+
+  try {
+    const value = await roteCache.promise;
+    roteCache.value = value;
+    roteCache.expiresAt = Date.now() + roteCacheMs;
+    return value;
+  } catch (error) {
+    if (roteCache.value) return { ...roteCache.value, stale: true };
+    throw error;
+  } finally {
+    roteCache.promise = null;
+  }
+}
+
 function validLiveRoster(body) {
   return body?.source === "live" && body?.player && Array.isArray(body?.units);
 }
@@ -124,12 +168,32 @@ async function handleApi(request, response, url) {
           maxEntries: rosterCacheMaxEntries,
           shared: false,
         },
+        roteOperations: {
+          source: "swgoh-utils/gamedata",
+          cached: Boolean(roteCache.value),
+          cacheSeconds: Math.round(roteCacheMs / 1000),
+        },
       });
     } catch (error) {
       writeJson(response, error?.status || 502, {
         status: "unavailable",
         liveOnly: true,
         error: error?.name === "AbortError" ? "The live gateway timed out." : error?.message || "The live gateway is unavailable.",
+      });
+    }
+    return true;
+  }
+
+  if (url.pathname === "/api/rote/operations") {
+    try {
+      const body = await loadRoteOperations();
+      writeJson(response, 200, body, {
+        "Cache-Control": "public, max-age=3600, stale-while-revalidate=21600",
+        "X-ROTE-Source": "swgoh-utils-gamedata",
+      });
+    } catch (error) {
+      writeJson(response, 502, {
+        error: error?.name === "AbortError" ? "The ROTE game-data source timed out." : error?.message || "ROTE operations data is unavailable.",
       });
     }
     return true;
@@ -168,8 +232,6 @@ async function serveStatic(response, pathname) {
     const activelyVersionedSource = [".html", ".js", ".css", ".json"].includes(extension);
     response.writeHead(200, {
       "Content-Type": mimeTypes.get(extension) || "application/octet-stream",
-      // ES module dependencies were cached for an hour even when index.html's
-      // app.js URL changed. Revalidate source/data until we use hashed bundles.
       "Cache-Control": activelyVersionedSource ? "no-cache" : "public, max-age=3600",
       "X-Content-Type-Options": "nosniff",
       "Referrer-Policy": "strict-origin-when-cross-origin",
