@@ -19,6 +19,28 @@ function ratio(current, required) {
   return Math.max(0, Math.min(1, Number(current || 0) / Number(required)));
 }
 
+export function readinessBand(percent, complete = false) {
+  const value = Math.max(0, Math.min(100, Number(percent || 0)));
+  if (complete || value >= 100) return "ready";
+  if (value >= 80) return "close";
+  if (value >= 50) return "building";
+  return "far";
+}
+
+export function readinessLabel(percent, complete = false, owned = true) {
+  if (!owned) return "Missing";
+  const band = readinessBand(percent, complete);
+  if (band === "ready") return "Ready";
+  if (band === "close") return "Close";
+  if (band === "building") return "Building";
+  return "Far";
+}
+
+export function metricReadiness(current, required) {
+  if (!required) return "na";
+  return readinessBand(Math.round(ratio(current, required) * 100), Number(current || 0) >= Number(required));
+}
+
 export function requirementTargets(requirement) {
   return {
     requiredStars: requirement?.type === "STAR" ? Number(requirement.tier || 0) : 7,
