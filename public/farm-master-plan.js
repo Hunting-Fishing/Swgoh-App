@@ -39,7 +39,8 @@ function targetLabel(requirement) {
   return `${requirement.tier}★`;
 }
 
-function currentLabel(progress) {
+function currentLabel(progress, owned) {
+  if (!owned) return "Not owned";
   if (Number(progress.relic || 0) > 0) return `${progress.stars}★ · G${progress.gear} · R${progress.relic}`;
   if (Number(progress.gear || 0) > 0) return `${progress.stars}★ · G${progress.gear}`;
   return `${progress.stars}★`;
@@ -93,7 +94,8 @@ export function buildMasterFarmPlan(events = [], liveUnits = []) {
     const progress = requirementProgress(unit, requirement);
     const owned = Boolean(unit?.baseId);
     const requiredGear = requirement.type === "RELIC" ? 13 : requirement.type === "GEAR" ? requirement.tier : 0;
-    const gearPlan = requiredGear ? gearGap(progress.gear, requiredGear) : gearGap(0, 0);
+    const currentGearForPlan = owned ? progress.gear : requiredGear ? 1 : 0;
+    const gearPlan = requiredGear ? gearGap(currentGearForPlan, requiredGear) : gearGap(0, 0);
     const relicPlan = requirement.type === "RELIC"
       ? relicMaterialsBetween(progress.relic, requirement.tier)
       : relicMaterialsBetween(0, 0);
@@ -115,7 +117,7 @@ export function buildMasterFarmPlan(events = [], liveUnits = []) {
       unit,
       progress,
       complete: progress.complete,
-      currentLabel: currentLabel(progress),
+      currentLabel: currentLabel(progress, owned),
       targetLabel: targetLabel(requirement),
       farmIds: [...entry.farmIds],
       farmNames: [...entry.farmNames],
