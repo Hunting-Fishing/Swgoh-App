@@ -57,11 +57,12 @@ test("Tatooine Jabba treats Sandstorm as unavoidable attrition", () => {
   assert.match(JSON.stringify(analysis.stages), /does not disable future environmental DoTs/i);
 });
 
-test("Kessel Jabba explicitly manages Confuse thresholds and Recompute", () => {
+test("Kessel Jabba explicitly manages Confuse thresholds with ground Clear Head", () => {
   const analysis = evaluateBattleStrategy({ missionId: "kessel-jabba", members: [member("JABBATHEHUTT", "Jabba the Hutt")] });
   assert.match(analysis.summary, /at 2 it cannot counter, assist or gain bonus Turn Meter/i);
-  assert.match(JSON.stringify(analysis.stages), /Recompute/i);
-  assert.match(JSON.stringify(analysis.failureRisks), /2-3 Confuse/i);
+  assert.match(JSON.stringify(analysis.stages), /Clear Head/i);
+  assert.doesNotMatch(JSON.stringify(analysis.stages), /Recompute/i);
+  assert.match(JSON.stringify(analysis.failureRisks), /Recompute is the ship version/i);
 });
 
 test("Vandor Jabba preserves official Crate recovery and Sabacc interpretation", () => {
