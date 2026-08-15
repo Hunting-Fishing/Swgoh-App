@@ -127,6 +127,7 @@ function applySelectedBattle() {
   if (!panel || !host) return;
   const tb = territoryBattleById(state.selected);
   const isRote = tb.id === "rote";
+  panel.classList.toggle("tb-non-rote", !isRote);
   const roteSwitcher = panel.querySelector(".rote-view-switcher");
   const roteMap = $("roteMapView");
   const roteOperations = $("roteOperationsView");
@@ -200,7 +201,10 @@ function install() {
     }, 500);
   });
   window.addEventListener("swgoh:workspace-activated", (event) => {
-    if (event.detail?.id === "rote" && state.selected !== "rote") applySelectedBattle();
+    if (event.detail?.id !== "rote" || state.selected === "rote") return;
+    applySelectedBattle();
+    setTimeout(applySelectedBattle, 0);
+    setTimeout(applySelectedBattle, 500);
   });
 
   state.initialized = true;
