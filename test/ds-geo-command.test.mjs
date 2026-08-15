@@ -12,7 +12,10 @@ import {
   normalizeRecommendation,
   rosterUnitMeetsEntry,
   recommendationRosterFit,
+  recommendationUpgradeRows,
   legalRosterCandidates,
+  mandatoryRosterStatus,
+  missionRosterEntrySummary,
 } from "../public/tb-mission-intelligence.js";
 
 test("DS Geo full map has all 11 territories and 28 missions", () => {
@@ -87,10 +90,28 @@ test("community recommendation members resolve by live roster name and expose en
   assert.equal(fit.rows[1].gap.power, 1500);
 });
 
-test("ambiguous Dooku/Asajj restriction stays fail-closed", () => {
+test("Jabba is mandatory for the Phase 4 Hutt Cartel special mission", () => {
+  const mission = DS_GEO_MISSIONS.find((item) => item.id === "s5");
+  assert.equal(mission.entry.mandatoryMembers[0].baseId, "JABBATHEHUTT");
+  const hutt = (baseId, name) => ({ baseId, name, unitType: "Character", alignment: "Dark", stars: 7, power: 30000, factions: ["Hutt Cartel"] });
+  const withoutJabba = { units: [hutt("KRRSANTAN", "Krrsantan"), hutt("BOUSHH", "Boushh (Leia Organa)"), hutt("BOBAFETT", "Boba Fett"), hutt("GAMORREANGUARD", "Gamorrean Guard"), hutt("GREEDO", "Greedo")] };
+  const without = missionRosterEntrySummary(withoutJabba, mission, 5);
+  assert.equal(without.candidates.length, 5);
+  assert.equal(without.mandatory.complete, false);
+  assert.equal(without.ready, false);
+
+  const withJabba = { units: [hutt("JABBATHEHUTT", "Jabba the Hutt"), ...withoutJabba.units.slice(0, 4)] };
+  const withSummary = missionRosterEntrySummary(withJabba, mission, 5);
+  assert.equal(mandatoryRosterStatus(withJabba, mission).complete, true);
+  assert.equal(withSummary.ready, true);
+});
+
+test("ambiguous Dooku/Asajj restriction stays fail-closed and produces no upgrade advice", () => {
   const mission = DS_GEO_MISSIONS.find((item) => item.id === "c8");
   assert.equal(mission.entry.verified, false);
   assert.match(mission.entry.notes, /unverified/i);
+  const recommendation = mission.recommendations[0];
+  assert.deepEqual(recommendationUpgradeRows({ units: [] }, mission, recommendation), []);
 });
 
 test("DS Geo browser modules parse", () => {
