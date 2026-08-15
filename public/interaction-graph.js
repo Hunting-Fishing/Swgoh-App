@@ -102,8 +102,8 @@ export function extractUnitInteractions(unit, indexes) {
   return [...new Map(interactions.map((item) => [key(item), item])).values()];
 }
 
-export function buildInteractionIndex(catalog = {}, rawEffectIndex = null) {
-  const indexes = buildMentionIndexes(catalog);
+export function buildInteractionIndex(catalog = {}, rawEffectIndex = null, mentionCatalog = catalog) {
+  const indexes = buildMentionIndexes(mentionCatalog);
   const rawByBaseId = new Map((rawEffectIndex?.units || []).map((unit) => [String(unit.baseId), unit]));
   const units = (catalog.units || []).map((unit) => ({
     baseId: unit.baseId,
