@@ -19,7 +19,7 @@
       roteMissionPromise = null;
       console.error("ROTE exact mission intelligence failed to load", error);
     });
-    tbCombatPromise ||= import("/tb-combat-overlay.js?v=20260815-tbcombat1").catch((error) => {
+    tbCombatPromise ||= import("/tb-combat-overlay.js?v=20260815-tbcombat2").catch((error) => {
       tbCombatPromise = null;
       console.error("TB combat preparation failed to load", error);
     });
