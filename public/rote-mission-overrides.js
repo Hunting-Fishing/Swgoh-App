@@ -13,6 +13,17 @@ function normalizeMember(member = {}) {
   return { ...member, baseId: canonicalId(member.baseId) };
 }
 
+function normalizeMandatoryAnyGroup(group = {}, index = 0) {
+  const source = Array.isArray(group) ? { members: group } : group;
+  return {
+    ...source,
+    id: String(source.id || `mandatory-any-${index + 1}`),
+    label: String(source.label || "One of required units"),
+    count: Math.max(1, Number(source.count || 1)),
+    members: Array.isArray(source.members) ? source.members.map(normalizeMember) : [],
+  };
+}
+
 function normalizeRecommendation(recommendation = {}) {
   return {
     ...recommendation,
@@ -28,6 +39,7 @@ function normalizeEntry(entry = {}) {
     requiredBaseIds: Array.isArray(entry.requiredBaseIds) ? entry.requiredBaseIds.map(canonicalId) : entry.requiredBaseIds,
     allowedBaseIds: Array.isArray(entry.allowedBaseIds) ? entry.allowedBaseIds.map(canonicalId) : entry.allowedBaseIds,
     mandatoryMembers: Array.isArray(entry.mandatoryMembers) ? entry.mandatoryMembers.map(normalizeMember) : entry.mandatoryMembers,
+    mandatoryAnyGroups: Array.isArray(entry.mandatoryAnyGroups) ? entry.mandatoryAnyGroups.map(normalizeMandatoryAnyGroup) : [],
   };
 }
 
@@ -45,12 +57,73 @@ const TATOOINE_UNLOCK_RECOMMENDATION = Object.freeze({
   lastVerified: "2026-08-15",
 });
 
+const BRACCA_CERE_CAL = Object.freeze({
+  id: "rote-bracca-cere-cal",
+  name: "Cere Junda + Cal Kestis",
+  confidence: "verified",
+  verifiedLegal: true,
+  members: [
+    { name: "Cere Junda", baseId: "CEREJUNDA", relicMin: 7 },
+    { name: "Cal Kestis", baseId: "CALKESTIS", relicMin: 7 },
+  ],
+  sourceIds: ["cg-zeffo"],
+  lastVerified: "2026-08-15",
+});
+
+const BRACCA_CERE_JKCK = Object.freeze({
+  id: "rote-bracca-cere-jkck",
+  name: "Cere Junda + Jedi Knight Cal Kestis",
+  confidence: "verified",
+  verifiedLegal: true,
+  members: [
+    { name: "Cere Junda", baseId: "CEREJUNDA", relicMin: 7 },
+    { name: "Jedi Knight Cal Kestis", baseId: "JEDIKNIGHTCAL", relicMin: 7 },
+  ],
+  sourceIds: ["cg-zeffo"],
+  lastVerified: "2026-08-15",
+});
+
 export function normalizeRoteMission(mission = {}) {
   const next = {
     ...mission,
     entry: normalizeEntry(mission.entry || {}),
     recommendations: Array.isArray(mission.recommendations) ? mission.recommendations.map(normalizeRecommendation) : [],
   };
+
+  if (next.id === "bracca-zeffo-unlock") {
+    next.name = "Special Unlock — Cere Junda + Any Cal Kestis";
+    next.entry = {
+      ...next.entry,
+      verified: true,
+      unitType: "Character",
+      alignment: "Light",
+      allowedAlignments: [],
+      starsMin: 7,
+      relicMin: 7,
+      squadSize: 2,
+      requiredBaseIds: [],
+      allowedBaseIds: ["CEREJUNDA", "CALKESTIS", "JEDIKNIGHTCAL"],
+      requiredCategories: [],
+      mandatoryMembers: [
+        { name: "Cere Junda", baseId: "CEREJUNDA", relicMin: 7 },
+      ],
+      mandatoryAnyGroups: [
+        {
+          id: "cal-variant",
+          label: "One Cal Kestis variant",
+          count: 1,
+          members: [
+            { name: "Cal Kestis", baseId: "CALKESTIS", relicMin: 7 },
+            { name: "Jedi Knight Cal Kestis", baseId: "JEDIKNIGHTCAL", relicMin: 7 },
+          ],
+        },
+      ],
+      notes: "Official Zeffo gateway: Cere Junda R7 plus either Cal Kestis R7 or Jedi Knight Cal Kestis R7. Thirty guild clears during the active Territory Battle unlock Zeffo for that run.",
+    };
+    next.recommendations = [BRACCA_CERE_CAL, BRACCA_CERE_JKCK];
+    next.rewards = ["50 Mk III Guild Event Tokens per clear", "30 guild clears unlock Zeffo"];
+    next.sources = [...new Set([...(next.sources || []), "cg-zeffo"])];
+  }
 
   if (next.id === "tatooine-mandalore-unlock") {
     next.name = "Krayt Dragon Special Mission — Unlock Mandalore";
@@ -71,6 +144,7 @@ export function normalizeRoteMission(mission = {}) {
         { name: "Bo-Katan (Mand'alor)", baseId: "MANDALORBOKATAN", relicMin: 7 },
         { name: "The Mandalorian (Beskar Armor)", baseId: "THEMANDALORIANBESKARARMOR", relicMin: 7 },
       ],
+      mandatoryAnyGroups: [],
       notes: "Official unlock mission: Bo-Katan (Mand'alor) R7 + The Mandalorian (Beskar Armor) R7 + one additional Mandalorian R7. Twenty-five guild clears unlock Mandalore for that Territory Battle instance.",
     };
     next.recommendations = [TATOOINE_UNLOCK_RECOMMENDATION];
