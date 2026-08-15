@@ -4,6 +4,7 @@ import { watBattleStrategyForMission } from "./tb-battle-strategy-wat-data.js";
 import { rotePhaseOneBattleStrategyForMission } from "./tb-battle-strategy-rote-p1-data.js";
 import { mandaloreBattleStrategyForMission } from "./tb-battle-strategy-mandalore-data.js";
 import { rotePriorityBattleStrategyForMission } from "./tb-battle-strategy-rote-priority-data.js";
+import { roteFactionBattleStrategyForMission } from "./tb-battle-strategy-rote-factions-data.js";
 
 const normalized = (value) => String(value || "").trim().toLowerCase();
 
@@ -68,6 +69,7 @@ function priorityRank(value) {
 function resolvedStrategy(missionId) {
   return mandaloreBattleStrategyForMission(missionId)
     || rotePriorityBattleStrategyForMission(missionId)
+    || roteFactionBattleStrategyForMission(missionId)
     || rotePhaseOneBattleStrategyForMission(missionId)
     || watBattleStrategyForMission(missionId)
     || battleStrategyForMission(missionId);
