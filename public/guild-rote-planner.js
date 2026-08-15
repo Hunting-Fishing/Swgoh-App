@@ -61,10 +61,35 @@ function candidateIdentity(member, index) {
   return String(member?.playerId || member?.allyCode || member?.name || `member-${index + 1}`);
 }
 
-function eligibleCandidates(slot, memberStates, usedUnits, territoryLoads, maxPerTerritory) {
+function reservationKey(memberId, phase, baseId) {
+  return `${String(memberId)}|${String(phase || "All")}|${String(baseId)}`;
+}
+
+function reservationSetOf(reservations) {
+  return new Set(asArray(reservations)
+    .filter((entry) => entry?.memberId && entry?.baseId)
+    .map((entry) => reservationKey(entry.memberId, entry.phase || "All", entry.baseId)));
+}
+
+function isReserved(reservations, memberId, slot) {
+  return reservations.has(reservationKey(memberId, slot.phase, slot.baseId))
+    || reservations.has(reservationKey(memberId, "All", slot.baseId));
+}
+
+function lockMapOf(locks) {
+  const map = new Map();
+  for (const entry of asArray(locks)) {
+    if (!entry?.slotId || !entry?.memberId) continue;
+    map.set(String(entry.slotId), String(entry.memberId));
+  }
+  return map;
+}
+
+function eligibleCandidates(slot, memberStates, usedUnits, territoryLoads, maxPerTerritory, reservations) {
   const candidates = [];
   for (const state of memberStates) {
     if (!state.member?.rosterAvailable) continue;
+    if (isReserved(reservations, state.id, slot)) continue;
     const unit = state.units.get(String(slot.baseId));
     if (!unitMeetsRoteSlot(unit, slot)) continue;
     if (usedUnits.has(usedUnitKey(state.id, slot.phase, slot.baseId))) continue;
@@ -73,6 +98,45 @@ function eligibleCandidates(slot, memberStates, usedUnits, territoryLoads, maxPe
     candidates.push({ state, unit, territoryLoad });
   }
   return candidates;
+}
+
+function assignmentFrom(slot, chosen, eligibleOwners, availableOwners, locked = false) {
+  return {
+    ...slot,
+    eligibleOwners,
+    availableOwners,
+    locked,
+    member: {
+      playerId: chosen.state.member?.playerId || "",
+      allyCode: chosen.state.member?.allyCode || "",
+      name: chosen.state.member?.name || chosen.state.id,
+      galacticPower: finite(chosen.state.member?.galacticPower, 0),
+    },
+    owned: {
+      stars: finite(chosen.unit?.stars, 0),
+      gear: finite(chosen.unit?.gear, 0),
+      relic: finite(chosen.unit?.relic, 0),
+    },
+  };
+}
+
+function consumeAssignment(chosen, slot, usedUnits, territoryLoads, phaseLoads) {
+  usedUnits.add(usedUnitKey(chosen.state.id, slot.phase, slot.baseId));
+  const territoryKey = loadKey(chosen.state.id, slot.conflictId);
+  territoryLoads.set(territoryKey, (territoryLoads.get(territoryKey) || 0) + 1);
+  const phaseKey = `${chosen.state.id}|${slot.phase}`;
+  phaseLoads.set(phaseKey, (phaseLoads.get(phaseKey) || 0) + 1);
+}
+
+function lockFailureReason(slot, state, unit, reservations, usedUnits, territoryLoads, maxPerTerritory) {
+  if (!state) return "Locked member is no longer in the hydrated guild roster.";
+  if (!state.member?.rosterAvailable) return "Locked member roster is currently unavailable.";
+  if (isReserved(reservations, state.id, slot)) return "Locked unit is reserved for a mission in this phase.";
+  if (!unit) return "Locked member does not own this unit.";
+  if (!unitMeetsRoteSlot(unit, slot)) return "Locked member does not meet the required stars/relic level.";
+  if (usedUnits.has(usedUnitKey(state.id, slot.phase, slot.baseId))) return "Locked member already uses this unit in another Operation this phase.";
+  if ((territoryLoads.get(loadKey(state.id, slot.conflictId)) || 0) >= maxPerTerritory) return "Locked member is already at the territory contribution limit.";
+  return "Lock could not be applied.";
 }
 
 export function planGuildRoteAssignments(guildSnapshot, operations, options = {}) {
@@ -84,17 +148,29 @@ export function planGuildRoteAssignments(guildSnapshot, operations, options = {}
     id: candidateIdentity(member, index),
     units: unitMap(member),
   }));
+  const memberById = new Map(memberStates.map((state) => [state.id, state]));
+  const reservations = reservationSetOf(options.reservations);
+  const locks = lockMapOf(options.locks);
 
   const staticEligibility = new Map();
+  const availableEligibility = new Map();
   for (const slot of slots) {
-    const count = memberStates.reduce((sum, state) => {
-      if (!state.member?.rosterAvailable) return sum;
-      return sum + (unitMeetsRoteSlot(state.units.get(String(slot.baseId)), slot) ? 1 : 0);
-    }, 0);
-    staticEligibility.set(slot.id, count);
+    let physical = 0;
+    let available = 0;
+    for (const state of memberStates) {
+      if (!state.member?.rosterAvailable) continue;
+      const unit = state.units.get(String(slot.baseId));
+      if (!unitMeetsRoteSlot(unit, slot)) continue;
+      physical += 1;
+      if (!isReserved(reservations, state.id, slot)) available += 1;
+    }
+    staticEligibility.set(slot.id, physical);
+    availableEligibility.set(slot.id, available);
   }
 
   const sortedSlots = slots.slice().sort((a, b) => {
+    const availableDiff = (availableEligibility.get(a.id) || 0) - (availableEligibility.get(b.id) || 0);
+    if (availableDiff) return availableDiff;
     const eligibleDiff = (staticEligibility.get(a.id) || 0) - (staticEligibility.get(b.id) || 0);
     if (eligibleDiff) return eligibleDiff;
     const difficultyDiff = slotDifficulty(b) - slotDifficulty(a);
@@ -109,9 +185,41 @@ export function planGuildRoteAssignments(guildSnapshot, operations, options = {}
   const phaseLoads = new Map();
   const assignments = [];
   const unfilled = [];
+  const lockIssues = [];
+  const handledLocks = new Set();
+
+  for (const slot of slots) {
+    const lockedMemberId = locks.get(String(slot.id));
+    if (!lockedMemberId) continue;
+    handledLocks.add(String(slot.id));
+    const state = memberById.get(lockedMemberId);
+    const unit = state?.units.get(String(slot.baseId));
+    const chosen = state && unit ? { state, unit, territoryLoad: territoryLoads.get(loadKey(state.id, slot.conflictId)) || 0 } : null;
+    const reason = lockFailureReason(slot, state, unit, reservations, usedUnits, territoryLoads, maxPerTerritory);
+    if (!chosen || reason !== "Lock could not be applied.") {
+      lockIssues.push({ slotId: slot.id, memberId: lockedMemberId, phase: slot.phase, baseId: slot.baseId, name: slot.name, reason });
+      unfilled.push({
+        ...slot,
+        eligibleOwners: staticEligibility.get(slot.id) || 0,
+        availableOwners: availableEligibility.get(slot.id) || 0,
+        locked: true,
+        lockIssue: reason,
+      });
+      continue;
+    }
+    consumeAssignment(chosen, slot, usedUnits, territoryLoads, phaseLoads);
+    assignments.push(assignmentFrom(
+      slot,
+      chosen,
+      staticEligibility.get(slot.id) || 0,
+      availableEligibility.get(slot.id) || 0,
+      true,
+    ));
+  }
 
   for (const slot of sortedSlots) {
-    const candidates = eligibleCandidates(slot, memberStates, usedUnits, territoryLoads, maxPerTerritory);
+    if (handledLocks.has(String(slot.id))) continue;
+    const candidates = eligibleCandidates(slot, memberStates, usedUnits, territoryLoads, maxPerTerritory, reservations);
     candidates.sort((a, b) => {
       const territoryDiff = a.territoryLoad - b.territoryLoad;
       if (territoryDiff) return territoryDiff;
@@ -127,30 +235,23 @@ export function planGuildRoteAssignments(guildSnapshot, operations, options = {}
 
     const chosen = candidates[0];
     if (!chosen) {
-      unfilled.push({ ...slot, eligibleOwners: staticEligibility.get(slot.id) || 0 });
+      unfilled.push({
+        ...slot,
+        eligibleOwners: staticEligibility.get(slot.id) || 0,
+        availableOwners: availableEligibility.get(slot.id) || 0,
+        locked: false,
+      });
       continue;
     }
 
-    usedUnits.add(usedUnitKey(chosen.state.id, slot.phase, slot.baseId));
-    const territoryKey = loadKey(chosen.state.id, slot.conflictId);
-    territoryLoads.set(territoryKey, (territoryLoads.get(territoryKey) || 0) + 1);
-    const phaseKey = `${chosen.state.id}|${slot.phase}`;
-    phaseLoads.set(phaseKey, (phaseLoads.get(phaseKey) || 0) + 1);
-    assignments.push({
-      ...slot,
-      eligibleOwners: staticEligibility.get(slot.id) || 0,
-      member: {
-        playerId: chosen.state.member?.playerId || "",
-        allyCode: chosen.state.member?.allyCode || "",
-        name: chosen.state.member?.name || chosen.state.id,
-        galacticPower: finite(chosen.state.member?.galacticPower, 0),
-      },
-      owned: {
-        stars: finite(chosen.unit?.stars, 0),
-        gear: finite(chosen.unit?.gear, 0),
-        relic: finite(chosen.unit?.relic, 0),
-      },
-    });
+    consumeAssignment(chosen, slot, usedUnits, territoryLoads, phaseLoads);
+    assignments.push(assignmentFrom(
+      slot,
+      chosen,
+      staticEligibility.get(slot.id) || 0,
+      availableEligibility.get(slot.id) || 0,
+      false,
+    ));
   }
 
   const phases = new Map();
@@ -166,10 +267,11 @@ export function planGuildRoteAssignments(guildSnapshot, operations, options = {}
     const id = String(assignment.member.playerId || assignment.member.allyCode || assignment.member.name);
     let row = memberLoads.get(id);
     if (!row) {
-      row = { ...assignment.member, total: 0, phases: {}, territories: {} };
+      row = { ...assignment.member, total: 0, locked: 0, phases: {}, territories: {} };
       memberLoads.set(id, row);
     }
     row.total += 1;
+    if (assignment.locked) row.locked += 1;
     row.phases[assignment.phase] = (row.phases[assignment.phase] || 0) + 1;
     row.territories[assignment.conflictId] = (row.territories[assignment.conflictId] || 0) + 1;
   }
@@ -188,18 +290,21 @@ export function planGuildRoteAssignments(guildSnapshot, operations, options = {}
         requiredRarity: slot.requiredRarity,
         demand: 0,
         eligibleOwners: staticEligibility.get(slot.id) || 0,
+        availableOwners: availableEligibility.get(slot.id) || 0,
         assigned: 0,
       };
       scarcity.set(key, row);
     }
     row.demand += 1;
     row.eligibleOwners = Math.min(row.eligibleOwners, staticEligibility.get(slot.id) || 0);
+    row.availableOwners = Math.min(row.availableOwners, availableEligibility.get(slot.id) || 0);
   }
   for (const assignment of assignments) {
     const key = `${assignment.phase}|${assignment.baseId}|${assignment.requiredRelic}|${assignment.requiredRarity}`;
     if (scarcity.has(key)) scarcity.get(key).assigned += 1;
   }
 
+  const hydratedCount = memberStates.filter((state) => state.member?.rosterAvailable).length;
   const developmentTargets = [...scarcity.values()]
     .filter((row) => row.eligibleOwners < row.demand)
     .map((row) => {
@@ -233,7 +338,7 @@ export function planGuildRoteAssignments(guildSnapshot, operations, options = {}
         shortage,
         ownedCount,
         belowRequirement: candidates.length,
-        missingOwnership: Math.max(0, memberStates.filter((state) => state.member?.rosterAvailable).length - ownedCount),
+        missingOwnership: Math.max(0, hydratedCount - ownedCount),
         closest: candidates.slice(0, Math.max(5, shortage * 2)),
       };
     })
@@ -254,15 +359,21 @@ export function planGuildRoteAssignments(guildSnapshot, operations, options = {}
     assignedSlots: assignments.length,
     unfilledSlots: unfilled.length,
     coveragePercent: slots.length ? Math.round((assignments.length / slots.length) * 1000) / 10 : 0,
-    hydratedMembers: members.filter((member) => member?.rosterAvailable).length,
+    hydratedMembers: hydratedCount,
+    controls: {
+      requestedLocks: locks.size,
+      appliedLocks: assignments.filter((assignment) => assignment.locked).length,
+      lockIssues,
+      reservations: reservations.size,
+    },
     assignments: assignments.sort((a, b) => phaseNumber(a.phase) - phaseNumber(b.phase) || a.conflictId.localeCompare(b.conflictId) || a.squadId.localeCompare(b.squadId) || a.slot - b.slot),
-    unfilled: unfilled.sort((a, b) => phaseNumber(a.phase) - phaseNumber(b.phase) || (a.eligibleOwners - b.eligibleOwners) || a.baseId.localeCompare(b.baseId)),
+    unfilled: unfilled.sort((a, b) => phaseNumber(a.phase) - phaseNumber(b.phase) || Number(b.locked) - Number(a.locked) || (a.availableOwners - b.availableOwners) || a.baseId.localeCompare(b.baseId)),
     phases: [...phases.values()].sort((a, b) => phaseNumber(a.phase) - phaseNumber(b.phase)),
     memberLoads: [...memberLoads.values()].sort((a, b) => b.total - a.total || a.name.localeCompare(b.name)),
     developmentTargets,
     scarcity: [...scarcity.values()].sort((a, b) => {
-      const aMargin = a.eligibleOwners - a.demand;
-      const bMargin = b.eligibleOwners - b.demand;
+      const aMargin = a.availableOwners - a.demand;
+      const bMargin = b.availableOwners - b.demand;
       return aMargin - bMargin || b.demand - a.demand || a.name.localeCompare(b.name);
     }),
   };
