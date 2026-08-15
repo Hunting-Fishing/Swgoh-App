@@ -6,6 +6,7 @@ import { rotePhaseOneBattleStrategyForMission } from "../public/tb-battle-strate
 import { mandaloreBattleStrategyForMission } from "../public/tb-battle-strategy-mandalore-data.js";
 import { rotePriorityBattleStrategyForMission } from "../public/tb-battle-strategy-rote-priority-data.js";
 import { roteFactionBattleStrategyForMission } from "../public/tb-battle-strategy-rote-factions-data.js";
+import { roteRewardBattleStrategyForMission } from "../public/tb-battle-strategy-rote-rewards-data.js";
 import { evaluateBattleStrategy } from "../public/tb-battle-strategy.js";
 
 function member(baseId, name, abilities, speed = null) {
@@ -111,6 +112,26 @@ assert.ok(phoenixSuppressing, "Phoenix Suppressing Fire advisory missing");
 assert.doesNotMatch(phoenixSuppressing.expected, /Stun/i, "Suppressing Fire must not be mislabeled as a Stun ability");
 assert.ok(battleStrategyForMission("zeffo-clones")?.keyAbilities.some((row) => row.abilityName === "Master Marksman" && row.importance === "critical"), "Zeffo Clone pack must retain Master Marksman as its critical Stun source");
 
+const roteRewardPackIds = ["bracca-zeffo-unlock", "corellia-qira", "kessel-qira-l3", "vandor-yhan"];
+for (const id of roteRewardPackIds) {
+  const strategy = roteRewardBattleStrategyForMission(id);
+  assert.ok(strategy, `${id} ROTE reward strategy pack missing`);
+  assert.ok(Array.isArray(strategy.sources) && strategy.sources.length > 0, `${id} reward strategy sources missing`);
+  assert.ok(strategy.sources.some((source) => source.kind === "official"), `${id} official source missing`);
+  assert.ok(strategy.sources.some((source) => source.kind === "current-reference"), `${id} current kit source missing`);
+  assert.ok(strategy.evidenceBoundary, `${id} reward evidence boundary missing`);
+  assert.equal("winPercent" in strategy, false, `${id} must not invent win percentage`);
+  assert.equal("score" in strategy, false, `${id} must not invent strategy score`);
+}
+for (const id of ["mandalore-bkm", "lothal-phoenix", "zeffo-clones", "mustafar-lv"]) assert.equal(roteRewardBattleStrategyForMission(id), null, `${id} must remain owned by its existing strategy module`);
+assert.equal(roteRewardBattleStrategyForMission("bracca-zeffo-unlock")?.requiredLeaderBaseId, "CEREJUNDA");
+assert.ok(roteRewardBattleStrategyForMission("bracca-zeffo-unlock")?.keyUnits.some((row) => row.baseId === "JEDIKNIGHTCAL" && row.importance === "critical"), "Bracca JKCK strategy route missing");
+assert.equal(roteRewardBattleStrategyForMission("corellia-qira")?.requiredLeaderBaseId, "QIRA");
+assert.equal(roteRewardBattleStrategyForMission("kessel-qira-l3")?.requiredLeaderBaseId, "BAYLANSKOLL");
+assert.ok(roteRewardBattleStrategyForMission("kessel-qira-l3")?.keyUnits.some((row) => row.baseId === "L3_37" && row.importance === "critical"), "Kessel L3-37 mandatory strategy gate missing");
+assert.equal(roteRewardBattleStrategyForMission("vandor-yhan")?.requiredLeaderBaseId, null);
+assert.ok(roteRewardBattleStrategyForMission("vandor-yhan")?.keyUnits.some((row) => row.baseId === "YOUNGCHEWBACCA" && row.importance === "critical"), "Vandor Chewbacca mandatory strategy gate missing");
+
 const statusSemantics = extractAbilitySemantics({ description: "Inflict Purge, Thermal Detonator and Armor Shred on target enemy." });
 assert.ok(statusSemantics.debuffs.includes("Purge"), "Purge semantic recognition missing");
 assert.ok(statusSemantics.debuffs.includes("Thermal Detonator"), "Thermal Detonator semantic recognition missing");
@@ -155,4 +176,4 @@ assert.equal(reversed.status, "warning", "Reversed BKM/BAM speed order should be
 assert.equal(reversed.blockers.length, 0, "Speed-order recommendation must not be promoted to a hard mission gate");
 assert.ok(reversed.warnings.some((check) => check.type === "speed-order" && check.ready === false), "Reversed speed order should surface an advisory");
 
-console.log(`[battle-strategy] validated ${corePackIds.length + 2 + roteP1PackIds.length + rotePriorityPackIds.length + roteFactionPackIds.length} strategy packs, semantic gates, KAM/Wat controls, ROTE Phase 1 evidence, Mandalore speed order, priority ROTE packs and Phoenix/Merrin faction packs`);
+console.log(`[battle-strategy] validated ${corePackIds.length + 2 + roteP1PackIds.length + rotePriorityPackIds.length + roteFactionPackIds.length + roteRewardPackIds.length} strategy packs, semantic gates, KAM/Wat controls, ROTE Phase 1 evidence, Mandalore speed order, priority/faction packs and reward/unlock mission packs`);
