@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { classifyAbilityType, enrichCatalogWithKitSemantics, extractAbilitySemantics, summarizeUnitKit } from "../scripts/kit-semantics.mjs";
+import { classifyAbilityType, enrichCatalogWithKitSemantics, extractAbilitySemantics, summarizeUnitKit } from "../public/kit-semantics.js";
 
 test("classifies common SWGOH ability slots", () => {
   assert.equal(classifyAbilityType("Basic", "basic_test"), "basic");
