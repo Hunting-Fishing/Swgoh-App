@@ -7,7 +7,7 @@ const NATIVE_TARGETS = [
   ["Journey Visualizer", "BUILDING", "Show prerequisite chains and which earlier Journey unlocks feed the selected target."],
   ["Gear & Relic Planner", "LIVE", "Compare live gear/relic progression with a target and show remaining versioned gear-tier requirements without inventing private inventory balances."],
   ["Equipped Mod Audit", "LIVE", "Inspect every public equipped 1–6 dot mod, including lower-pip investment, level-15 coverage, primary/secondary stats, speed secondaries and character-by-character mod coverage. Unequipped inventory is never fabricated."],
-  ["Mod Move Optimizer", "NEXT", "Build character-specific equipped-mod recommendations and move plans on top of the factual all-pip audit without pretending unequipped inventory is public."],
+  ["Mod Move Optimizer", "LIVE", "Priority-weighted equipped-mod redistribution with Grandivory-style weights/locks and a HotUtils-style include, tune, review, save and export workflow. Recommendations stay inside the public equipped-mod pool."],
   ["GAC Scout / Compare", "NEXT", "Player-vs-opponent roster differences, omicrons, team coverage and counter planning."],
   ["Ship Projection", "PLANNED", "Separate ship progression from pilot-driven stat contribution and fleet readiness."],
   ["Event Calendar", "PLANNED", "Current events, Proving Grounds, Assault Battles, recurring events and roster readiness in one native calendar."],
@@ -36,61 +36,29 @@ function targetCard([title, status, description]) {
   `;
 }
 
-function replaceEventsPanel() {
-  const panel = document.querySelector('[data-workspace-panel="events"]');
-  if (!panel || panel.dataset.nativeEventsReady === "true") return false;
-  panel.dataset.nativeEventsReady = "true";
-  panel.innerHTML = `
-    <section class="card workspace-intro">
-      <div class="kicker">NATIVE EVENT PLANNING</div>
-      <h2>Events &amp; Guides</h2>
-      <p>Roster Command will keep event planning inside the app. Journey requirements are now handled in Farm Tracker; this workspace will add recurring-event schedules, eligibility and live roster readiness without sending the player to another site.</p>
-    </section>
-    <section class="card workspace-intro">
-      <div class="workspace-grid">
-        ${[
-          ["Journey Guide", "LIVE IN FARM TRACKER", "Choose an unlock target and compare its requirements with the loaded roster."],
-          ["ROTE Operations", "LIVE IN ROTE", "Current operation demand and exact player coverage are available in the dedicated ROTE workspace."],
-          ["Assault Battles", "NEXT", "Eligible factions, tiers and strongest qualifying teams."],
-          ["Proving Grounds", "PLANNED", "Event teams and readiness against the loaded roster."],
-          ["Conquest", "PLANNED", "Feat requirements mapped to owned characters and squads."],
-          ["Raids", "PLANNED", "Eligibility and raid-team progression."],
-          ["Recurring Calendar", "PLANNED", "One native view for scheduled and recurring game events."],
-        ].map(targetCard).join("")}
-      </div>
-    </section>
-  `;
-  return true;
-}
-
-function replaceResourcesPanel() {
+function buildResourcesPanel() {
   const panel = document.querySelector('[data-workspace-panel="resources"]');
-  if (!panel || panel.dataset.resourceLibraryReady === "true") return false;
+  if (!panel || panel.dataset.resourceLibraryReady === "true") return Boolean(panel);
   panel.dataset.resourceLibraryReady = "true";
-  panel.innerHTML = `
-    <section class="card workspace-intro">
-      <div class="kicker">ROSTER COMMAND FEATURE LIBRARY</div>
-      <h2>Native tools we are building here</h2>
-      <p>The community tools we researched are now product references only. Players stay inside Roster Command; each high-value workflow becomes a native workspace backed by our live Comlink roster and versioned game database.</p>
-    </section>
-    <section class="card workspace-intro">
-      <div class="workspace-grid">
-        ${NATIVE_TARGETS.map(targetCard).join("")}
+  const section = document.createElement("section");
+  section.className = "card workspace-intro";
+  section.innerHTML = `
+    <div class="database-heading">
+      <div>
+        <div class="kicker">NATIVE FEATURE ROADMAP</div>
+        <h2>Roster Command capabilities</h2>
+        <p>Live means the feature operates from the current public player/game data available to this app. Planned items remain explicit instead of being simulated with mock data.</p>
       </div>
-    </section>
+    </div>
+    <div class="resource-grid">${NATIVE_TARGETS.map(targetCard).join("")}</div>
   `;
+  panel.appendChild(section);
   return true;
 }
 
-function enhanceNativeWorkspaces() {
-  const eventsReady = replaceEventsPanel();
-  const resourcesReady = replaceResourcesPanel();
-  return eventsReady && resourcesReady;
-}
-
-if (!enhanceNativeWorkspaces()) {
+if (!buildResourcesPanel()) {
   const observer = new MutationObserver(() => {
-    if (enhanceNativeWorkspaces()) observer.disconnect();
+    if (buildResourcesPanel()) observer.disconnect();
   });
   observer.observe(document.body, { childList: true, subtree: true });
 }
