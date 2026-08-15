@@ -2,6 +2,7 @@ import { buildTeamCapabilityIndex } from "./mission-mechanic-intelligence.js";
 import { battleStrategyForMission, battleStrategySources } from "./tb-battle-strategy-data.js";
 import { watBattleStrategyForMission } from "./tb-battle-strategy-wat-data.js";
 import { rotePhaseOneBattleStrategyForMission } from "./tb-battle-strategy-rote-p1-data.js";
+import { mandaloreBattleStrategyForMission } from "./tb-battle-strategy-mandalore-data.js";
 
 const normalized = (value) => String(value || "").trim().toLowerCase();
 
@@ -11,6 +12,12 @@ function memberBaseId(member) {
 
 function memberName(member) {
   return String(member?.unit?.name || member?.name || member?.staticUnit?.name || memberBaseId(member) || "Unknown");
+}
+
+function memberSpeed(member) {
+  const raw = member?.currentSpeed ?? member?.unit?.speed ?? member?.staticUnit?.speed;
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : null;
 }
 
 function abilityRows(member) {
@@ -58,7 +65,8 @@ function priorityRank(value) {
 }
 
 function resolvedStrategy(missionId) {
-  return rotePhaseOneBattleStrategyForMission(missionId)
+  return mandaloreBattleStrategyForMission(missionId)
+    || rotePhaseOneBattleStrategyForMission(missionId)
     || watBattleStrategyForMission(missionId)
     || battleStrategyForMission(missionId);
 }
@@ -150,7 +158,31 @@ export function evaluateBattleStrategy(analysis, mission = null) {
     };
   });
 
-  const checks = [leaderCheck, ...unitChecks, ...mechanicChecks, ...abilityChecks].filter(Boolean)
+  const speedOrderChecks = (strategy.speedOrders || []).map((check) => {
+    const faster = byId.get(String(check.fasterBaseId || ""));
+    const slower = byId.get(String(check.slowerBaseId || ""));
+    const fasterSpeed = faster ? memberSpeed(faster) : null;
+    const slowerSpeed = slower ? memberSpeed(slower) : null;
+    const bothPresent = Boolean(faster && slower);
+    const speedsKnown = fasterSpeed != null && slowerSpeed != null;
+    return {
+      type: "speed-order",
+      id: `${check.fasterBaseId}>${check.slowerBaseId}`,
+      label: check.label || "Recommended speed order",
+      importance: check.importance || "helpful",
+      required: check.required === true,
+      ready: bothPresent && speedsKnown && fasterSpeed > slowerSpeed,
+      fasterBaseId: String(check.fasterBaseId || ""),
+      slowerBaseId: String(check.slowerBaseId || ""),
+      fasterName: faster ? memberName(faster) : String(check.fasterBaseId || ""),
+      slowerName: slower ? memberName(slower) : String(check.slowerBaseId || ""),
+      fasterSpeed,
+      slowerSpeed,
+      reason: check.reason || "",
+    };
+  });
+
+  const checks = [leaderCheck, ...unitChecks, ...mechanicChecks, ...abilityChecks, ...speedOrderChecks].filter(Boolean)
     .sort((a, b) => priorityRank(a.importance || (a.required ? "critical" : "helpful")) - priorityRank(b.importance || (b.required ? "critical" : "helpful")));
 
   const blockers = checks.filter((check) => check.required && !check.ready);
