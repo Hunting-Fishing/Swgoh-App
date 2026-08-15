@@ -43,7 +43,8 @@ const kitIndex = {
   units: indexUnits,
 };
 
-await writeFile(CATALOG_PATH, JSON.stringify(enriched), "utf8");
+// Keep catalog.json lean because every app user loads it. The semantic expansion is
+// published separately and can be fetched only by combat/analysis features that need it.
 await writeFile(KIT_INDEX_PATH, JSON.stringify(kitIndex), "utf8");
 
 try {
@@ -56,4 +57,4 @@ try {
   // Catalog remains usable even if a legacy manifest is unavailable.
 }
 
-console.log(`[kit-intelligence] enriched ${indexUnits.length} units for game ${kitIndex.gameVersion || "unknown"}`);
+console.log(`[kit-intelligence] indexed ${indexUnits.length} units for game ${kitIndex.gameVersion || "unknown"} without expanding catalog.json`);
