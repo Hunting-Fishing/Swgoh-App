@@ -18,6 +18,12 @@ test("JKCK/Jabba resolver owns the six new mission packs", () => {
   assert.equal(roteJabbaJkckStrategyForMission("corellia-jabba"), null);
 });
 
+test("Jabba packs use the canonical Skiff Guard identifier", () => {
+  const strategy = ROTE_JABBA_JKCK_STRATEGIES["felucia-jabba"];
+  assert.ok(strategy.keyUnits.some((row) => row.baseId === "UNDERCOVERLANDO" && /Skiff Guard/i.test(row.name)));
+  assert.ok(!strategy.keyUnits.some((row) => row.baseId === "SKIFFGUARD"));
+});
+
 test("Zeffo JKCK uses Impetuous execution but never requires the TB Omicron", () => {
   const jkck = member("JEDIKNIGHTCAL", "Jedi Knight Cal Kestis", [
     { id: "whirlwind", name: "Whirlwind Slam", tier: 8, description: "Gain Configuration - Double-Bladed and Impetuous. Stun and Armor Shred enemies." },
@@ -40,19 +46,20 @@ test("Felucia Jabba respects Nysillin Buff Immunity immunity", () => {
   const analysis = evaluateBattleStrategy({ missionId: "felucia-jabba", members: [jabba] });
   assert.equal(analysis.blockers.length, 0);
   assert.match(analysis.summary, /Heal Over Time/i);
-  assert.match(analysis.summary, /immune to Buff Immunity|Buff Immunity immunity/i);
+  assert.match(analysis.summary, /immunity to Buff Immunity/i);
 });
 
 test("Tatooine Jabba treats Sandstorm as unavoidable attrition", () => {
   const analysis = evaluateBattleStrategy({ missionId: "tatooine-jabba", members: [member("JABBATHEHUTT", "Jabba the Hutt")] });
-  assert.ok(analysis.blockers.some((check) => check.type === "ability"));
+  assert.equal(analysis.blockers.length, 0);
   assert.match(analysis.summary, /unavoidable/i);
-  assert.match(analysis.summary, /full Health and Protection/i);
+  assert.match(analysis.summary, /full Health\/Protection|full Health and Protection/i);
+  assert.match(JSON.stringify(analysis.stages), /does not disable future environmental DoTs/i);
 });
 
 test("Kessel Jabba explicitly manages Confuse thresholds and Recompute", () => {
   const analysis = evaluateBattleStrategy({ missionId: "kessel-jabba", members: [member("JABBATHEHUTT", "Jabba the Hutt")] });
-  assert.match(analysis.summary, /2.*cannot counter, assist or gain bonus Turn Meter/i);
+  assert.match(analysis.summary, /at 2 it cannot counter, assist or gain bonus Turn Meter/i);
   assert.match(JSON.stringify(analysis.stages), /Recompute/i);
   assert.match(JSON.stringify(analysis.failureRisks), /2-3 Confuse/i);
 });
