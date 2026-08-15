@@ -15,11 +15,11 @@
   let tbCombatPromise = null;
   let kitIntelligencePromise = null;
   const loadTbEnhancements = () => {
-    roteMissionPromise ||= import("/rote-mission-pro.js?v=20260815-rotemission1").catch((error) => {
+    roteMissionPromise ||= import("/rote-mission-pro.js?v=20260815-rotemission2").catch((error) => {
       roteMissionPromise = null;
       console.error("ROTE exact mission intelligence failed to load", error);
     });
-    tbCombatPromise ||= import("/tb-combat-overlay.js?v=20260815-tbcombat4").catch((error) => {
+    tbCombatPromise ||= import("/tb-combat-overlay.js?v=20260815-tbcombat5").catch((error) => {
       tbCombatPromise = null;
       console.error("TB combat preparation failed to load", error);
     });

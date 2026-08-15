@@ -1,5 +1,6 @@
 import { ROTE_PLANETS, rotePlanetById } from "./rote-map-data.js";
 import { ROTE_MISSION_SOURCES, roteMissionsForPlanet, ROTE_MISSION_COUNT } from "./rote-mission-data.js";
+import { normalizeRoteMissions } from "./rote-mission-overrides.js";
 import {
   allRosterUnits,
   legalRosterCandidates,
@@ -155,7 +156,7 @@ function render() {
 
   const body = liveBody();
   const planet = rotePlanetById(state.selectedPlanet);
-  const missions = roteMissionsForPlanet(state.selectedPlanet);
+  const missions = normalizeRoteMissions(roteMissionsForPlanet(state.selectedPlanet));
   const readyCount = body ? missions.filter((mission) => missionRosterEntrySummary(body, mission).ready).length : 0;
   host.innerHTML = `<header class="rote-exact-head"><div><div class="kicker">EXACT MISSION INTELLIGENCE · ${escapeHtml(planet.phase)}</div><h3>${escapeHtml(planetName(state.selectedPlanet))}</h3><p>${missions.length} mission records with entry legality separated from battle-team confidence. ${body ? `${readyCount}/${missions.length} currently show sufficient legal roster depth.` : "Load an Ally Code for roster-specific readiness."}</p></div><b>${ROTE_MISSION_COUNT} ROTE MISSION RECORDS</b></header><div class="rote-exact-grid">${missions.map((mission) => missionMarkup(body, mission)).join("")}</div><div class="rote-exact-boundary"><strong>Data boundary:</strong> exact entry restrictions come from the current ROTE zone tables / official bonus-zone posts. Planning cores are never promoted to verified battle teams merely because all five units are owned. Equipped Zeta/Omicron and mod quality will be evaluated in the combat-intelligence layer separately.</div>`;
 
