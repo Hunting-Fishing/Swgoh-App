@@ -60,11 +60,19 @@ function missingMandatory(body, mission) {
     }));
 }
 
+function verifiedStrategy(strategy = {}) {
+  if (strategy.available !== true) return false;
+  const evidence = `${strategy.strategyStatus || ""} ${strategy.confidence || ""}`.toLowerCase();
+  return !evidence.includes("partial") && !evidence.includes("pending") && !evidence.includes("unverified");
+}
+
 function strategyReadiness(mission) {
   const strategy = evaluateBattleStrategy({ missionId: mission?.id, members: [] }, mission);
+  const verified = verifiedStrategy(strategy);
   return {
-    label: strategy?.available ? STRATEGY_READINESS.AVAILABLE : STRATEGY_READINESS.MISSING,
+    label: verified ? STRATEGY_READINESS.AVAILABLE : STRATEGY_READINESS.MISSING,
     available: strategy?.available === true,
+    verified,
     strategyId: strategy?.available ? String(strategy.strategyId || "") : "",
     strategyStatus: strategy?.available ? String(strategy.strategyStatus || "") : "",
     confidence: strategy?.available ? String(strategy.confidence || "") : "",
@@ -78,62 +86,22 @@ export function missionRosterReadiness(body = {}, mission = {}) {
   const strategy = strategyReadiness(mission);
 
   if (missingUnits.length) {
-    return {
-      label: ROSTER_READINESS.BLOCKED_MISSING_UNIT,
-      level: "blocked",
-      missionId: String(mission.id || ""),
-      missingUnits,
-      progressionGaps: [],
-      modGaps: [],
-      recommendationId: "",
-      strategy,
-    };
+    return { label: ROSTER_READINESS.BLOCKED_MISSING_UNIT, level: "blocked", missionId: String(mission.id || ""), missingUnits, progressionGaps: [], modGaps: [], recommendationId: "", strategy };
   }
 
   const progression = progressionGaps(body, mission, recommendations);
   if (progression.length) {
-    return {
-      label: ROSTER_READINESS.NEEDS_RELICS,
-      level: "warning",
-      missionId: String(mission.id || ""),
-      missingUnits: [],
-      progressionGaps: progression,
-      modGaps: [],
-      recommendationId: "",
-      strategy,
-    };
+    return { label: ROSTER_READINESS.NEEDS_RELICS, level: "warning", missionId: String(mission.id || ""), missingUnits: [], progressionGaps: progression, modGaps: [], recommendationId: "", strategy };
   }
 
-  const fits = recommendations.map((recommendation) => ({
-    recommendation,
-    fit: recommendationRosterFit(body, mission, recommendation),
-  }));
+  const fits = recommendations.map((recommendation) => ({ recommendation, fit: recommendationRosterFit(body, mission, recommendation) }));
   const exact = fits.find((item) => item.fit.complete) || null;
-
   if (exact) {
     const modGaps = minimumSpeedGap(body, mission, exact.recommendation);
     if (modGaps.length) {
-      return {
-        label: ROSTER_READINESS.NEEDS_MODS,
-        level: "warning",
-        missionId: String(mission.id || ""),
-        missingUnits: [],
-        progressionGaps: [],
-        modGaps,
-        recommendationId: String(exact.recommendation.id || ""),
-        strategy,
-      };
+      return { label: ROSTER_READINESS.NEEDS_MODS, level: "warning", missionId: String(mission.id || ""), missingUnits: [], progressionGaps: [], modGaps, recommendationId: String(exact.recommendation.id || ""), strategy };
     }
-    return {
-      label: ROSTER_READINESS.READY,
-      level: "ready",
-      missionId: String(mission.id || ""),
-      missingUnits: [],
-      progressionGaps: [],
-      modGaps: [],
-      recommendationId: String(exact.recommendation.id || ""),
-      strategy,
-    };
+    return { label: ROSTER_READINESS.READY, level: "ready", missionId: String(mission.id || ""), missingUnits: [], progressionGaps: [], modGaps: [], recommendationId: String(exact.recommendation.id || ""), strategy };
   }
 
   const entry = missionRosterEntrySummary(body, mission);
@@ -142,22 +110,14 @@ export function missionRosterReadiness(body = {}, mission = {}) {
       label: recommendations.length ? ROSTER_READINESS.READY_WITH_SUBSTITUTE : ROSTER_READINESS.READY,
       level: "ready",
       missionId: String(mission.id || ""),
-      missingUnits: [],
-      progressionGaps: [],
-      modGaps: [],
-      recommendationId: "",
-      strategy,
+      missingUnits: [], progressionGaps: [], modGaps: [], recommendationId: "", strategy,
       substituteCandidates: entry.candidates || [],
     };
   }
 
   const recommendationMissing = fits.flatMap(({ recommendation, fit }) => fit.rows
     .filter((row) => !row.owned)
-    .map((row) => ({
-      baseId: String(row.baseId || ""),
-      name: String(row.name || row.baseId || "Unknown"),
-      recommendationId: String(recommendation.id || ""),
-    })));
+    .map((row) => ({ baseId: String(row.baseId || ""), name: String(row.name || row.baseId || "Unknown"), recommendationId: String(recommendation.id || "") })));
 
   return {
     label: recommendationMissing.length ? ROSTER_READINESS.BLOCKED_MISSING_UNIT : ROSTER_READINESS.NEEDS_RELICS,
@@ -165,15 +125,10 @@ export function missionRosterReadiness(body = {}, mission = {}) {
     missionId: String(mission.id || ""),
     missingUnits: recommendationMissing,
     progressionGaps: progression,
-    modGaps: [],
-    recommendationId: "",
-    strategy,
+    modGaps: [], recommendationId: "", strategy,
   };
 }
 
 export function rosterReadinessForMissions(body = {}, missions = []) {
-  return (missions || []).map((mission) => ({
-    mission,
-    readiness: missionRosterReadiness(body, mission),
-  }));
+  return (missions || []).map((mission) => ({ mission, readiness: missionRosterReadiness(body, mission) }));
 }
