@@ -7,7 +7,7 @@
     "start": "node server.mjs",
     "test": "node --test",
     "verify": "node --test",
-    "sync:gamedata": "node scripts/sync-gamedata.mjs --allow-stale && node scripts/repair-catalog.mjs --allow-stale"
+    "sync:gamedata": "node scripts/sync-gamedata.mjs --allow-stale && node scripts/repair-catalog.mjs --allow-stale && node scripts/enrich-kit-intelligence.mjs"
   },
   "engines": {
     "node": ">=20"

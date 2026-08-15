@@ -13,6 +13,7 @@
 
   let roteMissionPromise = null;
   let tbCombatPromise = null;
+  let kitIntelligencePromise = null;
   const loadTbEnhancements = () => {
     roteMissionPromise ||= import("/rote-mission-pro.js?v=20260815-rotemission1").catch((error) => {
       roteMissionPromise = null;
@@ -25,11 +26,27 @@
     return Promise.allSettled([roteMissionPromise, tbCombatPromise]);
   };
 
+  const loadKitIntelligence = (baseId) => {
+    if (baseId) window.__swgohKitInspectPending = String(baseId);
+    kitIntelligencePromise ||= import("/kit-intelligence-ui.js?v=20260815-kit1").catch((error) => {
+      kitIntelligencePromise = null;
+      console.error("Character Kit Intelligence failed to load", error);
+    });
+    return kitIntelligencePromise;
+  };
+
   window.addEventListener("swgoh:workspace-activated", (event) => {
     if (event.detail?.id === "rote") void loadTbEnhancements();
   });
   document.addEventListener("click", (event) => {
     if (event.target.closest('button[data-workspace-tab="rote"]')) void loadTbEnhancements();
+  }, true);
+
+  window.addEventListener("click", (event) => {
+    const trigger = event.target.closest?.("[data-inspect-base-id],button[data-base-id],button[data-catalog-base-id],button[data-squad-base-id]");
+    if (!trigger) return;
+    const baseId = trigger.dataset.inspectBaseId || trigger.dataset.baseId || trigger.dataset.catalogBaseId || trigger.dataset.squadBaseId || "";
+    if (baseId) void loadKitIntelligence(baseId);
   }, true);
 
   window.addEventListener("swgoh:replace-squad", (event) => {
