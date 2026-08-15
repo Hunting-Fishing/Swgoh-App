@@ -55,9 +55,13 @@ export function normalizeRoteMission(mission = {}) {
       ...next.entry,
       verified: true,
       unitType: "Character",
+      alignment: null,
+      allowedAlignments: [],
       starsMin: 7,
       relicMin: 7,
       squadSize: 3,
+      requiredBaseIds: [],
+      allowedBaseIds: [],
       requiredCategories: ["Mandalorian"],
       categoryMode: "all",
       mandatoryMembers: [
