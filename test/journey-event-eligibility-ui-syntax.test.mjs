@@ -26,4 +26,6 @@ test("eligibility UI explicitly separates legal entry from battle recommendation
   assert.match(source, /not a battle-team recommendation/);
   assert.match(source, /Best progressed legal 5/);
   assert.match(source, /fail closed/i);
+  assert.match(source, /REVERIFY EVENT POOLS/);
+  assert.match(source, /Candidate recommendations are disabled/);
 });
