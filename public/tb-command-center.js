@@ -21,6 +21,7 @@ const state = {
 let dsGeoModulePromise = null;
 let legacyRendererPromise = null;
 let geoLsDataPromise = null;
+let hothLsDataPromise = null;
 
 function liveBody() {
   const digits = String($("allyCode")?.value || "").replace(/\D/g, "").slice(0, 9);
@@ -128,6 +129,11 @@ function genericView(tb) {
     </section>`;
 }
 
+async function legacyRenderer() {
+  legacyRendererPromise ||= import("./legacy-tb-command.js?v=20260815-legacy2");
+  return legacyRendererPromise;
+}
+
 async function renderDsGeo(host, token) {
   host.innerHTML = '<section class="card workspace-intro"><div class="workspace-note">Loading verified DS Geo territory and mission data…</div></section>';
   dsGeoModulePromise ||= import("./ds-geo-command.js?v=20260815-dsgeo2");
@@ -138,23 +144,25 @@ async function renderDsGeo(host, token) {
 
 async function renderGeoLs(host, token) {
   host.innerHTML = '<section class="card workspace-intro"><div class="workspace-note">Loading verified Republic Offensive territory and mission data…</div></section>';
-  legacyRendererPromise ||= import("./legacy-tb-command.js?v=20260815-legacy1");
   geoLsDataPromise ||= import("./geo-ls-data.js?v=20260815-geols1");
-  const [renderer, data] = await Promise.all([legacyRendererPromise, geoLsDataPromise]);
+  const [renderer, data] = await Promise.all([legacyRenderer(), geoLsDataPromise]);
   if (token !== state.renderToken || state.selected !== "geo-republic") return;
   renderer.renderLegacyTbCampaign(host, liveBody(), data.GEO_LS_CAMPAIGN);
 }
 
+async function renderHothLs(host, token) {
+  host.innerHTML = '<section class="card workspace-intro"><div class="workspace-note">Loading verified Hoth Rebel Assault territory and mission data…</div></section>';
+  hothLsDataPromise ||= import("./hoth-ls-data.js?v=20260815-hothls1");
+  const [renderer, data] = await Promise.all([legacyRenderer(), hothLsDataPromise]);
+  if (token !== state.renderToken || state.selected !== "hoth-rebel") return;
+  renderer.renderLegacyTbCampaign(host, liveBody(), data.HOTH_LS_CAMPAIGN);
+}
+
 async function renderNonRote(host, tb, token) {
   try {
-    if (tb.id === "geo-separatist") {
-      await renderDsGeo(host, token);
-      return;
-    }
-    if (tb.id === "geo-republic") {
-      await renderGeoLs(host, token);
-      return;
-    }
+    if (tb.id === "geo-separatist") return await renderDsGeo(host, token);
+    if (tb.id === "geo-republic") return await renderGeoLs(host, token);
+    if (tb.id === "hoth-rebel") return await renderHothLs(host, token);
     if (token === state.renderToken) host.innerHTML = genericView(tb);
   } catch (error) {
     if (token !== state.renderToken) return;
@@ -192,8 +200,10 @@ function applySelectedBattle() {
     : tb.id === "geo-separatist"
       ? "DS Geo has a full roster-aware territory and mission map. Entry legality, community teams and upgrade gaps remain separate layers."
       : tb.id === "geo-republic"
-        ? "Geo LS now uses the same mission engine with KAM, Galactic Republic, Jedi, Clone, 501st and fleet restrictions evaluated against the loaded Ally Code."
-        : "The shared engine is active. Exact territories and mission rules stay verification-gated until their source data is normalized.";
+        ? "Geo LS uses the same mission engine with KAM, Galactic Republic, Jedi, Clone, 501st and fleet restrictions evaluated against the loaded Ally Code."
+        : tb.id === "hoth-rebel"
+          ? "Hoth Rebel Assault is mapped phase-by-phase with Phoenix, Rebel, Rogue One and named Hoth mission requirements tied to the loaded Ally Code."
+          : "The shared engine is active. Exact territories and mission rules stay verification-gated until their source data is normalized.";
   localStorage.setItem(STORAGE_KEY, tb.id);
 }
 

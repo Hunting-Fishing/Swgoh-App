@@ -1,5 +1,5 @@
 (() => {
-  const cssHref = "/tb-command-center.css?v=20260815-tb3";
+  const cssHref = "/tb-command-center.css?v=20260815-tb4";
   if (!document.querySelector(`link[href="${cssHref}"]`)) {
     const link = document.createElement("link");
     link.rel = "stylesheet";
@@ -7,7 +7,7 @@
     document.head.appendChild(link);
   }
 
-  import("/tb-command-center.js?v=20260815-tb3").catch((error) => {
+  import("/tb-command-center.js?v=20260815-tb4").catch((error) => {
     console.error("TB Command Center failed to load", error);
   });
 
