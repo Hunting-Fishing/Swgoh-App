@@ -21,10 +21,18 @@ function hasPlanningEvidence(mission = {}) {
   );
 }
 
+function explicitlyPartial(strategy = {}) {
+  const evidenceLabel = `${strategy.strategyStatus || ""} ${strategy.confidence || ""}`.toLowerCase();
+  return evidenceLabel.includes("partial")
+    || evidenceLabel.includes("pending")
+    || evidenceLabel.includes("unverified");
+}
+
 export function missionStrategyCoverage(mission = {}) {
   const strategy = strategyEvidence(mission.id);
   const hasStrategy = strategy?.available === true;
   const strategyComplete = hasStrategy
+    && !explicitlyPartial(strategy)
     && Array.isArray(strategy.stages)
     && strategy.stages.length > 0
     && Array.isArray(strategy.sources)
@@ -56,12 +64,14 @@ export function missionStrategyCoverage(mission = {}) {
     hasMechanics: Boolean(mission.mechanics?.length),
     hasEnemies: Boolean(mission.enemies?.length),
     reason: strategyComplete
-      ? "Sourced battle-strategy pack is resolved with execution stages and an evidence boundary."
-      : hasStrategy
-        ? "A strategy resolves, but the pack is missing one or more completeness signals."
-        : hasPlanningEvidence(mission)
-          ? "Mission planning/mechanic data exists, but no sourced battle-strategy pack resolves yet."
-          : "No sourced battle-strategy pack or mission planning evidence resolves yet.",
+      ? "Sourced battle-strategy pack is resolved with execution stages, an evidence boundary, and no explicit partial/unverified marker."
+      : hasStrategy && explicitlyPartial(strategy)
+        ? "A sourced strategy resolves, but its own evidence status/confidence explicitly marks the pack partial or unverified."
+        : hasStrategy
+          ? "A strategy resolves, but the pack is missing one or more completeness signals."
+          : hasPlanningEvidence(mission)
+            ? "Mission planning/mechanic data exists, but no sourced battle-strategy pack resolves yet."
+            : "No sourced battle-strategy pack or mission planning evidence resolves yet.",
   };
 }
 
