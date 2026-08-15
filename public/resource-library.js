@@ -7,7 +7,7 @@ const NATIVE_TARGETS = [
   ["Journey Visualizer", "BUILDING", "Show prerequisite chains and which earlier Journey unlocks feed the selected target."],
   ["Gear & Relic Planner", "LIVE", "Compare live gear/relic progression with a target and show remaining versioned gear-tier requirements without inventing private inventory balances."],
   ["Equipped Mod Audit", "LIVE", "Inspect every public equipped 1–6 dot mod, including lower-pip investment, level-15 coverage, primary/secondary stats, speed secondaries and character-by-character mod coverage. Unequipped inventory is never fabricated."],
-  ["Mod Move Optimizer", "NEXT", "Build character-specific equipped-mod recommendations and move plans on top of the factual all-pip audit without pretending unequipped inventory is public."],
+  ["Mod Move Optimizer", "LIVE", "Priority-weighted equipped-mod redistribution with Grandivory-style weights/locks and a HotUtils-style include, tune, review, save and export workflow. Recommendations stay inside the public equipped-mod pool."],
   ["GAC Scout / Compare", "NEXT", "Player-vs-opponent roster differences, omicrons, team coverage and counter planning."],
   ["Ship Projection", "PLANNED", "Separate ship progression from pilot-driven stat contribution and fleet readiness."],
   ["Event Calendar", "PLANNED", "Current events, Proving Grounds, Assault Battles, recurring events and roster readiness in one native calendar."],
