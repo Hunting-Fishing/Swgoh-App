@@ -13,7 +13,7 @@ const number = (value) => Number.isFinite(Number(value)) ? new Intl.NumberFormat
 let selectedTerritoryId = "p1-top";
 
 function ensureCss() {
-  const href = "/ds-geo-command.css?v=20260815-dsgeo1";
+  const href = "/ds-geo-command.css?v=20260815-dsgeo2";
   if (document.querySelector(`link[href="${href}"]`)) return;
   const link = document.createElement("link");
   link.rel = "stylesheet";
@@ -40,14 +40,11 @@ function territoryStatus(body, territory) {
   if (!body) return { status: "unloaded", label: "Load Ally Code", percent: 0 };
   const verified = territory.missions.filter((mission) => mission.entry?.verified);
   if (!verified.length) return { status: "review", label: "Verify", percent: 0 };
-  const scores = verified.map((mission) => {
-    const count = legalRosterCandidates(body, mission).length;
-    const target = mission.missionType === "fleet" ? 5 : 5;
-    return Math.min(100, Math.round((count / target) * 100));
-  });
+  const scores = verified.map((mission) => Math.min(100, Math.round((legalRosterCandidates(body, mission).length / 5) * 100)));
   const percent = Math.round(scores.reduce((sum, value) => sum + value, 0) / scores.length);
   const status = percent >= 100 ? "ready" : percent >= 60 ? "close" : percent > 0 ? "building" : "blocked";
-  return { status, label: status === "ready" ? "Roster depth" : status === "close" ? "Close" : status === "building" ? "Building" : "Blocked", percent };
+  const label = status === "ready" ? "Roster depth" : status === "close" ? "Close" : status === "building" ? "Building" : "Blocked";
+  return { status, label, percent };
 }
 
 function mapLines() {
@@ -73,7 +70,7 @@ function territoryNode(body, territory) {
 function territoryMap(body) {
   return `<section class="card dsgeo-map-card">
     <div class="dsgeo-map-head">
-      <div><div class="kicker">GEONOSIS · SEPARATIST MIGHT</div><h3>Interactive Territory Map</h3><p>Click a territory to inspect exact zone thresholds, mission-entry rules, roster candidates and sourced team plans.</p></div>
+      <div><div class="kicker">GEONOSIS · SEPARATIST MIGHT</div><h3>Interactive Territory Map</h3><p>Click a territory to inspect zone thresholds, mission-entry rules, live roster candidates and sourced team plans.</p></div>
       <div class="dsgeo-legend"><span class="ready">Ready depth</span><span class="close">Close</span><span class="building">Building</span><span class="blocked">Blocked</span></div>
     </div>
     <div class="dsgeo-map">
@@ -98,9 +95,9 @@ function unitPortrait(unit, fallbackName) {
 }
 
 function candidateMarkup(body, mission) {
-  if (!mission.entry?.verified) return `<div class="dsgeo-note warning">Candidate ranking is disabled until this mission's entry restriction is reverified.</div>`;
-  const candidates = legalRosterCandidates(body, mission, 5);
+  if (!mission.entry?.verified) return `<div class="dsgeo-note warning">Candidate ranking is disabled until this mission's exact entry restriction is reverified.</div>`;
   if (!body) return `<div class="dsgeo-note">Load an Ally Code to rank legal roster candidates.</div>`;
+  const candidates = legalRosterCandidates(body, mission, 5);
   if (!candidates.length) return `<div class="dsgeo-note danger">No owned units currently clear this verified mission entry gate.</div>`;
   return `<div class="dsgeo-candidates">${candidates.map((unit, index) => `<button type="button" data-inspect-base-id="${escapeAttr(unit.baseId)}" title="Inspect ${escapeAttr(unit.name)}">
     <em>#${index + 1}</em>${unitPortrait(unit)}<span><strong>${escapeHtml(unit.name)}</strong><small>${unit.unitType === "Ship" ? `${unit.stars || 0}★ · ${number(unit.power)} GP` : `${unit.stars || 0}★ · G${unit.gear || 0}${Number(unit.relic || 0) ? ` · R${unit.relic}` : ""} · ${number(unit.power)} GP`}</small></span>
@@ -117,31 +114,43 @@ function gapText(row) {
   return gaps.join(" · ") || "Entry ready";
 }
 
+function upgradeCallout(body, mission, upgrades) {
+  if (!body) return "";
+  if (!mission.entry?.verified) return `<div class="dsgeo-upgrade-callout"><strong>Upgrade advice paused:</strong> exact entry legality must be reverified before this mission can produce roster investment advice.</div>`;
+  if (upgrades.length) return `<div class="dsgeo-upgrade-callout"><strong>Priority entry gap:</strong> ${escapeHtml(upgrades[0].unit?.name || upgrades[0].name)} · ${escapeHtml(gapText(upgrades[0]))}</div>`;
+  return `<div class="dsgeo-upgrade-callout ready"><strong>Entry gate:</strong> all listed members clear the verified mission gate.</div>`;
+}
+
 function recommendationMarkup(body, mission, recommendation) {
   const fit = recommendationRosterFit(body, mission, recommendation);
   const upgrades = recommendationUpgradeRows(body, mission, recommendation);
   const resolved = fit.rows.filter((row) => row.unit);
-  const characterOnly = resolved.length && resolved.every((row) => String(row.unit.unitType || "Character") !== "Ship");
-  const canLoad = characterOnly && resolved.length === fit.rows.length && fit.rows.length <= 5;
+  const characterOnly = resolved.length > 0 && resolved.every((row) => String(row.unit.unitType || "Character") !== "Ship");
+  const canLoad = Boolean(mission.entry?.verified && characterOnly && resolved.length === fit.rows.length && fit.rows.length <= 5);
   const zetaKnown = resolved.some((row) => row.unit?.zetas != null);
   const omiKnown = resolved.some((row) => row.unit?.omicrons != null);
   const zetas = resolved.reduce((sum, row) => sum + Number(row.unit?.zetas || 0), 0);
   const omicrons = resolved.reduce((sum, row) => sum + Number(row.unit?.omicrons || 0), 0);
+  const fitLabel = !body ? "Load roster" : !mission.entry?.verified ? "Entry unverified" : `${fit.legal}/${fit.rows.length} entry-ready`;
   return `<article class="dsgeo-team-card${fit.complete ? " complete" : ""}">
-    <header><div><span>${escapeHtml(recommendationLabel(mission, recommendation))}</span><h5>${escapeHtml(recommendation.name)}</h5></div><b>${body ? `${fit.legal}/${fit.rows.length} entry-ready` : "Load roster"}</b></header>
+    <header><div><span>${escapeHtml(recommendationLabel(mission, recommendation))}</span><h5>${escapeHtml(recommendation.name)}</h5></div><b>${escapeHtml(fitLabel)}</b></header>
     <div class="dsgeo-team-members">${fit.rows.map((row) => `<div class="${row.legal ? "ready" : row.owned ? "under" : "missing"}">
-      ${unitPortrait(row.unit, row.name)}<span><strong>${escapeHtml(row.unit?.name || row.name)}</strong><small>${body ? escapeHtml(gapText(row)) : "Roster not loaded"}</small></span>
+      ${unitPortrait(row.unit, row.name)}<span><strong>${escapeHtml(row.unit?.name || row.name)}</strong><small>${body && mission.entry?.verified ? escapeHtml(gapText(row)) : body ? "Entry check paused" : "Roster not loaded"}</small></span>
     </div>`).join("")}</div>
     <div class="dsgeo-team-meta"><span>Source: ${escapeHtml(recommendation.sourceIds?.join(", ") || "community")}</span><span>${zetaKnown ? `${zetas} Zetas installed` : "Zeta recommendation pending"}</span><span>${omiKnown ? `${omicrons} Omicrons installed` : "TB Omicron relevance pending"}</span></div>
-    ${upgrades.length ? `<div class="dsgeo-upgrade-callout"><strong>Priority entry gap:</strong> ${escapeHtml(upgrades[0].unit?.name || upgrades[0].name)} · ${escapeHtml(gapText(upgrades[0]))}</div>` : body ? `<div class="dsgeo-upgrade-callout ready"><strong>Entry gate:</strong> all listed members clear the verified mission gate.</div>` : ""}
+    ${upgradeCallout(body, mission, upgrades)}
     <footer>${canLoad ? `<button type="button" data-dsgeo-load-team="${escapeAttr(recommendation.id)}">Load in Squad Workbench</button>` : ""}<small>Composition quality is source-labelled separately from entry legality.</small></footer>
   </article>`;
 }
 
 function missionCard(body, mission) {
   const pool = mission.entry?.verified && body ? legalRosterCandidates(body, mission).length : null;
-  const rewards = mission.rewards?.length ? mission.rewards.join(" · ") : mission.waves?.length ? `${mission.waves.length} wave${mission.waves.length === 1 ? "" : "s"} · max ${number(mission.waves.reduce((sum, value) => sum + Number(value || 0), 0))} TP/player` : "Combat mission";
-  return `<details class="dsgeo-mission" ${mission.missionType === "special" ? "open" : ""}>
+  const rewards = mission.rewards?.length
+    ? mission.rewards.join(" · ")
+    : mission.waves?.length
+      ? `${mission.waves.length} wave${mission.waves.length === 1 ? "" : "s"} · max ${number(mission.waves.reduce((sum, value) => sum + Number(value || 0), 0))} TP/player`
+      : "Combat mission";
+  return `<details class="dsgeo-mission" data-dsgeo-mission-id="${escapeAttr(mission.id)}" ${mission.missionType === "special" ? "open" : ""}>
     <summary>
       <span class="dsgeo-mission-type ${escapeAttr(mission.missionType)}">${escapeHtml(mission.missionType)}</span>
       <span><strong>${escapeHtml(mission.name)}</strong><small>${escapeHtml(requirementLabel(mission))}</small></span>
@@ -166,7 +175,7 @@ function territoryBoard(body, territory) {
 }
 
 function sourceStrip() {
-  return `<section class="card dsgeo-source-strip"><div><strong>Data boundary</strong><span>Current zone structure and entry rules are stored separately from community team advice.</span></div>${Object.values(DS_GEO_SOURCES).map((source) => `<span><b>${escapeHtml(source.kind)}</b>${escapeHtml(source.label)}${source.license ? ` · ${escapeHtml(source.license)}` : ""}</span>`).join("")}</section>`;
+  return `<section class="card dsgeo-source-strip"><div><strong>Data boundary</strong><span>Current zone structure and verified entry rules are stored separately from community team advice.</span></div>${Object.values(DS_GEO_SOURCES).map((source) => `<span><b>${escapeHtml(source.kind)}</b>${escapeHtml(source.label)}${source.license ? ` · ${escapeHtml(source.license)}` : ""}</span>`).join("")}</section>`;
 }
 
 function renderInto(host, body) {
@@ -182,16 +191,20 @@ function renderInto(host, body) {
 
   for (const button of host.querySelectorAll("[data-dsgeo-load-team]")) {
     button.addEventListener("click", () => {
-      const missionElement = button.closest(".dsgeo-mission");
-      const missionName = missionElement?.querySelector("summary strong")?.textContent || "DS Geo Mission";
-      const recommendationId = button.dataset.dsgeoLoadTeam;
-      const mission = territory.missions.find((item) => missionElement?.querySelector("summary strong")?.textContent === item.name);
-      const recommendation = mission?.recommendations?.find((item) => item.id === recommendationId);
-      if (!mission || !recommendation) return;
+      const missionId = button.closest("[data-dsgeo-mission-id]")?.dataset.dsgeoMissionId;
+      const mission = territory.missions.find((item) => item.id === missionId);
+      const recommendation = mission?.recommendations?.find((item) => item.id === button.dataset.dsgeoLoadTeam);
+      if (!mission?.entry?.verified || !recommendation) return;
       const fit = recommendationRosterFit(body, mission, recommendation);
       const baseIds = fit.rows.map((row) => row.unit?.baseId).filter(Boolean).slice(0, 5);
       if (!baseIds.length) return;
-      window.dispatchEvent(new CustomEvent("swgoh:replace-squad", { detail: { baseIds, size: baseIds.length === 3 ? 3 : 5, name: `DS Geo · ${territory.name} · ${missionName} · ${recommendation.name}` } }));
+      window.dispatchEvent(new CustomEvent("swgoh:replace-squad", {
+        detail: {
+          baseIds,
+          size: baseIds.length === 3 ? 3 : 5,
+          name: `DS Geo · ${territory.name} · ${mission.name} · ${recommendation.name}`,
+        },
+      }));
     });
   }
 }
