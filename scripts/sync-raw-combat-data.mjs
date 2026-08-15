@@ -8,6 +8,7 @@ import { enemyArchetypeCatalog, normalizeEnemyCatalog } from "./enemy-kit-normal
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const DATA_DIR = path.join(ROOT, "public", "data");
 const CATALOG_PATH = path.join(DATA_DIR, "catalog.json");
+const KIT_INDEX_PATH = path.join(DATA_DIR, "kit-index.json");
 const OUTPUT_PATH = path.join(DATA_DIR, "effect-graph-index.json");
 const ENEMY_KIT_PATH = path.join(DATA_DIR, "enemy-kit-index.json");
 const ENEMY_RAW_PATH = path.join(DATA_DIR, "enemy-effect-graph-index.json");
@@ -48,6 +49,34 @@ async function exists(filePath) {
   }
 }
 
+async function optionalJson(filePath) {
+  try {
+    return JSON.parse(await readFile(filePath, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+function withKitSemantics(catalog, kitIndex) {
+  if (!kitIndex?.units?.length) return catalog;
+  const kitByBaseId = new Map(kitIndex.units.map((unit) => [String(unit.baseId), unit]));
+  return {
+    ...catalog,
+    units: (catalog.units || []).map((unit) => {
+      const kitUnit = kitByBaseId.get(String(unit.baseId));
+      if (!kitUnit) return unit;
+      const semanticById = new Map((kitUnit.abilities || []).map((ability) => [String(ability.id), ability.semantics]));
+      return {
+        ...unit,
+        abilities: (unit.abilities || []).map((ability) => ({
+          ...ability,
+          ...(semanticById.get(String(ability.id)) ? { semantics: semanticById.get(String(ability.id)) } : {}),
+        })),
+      };
+    }),
+  };
+}
+
 function assertVersionCompatibility(catalog, payloads) {
   const catalogVersion = String(catalog?.gameVersion || "");
   const versions = payloads.map(payloadVersion).filter(Boolean);
@@ -62,6 +91,7 @@ function assertVersionCompatibility(catalog, payloads) {
 async function sync() {
   await mkdir(DATA_DIR, { recursive: true });
   const catalog = JSON.parse(await readFile(CATALOG_PATH, "utf8"));
+  const semanticCatalog = withKitSemantics(catalog, await optionalJson(KIT_INDEX_PATH));
   console.log(`[raw-combat] syncing player + enemy combat graph for ${catalog.gameVersion || "unknown"}`);
 
   const [skills, abilities, effectsCompressed, enums, pveUnitsCompressed, localizationCompressed] = await Promise.all([
@@ -77,7 +107,7 @@ async function sync() {
   const localization = JSON.parse(brotliDecompressSync(localizationCompressed).toString("utf8"));
   const gameVersion = assertVersionCompatibility(catalog, [skills, abilities, effects, enums, pveUnits]);
 
-  const index = buildRawEffectIndex({ catalog, skillsPayload: skills, abilitiesPayload: abilities, effectsPayload: effects, enumsPayload: enums });
+  const index = buildRawEffectIndex({ catalog: semanticCatalog, skillsPayload: skills, abilitiesPayload: abilities, effectsPayload: effects, enumsPayload: enums });
   index.gameVersion = gameVersion;
   if (!index.coverage.totalAbilities) throw new Error("Raw combat graph found zero catalog abilities");
   if (!index.coverage.linkedAbilities) throw new Error("Raw combat graph linked zero abilities; upstream schema may have changed");
