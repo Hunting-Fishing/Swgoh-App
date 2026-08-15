@@ -1,5 +1,6 @@
 import { analyzeTeamCombatPreparation, combatPreparationStatus, loadCombatCatalog, loadCombatKnowledge } from "./tb-combat-intelligence.js";
 import { battleStrategyMarkup } from "./tb-battle-strategy-ui.js";
+import { missionRosterReadiness } from "./tb-roster-readiness.js";
 
 const escapeHtml = (value) => String(value ?? "")
   .replaceAll("&", "&amp;")
@@ -17,7 +18,7 @@ function ensureStyle(href) {
 }
 
 function ensureCss() {
-  ensureStyle("/tb-combat-prep.css?v=20260815-tbcombat2");
+  ensureStyle("/tb-combat-prep.css?v=20260816-tbcombat3");
   ensureStyle("/tb-battle-strategy.css?v=20260815-tbstrategy1");
 }
 
@@ -93,13 +94,15 @@ function interactionMarkup(profile = {}) {
   </section>`;
 }
 
-function prepMarkup(analysis) {
+function prepMarkup(analysis, readiness) {
   const status = combatPreparationStatus(analysis);
   const activeOmiRows = analysis.tbOmicrons.rows;
   const coverageCount = (analysis.mechanicCoverage?.requirements?.length || 0) + (analysis.mechanicCoverage?.hazards?.length || 0);
   return `<section class="tbcp-card">
     <header class="tbcp-head"><div><span>MISSION BATTLE PREPARATION</span><strong>Abilities · Mechanics · Strategy · Mods</strong></div><b class="${status.level}">${escapeHtml(status.label)}</b></header>
     <div class="tbcp-summary">
+      <div><span>Roster Readiness</span><strong>${escapeHtml(readiness?.label || "UNKNOWN")}</strong></div>
+      <div><span>Strategy Evidence</span><strong>${escapeHtml(readiness?.strategy?.label || "NO VERIFIED STRATEGY YET")}</strong></div>
       <div><span>Zetas installed</span><strong>${analysis.zetas.installed}/${analysis.zetas.available}</strong></div>
       <div><span>TB-active Omicrons</span><strong>${analysis.tbOmicrons.installed}/${analysis.tbOmicrons.active}</strong></div>
       <div><span>Minimum target</span><strong>${escapeHtml(targetText(analysis.targets.minimum))}</strong></div>
@@ -148,7 +151,8 @@ export async function hydrateCombatPreparation(root, body, missions) {
     const recommendation = mission?.recommendations?.find((item) => String(item.id) === String(slot.dataset.tbCombatTeam || ""));
     if (!mission || !recommendation) continue;
     const analysis = analyzeTeamCombatPreparation(body, mission, recommendation, catalog, knowledge);
-    slot.innerHTML = prepMarkup(analysis);
+    const readiness = missionRosterReadiness(body, mission);
+    slot.innerHTML = prepMarkup(analysis, readiness);
   }
   for (const button of root.querySelectorAll("[data-tbcp-open-mods]")) {
     button.addEventListener("click", () => document.querySelector('button[data-workspace-tab="mods"]')?.click());
