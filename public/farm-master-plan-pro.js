@@ -132,7 +132,7 @@ function targetView(target, index) {
   if (target.gearPlan.tiersRemaining > 0) gaps.push(`${target.gearPlan.tiersRemaining} gear tier${target.gearPlan.tiersRemaining === 1 ? "" : "s"}`);
   if (target.relicPlan.levelsRemaining > 0) gaps.push(`${target.relicPlan.levelsRemaining} relic level${target.relicPlan.levelsRemaining === 1 ? "" : "s"}`);
   const targetTone = tone(target.progress.percent, target.complete);
-  const plannerAllowed = target.requirement.type !== "STAR";
+  const plannerAllowed = target.owned && target.requirement.type !== "STAR";
   return `
     <article class="farm-master-priority tone-${targetTone} ${index === 0 ? "top-priority" : ""}">
       <div class="farm-master-rank">${index === 0 ? "NEXT" : `#${index + 1}`}</div>
