@@ -15,6 +15,7 @@ const NUMBER = new Intl.NumberFormat();
 const state = {
   catalog: [],
   catalogMap: new Map(),
+  manifest: null,
   body: null,
   allyCode: "",
   fetchedAt: 0,
@@ -30,6 +31,14 @@ async function loadCatalog() {
   state.catalog = Array.isArray(body?.units) ? body.units : [];
   state.catalogMap = new Map(state.catalog.map((unit) => [String(unit?.baseId || ""), unit]));
   return state.catalog;
+}
+
+async function loadManifest() {
+  if (state.manifest) return state.manifest;
+  const response = await fetch("/data/manifest.json?journey-eligibility=1", { cache: "no-store" });
+  if (!response.ok) return null;
+  state.manifest = await response.json();
+  return state.manifest;
 }
 
 async function loadLive(force = false) {
@@ -115,7 +124,7 @@ function selectorCard(plan) {
         <div class="journey-eligibility-title">
           <span>${escapeHtml(profile.faction)} · ANY ${profile.requiredCount} VERIFIED</span>
           <h4>${escapeHtml(profile.name)}</h4>
-          <small>Final tier: ${profile.requiredCount} legal characters at ${profile.targetStars}★</small>
+          <small>Final event tier: ${profile.requiredCount} legal characters at ${profile.targetStars}★</small>
         </div>
         <div class="journey-eligibility-score">
           <b>${plan.percent}%</b>
@@ -140,7 +149,7 @@ function selectorCard(plan) {
         <summary><span>All verified event candidates</span><b>${plan.poolSize}</b></summary>
         <div class="journey-eligibility-pool">${poolRows.map((candidate) => allCandidate(candidate, profile.targetStars)).join("")}</div>
         ${plan.verificationWarnings.length ? `<div class="journey-eligibility-warning">${plan.verificationWarnings.map(escapeHtml).join(" ")}</div>` : ""}
-        <p class="journey-eligibility-source">Verified against the current Journey identity and current catalog faction/category, then constrained by the checked event pool. New faction-tagged characters fail closed until their event eligibility is verified.</p>
+        <p class="journey-eligibility-source">Checked event pool ∩ versioned catalog faction/category. New faction-tagged characters fail closed until event eligibility is reverified. Current account unlock progression can also include Legacy Story Token / quest-chain gates; this card models the event squad itself, not those separate account gates.</p>
       </details>
     </article>`;
 }
@@ -174,11 +183,18 @@ function visiblePlans(plans) {
   });
 }
 
+function versionWarning() {
+  const expected = String(JOURNEY_EVENT_PROFILES[0]?.verification?.gameDataVersion || "");
+  const current = String(state.manifest?.gameVersion || "");
+  if (!expected || !current || current.startsWith(expected)) return "";
+  return `<div class="journey-eligibility-version-warning"><strong>REVERIFY EVENT POOLS</strong><span>Eligibility was checked against game data ${escapeHtml(expected)}, but the local catalog is now ${escapeHtml(current)}. The allowlist remains fail-closed until reviewed.</span></div>`;
+}
+
 async function renderEligibility(force = false) {
   const map = $("farmJourneyMap");
   const toolbar = map?.querySelector(".journey-map-toolbar");
   if (!map || !toolbar) return;
-  await loadCatalog();
+  await Promise.all([loadCatalog(), loadManifest()]);
   const body = await loadLive(force);
   const liveUnits = body ? [...(body.units || []), ...(body.ships || [])] : [];
   const plans = JOURNEY_EVENT_PROFILES.map((profile) => buildEventCandidatePlan(profile, state.catalog, liveUnits));
@@ -202,6 +218,7 @@ async function renderEligibility(force = false) {
         <span>Final-tier ${JOURNEY_EVENT_PROFILES[0]?.targetStars || 7}★ check</span>
       </div>
     </header>
+    ${versionWarning()}
     <div class="journey-eligibility-grid">${visible.map(selectorCard).join("")}</div>
     <footer>
       <strong>Battle intelligence comes next.</strong>
