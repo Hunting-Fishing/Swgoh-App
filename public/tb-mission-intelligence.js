@@ -33,11 +33,15 @@ export function allRosterUnits(body) {
 }
 
 function normalizeMember(member) {
-  if (typeof member === "string") return { name: member, baseId: "", bypassPool: false };
+  if (typeof member === "string") return { name: member, baseId: "", bypassPool: false, starsMin: null, gearMin: null, relicMin: null, powerMin: null };
   return {
     name: String(member?.name || ""),
     baseId: String(member?.baseId || ""),
     bypassPool: Boolean(member?.bypassPool),
+    starsMin: finiteOrNull(member?.starsMin),
+    gearMin: finiteOrNull(member?.gearMin),
+    relicMin: finiteOrNull(member?.relicMin),
+    powerMin: finiteOrNull(member?.powerMin),
   };
 }
 
@@ -81,7 +85,7 @@ export function normalizeRecommendation(input = {}) {
   const baseIds = Array.isArray(input.baseIds) ? [...input.baseIds] : [];
   const members = Array.isArray(input.members)
     ? input.members.map(normalizeMember)
-    : baseIds.map((baseId) => ({ name: "", baseId: String(baseId), bypassPool: false }));
+    : baseIds.map((baseId) => normalizeMember({ baseId: String(baseId) }));
   return {
     id: String(input.id || ""),
     name: String(input.name || "Team"),
@@ -116,12 +120,7 @@ export function canPresentAsVerifiedTeam(mission, recommendation) {
   const memberCount = Array.isArray(recommendation?.members) && recommendation.members.length
     ? recommendation.members.length
     : Array.isArray(recommendation?.baseIds) ? recommendation.baseIds.length : 0;
-  return Boolean(
-    mission?.entry?.verified &&
-    recommendation?.verifiedLegal &&
-    recommendation?.confidence === MISSION_CONFIDENCE.VERIFIED &&
-    memberCount > 0
-  );
+  return Boolean(mission?.entry?.verified && recommendation?.verifiedLegal && recommendation?.confidence === MISSION_CONFIDENCE.VERIFIED && memberCount > 0);
 }
 
 export function recommendationLabel(mission, recommendation) {
@@ -135,24 +134,36 @@ function unitFactionSet(unit) {
   return new Set([...(unit?.factions || []), ...(unit?.categories || [])].map((value) => String(value).toLowerCase()));
 }
 
+function thresholdEntry(entry, member = null) {
+  if (!member) return entry;
+  return {
+    ...entry,
+    starsMin: member.starsMin ?? entry.starsMin,
+    gearMin: member.gearMin ?? entry.gearMin,
+    relicMin: member.relicMin ?? entry.relicMin,
+    powerMin: member.powerMin ?? entry.powerMin,
+  };
+}
+
 function unitMeetsBaseThresholds(unit, entry) {
   if (!unit) return false;
   if (entry.unitType && String(unit.unitType || "Character").toLowerCase() !== String(entry.unitType).toLowerCase()) return false;
   const alignment = String(unit.alignment || "").toLowerCase();
-  if (entry.allowedAlignments.length) {
+  if (entry.allowedAlignments?.length) {
     if (!entry.allowedAlignments.some((allowed) => alignment === String(allowed).toLowerCase())) return false;
   } else if (entry.alignment && entry.alignment !== "Mixed" && alignment !== String(entry.alignment).toLowerCase()) return false;
-  if (entry.relicMin != null && Number(unit.relic || 0) < Number(entry.relicMin)) return false;
-  if (entry.gearMin != null && Number(unit.gear || 0) < Number(entry.gearMin)) return false;
+  const isShip = String(unit.unitType || "Character") === "Ship";
+  if (entry.relicMin != null && !isShip && Number(unit.relic || 0) < Number(entry.relicMin)) return false;
+  if (entry.gearMin != null && !isShip && Number(unit.gear || 0) < Number(entry.gearMin)) return false;
   if (entry.starsMin != null && Number(unit.stars || 0) < Number(entry.starsMin)) return false;
   if (entry.powerMin != null && Number(unit.power || 0) < Number(entry.powerMin)) return false;
   return true;
 }
 
 function unitMeetsPoolRestrictions(unit, entry) {
-  if (entry.requiredBaseIds.length && !entry.requiredBaseIds.includes(String(unit.baseId || ""))) return false;
-  if (entry.allowedBaseIds.length && !entry.allowedBaseIds.includes(String(unit.baseId || ""))) return false;
-  if (entry.requiredCategories.length) {
+  if (entry.requiredBaseIds?.length && !entry.requiredBaseIds.includes(String(unit.baseId || ""))) return false;
+  if (entry.allowedBaseIds?.length && !entry.allowedBaseIds.includes(String(unit.baseId || ""))) return false;
+  if (entry.requiredCategories?.length) {
     const factions = unitFactionSet(unit);
     const checks = entry.requiredCategories.map((category) => factions.has(String(category).toLowerCase()));
     if (entry.categoryMode === "any" ? !checks.some(Boolean) : !checks.every(Boolean)) return false;
@@ -162,15 +173,13 @@ function unitMeetsPoolRestrictions(unit, entry) {
 
 export function rosterUnitMeetsEntry(unit, mission) {
   if (!unit || !mission?.entry?.verified) return false;
-  const entry = mission.entry;
-  return unitMeetsBaseThresholds(unit, entry) && unitMeetsPoolRestrictions(unit, entry);
+  return unitMeetsBaseThresholds(unit, mission.entry) && unitMeetsPoolRestrictions(unit, mission.entry);
 }
 
 export function mandatoryUnitMeetsEntry(unit, mission, member = {}) {
   if (!unit || !mission?.entry?.verified) return false;
-  const entry = mission.entry;
-  if (!unitMeetsBaseThresholds(unit, entry)) return false;
-  return member?.bypassPool ? true : unitMeetsPoolRestrictions(unit, entry);
+  if (!unitMeetsBaseThresholds(unit, thresholdEntry(mission.entry, member))) return false;
+  return member?.bypassPool ? true : unitMeetsPoolRestrictions(unit, mission.entry);
 }
 
 export function resolveRosterMember(body, member) {
@@ -195,35 +204,33 @@ function memberMatches(member, unit, fallbackName = "") {
 }
 
 function matchingMandatoryMember(mission, member, unit) {
-  return (mission?.entry?.mandatoryMembers || []).find((mandatory) =>
-    memberMatches(mandatory, unit, member?.name)
-  ) || null;
+  return (mission?.entry?.mandatoryMembers || []).find((mandatory) => memberMatches(mandatory, unit, member?.name)) || null;
+}
+
+export function entryGap(unit, mission, member = null) {
+  const entry = thresholdEntry(mission?.entry || {}, member);
+  if (!unit) return { missing: true, stars: entry.starsMin || 0, power: entry.powerMin || 0, gear: entry.gearMin || 0, relic: entry.relicMin || 0, score: 1000000 };
+  const stars = entry.starsMin == null ? 0 : Math.max(0, Number(entry.starsMin) - Number(unit.stars || 0));
+  const power = entry.powerMin == null ? 0 : Math.max(0, Number(entry.powerMin) - Number(unit.power || 0));
+  const isShip = String(unit.unitType || "Character") === "Ship";
+  const gear = entry.gearMin == null || isShip ? 0 : Math.max(0, Number(entry.gearMin) - Number(unit.gear || 0));
+  const relic = entry.relicMin == null || isShip ? 0 : Math.max(0, Number(entry.relicMin) - Number(unit.relic || 0));
+  return { missing: false, stars, power, gear, relic, score: stars * 100000 + relic * 10000 + gear * 1000 + power };
 }
 
 export function mandatoryRosterStatus(body, mission) {
   const members = mission?.entry?.mandatoryMembers || [];
   const rows = members.map((member) => {
     const unit = resolveRosterMember(body, member);
-    return {
-      member,
-      unit,
-      owned: Boolean(unit),
-      legal: unit ? mandatoryUnitMeetsEntry(unit, mission, member) : false,
-      gap: entryGap(unit, mission),
-    };
+    return { member, unit, owned: Boolean(unit), legal: unit ? mandatoryUnitMeetsEntry(unit, mission, member) : false, gap: entryGap(unit, mission, member) };
   });
-  return {
-    rows,
-    total: rows.length,
-    ready: rows.filter((row) => row.legal).length,
-    complete: rows.every((row) => row.legal),
-  };
+  return { rows, total: rows.length, ready: rows.filter((row) => row.legal).length, complete: rows.every((row) => row.legal) };
 }
 
 export function recommendationRosterFit(body, mission, recommendation) {
   const members = Array.isArray(recommendation?.members) && recommendation.members.length
     ? recommendation.members
-    : (recommendation?.baseIds || []).map((baseId) => ({ baseId: String(baseId), name: "", bypassPool: false }));
+    : (recommendation?.baseIds || []).map((baseId) => normalizeMember({ baseId: String(baseId) }));
   const rows = members.map((member) => {
     const unit = resolveRosterMember(body, member);
     const mandatory = unit ? matchingMandatoryMember(mission, member, unit) : null;
@@ -234,7 +241,7 @@ export function recommendationRosterFit(body, mission, recommendation) {
       unit,
       owned: Boolean(unit),
       legal,
-      gap: entryGap(unit, mission),
+      gap: entryGap(unit, mission, mandatory || member),
       mandatory: Boolean(mandatory),
     };
   });
@@ -256,16 +263,6 @@ export function recommendationRosterFit(body, mission, recommendation) {
   };
 }
 
-export function entryGap(unit, mission) {
-  const entry = mission?.entry || {};
-  if (!unit) return { missing: true, stars: entry.starsMin || 0, power: entry.powerMin || 0, gear: entry.gearMin || 0, relic: entry.relicMin || 0, score: 1000000 };
-  const stars = entry.starsMin == null ? 0 : Math.max(0, Number(entry.starsMin) - Number(unit.stars || 0));
-  const power = entry.powerMin == null ? 0 : Math.max(0, Number(entry.powerMin) - Number(unit.power || 0));
-  const gear = entry.gearMin == null ? 0 : Math.max(0, Number(entry.gearMin) - Number(unit.gear || 0));
-  const relic = entry.relicMin == null ? 0 : Math.max(0, Number(entry.relicMin) - Number(unit.relic || 0));
-  return { missing: false, stars, power, gear, relic, score: stars * 100000 + relic * 10000 + gear * 1000 + power };
-}
-
 export function legalRosterCandidates(body, mission, limit = 0) {
   if (!mission?.entry?.verified) return [];
   const rows = allRosterUnits(body)
@@ -284,15 +281,7 @@ export function missionRosterEntrySummary(body, mission, squadSize = null) {
   const depthRatio = poolTarget === 0 ? 1 : Math.min(1, candidates.length / poolTarget);
   const mandatoryRatio = mandatory.total ? mandatory.ready / mandatory.total : 1;
   const percent = Math.round((depthRatio * (mandatory.total ? 0.7 : 1) + (mandatory.total ? mandatoryRatio * 0.3 : 0)) * 100);
-  return {
-    verified: true,
-    ready: candidates.length >= poolTarget && mandatory.complete,
-    percent,
-    candidates,
-    mandatory,
-    squadSize: target,
-    poolTarget,
-  };
+  return { verified: true, ready: candidates.length >= poolTarget && mandatory.complete, percent, candidates, mandatory, squadSize: target, poolTarget };
 }
 
 export function recommendationUpgradeRows(body, mission, recommendation) {
@@ -312,7 +301,5 @@ export function recommendationUpgradeRows(body, mission, recommendation) {
       mandatory: true,
     });
   }
-  return rows
-    .slice()
-    .sort((a, b) => Number(b.mandatory) - Number(a.mandatory) || Number(b.gap?.missing) - Number(a.gap?.missing) || Number(b.gap?.score || 0) - Number(a.gap?.score || 0) || a.name.localeCompare(b.name));
+  return rows.slice().sort((a, b) => Number(b.mandatory) - Number(a.mandatory) || Number(b.gap?.missing) - Number(a.gap?.missing) || Number(b.gap?.score || 0) - Number(a.gap?.score || 0) || a.name.localeCompare(b.name));
 }
