@@ -24,6 +24,22 @@ function requirementLabel(row) {
   return row.unitType === "Ship" ? `${Number(row.requiredRarity || 0)}★` : `R${Number(row.requiredRelic || 0)}`;
 }
 
+function currentProgressionLabel(candidate, row) {
+  const current = candidate?.current || {};
+  if (row.unitType === "Ship") return `${number(current.stars || 0)}★`;
+  if (Number(current.relic || 0) > 0) return `R${number(current.relic)}`;
+  return `${number(current.stars || 0)}★ · G${number(current.gear || 0)}`;
+}
+
+function gapLabel(candidate) {
+  const gap = candidate?.gap || {};
+  const parts = [];
+  if (Number(gap.stars || 0) > 0) parts.push(`+${number(gap.stars)}★`);
+  if (Number(gap.gear || 0) > 0) parts.push(`+${number(gap.gear)} gear tier${Number(gap.gear) === 1 ? "" : "s"}`);
+  if (Number(gap.relic || 0) > 0) parts.push(`+${number(gap.relic)} relic level${Number(gap.relic) === 1 ? "" : "s"}`);
+  return parts.join(" · ") || "Requirement met";
+}
+
 function stat(label, value, extra = "") {
   return `<div class="pro-summary-stat${extra ? ` ${extra}` : ""}"><span>${escapeHtml(label)}</span><strong>${escapeHtml(String(value))}</strong></div>`;
 }
@@ -52,6 +68,7 @@ function setupPanel() {
             <option value="assignments">Assignment Draft</option>
             <option value="unfilled">Unfilled Slots</option>
             <option value="scarcity">Scarcity</option>
+            <option value="farms">Farm Priorities</option>
             <option value="members">Member Load</option>
           </select>
         </label>
@@ -199,6 +216,17 @@ function renderCritical() {
     <div class="guild-rote-critical-grid">${critical.map((row) => `<div class="guild-rote-critical"><strong>${escapeHtml(row.name || row.baseId)}</strong><span>${escapeHtml(row.phase)} · ${escapeHtml(requirementLabel(row))}</span><small>${number(row.demand)} demand · ${number(row.eligibleOwners)} eligible owners · ${number(row.assigned)} assigned</small></div>`).join("")}</div>`;
 }
 
+function farmCandidatesHtml(row) {
+  if (!row.closest?.length) return '<span class="pro-rote-status missing">No current owner below requirement</span>';
+  return `<div class="guild-rote-farm-candidates">${row.closest.slice(0, 3).map((candidate) => `
+    <div class="guild-rote-farm-candidate">
+      <strong>${escapeHtml(candidate.member?.name || "Unknown")}</strong>
+      <span>${escapeHtml(currentProgressionLabel(candidate, row))} → ${escapeHtml(requirementLabel(row))}</span>
+      <small>${escapeHtml(gapLabel(candidate))}</small>
+    </div>
+  `).join("")}</div>`;
+}
+
 function renderTable() {
   const output = $("guildRoteOutput");
   if (!output || !state.plan) return;
@@ -218,6 +246,10 @@ function renderTable() {
     rows = filteredRows(state.plan.scarcity, (row) => [row.phase, row.name, row.baseId]);
     const visible = rows.slice(0, state.shown);
     html = `<div class="database-heading"><div><div class="kicker">SCARCITY</div><h3>Demand vs Qualifying Owners</h3><p>Lowest coverage margin first. This highlights guild farms with the most operational leverage.</p></div></div><div class="pro-table-wrap"><table class="pro-rote-table guild-rote-table"><thead><tr><th>Phase</th><th>Unit</th><th>Requirement</th><th>Demand</th><th>Eligible Owners</th><th>Assigned</th><th>Margin</th></tr></thead><tbody>${visible.map((row) => { const margin = row.eligibleOwners - row.demand; return `<tr><td>${escapeHtml(row.phase)}</td><td><strong>${escapeHtml(row.name || row.baseId)}</strong><small>${escapeHtml(row.baseId)}</small></td><td>${escapeHtml(requirementLabel(row))}</td><td>${number(row.demand)}</td><td>${number(row.eligibleOwners)}</td><td>${number(row.assigned)}</td><td><span class="pro-rote-status ${margin < 0 ? "missing" : margin <= 1 ? "partial" : "ready"}">${margin >= 0 ? "+" : ""}${number(margin)}</span></td></tr>`; }).join("")}</tbody></table></div>`;
+  } else if (view === "farms") {
+    rows = filteredRows(state.plan.developmentTargets || [], (row) => [row.phase, row.name, row.baseId, ...(row.closest || []).map((candidate) => candidate.member?.name || "")]);
+    const visible = rows.slice(0, state.shown);
+    html = `<div class="database-heading"><div><div class="kicker">GUILD FARM PRIORITIES</div><h3>Closest Upgrades to Close ROTE Gaps</h3><p>Ranks public roster progression only. It does not estimate shards, signal data, relic materials, gear salvage or other private inventory the public player endpoint cannot expose.</p></div></div><div class="pro-table-wrap"><table class="pro-rote-table guild-rote-table guild-rote-farm-table"><thead><tr><th>Phase</th><th>Unit</th><th>Requirement</th><th>Demand</th><th>Ready</th><th>Shortage</th><th>Owned Below Req.</th><th>Closest Members</th></tr></thead><tbody>${visible.map((row) => `<tr><td>${escapeHtml(row.phase)}</td><td><strong>${escapeHtml(row.name || row.baseId)}</strong><small>${escapeHtml(row.baseId)}</small></td><td>${escapeHtml(requirementLabel(row))}</td><td>${number(row.demand)}</td><td>${number(row.eligibleOwners)}</td><td><span class="pro-rote-status missing">${number(row.shortage)}</span></td><td>${number(row.belowRequirement)}</td><td>${farmCandidatesHtml(row)}</td></tr>`).join("")}</tbody></table></div>`;
   } else {
     const phase = $("guildRotePhase")?.value || "All";
     const query = String($("guildRoteSearch")?.value || "").trim().toLowerCase();
