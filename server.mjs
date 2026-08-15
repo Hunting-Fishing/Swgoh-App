@@ -10,9 +10,13 @@ const port = positiveNumber(process.env.PORT, 8080);
 const gatewayUrl = trimUrl(process.env.SWGOH_GATEWAY_URL);
 const gatewayApiKey = String(process.env.SWGOH_GATEWAY_API_KEY || "").trim();
 const requestTimeoutMs = positiveNumber(process.env.SWGOH_REQUEST_TIMEOUT_MS, 35000);
+const guildRequestTimeoutMs = positiveNumber(process.env.SWGOH_GUILD_REQUEST_TIMEOUT_MS, 120000);
 const rosterCacheFreshMs = positiveNumber(process.env.SWGOH_CACHE_FRESH_SECONDS, 90) * 1000;
 const rosterCacheStaleMs = positiveNumber(process.env.SWGOH_CACHE_STALE_SECONDS, 600) * 1000;
 const rosterCacheMaxEntries = Math.max(1, Math.floor(positiveNumber(process.env.SWGOH_CACHE_MAX_ENTRIES, 500)));
+const guildCacheFreshMs = positiveNumber(process.env.SWGOH_GUILD_CACHE_FRESH_SECONDS, 600) * 1000;
+const guildCacheStaleMs = positiveNumber(process.env.SWGOH_GUILD_CACHE_STALE_SECONDS, 1800) * 1000;
+const guildCacheMaxEntries = Math.max(1, Math.floor(positiveNumber(process.env.SWGOH_GUILD_CACHE_MAX_ENTRIES, 100)));
 const roteOperationsUrl = String(process.env.SWGOH_ROTE_OPERATIONS_URL || "https://raw.githubusercontent.com/swgoh-utils/gamedata/main/swgoh_rote_operations.json").trim();
 const roteCacheMs = positiveNumber(process.env.SWGOH_ROTE_CACHE_SECONDS, 21600) * 1000;
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "public");
@@ -20,6 +24,11 @@ const rosterCache = new LiveRosterCache({
   freshMs: rosterCacheFreshMs,
   staleMs: rosterCacheStaleMs,
   maxEntries: rosterCacheMaxEntries,
+});
+const guildCache = new LiveRosterCache({
+  freshMs: guildCacheFreshMs,
+  staleMs: guildCacheStaleMs,
+  maxEntries: guildCacheMaxEntries,
 });
 const roteCache = { value: null, expiresAt: 0, promise: null };
 
@@ -55,7 +64,7 @@ function writeJson(response, status, body, headers = {}) {
   response.end(JSON.stringify(body));
 }
 
-async function requestGateway(pathname, includeKey) {
+async function requestGateway(pathname, includeKey, timeoutMs = requestTimeoutMs) {
   if (!gatewayUrl) {
     const error = new Error("SWGOH_GATEWAY_URL is not configured.");
     error.status = 503;
@@ -68,7 +77,7 @@ async function requestGateway(pathname, includeKey) {
   }
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), requestTimeoutMs);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(`${gatewayUrl}${pathname}`, {
       method: "GET",
@@ -143,6 +152,10 @@ function validLiveRoster(body) {
   return body?.source === "live" && body?.player && Array.isArray(body?.units);
 }
 
+function validGuildRoster(body) {
+  return body?.source === "live" && body?.guild && Array.isArray(body?.members);
+}
+
 async function loadLiveRoster(allyCode) {
   const body = await requestGateway(`/v1/player/${allyCode}`, true);
   if (!validLiveRoster(body)) {
@@ -151,6 +164,16 @@ async function loadLiveRoster(allyCode) {
     throw error;
   }
   return withCapabilityContract(body);
+}
+
+async function loadGuildRoster(allyCode) {
+  const body = await requestGateway(`/v1/guild/by-player/${allyCode}/roster`, true, guildRequestTimeoutMs);
+  if (!validGuildRoster(body)) {
+    const error = new Error("The live gateway returned an unexpected guild roster response.");
+    error.status = 502;
+    throw error;
+  }
+  return body;
 }
 
 async function handleApi(request, response, url) {
@@ -167,6 +190,14 @@ async function handleApi(request, response, url) {
           staleSeconds: Math.round(rosterCacheStaleMs / 1000),
           maxEntries: rosterCacheMaxEntries,
           shared: false,
+        },
+        guildRosterCache: {
+          mode: "process-local-coalesced-swr-lru",
+          freshSeconds: Math.round(guildCacheFreshMs / 1000),
+          staleSeconds: Math.round(guildCacheStaleMs / 1000),
+          maxEntries: guildCacheMaxEntries,
+          shared: false,
+          coldRequestTimeoutSeconds: Math.round(guildRequestTimeoutMs / 1000),
         },
         roteOperations: {
           source: "swgoh-utils/gamedata",
@@ -194,6 +225,25 @@ async function handleApi(request, response, url) {
     } catch (error) {
       writeJson(response, 502, {
         error: error?.name === "AbortError" ? "The ROTE game-data source timed out." : error?.message || "ROTE operations data is unavailable.",
+      });
+    }
+    return true;
+  }
+
+  const guildMatch = url.pathname.match(/^\/api\/guild\/by-player\/(\d{9})\/roster$/);
+  if (guildMatch) {
+    try {
+      const allyCode = guildMatch[1];
+      const cached = await guildCache.getOrLoad(allyCode, () => loadGuildRoster(allyCode));
+      writeJson(response, 200, cached.value, {
+        "X-Guild-Source": "comlink-live",
+        "X-Guild-Cache": cached.cache,
+        Age: String(Math.max(0, Math.floor((cached.ageMs || 0) / 1000))),
+      });
+    } catch (error) {
+      const status = [400, 401, 404, 429, 503].includes(error?.status) ? error.status : 502;
+      writeJson(response, status, {
+        error: error?.name === "AbortError" ? "The live guild request timed out." : error?.message || "The live SWGOH guild pipeline is unavailable.",
       });
     }
     return true;

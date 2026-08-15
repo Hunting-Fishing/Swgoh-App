@@ -28,31 +28,50 @@ export function aggregateRoteOperations(payload) {
   const conflicts = asArray(payload?.data || payload);
   const units = new Map();
   const phaseTotals = new Map();
+  const slots = [];
   let totalSlots = 0;
   let squadCount = 0;
 
-  for (const conflict of conflicts) {
+  for (const [conflictIndex, conflict] of conflicts.entries()) {
     const phase = String(conflict?.phase || "Unknown");
-    const conflictId = String(conflict?.id || conflict?.conflict || conflict?.linkedConflictId || "");
-    for (const squad of asArray(conflict?.squads)) {
+    const conflictId = String(conflict?.id || conflict?.conflict || conflict?.linkedConflictId || `conflict-${conflictIndex + 1}`);
+    const linkedConflictId = String(conflict?.linkedConflictId || "");
+    for (const [squadIndex, squad] of asArray(conflict?.squads).entries()) {
       squadCount += 1;
-      for (const unit of asArray(squad?.units)) {
+      const squadId = String(squad?.id || `squad-${squadIndex + 1}`);
+      for (const [unitIndex, unit] of asArray(squad?.units).entries()) {
         const baseId = String(unit?.baseId || unit?.unitIdentifier || "").trim();
         if (!baseId) continue;
         const combatType = finite(unit?.combatType, CHARACTER_COMBAT_TYPE);
         const rawRelicTier = finite(unit?.unitRelicTier, 0);
         const relic = combatType === CHARACTER_COMBAT_TYPE ? displayRelicTier(rawRelicTier) : 0;
         const rarity = Math.max(0, finite(unit?.rarity, 0));
+        const unitType = combatType === SHIP_COMBAT_TYPE ? "Ship" : "Character";
+        const name = String(unit?.nameKey || baseId);
         totalSlots += 1;
         phaseTotals.set(phase, (phaseTotals.get(phase) || 0) + 1);
+        slots.push({
+          id: `${phase}:${conflictId}:${squadId}:${unitIndex + 1}:${baseId}`,
+          phase,
+          conflictId,
+          linkedConflictId,
+          squadId,
+          slot: unitIndex + 1,
+          baseId,
+          name,
+          combatType,
+          unitType,
+          requiredRelic: unitType === "Character" ? relic : 0,
+          requiredRarity: rarity,
+        });
 
         let entry = units.get(baseId);
         if (!entry) {
           entry = {
             baseId,
-            name: String(unit?.nameKey || baseId),
+            name,
             combatType,
-            unitType: combatType === SHIP_COMBAT_TYPE ? "Ship" : "Character",
+            unitType,
             requiredCount: 0,
             minRelic: null,
             maxRelic: 0,
@@ -138,7 +157,8 @@ export function aggregateRoteOperations(payload) {
     squadCount,
     phases: [...phaseTotals.entries()]
       .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([phase, slots]) => ({ phase, slots })),
+      .map(([phase, phaseSlots]) => ({ phase, slots: phaseSlots })),
+    slots,
     requirements,
   };
 }
