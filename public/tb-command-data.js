@@ -84,6 +84,8 @@ export const TERRITORY_BATTLES = Object.freeze([
     alignment: "Light",
     phases: 4,
     phaseHours: 36,
+    requiredGuildGp: 100000000,
+    recommendedGuildGp: 150000000,
     exclusiveReward: "Ki-Adi-Mundi shards",
     mapStatus: "reference-ready",
     recommendationStatus: "community-reference",
