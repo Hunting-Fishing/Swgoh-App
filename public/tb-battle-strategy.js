@@ -1,5 +1,6 @@
 import { buildTeamCapabilityIndex } from "./mission-mechanic-intelligence.js";
 import { battleStrategyForMission, battleStrategySources } from "./tb-battle-strategy-data.js";
+import { watBattleStrategyForMission } from "./tb-battle-strategy-wat-data.js";
 
 const normalized = (value) => String(value || "").trim().toLowerCase();
 
@@ -55,8 +56,16 @@ function priorityRank(value) {
   return order[normalized(value)] ?? 5;
 }
 
+function resolvedStrategy(missionId) {
+  return watBattleStrategyForMission(missionId) || battleStrategyForMission(missionId);
+}
+
+function resolvedSources(strategy) {
+  return Array.isArray(strategy?.sources) ? strategy.sources : battleStrategySources(strategy);
+}
+
 export function evaluateBattleStrategy(analysis, mission = null) {
-  const strategy = battleStrategyForMission(analysis?.missionId || mission?.id);
+  const strategy = resolvedStrategy(analysis?.missionId || mission?.id);
   if (!strategy) {
     return {
       available: false,
@@ -157,7 +166,7 @@ export function evaluateBattleStrategy(analysis, mission = null) {
     strategyStatus: strategy.status,
     lastVerified: strategy.lastVerified,
     summary: strategy.summary,
-    sources: battleStrategySources(strategy),
+    sources: resolvedSources(strategy),
     checks,
     blockers,
     warnings,

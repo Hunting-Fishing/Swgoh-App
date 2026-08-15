@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { extractAbilitySemantics } from "../public/kit-semantics.js";
 import { battleStrategyForMission } from "../public/tb-battle-strategy-data.js";
+import { watBattleStrategyForMission } from "../public/tb-battle-strategy-wat-data.js";
 import { evaluateBattleStrategy } from "../public/tb-battle-strategy.js";
 
 function member(baseId, name, abilities) {
@@ -30,8 +31,22 @@ function kamMembers(fivesZeta = true) {
   ];
 }
 
-const packIds = ["zeffo-clones", "tatooine-reva", "p3-kam"];
-for (const id of packIds) assert.ok(battleStrategyForMission(id), `${id} strategy pack missing`);
+function watMembers() {
+  return [
+    member("GEONOSIANBROODALPHA", "Geonosian Brood Alpha", [
+      { id: "conscription", name: "Conscription", tier: 8, description: "Dispel all debuffs on all Geonosian allies. Summon a Geonosian Brute. All Geonosian allies gain Turn Meter and recover Health and Protection." },
+      { id: "queens_will", name: "Queen's Will", tier: 8, description: "All Geonosian allies have Hive Mind while Geonosian Brood Alpha is active." },
+    ]),
+    member("POGGLETHELESSER", "Poggle the Lesser", [{ id: "martial_doom", name: "Martial Doom", tier: 8, description: "Deal Physical damage to target enemy with an 80% chance to inflict Ability Block for 1 turn." }]),
+    member("GEONOSIANSOLDIER", "Geonosian Soldier", [{ id: "aggressive_advance", name: "Aggressive Advance", tier: 8, description: "Deal Physical damage to target enemy and inflict Tenacity Down for 2 turns." }]),
+    member("GEONOSIANSPY", "Geonosian Spy", [{ id: "silent_strike", name: "Silent Strike", tier: 8, description: "Deal Physical damage to target enemy and dispel status effects from the target." }]),
+    member("SUNFAC", "Sun Fac", [{ id: "browbeat", name: "Browbeat", tier: 8, description: "Deal Physical damage to target enemy and dispel all buffs on them." }]),
+  ];
+}
+
+const corePackIds = ["zeffo-clones", "tatooine-reva", "p3-kam"];
+for (const id of corePackIds) assert.ok(battleStrategyForMission(id), `${id} strategy pack missing`);
+assert.ok(watBattleStrategyForMission("s3"), "s3 Wat strategy pack missing");
 
 const statusSemantics = extractAbilitySemantics({ description: "Inflict Purge and Thermal Detonator on target enemy." });
 assert.ok(statusSemantics.debuffs.includes("Purge"), "Purge semantic recognition missing");
@@ -58,4 +73,11 @@ const kamMissingZeta = evaluateBattleStrategy({ missionId: "p3-kam", members: ka
 assert.equal(kamMissingZeta.status, "blocked", "KAM strategy must fail closed without the required Fives Zeta");
 assert.ok(kamMissingZeta.blockers.some((check) => check.label === "Tactical Awareness" && check.zetaReady === false));
 
-console.log(`[battle-strategy] validated ${packIds.length} strategy packs, semantic gates and KAM installed-upgrade requirements`);
+const wat = evaluateBattleStrategy({ missionId: "s3", members: watMembers() });
+assert.equal(wat.status, "ready", "Wat strategy should pass with the standard GBA-led Geo control kit");
+assert.equal(wat.blockers.length, 0, "Wat validation unexpectedly has blockers");
+assert.ok(wat.checks.some((check) => check.id === "ability_block" && check.ready), "Wat Ability Block control missing");
+assert.ok(wat.checks.some((check) => check.id === "tenacity_down" && check.ready), "Wat Tenacity Down setup missing");
+assert.equal("winPercent" in wat, false, "Wat strategy must not invent win probability");
+
+console.log(`[battle-strategy] validated ${corePackIds.length + 1} strategy packs, semantic gates, KAM installed upgrades and Wat control requirements`);
