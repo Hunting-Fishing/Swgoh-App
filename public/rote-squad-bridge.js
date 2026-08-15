@@ -1,5 +1,5 @@
 (() => {
-  const cssHref = "/tb-command-center.css?v=20260815-tb6";
+  const cssHref = "/tb-command-center.css?v=20260815-tb7";
   if (!document.querySelector(`link[href="${cssHref}"]`)) {
     const link = document.createElement("link");
     link.rel = "stylesheet";
@@ -7,24 +7,29 @@
     document.head.appendChild(link);
   }
 
-  import("/tb-command-center.js?v=20260815-tb6").catch((error) => {
+  import("/tb-command-center.js?v=20260815-tb7").catch((error) => {
     console.error("TB Command Center failed to load", error);
   });
 
   let roteMissionPromise = null;
-  const loadRoteMissionIntelligence = () => {
+  let tbCombatPromise = null;
+  const loadTbEnhancements = () => {
     roteMissionPromise ||= import("/rote-mission-pro.js?v=20260815-rotemission1").catch((error) => {
       roteMissionPromise = null;
       console.error("ROTE exact mission intelligence failed to load", error);
     });
-    return roteMissionPromise;
+    tbCombatPromise ||= import("/tb-combat-overlay.js?v=20260815-tbcombat1").catch((error) => {
+      tbCombatPromise = null;
+      console.error("TB combat preparation failed to load", error);
+    });
+    return Promise.allSettled([roteMissionPromise, tbCombatPromise]);
   };
 
   window.addEventListener("swgoh:workspace-activated", (event) => {
-    if (event.detail?.id === "rote") void loadRoteMissionIntelligence();
+    if (event.detail?.id === "rote") void loadTbEnhancements();
   });
   document.addEventListener("click", (event) => {
-    if (event.target.closest('button[data-workspace-tab="rote"]')) void loadRoteMissionIntelligence();
+    if (event.target.closest('button[data-workspace-tab="rote"]')) void loadTbEnhancements();
   }, true);
 
   window.addEventListener("swgoh:replace-squad", (event) => {
