@@ -5,8 +5,9 @@ import { aggregateRoteOperations, readyOccurrences } from "../rote-operations.mj
 const fixture = [
   {
     id: "P1-C1",
+    linkedConflictId: "tb3_mixed_phase01_conflict01",
     phase: "P1",
-    squads: [{ units: [
+    squads: [{ id: "platoon-1", units: [
       { baseId: "A", nameKey: "Alpha", combatType: 1, unitRelicTier: 7, rarity: 7 },
       { baseId: "SHIP", nameKey: "Ship", combatType: 2, unitRelicTier: 7, rarity: 7 },
     ] }],
@@ -14,16 +15,31 @@ const fixture = [
   {
     id: "P2-C1",
     phase: "P2",
-    squads: [{ units: [
+    squads: [{ id: "platoon-2", units: [
       { baseId: "A", nameKey: "Alpha", combatType: 1, unitRelicTier: 8, rarity: 7 },
       { baseId: "B", nameKey: "Beta", combatType: 1, unitRelicTier: 9, rarity: 7 },
     ] }],
   },
 ];
 
-test("aggregates exact ROTE operation demand and normalizes internal relic tiers", () => {
+test("aggregates exact ROTE operation demand, slots and normalized relic tiers", () => {
   const result = aggregateRoteOperations(fixture);
   assert.equal(result.totalSlots, 4);
+  assert.equal(result.slots.length, 4);
+  assert.deepEqual(result.slots[0], {
+    id: "P1:P1-C1:platoon-1:1:A",
+    phase: "P1",
+    conflictId: "P1-C1",
+    linkedConflictId: "tb3_mixed_phase01_conflict01",
+    squadId: "platoon-1",
+    slot: 1,
+    baseId: "A",
+    name: "Alpha",
+    combatType: 1,
+    unitType: "Character",
+    requiredRelic: 5,
+    requiredRarity: 7,
+  });
   assert.equal(result.uniqueUnits, 3);
   const alpha = result.requirements.find((entry) => entry.baseId === "A");
   assert.equal(alpha.requiredCount, 2);
