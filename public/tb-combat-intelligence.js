@@ -2,6 +2,7 @@ import { mergeAbilityProgression } from "./progression-policy.js";
 import { recommendationRosterFit } from "./tb-mission-intelligence.js";
 import { analyzeMissionMechanicCoverage } from "./mission-mechanic-intelligence.js";
 import { teamInteractionProfileFromCatalog } from "./interaction-graph.js";
+import { evaluateBattleStrategy } from "./tb-battle-strategy.js";
 
 export const TB_OMICRON_MODES = Object.freeze({
   STRIKE: 5,
@@ -149,7 +150,7 @@ export function analyzeTeamCombatPreparation(body, mission, recommendation, cata
   const selectedBaseIds = members.map((member) => member.unit?.baseId || member.baseId).filter(Boolean);
   const interactionProfile = teamInteractionProfileFromCatalog(selectedBaseIds, catalog);
 
-  return {
+  const result = {
     missionId: String(mission?.id || ""),
     recommendationId: String(recommendation?.id || ""),
     members,
@@ -178,6 +179,8 @@ export function analyzeTeamCombatPreparation(body, mission, recommendation, cata
     mechanics: Array.isArray(mission?.mechanics) ? [...mission.mechanics] : [],
     enemies: Array.isArray(mission?.enemies) ? [...mission.enemies] : [],
   };
+  result.battleStrategy = evaluateBattleStrategy(result, mission);
+  return result;
 }
 
 export function combatPreparationStatus(analysis) {
@@ -186,6 +189,7 @@ export function combatPreparationStatus(analysis) {
   const minimumMiss = analysis.members.some((member) => member.minimumGap?.ready === false);
   if (minimumMiss) return { level: "warning", label: "MINIMUM TARGET GAP" };
   if (analysis.mechanicCoverage?.missing?.length) return { level: "warning", label: "MECHANIC GAP" };
+  if (analysis.battleStrategy?.available && analysis.battleStrategy.blockers?.length) return { level: "warning", label: "STRATEGY GAP" };
   if (analysis.targets.minimumDefined) return { level: "ready", label: "MINIMUM READY" };
   return { level: "ready", label: "ENTRY READY" };
 }
