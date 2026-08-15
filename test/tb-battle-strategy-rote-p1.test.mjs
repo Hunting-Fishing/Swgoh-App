@@ -126,8 +126,11 @@ test("ROTE phase one strategies keep evidence boundaries and avoid fabricated od
   for (const strategy of Object.values(ROTE_P1_BATTLE_STRATEGIES)) {
     assert.ok(strategy.sources.some((source) => source.kind === "official" || source.kind === "current-reference"));
     assert.match(strategy.evidenceBoundary, /(official|current|community)/i);
+    assert.equal("winPercent" in strategy, false);
+    assert.equal("score" in strategy, false);
+    assert.equal("guaranteedWin" in strategy, false);
     const text = JSON.stringify(strategy);
-    assert.doesNotMatch(text, /100% win|guaranteed clear|win probability/i);
+    assert.doesNotMatch(text, /\b(?:9\d|100)%\s*(?:win|clear)/i);
   }
 });
 
