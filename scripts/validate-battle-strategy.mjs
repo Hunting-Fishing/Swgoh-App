@@ -4,6 +4,7 @@ import { battleStrategyForMission } from "../public/tb-battle-strategy-data.js";
 import { watBattleStrategyForMission } from "../public/tb-battle-strategy-wat-data.js";
 import { rotePhaseOneBattleStrategyForMission } from "../public/tb-battle-strategy-rote-p1-data.js";
 import { mandaloreBattleStrategyForMission } from "../public/tb-battle-strategy-mandalore-data.js";
+import { rotePriorityBattleStrategyForMission } from "../public/tb-battle-strategy-rote-priority-data.js";
 import { evaluateBattleStrategy } from "../public/tb-battle-strategy.js";
 
 function member(baseId, name, abilities, speed = null) {
@@ -74,6 +75,21 @@ for (const id of roteP1PackIds) {
   assert.ok(strategy.evidenceBoundary, `${id} evidence boundary missing`);
 }
 
+const rotePriorityPackIds = ["tatooine-mandalore-unlock", "mandalore-dtmg", "haven-reva"];
+for (const id of rotePriorityPackIds) {
+  const strategy = rotePriorityBattleStrategyForMission(id);
+  assert.ok(strategy, `${id} priority ROTE strategy pack missing`);
+  assert.ok(Array.isArray(strategy.sources) && strategy.sources.length > 0, `${id} strategy sources missing`);
+  assert.ok(strategy.sources.some((source) => source.kind === "official" || source.kind === "current-reference"), `${id} authoritative source missing`);
+  assert.ok(strategy.evidenceBoundary, `${id} evidence boundary missing`);
+  assert.equal("winPercent" in strategy, false, `${id} must not invent win percentage`);
+  assert.equal("score" in strategy, false, `${id} must not invent strategy score`);
+}
+assert.equal(rotePriorityBattleStrategyForMission("mandalore-bkm"), null, "Existing Mandalore BKM module must retain mission ownership");
+assert.equal(rotePriorityBattleStrategyForMission("tatooine-mandalore-unlock")?.requiredLeaderBaseId, "MANDALORBOKATAN");
+assert.equal(rotePriorityBattleStrategyForMission("mandalore-dtmg")?.requiredLeaderBaseId, "MOFFGIDEONS3");
+assert.equal(rotePriorityBattleStrategyForMission("haven-reva")?.requiredLeaderBaseId, "THIRDSISTER");
+
 const statusSemantics = extractAbilitySemantics({ description: "Inflict Purge, Thermal Detonator and Armor Shred on target enemy." });
 assert.ok(statusSemantics.debuffs.includes("Purge"), "Purge semantic recognition missing");
 assert.ok(statusSemantics.debuffs.includes("Thermal Detonator"), "Thermal Detonator semantic recognition missing");
@@ -118,4 +134,4 @@ assert.equal(reversed.status, "warning", "Reversed BKM/BAM speed order should be
 assert.equal(reversed.blockers.length, 0, "Speed-order recommendation must not be promoted to a hard mission gate");
 assert.ok(reversed.warnings.some((check) => check.type === "speed-order" && check.ready === false), "Reversed speed order should surface an advisory");
 
-console.log(`[battle-strategy] validated ${corePackIds.length + 2 + roteP1PackIds.length} strategy packs, semantic gates, KAM/Wat controls, ROTE Phase 1 evidence and Mandalore speed order`);
+console.log(`[battle-strategy] validated ${corePackIds.length + 2 + roteP1PackIds.length + rotePriorityPackIds.length} strategy packs, semantic gates, KAM/Wat controls, ROTE Phase 1 evidence, Mandalore speed order and remaining priority ROTE packs`);
