@@ -92,11 +92,17 @@ test("Kessel strategy fails closed without Baylan or an official required unit",
 
 test("Vandor pack remains conservative while enforcing the mandatory Prepared core", () => {
   const analysis = evaluateBattleStrategy({ missionId: "vandor-yhan", members: [youngHan(), vandor(), qira()] });
+  const strategy = ROTE_REWARD_BATTLE_STRATEGIES["vandor-yhan"];
   assert.equal(analysis.blockers.length, 0);
   assert.equal(analysis.strategyStatus, "kit-driven-conservative");
   assert.match(analysis.summary, /Sabacc Shift/i);
+  assert.match(analysis.summary, /Health Up \(35%\)/i);
+  assert.match(analysis.summary, /Boxed In/i);
   assert.match(analysis.summary, /Prepared/i);
+  assert.match(JSON.stringify(analysis.stages), /Crate/i);
+  assert.match(JSON.stringify(analysis.stages), /50% Health and Protection/i);
   assert.match(analysis.evidenceBoundary, /adaptive/i);
+  assert.doesNotMatch(JSON.stringify(strategy), /\bdice\b|\broll\b/i);
   assert.ok(analysis.checks.some((check) => check.id === "YOUNGHAN" && check.required));
   assert.ok(analysis.checks.some((check) => check.id === "YOUNGCHEWBACCA" && check.required));
   assert.equal("winPercent" in analysis, false);
