@@ -2,7 +2,7 @@
 
 **Purpose:** this is the authoritative Discord bot bring-up checklist for the SWGOH Command Center project. Update this file as work is completed. Do not skip ahead simply because later architecture has been discussed.
 
-**Current checkpoint:** **Stage 4 — bootstrap the pilot Discord server to the live SWGOH guild with `/tb setup`.**
+**Current checkpoint:** **Stage 4D — create the pilot Discord officer role before running `/tb setup`.**
 
 **Current operating mode:** signed HTTP Discord interactions, guild-scoped `/tb` pilot, live SWGOH gateway reads, durable Railway Volume attached, outbound publishing/DM delivery still disabled.
 
@@ -124,29 +124,16 @@ Do not fake durability by pointing state at an ordinary ephemeral container dire
 
 ## Stage 4 — CURRENT CHECKPOINT: bootstrap the pilot guild with `/tb setup`
 
-The last verified Discord status reported:
-
-```text
-Pilot SWGOH guild seed: not configured
-```
-
-and setup correctly refused to continue without the bootstrap Ally Code.
-
 ### 4A. Configure the pilot SWGOH guild seed
 
-- [ ] In **Swgoh-App → Variables**, add:
-
-```text
-DISCORD_DEFAULT_ALLY_CODE=<9-digit Ally Code from a player in the pilot SWGOH guild>
-```
-
-Use digits only or a normal formatted Ally Code; the app normalizes it to exactly 9 digits.
+- [x] `DISCORD_DEFAULT_ALLY_CODE` is configured in **Swgoh-App → Variables**.
+- [x] `/tb status` reports `Pilot SWGOH guild seed: configured`.
 
 This is a **pilot bootstrap seed**, not the long-term commercial multi-guild onboarding model. Once `/tb setup` durably binds this Discord server to its SWGOH guild, normal live read commands resolve the durable binding first.
 
 ### 4B. Wait for Railway deployment
 
-- [ ] Wait for **Swgoh-App → Deployment successful / ACTIVE** after the variable/volume changes.
+- [x] Updated Swgoh-App deployment is serving the new configuration.
 
 ### 4C. Verify status before setup
 
@@ -156,28 +143,67 @@ Run in Discord:
 /tb status
 ```
 
-- [ ] `HTTP interactions: enabled`.
-- [ ] Pilot Discord server ID is correct.
-- [ ] `Pilot SWGOH guild seed: configured`.
+Verified:
+
+- [x] `HTTP interactions: enabled`.
+- [x] Pilot Discord server ID is correct.
+- [x] `Pilot SWGOH guild seed: configured`.
 - [ ] Durable state reports ready rather than `durable-storage-not-configured`.
-- [ ] Publishing/DM delivery remains disabled.
+- [x] Publishing/DM delivery remains disabled.
 
-### 4D. Run `/tb setup`
+### 4D. Create the Discord officer role — CURRENT ACTION
 
-Run as a Discord member with **Manage Guild / Manage Server** or **Administrator**:
+The pilot Discord server currently has no custom roles; only `@everyone` exists. Do **not** use `@everyone` for `officer_role`. The bot intentionally rejects it because that would authorize every server member as an officer.
+
+Create this pilot role:
+
+```text
+SWGOH Officer
+```
+
+Recommended pilot policy:
+
+- this role identifies people authorized to operate SWGOH Command Center officer commands;
+- do **not** enable Discord `Administrator` merely for the bot;
+- do **not** enable Discord `Manage Roles` merely for the bot;
+- do **not** enable Discord `Manage Server` merely for ordinary bot officer access;
+- role membership itself is persisted by `/tb setup` as the Command Center officer authorization signal;
+- the server owner/Administrator can still bootstrap setup independently of the custom role.
+
+Create and assign it in Discord:
+
+1. Server name → **Server Settings**.
+2. **Roles** → **Create Role**.
+3. Name it `SWGOH Officer`.
+4. Choose a visible role color if desired.
+5. Leave dangerous administrative permissions disabled for the pilot unless independently required for Discord administration.
+6. Save changes.
+7. Open **Members** / **Manage Members**.
+8. Assign `SWGOH Officer` to the pilot operator account.
+9. Ensure the SWGOH Command Center bot's managed bot role remains in a sane hierarchy and is not replaced by `SWGOH Officer`.
+
+Acceptance:
+
+- [ ] `SWGOH Officer` role exists.
+- [ ] Pilot operator is assigned `SWGOH Officer`.
+- [ ] `@everyone` is not used as the bot officer role.
+- [ ] No unnecessary `Administrator` permission was granted.
+- [ ] The role appears in the `/tb setup officer_role` picker.
+
+### 4E. Run `/tb setup`
+
+Run as the server owner or a Discord member with **Manage Guild / Manage Server** or **Administrator**:
 
 ```text
 /tb setup
 ```
 
-Recommended selections for this pilot:
+Recommended selections:
 
 ```text
 channel: #bot-for-raid
-officer_role: <the Discord role that should operate SWGOH Command Center>
+officer_role: @SWGOH Officer
 ```
-
-Both options are selectable in Discord. The command channel can default to the current channel, and officer role may be omitted initially if needed; Manage Guild/Administrator remains bootstrap authority.
 
 Expected setup behavior:
 
@@ -186,14 +212,14 @@ Expected setup behavior:
 3. verify the live guild can be resolved;
 4. persist the Discord server → SWGOH guild binding;
 5. persist the command channel;
-6. persist the selected officer role ID when supplied;
+6. persist the selected officer role ID;
 7. write an audit entry to durable state;
 8. return an ephemeral success response.
 
 - [ ] `/tb setup` succeeds.
 - [ ] Discord→SWGOH guild binding persisted.
 - [ ] `#bot-for-raid` command channel persisted.
-- [ ] Officer role persisted, if selected.
+- [ ] `SWGOH Officer` role persisted.
 - [ ] Durable state file exists on `/data`.
 - [ ] Re-running `/tb status` reflects configured live guild state.
 
@@ -417,18 +443,13 @@ Known configured variables from the pilot deployment:
 DISCORD_APPLICATION_ID
 DISCORD_BOT_TOKEN
 DISCORD_DEFAULT_GUILD_ID
+DISCORD_DEFAULT_ALLY_CODE
 DISCORD_PUBLIC_KEY
 DISCORD_TB_DELIVERY_ENABLED
 DISCORD_TB_INTERACTIONS_ENABLED
 SWGOH_GATEWAY_API_KEY
 SWGOH_GATEWAY_URL
 SWGOH_REQUEST_TIMEOUT_MS
-```
-
-Current missing/next-required variable based on the last `/tb status` result:
-
-```text
-DISCORD_DEFAULT_ALLY_CODE=<pilot guild member Ally Code>
 ```
 
 Volume:
@@ -494,10 +515,10 @@ Safe clears such as `DEFAULT` preference or `AVAILABLE` may remove stale control
 
 # Immediate next action — do not skip
 
-1. Add `DISCORD_DEFAULT_ALLY_CODE` to **Swgoh-App** if it has not yet been added.
-2. Wait for Railway to redeploy successfully.
-3. Run `/tb status` and confirm **guild seed configured + durable state ready**.
-4. Run `/tb setup` in `#bot-for-raid`, selecting the desired officer role.
+1. Create the `SWGOH Officer` Discord role.
+2. Assign `SWGOH Officer` to the pilot operator account.
+3. Confirm the role appears in `/tb setup officer_role`.
+4. Run `/tb setup` with `channel:#bot-for-raid` and `officer_role:@SWGOH Officer`.
 5. Capture the exact Discord result.
 6. Only after setup succeeds, proceed to `/tb sync`.
 
@@ -505,5 +526,6 @@ Safe clears such as `DEFAULT` preference or `AVAILABLE` may remove stale control
 
 ## Change log
 
+- 2026-08-17: Added explicit Discord officer-role creation checkpoint before `/tb setup`; recorded the Ally Code seed as configured and retained `/tb setup` as the active stage.
 - 2026-08-17: Converted this document into the authoritative master checklist and reset the active checkpoint to `/tb setup`.
 - 2026-08-17: Recorded successful `/tb` registration, live signed interaction response, Railway `/data` Volume mount, existing member-link/preference/availability functionality, safety roadmap, and parked commercial scaling work.
