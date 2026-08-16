@@ -266,7 +266,7 @@ test("/tb status is ephemeral and pilot-guild restricted", () => {
   assert.match(denied.data.content, /restricted to the configured pilot Discord server/);
 });
 
-test("deferred commands require a valid pilot Ally Code and /tb phase still requires an explicit phase", () => {
+test("live read commands can defer without the fallback Ally Code while /tb setup still requires the bootstrap seed", () => {
   const configured = discordTbConfig({
     DISCORD_TB_INTERACTIONS_ENABLED: "true",
     DISCORD_APPLICATION_ID: "123456789012345678",
@@ -299,15 +299,18 @@ test("deferred commands require a valid pilot Ally Code and /tb phase still requ
   assert.equal(missingPhase.type, 4);
   assert.match(missingPhase.data.content, /Choose a ROTE phase/);
 
-  const missing = discordTbConfig({
+  const durableOnly = discordTbConfig({
     DISCORD_TB_INTERACTIONS_ENABLED: "true",
     DISCORD_APPLICATION_ID: "123456789012345678",
     DISCORD_PUBLIC_KEY: "ab".repeat(32),
     DISCORD_DEFAULT_GUILD_ID: "987654321098765432",
   });
-  const response = handleDiscordTbCommand(syncInteraction, missing);
-  assert.equal(response.type, 4);
-  assert.match(response.data.content, /DISCORD_DEFAULT_ALLY_CODE/);
+  const syncResponse = handleDiscordTbCommand(syncInteraction, durableOnly);
+  assert.equal(syncResponse.type, 5);
+
+  const setupResponse = handleDiscordTbCommand(setupInteraction, durableOnly);
+  assert.equal(setupResponse.type, 4);
+  assert.match(setupResponse.data.content, /Initial.*tb setup.*DISCORD_DEFAULT_ALLY_CODE/);
 });
 
 test("subcommand/option resolver handles Discord setup channel/role snowflake values and validates phase", () => {
@@ -427,6 +430,34 @@ test("deferred sync returns a live read-only guild summary", async () => {
   );
   assert.match(content, /Pilot Guild/);
   assert.match(content, /No TB assignments or officer state were changed/);
+});
+
+test("deferred sync permits a durable-only live service with no environment fallback Ally Code", async () => {
+  const config = discordTbConfig({
+    DISCORD_APPLICATION_ID: "123456789012345678",
+    DISCORD_PUBLIC_KEY: "ab".repeat(32),
+    DISCORD_DEFAULT_GUILD_ID: "987654321098765432",
+  });
+  let capturedArgs;
+  const interaction = {
+    guild_id: "987654321098765432",
+    data: { name: "tb", options: [{ type: 1, name: "sync" }] },
+  };
+  const content = await executeDiscordTbDeferredCommand(interaction, config, {
+    syncGuild: async (args) => {
+      capturedArgs = args;
+      return {
+        cache: "refreshed",
+        guild: {
+          guild: { name: "Durable Guild" },
+          members: [{ rosterAvailable: true, galacticPower: 5678 }],
+        },
+      };
+    },
+  });
+  assert.equal(capturedArgs.allyCode, "");
+  assert.equal(capturedArgs.interaction, interaction);
+  assert.match(content, /Durable Guild/);
 });
 
 test("deferred phase command returns the shared officer phase summary", async () => {
