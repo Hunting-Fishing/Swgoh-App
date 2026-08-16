@@ -4,7 +4,9 @@ import { generateKeyPairSync, sign } from "node:crypto";
 import { Readable } from "node:stream";
 import {
   discordTbConfig,
+  discordTbMemberHasConfiguredOfficerRole,
   discordTbMemberHasOfficerPermission,
+  discordTbOption,
   discordTbPhase,
   discordTbPublicStatus,
   discordTbSubcommand,
@@ -59,6 +61,13 @@ function authEnv(publicKeyHex) {
   };
 }
 
+function configuredRoleStore(roleId = "333333333333333333") {
+  return {
+    status: () => ({ enabled: true, durable: true, reason: "ready" }),
+    readGuild: async () => ({ officerRoleIds: [roleId] }),
+  };
+}
+
 test("Discord interaction verification accepts the exact signed timestamp+body and rejects mutations", () => {
   const { publicKeyHex, privateKey } = testKeys();
   const timestamp = "1786887600";
@@ -71,7 +80,7 @@ test("Discord interaction verification accepts the exact signed timestamp+body a
   assert.equal(verifyDiscordInteraction({ publicKey: publicKeyHex, signature: "00", timestamp, rawBody }), false);
 });
 
-test("Discord public status exposes configuration booleans and auth policy but never secret values", () => {
+test("Discord public status exposes configuration/auth policy but never secret values", () => {
   const env = {
     DISCORD_TB_INTERACTIONS_ENABLED: "true",
     DISCORD_TB_DELIVERY_ENABLED: "false",
@@ -90,7 +99,8 @@ test("Discord public status exposes configuration booleans and auth policy but n
   assert.equal(status.commandRegistrationConfigured, true);
   assert.equal(status.pilotGuildLiveConfigured, true);
   assert.equal(status.redundancyTarget, 4);
-  assert.equal(status.officerAuthorization, "manage-guild-or-administrator");
+  assert.equal(status.officerAuthorization, "manage-guild-administrator-or-configured-role");
+  assert.equal(status.setupAuthorization, "manage-guild-or-administrator");
   assert.equal(serialized.includes("super-secret-token"), false);
   assert.equal(serialized.includes("ab".repeat(32)), false);
   assert.equal(serialized.includes("123456789"), false);
@@ -107,7 +117,7 @@ test("invalid public key leaves the interaction configuration fail-closed", () =
   assert.equal(config.publicKey, "");
 });
 
-test("officer authorization accepts Manage Guild or Administrator and rejects malformed/missing permissions", () => {
+test("bootstrap officer authorization accepts Manage Guild or Administrator and rejects malformed/missing permissions", () => {
   assert.equal(discordTbMemberHasOfficerPermission({ member: { permissions: "32" } }), true);
   assert.equal(discordTbMemberHasOfficerPermission({ member: { permissions: "8" } }), true);
   assert.equal(discordTbMemberHasOfficerPermission({ member: { permissions: "40" } }), true);
@@ -117,19 +127,30 @@ test("officer authorization accepts Manage Guild or Administrator and rejects ma
   assert.equal(discordTbMemberHasOfficerPermission({ member: { permissions: "not-a-bitset" } }), false);
 });
 
-test("signed application commands are rejected server-side when the member lacks officer permission", async () => {
+test("configured officer-role authorization is durable-state backed and fail-closed", async () => {
+  const interaction = {
+    guild_id: "987654321098765432",
+    member: { permissions: "0", roles: ["333333333333333333"] },
+  };
+  assert.equal(await discordTbMemberHasConfiguredOfficerRole(interaction, configuredRoleStore()), true);
+  assert.equal(await discordTbMemberHasConfiguredOfficerRole(interaction, configuredRoleStore("444444444444444444")), false);
+  assert.equal(await discordTbMemberHasConfiguredOfficerRole(interaction, { status: () => ({ enabled: false }), readGuild: async () => ({ officerRoleIds: ["333333333333333333"] }) }), false);
+  assert.equal(await discordTbMemberHasConfiguredOfficerRole(interaction, { status: () => ({ enabled: true }), readGuild: async () => { throw new Error("read failed"); } }), false);
+});
+
+test("signed application commands are rejected when the member has neither Discord officer permission nor configured role", async () => {
   const { publicKeyHex, privateKey } = testKeys();
   const interaction = {
     type: 2,
     application_id: "123456789012345678",
     guild_id: "987654321098765432",
-    member: { permissions: "0", user: { id: "111111111111111111" } },
+    member: { permissions: "0", roles: [], user: { id: "111111111111111111" } },
     data: { name: "tb", options: [{ type: 1, name: "status" }] },
   };
   const request = signedInteractionRequest(interaction, privateKey);
   const captured = captureResponse();
 
-  await handleDiscordInteractionRequest(request, captured.response, authEnv(publicKeyHex));
+  await handleDiscordInteractionRequest(request, captured.response, authEnv(publicKeyHex), { stateStore: configuredRoleStore() });
   assert.equal(captured.result.status, 200);
   const body = JSON.parse(captured.result.body);
   assert.equal(body.type, 4);
@@ -137,13 +158,52 @@ test("signed application commands are rejected server-side when the member lacks
   assert.match(body.data.content, /Officer permission required/);
 });
 
-test("signed application commands with Manage Guild permission pass the server-side officer gate", async () => {
+test("signed read commands with a durably configured officer role pass without Manage Guild", async () => {
   const { publicKeyHex, privateKey } = testKeys();
   const interaction = {
     type: 2,
     application_id: "123456789012345678",
     guild_id: "987654321098765432",
-    member: { permissions: "32", user: { id: "111111111111111111" } },
+    member: { permissions: "0", roles: ["333333333333333333"], user: { id: "111111111111111111" } },
+    data: { name: "tb", options: [{ type: 1, name: "status" }] },
+  };
+  const request = signedInteractionRequest(interaction, privateKey);
+  const captured = captureResponse();
+
+  await handleDiscordInteractionRequest(request, captured.response, authEnv(publicKeyHex), { stateStore: configuredRoleStore() });
+  assert.equal(captured.result.status, 200);
+  const body = JSON.parse(captured.result.body);
+  assert.equal(body.type, 4);
+  assert.match(body.data.content, /durably configured officer role/);
+});
+
+test("configured officer roles cannot bootstrap or reconfigure /tb setup", async () => {
+  const { publicKeyHex, privateKey } = testKeys();
+  const interaction = {
+    type: 2,
+    application_id: "123456789012345678",
+    guild_id: "987654321098765432",
+    channel_id: "222222222222222222",
+    member: { permissions: "0", roles: ["333333333333333333"], user: { id: "111111111111111111" } },
+    data: { name: "tb", options: [{ type: 1, name: "setup" }] },
+  };
+  const request = signedInteractionRequest(interaction, privateKey);
+  const captured = captureResponse();
+
+  await handleDiscordInteractionRequest(request, captured.response, authEnv(publicKeyHex), { stateStore: configuredRoleStore() });
+  assert.equal(captured.result.status, 200);
+  const body = JSON.parse(captured.result.body);
+  assert.equal(body.type, 4);
+  assert.match(body.data.content, /Bootstrap permission required/);
+});
+
+test("signed application commands with Manage Guild permission pass the bootstrap officer gate", async () => {
+  const { publicKeyHex, privateKey } = testKeys();
+  const interaction = {
+    type: 2,
+    application_id: "123456789012345678",
+    guild_id: "987654321098765432",
+    member: { permissions: "32", roles: [], user: { id: "111111111111111111" } },
     data: { name: "tb", options: [{ type: 1, name: "status" }] },
   };
   const request = signedInteractionRequest(interaction, privateKey);
@@ -154,7 +214,7 @@ test("signed application commands with Manage Guild permission pass the server-s
   const body = JSON.parse(captured.result.body);
   assert.equal(body.type, 4);
   assert.match(body.data.content, /SWGOH Command Center · TB/);
-  assert.match(body.data.content, /server-enforced/);
+  assert.match(body.data.content, /Setup authorization/);
 });
 
 test("signed application commands from a different Discord application are rejected", async () => {
@@ -206,7 +266,7 @@ test("/tb status is ephemeral and pilot-guild restricted", () => {
   assert.match(denied.data.content, /restricted to the configured pilot Discord server/);
 });
 
-test("live read commands defer only after a valid pilot Ally Code is configured", () => {
+test("deferred commands require a valid pilot Ally Code and /tb phase still requires an explicit phase", () => {
   const configured = discordTbConfig({
     DISCORD_TB_INTERACTIONS_ENABLED: "true",
     DISCORD_APPLICATION_ID: "123456789012345678",
@@ -214,11 +274,17 @@ test("live read commands defer only after a valid pilot Ally Code is configured"
     DISCORD_DEFAULT_GUILD_ID: "987654321098765432",
     DISCORD_DEFAULT_ALLY_CODE: "123456789",
   });
-  const interaction = {
+  const syncInteraction = {
     guild_id: "987654321098765432",
     data: { name: "tb", options: [{ type: 1, name: "sync" }] },
   };
-  assert.equal(handleDiscordTbCommand(interaction, configured).type, 5);
+  const setupInteraction = {
+    guild_id: "987654321098765432",
+    channel_id: "222222222222222222",
+    data: { name: "tb", options: [{ type: 1, name: "setup" }] },
+  };
+  assert.equal(handleDiscordTbCommand(syncInteraction, configured).type, 5);
+  assert.equal(handleDiscordTbCommand(setupInteraction, configured).type, 5);
 
   const phaseInteraction = {
     guild_id: "987654321098765432",
@@ -239,16 +305,104 @@ test("live read commands defer only after a valid pilot Ally Code is configured"
     DISCORD_PUBLIC_KEY: "ab".repeat(32),
     DISCORD_DEFAULT_GUILD_ID: "987654321098765432",
   });
-  const response = handleDiscordTbCommand(interaction, missing);
+  const response = handleDiscordTbCommand(syncInteraction, missing);
   assert.equal(response.type, 4);
   assert.match(response.data.content, /DISCORD_DEFAULT_ALLY_CODE/);
 });
 
-test("subcommand resolver defaults to status and phase scope is validated", () => {
-  assert.equal(discordTbSubcommand({ data: { options: [{ type: 1, name: "assignments" }] } }), "assignments");
+test("subcommand/option resolver handles Discord setup channel/role snowflake values and validates phase", () => {
+  const setup = {
+    data: {
+      options: [{
+        type: 1,
+        name: "setup",
+        options: [
+          { type: 7, name: "channel", value: "222222222222222222" },
+          { type: 8, name: "officer_role", value: "333333333333333333" },
+        ],
+      }],
+    },
+  };
+  assert.equal(discordTbSubcommand(setup), "setup");
+  assert.equal(discordTbOption(setup, "channel"), "222222222222222222");
+  assert.equal(discordTbOption(setup, "officer_role"), "333333333333333333");
   assert.equal(discordTbSubcommand({ data: {} }), "status");
   assert.equal(discordTbPhase({ data: { options: [{ type: 1, name: "assignments", options: [{ type: 3, name: "phase", value: "P3" }] }] } }), "P3");
   assert.equal(discordTbPhase({ data: { options: [{ type: 1, name: "assignments", options: [{ type: 3, name: "phase", value: "P9" }] }] } }), "");
+});
+
+test("deferred setup performs one durable atomic bootstrap and defaults channel to the interaction channel", async () => {
+  const config = discordTbConfig({
+    DISCORD_APPLICATION_ID: "123456789012345678",
+    DISCORD_PUBLIC_KEY: "ab".repeat(32),
+    DISCORD_DEFAULT_GUILD_ID: "987654321098765432",
+    DISCORD_DEFAULT_ALLY_CODE: "123456789",
+  });
+  let capturedArgs;
+  const content = await executeDiscordTbDeferredCommand(
+    {
+      guild_id: "987654321098765432",
+      channel_id: "222222222222222222",
+      member: { user: { id: "111111111111111111" } },
+      data: {
+        name: "tb",
+        options: [{ type: 1, name: "setup", options: [{ type: 8, name: "officer_role", value: "333333333333333333" }] }],
+      },
+    },
+    config,
+    {
+      stateStore: {
+        status: () => ({ enabled: true, durable: true, reason: "ready" }),
+        bootstrapGuild: async (args) => {
+          capturedArgs = args;
+          return {
+            discordGuildId: args.discordGuildId,
+            swgohAllyCode: args.swgohAllyCode,
+            commandChannelId: args.commandChannelId,
+            officerRoleIds: args.officerRoleIds,
+          };
+        },
+      },
+    },
+  );
+  assert.deepEqual(capturedArgs, {
+    discordGuildId: "987654321098765432",
+    swgohAllyCode: "123456789",
+    commandChannelId: "222222222222222222",
+    officerRoleIds: ["333333333333333333"],
+    actorDiscordUserId: "111111111111111111",
+  });
+  assert.match(content, /Durable Setup Saved/);
+  assert.match(content, /Publishing and DMs are still disabled/);
+});
+
+test("deferred setup refuses to mutate when durable state is not ready", async () => {
+  const config = discordTbConfig({
+    DISCORD_APPLICATION_ID: "123456789012345678",
+    DISCORD_PUBLIC_KEY: "ab".repeat(32),
+    DISCORD_DEFAULT_GUILD_ID: "987654321098765432",
+    DISCORD_DEFAULT_ALLY_CODE: "123456789",
+  });
+  let mutations = 0;
+  await assert.rejects(
+    () => executeDiscordTbDeferredCommand(
+      {
+        guild_id: "987654321098765432",
+        channel_id: "222222222222222222",
+        member: { user: { id: "111111111111111111" } },
+        data: { name: "tb", options: [{ type: 1, name: "setup" }] },
+      },
+      config,
+      {
+        stateStore: {
+          status: () => ({ enabled: false, durable: false, reason: "durable-storage-not-configured" }),
+          bootstrapGuild: async () => { mutations += 1; },
+        },
+      },
+    ),
+    /Attach a persistent Railway Volume/,
+  );
+  assert.equal(mutations, 0);
 });
 
 test("deferred sync returns a live read-only guild summary", async () => {
