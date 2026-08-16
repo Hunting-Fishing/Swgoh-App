@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { aggregateRoteOperations } from "./rote-operations.mjs";
 import { buildGuildRoteOperationSafety } from "./public/guild-rote-operation-safety.js";
 import { planGuildRoteSafeAssignments } from "./public/guild-rote-safe-planner.js";
+import { buildGuildTbPhaseCommand } from "./public/guild-tb-phase-command-model.js";
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "public");
 const guildCache = new Map();
@@ -127,6 +128,25 @@ async function loadOperations(config, fetchImpl) {
   return roteCache.promise;
 }
 
+async function buildPlanningSnapshot({ allyCode, redundancyTarget }, config, fetchImpl) {
+  const [guildResult, operations, catalog] = await Promise.all([
+    loadGuild(allyCode, config, fetchImpl, false),
+    loadOperations(config, fetchImpl),
+    loadCatalog(),
+  ]);
+  const safety = buildGuildRoteOperationSafety(guildResult.guild, catalog, { redundancyTarget });
+  const plan = planGuildRoteSafeAssignments(guildResult.guild, operations, {
+    protections: safety.protections,
+  });
+  return Object.freeze({
+    guild: guildResult.guild,
+    cache: guildResult.cache,
+    operations,
+    safety,
+    plan,
+  });
+}
+
 export function createDiscordTbLiveServices(env = process.env, options = {}) {
   const config = createConfig(env);
   const fetchImpl = options.fetch || fetch;
@@ -137,22 +157,18 @@ export function createDiscordTbLiveServices(env = process.env, options = {}) {
       return loadGuild(allyCode, config, fetchImpl, true);
     },
     async buildPlan({ allyCode, redundancyTarget = 2 }) {
-      const [guildResult, operations, catalog] = await Promise.all([
-        loadGuild(allyCode, config, fetchImpl, false),
-        loadOperations(config, fetchImpl),
-        loadCatalog(),
-      ]);
-      const safety = buildGuildRoteOperationSafety(guildResult.guild, catalog, { redundancyTarget });
-      const plan = planGuildRoteSafeAssignments(guildResult.guild, operations, {
-        protections: safety.protections,
+      return buildPlanningSnapshot({ allyCode, redundancyTarget }, config, fetchImpl);
+    },
+    async buildPhaseCommand({ allyCode, redundancyTarget = 2, phase = "P1" }) {
+      const snapshot = await buildPlanningSnapshot({ allyCode, redundancyTarget }, config, fetchImpl);
+      const phaseCommand = buildGuildTbPhaseCommand({
+        guildSnapshot: snapshot.guild,
+        coverage: snapshot.safety.coverage,
+        safePlan: snapshot.plan,
+        safety: snapshot.safety,
+        phase,
       });
-      return Object.freeze({
-        guild: guildResult.guild,
-        cache: guildResult.cache,
-        operations,
-        safety,
-        plan,
-      });
+      return Object.freeze({ ...snapshot, phaseCommand });
     },
   });
 }
