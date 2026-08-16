@@ -3,6 +3,7 @@ import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { withCapabilityContract } from "./capability-contract.mjs";
+import { discordTbPublicStatus, handleDiscordInteractionRequest } from "./discord-tb.mjs";
 import { LiveRosterCache } from "./live-roster-cache.mjs";
 import { aggregateRoteOperations } from "./rote-operations.mjs";
 
@@ -200,6 +201,11 @@ async function loadGuildRoster(allyCode) {
 }
 
 async function handleApi(request, response, url) {
+  if (url.pathname === "/api/discord/status") {
+    writeJson(response, 200, discordTbPublicStatus());
+    return true;
+  }
+
   if (url.pathname === "/api/health") {
     try {
       const gateway = await requestGateway("/healthz", false);
@@ -207,6 +213,7 @@ async function handleApi(request, response, url) {
         status: gateway?.status === "configured" ? "ready" : "needs-configuration",
         liveOnly: true,
         gateway,
+        discordTb: discordTbPublicStatus(),
         rosterCache: {
           mode: "process-local-coalesced-swr-lru",
           freshSeconds: Math.round(rosterCacheFreshMs / 1000),
@@ -240,6 +247,7 @@ async function handleApi(request, response, url) {
       writeJson(response, error?.status || 502, {
         status: "unavailable",
         liveOnly: true,
+        discordTb: discordTbPublicStatus(),
         error: error?.name === "AbortError" ? "The live gateway timed out." : error?.message || "The live gateway is unavailable.",
       });
     }
@@ -354,12 +362,18 @@ async function serveStatic(response, pathname) {
 }
 
 const server = http.createServer(async (request, response) => {
-  if (request.method !== "GET") {
-    writeJson(response, 405, { error: "Method not allowed." }, { Allow: "GET" });
+  const url = new URL(request.url || "/", "http://localhost");
+
+  if (request.method === "POST" && url.pathname === "/api/discord/interactions") {
+    await handleDiscordInteractionRequest(request, response);
     return;
   }
 
-  const url = new URL(request.url || "/", "http://localhost");
+  if (request.method !== "GET") {
+    writeJson(response, 405, { error: "Method not allowed." }, { Allow: "GET, POST" });
+    return;
+  }
+
   if (url.pathname.startsWith("/api/")) {
     const handled = await handleApi(request, response, url);
     if (!handled) writeJson(response, 404, { error: "API route not found." });
