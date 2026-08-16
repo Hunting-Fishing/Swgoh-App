@@ -22,6 +22,7 @@
       return null;
     }
     if (url.origin !== window.location.origin) return null;
+    const force = url.searchParams.get("refresh") === "1";
 
     const player = url.pathname.match(/^\/api\/player\/(\d{9})$/);
     if (player) {
@@ -30,6 +31,7 @@
         key: url.pathname,
         allyCode: player[1],
         ttlMs: TTL.player,
+        force,
       };
     }
 
@@ -40,6 +42,7 @@
         key: url.pathname,
         allyCode: guildRoster[1],
         ttlMs: TTL.guild,
+        force,
       };
     }
 
@@ -50,17 +53,17 @@
         key: url.pathname,
         allyCode: guild[1],
         ttlMs: TTL.guild,
+        force,
       };
     }
 
     if (url.pathname === "/data/catalog.json") {
       return {
         kind: "catalog",
-        // Feature-specific query strings all request the same versioned static file.
-        // Canonicalizing the key prevents repeated downloads of a large catalog.
         key: url.pathname,
         allyCode: "",
         ttlMs: TTL.catalog,
+        force,
       };
     }
 
@@ -70,6 +73,7 @@
         key: url.pathname,
         allyCode: "",
         ttlMs: TTL.operations,
+        force,
       };
     }
 
@@ -146,10 +150,11 @@
 
     const now = Date.now();
     purgeExpired(now);
-    const cached = cache.get(info.key);
+    if (info.force) cache.delete(info.key);
+    const cached = info.force ? null : cache.get(info.key);
     if (cached && cached.expiresAt > now) return responseFrom(cached);
 
-    if (inflight.has(info.key)) {
+    if (!info.force && inflight.has(info.key)) {
       const entry = await inflight.get(info.key);
       return responseFrom(entry);
     }
@@ -177,7 +182,6 @@
     return responseFrom(entry);
   };
 
-  // Backward-compatible API used by existing player-roster features.
   window.__swgohRosterFetchCache = {
     clear(allyCode = "") {
       const code = digits(allyCode);
