@@ -115,7 +115,7 @@ async function readJsonBody(request) {
 
 function expectedOrigin(request) {
   const host = clean(request?.headers?.['x-forwarded-host'] || request?.headers?.host);
-  const proto = clean(request?.headers?.['x-forwarded-proto']).split(',')[0] || 'https';
+  const proto = clean(clean(request?.headers?.['x-forwarded-proto']).split(',')[0]) || 'https';
   return host ? `${proto}://${host}` : '';
 }
 
@@ -136,11 +136,10 @@ function validEmail(value) {
 }
 
 function validDisplayName(value) {
-  const name = clean(value).replace(/\s+/g, ' ');
-  return name.slice(0, 80);
+  return clean(value).replace(/\s+/g, ' ').slice(0, 80);
 }
 
-async function authFetch(config, pathname, { method = 'POST', accessToken = '', body } = {}) {
+async function authFetch(config, fetchImpl, pathname, { method = 'POST', accessToken = '', body } = {}) {
   if (!config.enabled) {
     const error = new Error('Supabase Auth is not configured on this server.');
     error.status = 503;
@@ -150,7 +149,7 @@ async function authFetch(config, pathname, { method = 'POST', accessToken = '', 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15_000);
   try {
-    const response = await fetch(`${config.url}${pathname}`, {
+    const response = await fetchImpl(`${config.url}${pathname}`, {
       method,
       headers: {
         Accept: 'application/json',
@@ -193,13 +192,13 @@ function safeUser(user) {
   return Object.freeze({
     id: clean(user.id),
     email: clean(user.email),
-    emailConfirmed: Boolean(user.email_confirmed_at || user.confirmed_at),
   });
 }
 
 export function createSupabaseAuthSession(env = process.env, options = {}) {
   const config = configFromEnv(env);
   const verifier = options.verifier || supabaseAuthVerifier;
+  const fetchImpl = options.fetch || fetch;
 
   function status() {
     return Object.freeze({
@@ -250,7 +249,7 @@ export function createSupabaseAuthSession(env = process.env, options = {}) {
         if (!email) throw Object.assign(new Error('A valid email address is required.'), { status: 400 });
         if (password.length < 8 || password.length > 128) throw Object.assign(new Error('Password must be between 8 and 128 characters.'), { status: 400 });
 
-        const payload = await authFetch(config, '/auth/v1/signup', {
+        const payload = await authFetch(config, fetchImpl, '/auth/v1/signup', {
           body: { email, password, data: displayName ? { display_name: displayName } : {} },
         });
         const session = payload?.access_token && payload?.refresh_token ? payload : payload?.session;
@@ -271,7 +270,7 @@ export function createSupabaseAuthSession(env = process.env, options = {}) {
         const email = validEmail(body?.email);
         const password = String(body?.password || '');
         if (!email || !password) throw Object.assign(new Error('Email and password are required.'), { status: 400 });
-        const session = await authFetch(config, '/auth/v1/token?grant_type=password', { body: { email, password } });
+        const session = await authFetch(config, fetchImpl, '/auth/v1/token?grant_type=password', { body: { email, password } });
         if (!session?.access_token || !session?.refresh_token) throw Object.assign(new Error('Authentication service did not return a valid session.'), { status: 502 });
         json(response, 200, { authenticated: true, user: safeUser(session.user) }, {
           'Set-Cookie': sessionCookies(session, config.secureCookies),
@@ -289,7 +288,7 @@ export function createSupabaseAuthSession(env = process.env, options = {}) {
           });
           return true;
         }
-        const session = await authFetch(config, '/auth/v1/token?grant_type=refresh_token', { body: { refresh_token: refreshToken } });
+        const session = await authFetch(config, fetchImpl, '/auth/v1/token?grant_type=refresh_token', { body: { refresh_token: refreshToken } });
         if (!session?.access_token || !session?.refresh_token) throw Object.assign(new Error('Authentication service did not return a refreshed session.'), { status: 502 });
         json(response, 200, { authenticated: true, user: safeUser(session.user) }, {
           'Set-Cookie': sessionCookies(session, config.secureCookies),
@@ -302,7 +301,7 @@ export function createSupabaseAuthSession(env = process.env, options = {}) {
         const cookies = parseCookies(request);
         const accessToken = clean(cookies[ACCESS_COOKIE]);
         if (accessToken && config.enabled) {
-          await authFetch(config, '/auth/v1/logout', { accessToken, body: {} }).catch(() => undefined);
+          await authFetch(config, fetchImpl, '/auth/v1/logout', { accessToken, body: {} }).catch(() => undefined);
         }
         json(response, 200, { authenticated: false }, {
           'Set-Cookie': clearSessionCookies(config.secureCookies),
