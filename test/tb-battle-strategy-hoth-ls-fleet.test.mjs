@@ -33,7 +33,7 @@ test("all Hoth LS fleet packs remain partial while using current Ion Cannon mech
 
 test("Home One and Profundity remain recommendations rather than fabricated mission gates", () => {
   for (const strategy of Object.values(HOTH_LS_FLEET_BATTLE_STRATEGIES)) {
-    const homeOne = strategy.keyUnits.find((row) => row.baseId === "CAPITALHOMEONE");
+    const homeOne = strategy.keyUnits.find((row) => row.baseId === "CAPITALMONCALAMARICRUISER");
     const profundity = strategy.keyUnits.find((row) => row.baseId === "CAPITALPROFUNDITY");
     assert.equal(homeOne?.importance, "helpful");
     assert.equal(profundity?.importance, "helpful");
