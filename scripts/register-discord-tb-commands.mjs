@@ -8,6 +8,10 @@ const preferenceChoices = [
   { name: "DEFAULT — clear the explicit override", value: "default" },
   { name: "KEEP — avoid this donor until necessary", value: "keep" },
 ];
+const availabilityChoices = [
+  { name: "AVAILABLE — include in normal ROTE planning", value: "available" },
+  { name: "UNAVAILABLE — exclude from Operation donor candidates", value: "unavailable" },
+];
 
 const optionalPhaseOption = {
   type: 3,
@@ -46,6 +50,26 @@ if (!config.commandRegistrationConfigured) {
           type: 1,
           name: "me",
           description: "Show your own linked SWGOH player from the bound live guild roster",
+        },
+        {
+          type: 1,
+          name: "availability",
+          description: "Read or change TB availability for your linked player or a guildmate",
+          options: [
+            {
+              type: 6,
+              name: "member",
+              description: "Optional member target; normal members may target only themselves",
+              required: false,
+            },
+            {
+              type: 3,
+              name: "state",
+              description: "Optional availability change; omit to read current status",
+              required: false,
+              choices: availabilityChoices,
+            },
+          ],
         },
         {
           type: 1,
