@@ -89,10 +89,9 @@ function thresholdCore(units = [], size = 5, threshold = 0) {
 }
 
 function upgradeRows(units = [], size = 5, threshold = 5) {
-  const ranked = asArray(units).slice().sort((a, b) => progressionScore(b) - progressionScore(a) || String(a.name).localeCompare(String(b.name)));
-  const top = ranked.slice(0, size);
-  if (top.length < size) return Object.freeze([]);
-  return Object.freeze(top
+  const core = bestFactionCore(units, size);
+  if (!core.complete) return Object.freeze([]);
+  return Object.freeze(core.selected
     .filter((unit) => finite(unit.relic, 0) < threshold)
     .map((unit) => Object.freeze({
       baseId: unit.baseId,
