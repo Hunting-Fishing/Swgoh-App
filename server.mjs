@@ -263,10 +263,15 @@ async function handleApi(request, response, url) {
   if (guildMatch) {
     try {
       const allyCode = guildMatch[1];
-      const cached = await guildRosterService.getGuildRoster(allyCode, { staleWhileRevalidate: true });
+      const forceRefresh = url.searchParams.get("refresh") === "1";
+      const cached = await guildRosterService.getGuildRoster(allyCode, {
+        forceRefresh,
+        staleWhileRevalidate: !forceRefresh,
+      });
       writeJson(response, 200, cached.value, {
         "X-Guild-Source": "comlink-live",
         "X-Guild-Cache": cached.cache,
+        "X-Guild-Refresh": forceRefresh ? "requested" : "normal",
         Age: String(Math.max(0, Math.floor((cached.ageMs || 0) / 1000))),
       });
     } catch (error) {
