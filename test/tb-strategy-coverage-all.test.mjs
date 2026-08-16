@@ -8,7 +8,7 @@ import {
   territoryBattleCoverageGaps,
   territoryBattleStrategyCoverage,
 } from "../public/tb-strategy-coverage-all.js";
-import { DS_GEO_TERRITORIES } from "../public/ds-geo-data.js";
+import { DS_GEO_TERRITORIES } from "../public/ds-geo-mission-overrides.js";
 import { GEO_LS_TERRITORIES } from "../public/geo-ls-data.js";
 
 const findMission = (territories, id) => territories.flatMap((territory) => territory.missions || []).find((mission) => mission.id === id);
@@ -20,6 +20,16 @@ test("all-TB audit includes ROTE, both Geo TBs, and both Hoth TBs", () => {
   assert.equal(report.rows.length, allTerritoryBattleMissions().length);
   assert.equal(report.counts.covered + report.counts.partial + report.counts.missing, report.counts.total);
   for (const tbId of expected) assert.ok(report.byTb[tbId].counts.total > 0, `${tbId} should contain missions`);
+});
+
+test("all-TB audit consumes corrected DS Geo mission contracts", () => {
+  const missions = allTerritoryBattleMissions().filter((mission) => mission.tbId === TB_COVERAGE_IDS.GEO_DS);
+  assert.equal(missions.length, 28);
+  const c8 = missions.find((mission) => mission.id === "c8");
+  assert.equal(c8.entry.verified, true);
+  assert.deepEqual(c8.entry.mandatoryMembers.map((row) => row.baseId), ["COUNTDOOKU", "ASAJVENTRESS"]);
+  const s4 = missions.find((mission) => mission.id === "s4");
+  assert.ok(s4.entry.mandatoryMembers.some((row) => row.baseId === "WATTAMBOR"));
 });
 
 test("recommendation-only legacy missions remain partial instead of being promoted to verified strategy", () => {
@@ -37,8 +47,17 @@ test("existing KAM and Wat battle packs are surfaced by the legacy audit", () =>
   assert.equal(kam.strategyAvailable, true);
 
   const wat = territoryBattleStrategyCoverage(findMission(DS_GEO_TERRITORIES, "s3"));
-  assert.notEqual(wat.coverage, "missing");
+  assert.equal(wat.coverage, "covered");
   assert.equal(wat.strategyAvailable, true);
+});
+
+test("DS Geo audit separates verified and partial strategy evidence", () => {
+  for (const id of ["s1", "s2", "s3", "c21", "s5"]) {
+    assert.equal(territoryBattleStrategyCoverage(findMission(DS_GEO_TERRITORIES, id)).coverage, "covered", `${id} should be covered`);
+  }
+  for (const id of ["c8", "s4"]) {
+    assert.equal(territoryBattleStrategyCoverage(findMission(DS_GEO_TERRITORIES, id)).coverage, "partial", `${id} should remain partial`);
+  }
 });
 
 test("coverage gaps can be filtered by Territory Battle and state", () => {
@@ -49,6 +68,7 @@ test("coverage gaps can be filtered by Territory Battle and state", () => {
 
 test("all-TB coverage modules parse", () => {
   for (const path of [
+    new URL("../public/ds-geo-mission-overrides.js", import.meta.url),
     new URL("../public/tb-strategy-coverage-all.js", import.meta.url),
     new URL("../scripts/report-all-tb-strategy-coverage.mjs", import.meta.url),
   ]) execFileSync(process.execPath, ["--check", path.pathname]);
