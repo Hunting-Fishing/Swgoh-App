@@ -28,7 +28,7 @@
   max-width: min(720px, 82%);
 }
 
-@media (max-width: 980px) {
+@media (max-width: 1080px) {
   .rote-planet-zoom {
     display: grid;
     grid-template-columns: 1fr;
