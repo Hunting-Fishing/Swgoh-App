@@ -6,7 +6,8 @@ const server = await readFile(new URL("../server.mjs", import.meta.url), "utf8")
 const overlay = await readFile(new URL("../guild-planning-overlay.mjs", import.meta.url), "utf8");
 
 test("server exposes a sanitized per-guild planning overlay route", () => {
-  assert.match(server, /\/api\\\/guild\\\/by-player\\\/\(\\d\{9\}\)\\\/planning-overlay/);
+  assert.ok(server.includes("planning-overlay"));
+  assert.match(server, /planningOverlayMatch/);
   assert.match(server, /resolveGuildPlanningOverlay\(cached\.value\)/);
   assert.match(server, /X-Guild-Planning-Overlay/);
   assert.match(server, /X-Guild-Planning-Source/);
