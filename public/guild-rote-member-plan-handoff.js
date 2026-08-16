@@ -18,6 +18,11 @@ const normalize = (value) => String(value || "")
   .replace(/[^a-z0-9]+/g, " ")
   .trim();
 
+function currentRedundancyTarget() {
+  const value = Number(window.__swgohGuildRoteRedundancyTarget || 2);
+  return Math.max(1, Math.min(5, Number.isFinite(value) ? Math.trunc(value) : 2));
+}
+
 export function guildFarmPlanTarget(row = {}) {
   const unit = row.unit || null;
   if (!unit || String(unit.unitType || "Character") === "Ship") return null;
@@ -59,7 +64,8 @@ async function loadCatalog() {
 async function loadCoverage() {
   const allyCode = digits(document.getElementById("allyCode")?.value);
   if (allyCode.length !== 9) return null;
-  const key = `${allyCode}:${state.catalog.length}`;
+  const target = currentRedundancyTarget();
+  const key = `${allyCode}:${state.catalog.length}:${target}`;
   if (state.coverage && state.coverageKey === key) return state.coverage;
   if (state.loading) return null;
   state.loading = true;
@@ -71,8 +77,8 @@ async function loadCoverage() {
     const guild = await response.json();
     if (!response.ok || !Array.isArray(guild?.members)) return null;
     state.allyCode = allyCode;
-    state.coverage = buildGuildRoteMissionCoverage(guild, catalog, { redundancyTarget: 2 });
-    state.coverageKey = `${allyCode}:${catalog.length}`;
+    state.coverage = buildGuildRoteMissionCoverage(guild, catalog, { redundancyTarget: target });
+    state.coverageKey = `${allyCode}:${catalog.length}:${target}`;
     return state.coverage;
   } finally {
     state.loading = false;
@@ -144,7 +150,7 @@ async function enhanceFarmRows() {
     const target = targets.get(guildFarmKey(memberName, unitName));
     const button = element.querySelector(".guild-farm-inspect");
     if (!target || !button) continue;
-    const signature = `${digits(target.member?.allyCode)}:${target.baseId}:${target.gapLabel}`;
+    const signature = `${currentRedundancyTarget()}:${digits(target.member?.allyCode)}:${target.baseId}:${target.gapLabel}`;
     if (button.dataset.guildHandoffSignature === signature) continue;
     button.dataset.guildHandoffSignature = signature;
     annotateButton(button, target);
@@ -215,6 +221,13 @@ function install() {
   observer.observe(document.body, { childList: true, subtree: true });
 
   document.addEventListener("click", (event) => {
+    const raw = event.target.closest?.(".guild-farm-inspect");
+    if (raw && !raw.dataset.guildHandoffSignature) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      scheduleEnhance();
+      return;
+    }
     const plan = event.target.closest?.("[data-guild-plan-member]");
     if (plan) {
       event.preventDefault();
@@ -236,6 +249,11 @@ function install() {
     setTimeout(scheduleEnhance, 500);
   });
 
+  window.addEventListener("swgoh:guild-rote-redundancy-target", () => {
+    state.coverage = null;
+    state.coverageKey = "";
+    setTimeout(scheduleEnhance, 0);
+  });
   window.addEventListener("hashchange", () => {
     if (location.hash.toLowerCase() === "#guild") setTimeout(scheduleEnhance, 200);
   });

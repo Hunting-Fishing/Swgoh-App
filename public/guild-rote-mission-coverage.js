@@ -1,5 +1,22 @@
 import { buildGuildRoteMissionCoverage } from "./guild-rote-mission-coverage-model.js";
 
+const REDUNDANCY_KEY = "swgoh:guild-rote-redundancy-target";
+
+export function normalizeGuildRedundancyTarget(value, fallback = 2) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return Math.max(1, Math.min(5, Math.trunc(Number(fallback) || 2)));
+  return Math.max(1, Math.min(5, Math.trunc(numeric)));
+}
+
+function savedRedundancyTarget() {
+  if (typeof localStorage === "undefined") return 2;
+  try {
+    return normalizeGuildRedundancyTarget(localStorage.getItem(REDUNDANCY_KEY), 2);
+  } catch {
+    return 2;
+  }
+}
+
 const state = {
   allyCode: "",
   guild: null,
@@ -12,6 +29,7 @@ const state = {
   search: "",
   shown: 40,
   renderKey: "",
+  redundancyTarget: savedRedundancyTarget(),
 };
 
 const $ = (id) => document.getElementById(id);
@@ -40,6 +58,28 @@ async function loadCatalog() {
   if (!response.ok || !Array.isArray(body?.units) || !body.units.length) throw new Error("Static unit catalog is unavailable for guild mission eligibility.");
   state.catalog = body.units;
   return state.catalog;
+}
+
+function publishRedundancyTarget() {
+  if (typeof window === "undefined") return;
+  window.__swgohGuildRoteRedundancyTarget = state.redundancyTarget;
+  try {
+    localStorage.setItem(REDUNDANCY_KEY, String(state.redundancyTarget));
+  } catch {
+    // Storage is optional; the in-memory target still applies.
+  }
+  window.dispatchEvent(new CustomEvent("swgoh:guild-rote-redundancy-target", {
+    detail: { redundancyTarget: state.redundancyTarget },
+  }));
+}
+
+function rebuildCoverageForTarget(target) {
+  state.redundancyTarget = normalizeGuildRedundancyTarget(target, state.redundancyTarget);
+  publishRedundancyTarget();
+  if (!state.guild || !state.catalog) return false;
+  state.coverage = buildGuildRoteMissionCoverage(state.guild, state.catalog, { redundancyTarget: state.redundancyTarget });
+  state.shown = 40;
+  return true;
 }
 
 function guildPanel() {
@@ -99,9 +139,10 @@ function missionMatches(mission) {
 
 function summaryMarkup() {
   const summary = state.coverage.summary;
+  const target = state.coverage.redundancyTarget;
   return `<div class="guild-mission-summary">
     <article><span>EXACT MISSION COVERAGE</span><strong>${summary.exactCoveragePercent}%</strong><small>${summary.exactMissions - summary.zeroCoverageMissions}/${summary.exactMissions} exact missions have ≥1 ready member</small></article>
-    <article><span>2+ MEMBER REDUNDANCY</span><strong>${summary.redundancyCoveragePercent}%</strong><small>${summary.redundancyReadyMissions}/${summary.exactMissions} exact missions meet redundancy target</small></article>
+    <article><span>${target}+ MEMBER REDUNDANCY</span><strong>${summary.redundancyCoveragePercent}%</strong><small>${summary.redundancyReadyMissions}/${summary.exactMissions} exact missions meet the ${target}-owner target</small></article>
     <article class="danger"><span>ZERO COVERAGE</span><strong>${number(summary.zeroCoverageMissions)}</strong><small>Verified missions with no entry-ready guild member</small></article>
     <article class="warning"><span>SINGLE OWNER</span><strong>${number(summary.fragileMissions)}</strong><small>Guild is dependent on one ready roster</small></article>
     <article><span>PARTIAL FLEET EVIDENCE</span><strong>${number(summary.partialEvidenceMissions)}</strong><small>Excluded from exact-ready claims</small></article>
@@ -228,6 +269,10 @@ function phaseOptions() {
   return ["All", ...phases].map((phase) => `<option value="${escapeAttr(phase)}"${state.phase === phase ? " selected" : ""}>${escapeHtml(phase === "All" ? "All phases" : phase)}</option>`).join("");
 }
 
+function redundancyOptions() {
+  return [1, 2, 3, 4, 5].map((value) => `<option value="${value}"${state.redundancyTarget === value ? " selected" : ""}>${value} ready owner${value === 1 ? "" : "s"}</option>`).join("");
+}
+
 function renderCoverage() {
   const shell = $("guildRoteMissionCoverage");
   if (!shell || !state.coverage) return;
@@ -242,6 +287,7 @@ function renderCoverage() {
       <div class="guild-mission-tabs">
         ${[["missions", "Coverage Matrix"], ["leads", "Mission Leads"], ["farms", "Farm Priorities"], ["members", "Member Coverage"]].map(([value, label]) => `<button type="button" data-guild-mission-view="${value}" class="${state.view === value ? "active" : ""}">${label}</button>`).join("")}
       </div>
+      <label>Coverage Target<select data-guild-mission-redundancy>${redundancyOptions()}</select></label>
       <label>Phase<select data-guild-mission-phase>${phaseOptions()}</select></label>
       ${state.view === "missions" ? `<label>Status<select data-guild-mission-status>${["All", "Zero", "Fragile", "Redundant", "Partial"].map((value) => `<option${state.status === value ? " selected" : ""}>${value}</option>`).join("")}</select></label>` : ""}
       <label class="search">Search<input type="search" data-guild-mission-search value="${escapeAttr(state.search)}" placeholder="Mission, planet, member, unit…"></label>
@@ -277,8 +323,9 @@ async function loadCoverage(force = false) {
     ]);
     state.allyCode = allyCode;
     state.guild = guild;
-    state.coverage = buildGuildRoteMissionCoverage(guild, catalog, { redundancyTarget: 2 });
+    state.coverage = buildGuildRoteMissionCoverage(guild, catalog, { redundancyTarget: state.redundancyTarget });
     state.shown = 40;
+    publishRedundancyTarget();
     renderCoverage();
   } catch (error) {
     renderLoading(error?.message || "Guild mission coverage is unavailable.", "danger");
@@ -311,6 +358,8 @@ function install() {
     }
     if (event.target.closest?.("[data-guild-mission-refresh]")) {
       state.coverage = null;
+      const allyCode = digits($("allyCode")?.value);
+      window.__swgohSharedFetchCache?.clear?.("guild", allyCode);
       loadCoverage(true);
       return;
     }
@@ -333,6 +382,10 @@ function install() {
   }, true);
 
   document.addEventListener("change", (event) => {
+    if (event.target.matches?.("[data-guild-mission-redundancy]")) {
+      if (rebuildCoverageForTarget(event.target.value)) renderCoverage();
+      return;
+    }
     if (event.target.matches?.("[data-guild-mission-phase]")) state.phase = event.target.value || "All";
     else if (event.target.matches?.("[data-guild-mission-status]")) state.status = event.target.value || "All";
     else return;
@@ -363,6 +416,7 @@ function install() {
     if (location.hash.toLowerCase() === "#guild") setTimeout(() => loadCoverage(false), 150);
   });
 
+  publishRedundancyTarget();
   if (location.hash.toLowerCase() === "#guild") setTimeout(() => loadCoverage(false), 150);
 }
 

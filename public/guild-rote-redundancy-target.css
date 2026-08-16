@@ -1,0 +1,31 @@
+.guild-mission-toolbar {
+  grid-template-columns:
+    minmax(300px, 1.35fr)
+    minmax(120px, .54fr)
+    minmax(105px, .46fr)
+    minmax(115px, .5fr)
+    minmax(210px, 1fr)
+    auto;
+}
+
+@media (max-width: 1320px) {
+  .guild-mission-toolbar {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .guild-mission-tabs,
+  .guild-mission-toolbar .search {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 720px) {
+  .guild-mission-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .guild-mission-tabs,
+  .guild-mission-toolbar .search {
+    grid-column: auto;
+  }
+}
