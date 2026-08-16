@@ -3,8 +3,11 @@ import assert from "node:assert/strict";
 import { generateKeyPairSync, sign } from "node:crypto";
 import {
   discordTbConfig,
+  discordTbPhase,
   discordTbPublicStatus,
   discordTbSubcommand,
+  editDiscordOriginalResponse,
+  executeDiscordTbDeferredCommand,
   handleDiscordTbCommand,
   verifyDiscordInteraction,
 } from "../discord-tb.mjs";
@@ -35,6 +38,8 @@ test("Discord public status exposes configuration booleans but never secret valu
     DISCORD_PUBLIC_KEY: "ab".repeat(32),
     DISCORD_BOT_TOKEN: "super-secret-token",
     DISCORD_DEFAULT_GUILD_ID: "987654321098765432",
+    DISCORD_DEFAULT_ALLY_CODE: "123-456-789",
+    DISCORD_TB_REDUNDANCY_TARGET: "4",
   };
   const status = discordTbPublicStatus(env);
   const serialized = JSON.stringify(status);
@@ -42,8 +47,11 @@ test("Discord public status exposes configuration booleans but never secret valu
   assert.equal(status.configured, true);
   assert.equal(status.botTokenConfigured, true);
   assert.equal(status.commandRegistrationConfigured, true);
+  assert.equal(status.pilotGuildLiveConfigured, true);
+  assert.equal(status.redundancyTarget, 4);
   assert.equal(serialized.includes("super-secret-token"), false);
   assert.equal(serialized.includes("ab".repeat(32)), false);
+  assert.equal(serialized.includes("123456789"), false);
 });
 
 test("invalid public key leaves the interaction configuration fail-closed", () => {
@@ -70,7 +78,7 @@ test("/tb status is ephemeral and pilot-guild restricted", () => {
   }, config);
   assert.equal(allowed.type, 4);
   assert.equal(allowed.data.flags, 64);
-  assert.match(allowed.data.content, /SWGOH Roster Command · TB/);
+  assert.match(allowed.data.content, /SWGOH Command Center · TB/);
 
   const denied = handleDiscordTbCommand({
     guild_id: "111111111111111111",
@@ -79,7 +87,79 @@ test("/tb status is ephemeral and pilot-guild restricted", () => {
   assert.match(denied.data.content, /restricted to the configured pilot Discord server/);
 });
 
-test("subcommand resolver defaults to status", () => {
+test("live read commands defer only after a valid pilot Ally Code is configured", () => {
+  const configured = discordTbConfig({
+    DISCORD_TB_INTERACTIONS_ENABLED: "true",
+    DISCORD_APPLICATION_ID: "123456789012345678",
+    DISCORD_PUBLIC_KEY: "ab".repeat(32),
+    DISCORD_DEFAULT_GUILD_ID: "987654321098765432",
+    DISCORD_DEFAULT_ALLY_CODE: "123456789",
+  });
+  const interaction = {
+    guild_id: "987654321098765432",
+    data: { name: "tb", options: [{ type: 1, name: "sync" }] },
+  };
+  assert.equal(handleDiscordTbCommand(interaction, configured).type, 5);
+
+  const missing = discordTbConfig({
+    DISCORD_TB_INTERACTIONS_ENABLED: "true",
+    DISCORD_APPLICATION_ID: "123456789012345678",
+    DISCORD_PUBLIC_KEY: "ab".repeat(32),
+    DISCORD_DEFAULT_GUILD_ID: "987654321098765432",
+  });
+  const response = handleDiscordTbCommand(interaction, missing);
+  assert.equal(response.type, 4);
+  assert.match(response.data.content, /DISCORD_DEFAULT_ALLY_CODE/);
+});
+
+test("subcommand resolver defaults to status and phase scope is validated", () => {
   assert.equal(discordTbSubcommand({ data: { options: [{ type: 1, name: "assignments" }] } }), "assignments");
   assert.equal(discordTbSubcommand({ data: {} }), "status");
+  assert.equal(discordTbPhase({ data: { options: [{ type: 1, name: "assignments", options: [{ type: 3, name: "phase", value: "P3" }] }] } }), "P3");
+  assert.equal(discordTbPhase({ data: { options: [{ type: 1, name: "assignments", options: [{ type: 3, name: "phase", value: "P9" }] }] } }), "");
+});
+
+test("deferred sync returns a live read-only guild summary", async () => {
+  const config = discordTbConfig({
+    DISCORD_APPLICATION_ID: "123456789012345678",
+    DISCORD_PUBLIC_KEY: "ab".repeat(32),
+    DISCORD_DEFAULT_GUILD_ID: "987654321098765432",
+    DISCORD_DEFAULT_ALLY_CODE: "123456789",
+  });
+  const content = await executeDiscordTbDeferredCommand(
+    { data: { name: "tb", options: [{ type: 1, name: "sync" }] } },
+    config,
+    {
+      syncGuild: async () => ({
+        cache: "refreshed",
+        guild: {
+          guild: { name: "Pilot Guild" },
+          members: [{ rosterAvailable: true, galacticPower: 1234 }],
+        },
+      }),
+    },
+  );
+  assert.match(content, /Pilot Guild/);
+  assert.match(content, /No TB assignments or officer state were changed/);
+});
+
+test("Discord deferred response edits the original interaction and suppresses mentions", async () => {
+  const config = discordTbConfig({
+    DISCORD_APPLICATION_ID: "123456789012345678",
+    DISCORD_PUBLIC_KEY: "ab".repeat(32),
+  });
+  let request;
+  const ok = await editDiscordOriginalResponse(
+    { token: "interaction-token" },
+    config,
+    "hello",
+    async (url, options) => {
+      request = { url, options };
+      return { ok: true, status: 200, text: async () => "" };
+    },
+  );
+  assert.equal(ok, true);
+  assert.match(request.url, /\/messages\/@original$/);
+  assert.equal(request.options.method, "PATCH");
+  assert.deepEqual(JSON.parse(request.options.body).allowed_mentions, { parse: [] });
 });
