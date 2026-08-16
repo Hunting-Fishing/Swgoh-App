@@ -4,19 +4,21 @@
 
 Discord player linking must never accept an arbitrary Ally Code and silently attach it to a Discord identity. Player preference writes must likewise never target an unlinked or unrelated SWGOH account.
 
-The current production-safe pilot is guild-scoped and officer-mediated.
+The current production-safe pilot is guild-scoped: player linking remains officer-mediated, while already-linked members may use tightly scoped self-service for their own player record.
 
 ## Current implementation
 
-The player-link path is implemented end-to-end for the pilot Discord application:
+The identity and preference path is implemented end-to-end for the pilot Discord application:
 
 - `discord-player-link.mjs` verifies a claimed 9-digit Ally Code against the roster of the SWGOH guild durably bound to the Discord server;
-- `discord-player-link-service.mjs` performs the verified transaction and writes through the durable Discord state store;
-- `discord-state-store.mjs` enforces one Ally Code mapping per Discord user inside a server, rejects duplicate Ally Code claims by another Discord user, and records audited link/unlink mutations;
-- `discord-linked-player-service.mjs` resolves an existing Discord user link back to the current bound guild roster for read-only member workflows;
-- `discord-tb.mjs` exposes officer-authorized `/tb link`, `/tb unlink`, `/tb links`, `/tb preference`, and `/tb preferences` handlers;
+- `discord-player-link-service.mjs` performs the verified link transaction and writes through the durable Discord state store;
+- `discord-state-store.mjs` enforces one Ally Code mapping per Discord user inside a server, rejects duplicate Ally Code claims by another Discord user, stores audited GIVE/KEEP controls, and clears stale controls on relink/unlink;
+- `discord-linked-player-service.mjs` resolves an existing Discord user link back to the current bound guild roster for member-safe read workflows;
+- `discord-donation-preference-service.mjs` verifies current guild membership and unit ownership before GIVE/KEEP writes;
+- `discord-tb-live.mjs` feeds persisted GIVE/KEEP controls into the mission-safe ROTE planner;
+- `discord-tb.mjs` exposes officer and member-safe interaction handlers;
 - `scripts/register-discord-tb-commands.mjs` contains the guild-scoped Discord command definitions;
-- focused tests cover durable-only operation, transaction routing, duplicate-safe state, unlinking, preference state, ownership validation, command routing, planner consumption, and fail-closed storage behavior.
+- focused tests cover durable state, transaction routing, duplicate-safe identity, unit ownership validation, planner consumption, self-target authorization, signed Discord interactions, and fail-closed storage behavior.
 
 ## Guild membership verification
 
@@ -35,15 +37,21 @@ A claim for an Ally Code outside the bound guild is rejected before persistence.
 
 ## Ownership boundary
 
-Guild membership is **not cryptographic proof** that the selected Discord user personally owns the SWGOH account. The current link command therefore remains officer-mediated and must not be described as self-service account ownership verification.
+Guild membership is **not cryptographic proof** that the selected Discord user personally owns the SWGOH account. The link command therefore remains officer-mediated and must not be described as self-service account ownership verification.
 
 The trust statement is:
 
 > An authorized guild officer linked this Discord member to an Ally Code that was verified as belonging to the Discord server's bound SWGOH guild roster.
 
-A later self-service link flow needs an additional ownership challenge or explicit officer approval mechanism before it can be described as verified account ownership.
+After that officer-created mapping exists, self-service commands use the signed Discord caller ID as the authorization boundary: a normal member can access only the SWGOH player mapped to that same Discord user ID.
+
+A future self-service linking flow would still require an additional ownership challenge or explicit officer approval mechanism before it could be described as verified account ownership.
 
 ## Slash commands
+
+### `/tb me`
+
+Available to a linked member. Resolves only the calling Discord user ID, checks that the linked Ally Code is still present in the bound guild roster, and returns that player's current roster summary. It cannot target another Discord user and performs no mutation.
 
 ### `/tb link member:<user> ally_code:<code>`
 
@@ -57,9 +65,9 @@ Officer-only. Removes an existing durable mapping through an audited transaction
 
 Officer-only. Lists durable mappings for the Discord server. Discord mentions are suppressed so the listing does not ping members.
 
-### `/tb preference member:<user> unit:<base-id> preference:<give|default|keep>`
+### `/tb preference member:<optional-user> unit:<base-id> preference:<give|default|keep>`
 
-Officer-only in the current pilot.
+A linked normal member may omit `member` or explicitly select themselves. They cannot target another Discord user. Authorized officers may select another linked guild member.
 
 For `GIVE` and `KEEP`, the service requires:
 
@@ -70,15 +78,15 @@ For `GIVE` and `KEEP`, the service requires:
 
 Only after those checks does the durable state write occur.
 
-`DEFAULT` removes the explicit override and is intentionally allowed to clear durable state without requiring the live gateway. This lets officers recover from a stale/unwanted preference even during an upstream outage.
+`DEFAULT` removes the explicit override and is intentionally allowed to clear durable state without requiring the live gateway. This allows a stale or unwanted control to be removed during an upstream outage.
 
 ### `/tb preferences member:<optional-user>`
 
-Officer-only. Lists current durable GIVE/KEEP overrides for one linked member or the guild. Mentions are suppressed.
+A normal linked member is automatically scoped to their own Discord user ID and cannot read another member's controls. Authorized officers may scope to a linked member or omit the member option to inspect all current GIVE/KEEP overrides. Mentions are suppressed.
 
 ## Planner integration
 
-Discord donation preferences now feed the same mission-safe ROTE planner used by `/tb assignments` and `/tb phase`.
+Discord donation preferences feed the same mission-safe ROTE planner used by `/tb assignments` and `/tb phase`.
 
 The planner contract is:
 
@@ -92,7 +100,9 @@ The Discord planning result reports how many persisted GIVE/KEEP controls were c
 
 ## Authorization
 
-The current mutation surface remains officer-gated:
+### Officer surface
+
+The existing officer authorization remains authoritative for guild-wide commands and cross-member mutation:
 
 - Manage Guild / Manage Server permission; or
 - Administrator permission; or
@@ -100,7 +110,17 @@ The current mutation surface remains officer-gated:
 
 `/tb setup` remains restricted to Manage Guild or Administrator even if a configured officer role exists.
 
-Member self-service is the next authorization layer; it must allow a normal Discord member to mutate only the durable SWGOH player linked to their own Discord user ID.
+### Linked-member self-service
+
+Normal Discord members are admitted only for the explicit self-service subcommands:
+
+- `/tb me`;
+- `/tb preference` for their own linked Discord user ID;
+- `/tb preferences` for their own linked Discord user ID.
+
+A normal member cannot use self-service authorization to call `/tb sync`, `/tb phase`, `/tb assignments`, `/tb farms`, `/tb links`, `/tb link`, `/tb unlink`, or `/tb setup`.
+
+A valid target belonging to a different Discord user fails authorization before the preference transaction executes.
 
 ## Persistence and safety guarantees
 
@@ -125,8 +145,7 @@ Preferences are cleared when a Discord member is relinked to a different Ally Co
 
 This identity/preference layer does **not** enable:
 
-- self-service account claiming;
-- normal-member preference writes yet;
+- self-service account claiming/link creation;
 - direct messages;
 - public assignment publishing;
 - automatic @mentions;
@@ -136,7 +155,7 @@ This identity/preference layer does **not** enable:
 
 ## Next safe transport steps
 
-1. Use the linked-player read service to add a member-safe `/tb me`/link-status workflow.
-2. Allow a normal member to set or clear preferences only for their own linked Discord user ID while retaining officer override capability.
-3. Add durable availability/ignore state using the same identity and audit boundary.
-4. Keep outbound assignment publishing and DMs as a separate rollout with immutable plan versions, explicit officer approval, a delivery queue, rate-limit handling, and per-member delivery status.
+1. Add durable member availability / ignore state using the same signed caller, linked-player, and audit boundary.
+2. Replace raw Base ID entry with a user-friendly verified unit search/autocomplete path while keeping Base IDs as the canonical stored key.
+3. Persist immutable assignment-plan versions and explicit officer approval before any outbound publishing.
+4. Add a rate-limited delivery queue and per-member delivery status before enabling DMs or proactive Discord posts.
