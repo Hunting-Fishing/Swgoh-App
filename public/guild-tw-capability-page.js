@@ -1,6 +1,5 @@
 import { buildGuildTwCapability, filterGuildTwFactions } from "./guild-tw-capability-model.js";
 
-const asArray = (value) => Array.isArray(value) ? value : [];
 const digits = (value) => String(value || "").replace(/\D/g, "").slice(0, 9);
 const number = (value) => Number.isFinite(Number(value)) ? new Intl.NumberFormat().format(Number(value)) : "0";
 const escapeHtml = (value) => String(value ?? "")
@@ -69,7 +68,7 @@ function overviewPage() {
   const broad = m.factions.slice().sort((a, b) => b.r7Owners - a.r7Owners || b.r5Owners - a.r5Owners).slice(0, 10);
   const thin = m.factions.filter((row) => row.r5Owners > 0).slice().sort((a, b) => a.r7Owners - b.r7Owners || a.r5Owners - b.r5Owners).slice(0, 10);
   return `${header("TW Guild Command", "Guild-wide faction depth is now calculated from the live hydrated roster. Detailed teams, members and upgrade bottlenecks each live on their own TW page.")}
-    <div class="guild-tw-summary">${stat("Hydrated Members", `${number(m.hydratedMembers)} / ${number(m.totalMembers)}`)}${stat("Factions Tracked", number(s.factionsTracked))}${stat("5-Unit Faction Cores", number(s.completeFactionCores))}${stat("R5 Cores", number(s.r5FactionCores), "")}${stat("R7 Cores", number(s.r7FactionCores), "good")}${stat("Leader-Capable", number(s.leaderCapableCores))}${stat("Thin R7 Factions", number(s.thinR7Factions), s.thinR7Factions ? "warn" : "good")}${stat("Zero R7 Factions", number(s.zeroR7Factions), s.zeroR7Factions ? "bad" : "good")}</div>
+    <div class="guild-tw-summary">${stat("Hydrated Members", `${number(m.hydratedMembers)} / ${number(m.totalMembers)}`)}${stat("Factions Tracked", number(s.factionsTracked))}${stat("5-Unit Faction Cores", number(s.completeFactionCores))}${stat("R5 Cores", number(s.r5FactionCores))}${stat("R7 Cores", number(s.r7FactionCores), "good")}${stat("Leader-Capable", number(s.leaderCapableCores))}${stat("Thin R7 Factions", number(s.thinR7Factions), s.thinR7Factions ? "warn" : "good")}${stat("Zero R7 Factions", number(s.zeroR7Factions), s.zeroR7Factions ? "bad" : "good")}</div>
     <div class="guild-tw-card-grid">
       ${twCard("TEAM COVERAGE", "Faction Team Coverage", "See how many guild members can field five owned, R5 and R7 characters in each faction, plus leader-capable depth.", route("/guild/tw/teams"))}
       ${twCard("MEMBER DEPTH", "Member TW Rosters", "Compare which guild members carry the largest number of complete faction cores and high-relic faction cores.", route("/guild/tw/members"))}
@@ -118,11 +117,33 @@ function bottlenecksPage() {
     ${evidenceNote()}`;
 }
 
+function renderWithFocus(id) {
+  render();
+  const element = document.getElementById(id);
+  if (!element) return;
+  element.focus();
+  const length = String(element.value || "").length;
+  element.setSelectionRange?.(length, length);
+}
+
+function updateFactionQuery() {
+  const params = new URLSearchParams(location.search);
+  if (state.selectedFaction) params.set("faction", state.selectedFaction); else params.delete("faction");
+  history.replaceState(null, "", `${location.pathname}${params.toString() ? `?${params.toString()}` : ""}`);
+}
+
 function wireTeams() {
-  document.getElementById("guildTwFactionSearch")?.addEventListener("input", (event) => { state.search = event.target.value; render(); });
+  document.getElementById("guildTwFactionSearch")?.addEventListener("input", (event) => {
+    state.search = event.target.value;
+    renderWithFocus("guildTwFactionSearch");
+  });
   document.getElementById("guildTwCoverage")?.addEventListener("change", (event) => { state.coverage = event.target.value; render(); });
   document.getElementById("guildTwSort")?.addEventListener("change", (event) => { state.sort = event.target.value; render(); });
-  for (const row of document.querySelectorAll("[data-tw-faction]")) row.addEventListener("click", () => { state.selectedFaction = row.dataset.twFaction; render(); });
+  for (const row of document.querySelectorAll("[data-tw-faction]")) row.addEventListener("click", () => {
+    state.selectedFaction = row.dataset.twFaction;
+    updateFactionQuery();
+    render();
+  });
 }
 
 function render() {
@@ -142,7 +163,7 @@ export function renderGuildTwCapabilityPage({ target, guildBody, catalog, allyCo
   state.allyCode = digits(allyCode);
   state.section = section;
   const params = new URLSearchParams(location.search);
-  state.selectedFaction = String(params.get("faction") || state.selectedFaction || "");
+  state.selectedFaction = String(params.get("faction") || "");
   state.model = buildGuildTwCapability(guildBody, catalog, { squadSize: 5 });
   render();
 }
