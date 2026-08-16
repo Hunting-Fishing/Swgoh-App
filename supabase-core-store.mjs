@@ -22,6 +22,12 @@ function normalizeTable(value) {
   return table;
 }
 
+function normalizeRpcName(value) {
+  const name = clean(value);
+  if (!/^[a-z][a-z0-9_]{1,62}$/.test(name)) throw new Error("Invalid Supabase RPC name.");
+  return name;
+}
+
 function encodeQuery(params = {}) {
   const search = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
@@ -52,10 +58,9 @@ export function createSupabaseCoreStore(env = process.env, options = {}) {
     throw error;
   }
 
-  async function request(table, { method = "GET", query = {}, body, prefer = "" } = {}) {
+  async function requestUrl(pathname, { method = "GET", query = {}, body, prefer = "" } = {}) {
     requireConfigured();
-    const normalizedTable = normalizeTable(table);
-    const response = await fetchImpl(`${config.url}/rest/v1/${normalizedTable}${encodeQuery(query)}`, {
+    const response = await fetchImpl(`${config.url}${pathname}${encodeQuery(query)}`, {
       method,
       headers: {
         Accept: "application/json",
@@ -85,6 +90,11 @@ export function createSupabaseCoreStore(env = process.env, options = {}) {
       throw error;
     }
     return payload;
+  }
+
+  async function request(table, { method = "GET", query = {}, body, prefer = "" } = {}) {
+    const normalizedTable = normalizeTable(table);
+    return requestUrl(`/rest/v1/${normalizedTable}`, { method, query, body, prefer });
   }
 
   return Object.freeze({
@@ -120,6 +130,13 @@ export function createSupabaseCoreStore(env = process.env, options = {}) {
         method: "DELETE",
         query,
         prefer: returning ? "return=representation" : "return=minimal",
+      });
+    },
+    rpc(name, args = {}) {
+      const normalizedName = normalizeRpcName(name);
+      return requestUrl(`/rest/v1/rpc/${normalizedName}`, {
+        method: "POST",
+        body: args,
       });
     },
   });
