@@ -1,5 +1,5 @@
 import { ROTE_MISSIONS_BY_PLANET } from "./rote-mission-data.js";
-import { DS_GEO_TERRITORIES } from "./ds-geo-data.js";
+import { DS_GEO_TERRITORIES } from "./ds-geo-mission-overrides.js";
 import { GEO_LS_TERRITORIES } from "./geo-ls-data.js";
 import { HOTH_DS_TERRITORIES } from "./hoth-ds-data.js";
 import { HOTH_LS_TERRITORIES } from "./hoth-ls-data.js";
