@@ -1,44 +1,45 @@
 # SWGOH Command Center Discord Bot — Pilot Runbook & Master Checklist
 
-**Purpose:** this is the authoritative Discord bot bring-up checklist for the SWGOH Command Center project. Update this file as work is completed. Do not skip ahead simply because later architecture has been discussed.
+**Purpose:** authoritative checklist for bringing the SWGOH Command Center Discord bot from pilot to production. Update this file as each checkpoint is actually verified. Do not skip ahead just because later architecture has been discussed.
 
-**Current checkpoint:** **Stage 4D — create the pilot Discord officer role before running `/tb setup`.**
+**Current checkpoint:** **Stage 6 — link the pilot Discord operator to the verified live SWGOH player.**
 
-**Current operating mode:** signed HTTP Discord interactions, guild-scoped `/tb` pilot, live SWGOH gateway reads, durable Railway Volume attached, outbound publishing/DM delivery still disabled.
+**Current operating mode:** signed HTTP Discord interactions, guild-scoped `/tb` pilot, live SWGOH gateway reads, durable Railway Volume state, outbound publishing/DM delivery disabled.
 
 ---
 
-## 0. Ground rules
+# 0. Ground rules
 
-- Production behavior must use live SWGOH data; do not silently substitute mock roster data.
-- Discord interactions remain ephemeral during the pilot unless a later approved publishing flow explicitly says otherwise.
-- Public assignment publishing and member DMs remain disabled until preview/approval/audit/queue safeguards exist.
-- Manage Guild / Administrator remains bootstrap authority. A durably configured officer role may authorize supported officer commands after setup.
-- Discord-to-player linking is officer-mediated and verifies that the Ally Code belongs to the currently bound SWGOH guild. It is not cryptographic game-account ownership proof.
-- Member self-service is limited to the signed Discord caller's own linked profile/preferences/availability unless the caller has officer authority.
-- When a new task is discovered, add it to this runbook before moving past the current stage.
+- Production behavior uses live SWGOH data; never silently present mock roster data as live.
+- Discord interaction replies remain ephemeral during the pilot unless an explicitly approved publishing flow says otherwise.
+- Public assignment publishing and member DMs remain disabled until immutable plan approval, audit, and delivery safeguards exist.
+- Manage Guild / Administrator remains bootstrap authority.
+- The durably configured Discord officer role authorizes supported officer commands after setup.
+- Discord-to-player linking is officer-managed and verifies that the Ally Code exists in the currently bound SWGOH guild.
+- Member self-service is limited to the signed caller's own linked profile/preferences/availability unless officer-authorized.
+- When new work is discovered, record it in this runbook before moving past the current stage.
 
 ---
 
 # MASTER CHECKLIST
 
-## Stage 1 — Discord application + signed interaction endpoint
+## Stage 1 — Discord application + signed interaction endpoint ✅
 
 - [x] Discord application ID configured in Railway.
 - [x] Discord bot token configured in Railway.
 - [x] Discord public key configured in Railway.
 - [x] Pilot Discord guild ID configured in Railway.
-- [x] `DISCORD_TB_INTERACTIONS_ENABLED` present.
+- [x] `DISCORD_TB_INTERACTIONS_ENABLED` configured.
 - [x] `/api/discord/interactions` accepts Discord signed interactions.
-- [x] Ed25519 request signature verification implemented.
-- [x] Signed application ID validation implemented.
+- [x] Ed25519 request-signature verification implemented.
+- [x] Signed `application_id` validation implemented.
 - [x] Discord PING verification works.
-- [x] Guild restriction works for the pilot server.
+- [x] Pilot guild restriction works.
 - [x] `/tb status` responds successfully in Discord.
 - [x] Responses are ephemeral by default.
 - [x] `allowed_mentions` suppresses accidental pings.
 
-### Verified pilot Discord server
+Verified pilot Discord server:
 
 ```text
 1422643338586099745
@@ -46,15 +47,14 @@
 
 ---
 
-## Stage 2 — `/tb` command registration
+## Stage 2 — `/tb` command registration ✅
 
-- [x] Guild-scoped `/tb` command registration script exists.
-- [x] Discord command option-ordering bug fixed.
-- [x] Registration diagnostics expanded to print nested Discord schema errors.
+- [x] Guild-scoped `/tb` registration script exists.
+- [x] Discord required/optional option ordering bug fixed.
+- [x] Registration diagnostics print nested Discord schema errors.
 - [x] `/tb` successfully registered with Discord.
-- [x] Command ID returned successfully by Discord.
 
-Successful registration observed:
+Verified registration:
 
 ```text
 Registered 1 guild-scoped Discord command in 1422643338586099745.
@@ -79,180 +79,124 @@ Current command surface:
 /tb availability [member] [state:<AVAILABLE|UNAVAILABLE>]
 ```
 
-> Re-run `npm run discord:register-tb` only when the Discord slash-command schema changes. It is not required for ordinary deploys that do not change the command manifest.
+> Re-run `npm run discord:register-tb` only when the Discord slash-command schema changes.
 
 ---
 
-## Stage 3 — durable Discord state
+## Stage 3 — durable Discord state ✅
 
 The bot uses durable state for Discord↔SWGOH guild binding, officer roles, player links, preferences, availability, audit history, and later plan versions.
 
 - [x] Persistent Railway Volume attached to **Swgoh-App**.
-- [x] Volume mount path `/data` exists inside the deployed service.
-- [x] Bash verification succeeded:
+- [x] Volume mounted at `/data` inside the deployed service.
+- [x] Bash verified `/data` exists.
+- [x] `/tb setup` performed an atomic durable write.
+- [x] `/tb setup` reported an audit event was written.
+- [x] Durable state is operational for guild setup writes.
 
-```text
-drwxr-xr-x ... /data
-```
-
-- [ ] Confirm the running app sees `RAILWAY_VOLUME_MOUNT_PATH=/data`.
-- [ ] Confirm `/tb status` / `/api/discord/status` reports durable state `enabled=true`, `durable=true`, `reason=ready` after the volume deployment.
-- [ ] Confirm first durable state file is created after `/tb setup`.
-
-Expected state path with the Railway mount:
+State path:
 
 ```text
 /data/swgoh-command-center/discord-state-v1.json
 ```
 
-Optional console verification:
+Optional deployment verification remains useful:
 
 ```bash
 echo "$RAILWAY_VOLUME_MOUNT_PATH"
 ls -ld /data
+ls -l /data/swgoh-command-center/
 ```
 
-Expected first command output:
-
-```text
-/data
-```
+- [ ] Optional: explicitly verify `RAILWAY_VOLUME_MOUNT_PATH=/data` in a fresh Railway Console.
+- [ ] Optional: inspect the state directory after setup to confirm `discord-state-v1.json` is present.
 
 Do not fake durability by pointing state at an ordinary ephemeral container directory.
 
 ---
 
-## Stage 4 — CURRENT CHECKPOINT: bootstrap the pilot guild with `/tb setup`
+## Stage 4 — Discord server → SWGOH guild setup ✅
 
-### 4A. Configure the pilot SWGOH guild seed
+### Bootstrap seed
 
-- [x] `DISCORD_DEFAULT_ALLY_CODE` is configured in **Swgoh-App → Variables**.
+- [x] `DISCORD_DEFAULT_ALLY_CODE` configured in **Swgoh-App → Variables**.
 - [x] `/tb status` reports `Pilot SWGOH guild seed: configured`.
 
-This is a **pilot bootstrap seed**, not the long-term commercial multi-guild onboarding model. Once `/tb setup` durably binds this Discord server to its SWGOH guild, normal live read commands resolve the durable binding first.
+The Ally Code is a pilot bootstrap seed. The durable Discord→SWGOH guild binding becomes authoritative after setup.
 
-### 4B. Wait for Railway deployment
+### Officer role
 
-- [x] Updated Swgoh-App deployment is serving the new configuration.
+- [x] Custom Discord officer role created.
+- [x] `@everyone` was not used as the bot officer role.
+- [x] Pilot operator assigned the officer role.
+- [x] Officer role appeared in `/tb setup` picker.
 
-### 4C. Verify status before setup
-
-Run in Discord:
-
-```text
-/tb status
-```
-
-Verified:
-
-- [x] `HTTP interactions: enabled`.
-- [x] Pilot Discord server ID is correct.
-- [x] `Pilot SWGOH guild seed: configured`.
-- [ ] Durable state reports ready rather than `durable-storage-not-configured`.
-- [x] Publishing/DM delivery remains disabled.
-
-### 4D. Create the Discord officer role — CURRENT ACTION
-
-The pilot Discord server currently has no custom roles; only `@everyone` exists. Do **not** use `@everyone` for `officer_role`. The bot intentionally rejects it because that would authorize every server member as an officer.
-
-Create this pilot role:
+Verified configured role:
 
 ```text
-SWGOH Officer
+@Commands Officer
 ```
 
-Recommended pilot policy:
+### `/tb setup`
 
-- this role identifies people authorized to operate SWGOH Command Center officer commands;
-- do **not** enable Discord `Administrator` merely for the bot;
-- do **not** enable Discord `Manage Roles` merely for the bot;
-- do **not** enable Discord `Manage Server` merely for ordinary bot officer access;
-- role membership itself is persisted by `/tb setup` as the Command Center officer authorization signal;
-- the server owner/Administrator can still bootstrap setup independently of the custom role.
-
-Create and assign it in Discord:
-
-1. Server name → **Server Settings**.
-2. **Roles** → **Create Role**.
-3. Name it `SWGOH Officer`.
-4. Choose a visible role color if desired.
-5. Leave dangerous administrative permissions disabled for the pilot unless independently required for Discord administration.
-6. Save changes.
-7. Open **Members** / **Manage Members**.
-8. Assign `SWGOH Officer` to the pilot operator account.
-9. Ensure the SWGOH Command Center bot's managed bot role remains in a sane hierarchy and is not replaced by `SWGOH Officer`.
-
-Acceptance:
-
-- [ ] `SWGOH Officer` role exists.
-- [ ] Pilot operator is assigned `SWGOH Officer`.
-- [ ] `@everyone` is not used as the bot officer role.
-- [ ] No unnecessary `Administrator` permission was granted.
-- [ ] The role appears in the `/tb setup officer_role` picker.
-
-### 4E. Run `/tb setup`
-
-Run as the server owner or a Discord member with **Manage Guild / Manage Server** or **Administrator**:
+Verified success response:
 
 ```text
-/tb setup
+SWGOH Command Center · Durable Setup Saved
+Discord server: 1422643338586099745
+SWGOH guild seed: configured
+Command channel: #bot-for-raid
+Officer role: @Commands Officer
+Setup was written atomically with an audit event. Publishing and DMs are still disabled.
 ```
 
-Recommended selections:
-
-```text
-channel: #bot-for-raid
-officer_role: @SWGOH Officer
-```
-
-Expected setup behavior:
-
-1. read the bootstrap Ally Code;
-2. resolve the live SWGOH player/guild through the configured gateway;
-3. verify the live guild can be resolved;
-4. persist the Discord server → SWGOH guild binding;
-5. persist the command channel;
-6. persist the selected officer role ID;
-7. write an audit entry to durable state;
-8. return an ephemeral success response.
-
-- [ ] `/tb setup` succeeds.
-- [ ] Discord→SWGOH guild binding persisted.
-- [ ] `#bot-for-raid` command channel persisted.
-- [ ] `SWGOH Officer` role persisted.
-- [ ] Durable state file exists on `/data`.
-- [ ] Re-running `/tb status` reflects configured live guild state.
-
-### Failure handling at this checkpoint
-
-If `/tb setup` fails, **stop here** and capture the exact Discord response before moving to `/tb sync`.
-
-Do not skip ahead to commercial onboarding, subscriptions, public publishing, DMs, or plan approval until this stage is green.
+- [x] `/tb setup` succeeds.
+- [x] Discord server binding persisted.
+- [x] SWGOH guild seed persisted/resolved for the binding.
+- [x] `#bot-for-raid` command channel persisted.
+- [x] `@Commands Officer` role persisted.
+- [x] Atomic state write succeeded.
+- [x] Audit event written.
+- [x] Publishing and DMs remained disabled.
 
 ---
 
-## Stage 5 — live guild synchronization
+## Stage 5 — live guild synchronization ✅
 
-Only begin after Stage 4 is green.
-
-Run:
+Verified command:
 
 ```text
 /tb sync
 ```
 
-Expected behavior: force-refresh the bound SWGOH guild roster from the live gateway and return the live guild name, hydrated roster count, guild GP, and cache/source status.
+Verified result:
 
-- [ ] `/tb sync` succeeds.
-- [ ] Correct SWGOH guild name returned.
-- [ ] Correct guild GP returned.
-- [ ] Guild member count/hydration looks credible.
-- [ ] No fallback/mock roster data is presented as live.
-- [ ] Re-run confirms durable guild binding works independently of the environment Ally Code fallback.
+```text
+SWGOH Command Center · Guild Sync
+Guild: Ludus Venatus
+Live roster refresh: complete
+Hydrated rosters: 50/50
+Guild GP: 574,260,422
+Cache state: refreshed
+No TB assignments or officer state were changed.
+```
+
+- [x] `/tb sync` succeeds.
+- [x] Correct live SWGOH guild resolved: **Ludus Venatus**.
+- [x] Live roster refresh completed.
+- [x] Hydrated roster count is **50/50**.
+- [x] Guild GP returned: **574,260,422**.
+- [x] Cache state reported `refreshed`.
+- [x] Sync remained read-only with respect to TB assignments/officer state.
+- [x] No mock/fallback roster was presented as the live guild result.
+
+Later resilience test:
+
+- [ ] After player linking is verified, confirm normal live reads continue from the durable guild binding independently of the environment Ally Code fallback.
 
 ---
 
-## Stage 6 — link the pilot Discord member to SWGOH
+## Stage 6 — CURRENT CHECKPOINT: link the pilot Discord member to SWGOH 🔴
 
 Run as an officer:
 
@@ -260,20 +204,37 @@ Run as an officer:
 /tb link member:@<Discord member> ally_code:<9-digit Ally Code>
 ```
 
+For the pilot operator, select the Discord account that is using the bot and provide that player's actual 9-digit Ally Code.
+
+Expected behavior:
+
+1. resolve the durable Discord→SWGOH guild binding;
+2. read the current live **Ludus Venatus** roster;
+3. normalize the submitted Ally Code;
+4. verify the Ally Code belongs to a current guild member;
+5. reject the link if the same Ally Code is already linked to another Discord user in this server;
+6. persist Discord user ID + Ally Code + SWGOH player ID;
+7. write an audit event;
+8. return an ephemeral success response.
+
 Rules already implemented:
 
-- claimed Ally Code must exist in the currently bound SWGOH guild roster;
+- claimed Ally Code must exist in the currently bound guild roster;
 - one Ally Code cannot be linked to two Discord users within the same Discord server;
-- link is stored durably and audited;
-- relinking to another Ally Code clears stale member preferences/availability;
-- unlink clears stale member preferences/availability.
+- player link is stored durably and audited;
+- relinking to another Ally Code clears stale preferences/availability;
+- unlink clears stale preferences/availability.
 
-Pilot acceptance:
+Acceptance:
 
-- [ ] Link the pilot operator account.
-- [ ] `/tb links` shows the link to officers.
+- [ ] Link the pilot operator account with `/tb link`.
+- [ ] Verify the returned SWGOH player name/Ally Code is correct.
+- [ ] `/tb links` shows the durable link to an officer.
 - [ ] `/tb me` returns the signed caller's live linked SWGOH profile.
+- [ ] Verify GP/player identity looks correct.
 - [ ] Normal member cannot inspect another member through self-service commands.
+
+**Stop and capture the exact Discord response if `/tb link` fails.**
 
 ---
 
@@ -307,11 +268,11 @@ Pilot acceptance:
 - [ ] KEEP verifies unit ownership and persists.
 - [ ] DEFAULT clears explicit override.
 - [ ] Planner consumes durable GIVE/KEEP controls.
-- [ ] Mission protections and hard reserves continue to override unsafe donor choices.
+- [ ] Mission protections and hard reserves override unsafe donor choices.
 
-### UX improvement backlog for member controls
+### Member-control UX backlog
 
-- [ ] Replace raw unit Base ID entry with user-friendly verified unit search/autocomplete.
+- [ ] Replace raw unit Base ID entry with verified unit search/autocomplete.
 - [ ] Add officer-readable member-control summary.
 
 ---
@@ -329,22 +290,22 @@ Run:
 Then repeat representative checks for later phases.
 
 - [ ] `/tb phase` returns live phase command-board metrics.
-- [ ] `/tb assignments` returns mission-safe Operation donor draft.
+- [ ] `/tb assignments` returns a mission-safe Operation donor draft.
 - [ ] `/tb farms` returns verified mission-impact farm priorities.
 - [ ] Availability exclusions alter candidates correctly.
 - [ ] GIVE/KEEP preferences alter donor priority correctly.
 - [ ] Mission protections remain enforced.
 - [ ] Hard reserves remain enforced.
-- [ ] Forced/risky assignments are clearly marked HELP/risk rather than disguised as safe.
+- [ ] Forced/risky assignments are clearly marked HELP/risk.
 - [ ] Generic fleet gates are not presented as exact-ready when selectable-ship evidence is incomplete.
 
-The bot currently does **not** infer the live in-game ROTE phase. Officers select P1-P6 explicitly until a verified live TB-state source is available.
+The bot currently does **not** infer the live in-game ROTE phase. Officers select P1-P6 explicitly until a verified live TB-state source exists.
 
 ---
 
 ## Stage 9 — assignment plan safety before outbound delivery
 
-Do not enable public assignment publishing or member DMs before completing this stage.
+Do not enable public assignment publishing or member DMs before this stage is complete.
 
 - [ ] Add immutable assignment plan versions.
 - [ ] Persist plan hash/version metadata.
@@ -371,19 +332,19 @@ Required before enabling:
 - [ ] Add per-message delivery status.
 - [ ] Retry transient Discord failures safely.
 - [ ] Dead-letter/report permanent failures.
-- [ ] Add preview → approve → publish command flow.
-- [ ] Restrict target channels to configured guild destinations.
+- [ ] Add preview → approve → publish flow.
+- [ ] Restrict targets to configured guild destinations.
 - [ ] Add safe member mention handling.
-- [ ] Add opt-in/controlled member DM delivery.
+- [ ] Add controlled/opt-in member DM delivery.
 - [ ] Audit each public post/DM delivery event.
-- [ ] Ensure a planner recalculation cannot silently change an already-approved plan.
+- [ ] Ensure recalculation cannot silently alter an already-approved plan.
 - [ ] Enable delivery only after pilot acceptance.
 
 ---
 
 # PARKED COMMERCIAL / SCALE BACKLOG
 
-These items are deliberately recorded here so they are not forgotten, but **they are not the current task**. Do not jump to them before the pilot stages above are green.
+These items are deliberately recorded so they are not forgotten, but **they are not the current task**.
 
 ## Multi-guild commercial onboarding
 
@@ -392,22 +353,22 @@ These items are deliberately recorded here so they are not forgotten, but **they
 - [ ] Let each Discord guild provide its own SWGOH guild bootstrap Ally Code.
 - [ ] Verify tenant isolation by Discord guild ID at every read/write boundary.
 - [ ] Add Discord Guild Install production flow.
-- [ ] Move command registration from pilot guild scope to the appropriate production/global installation model.
+- [ ] Move command registration from pilot guild scope to the production/global installation model.
 - [ ] Add uninstall/offboarding cleanup policy.
 
 ## Production persistence
 
-The current atomic JSON-on-Railway-Volume state is suitable for pilot validation, not the intended high-scale final persistence layer.
+Current atomic JSON-on-Railway-Volume state is suitable for pilot validation, not the intended high-scale persistence layer.
 
-- [ ] Design PostgreSQL schema for Discord guilds, SWGOH guild bindings, links, member controls, plans, audits, subscriptions, and entitlements.
-- [ ] Add database migrations.
+- [ ] Design PostgreSQL schema for Discord guilds, SWGOH bindings, player links, member controls, plans, audits, subscriptions, and entitlements.
+- [ ] Add migrations.
 - [ ] Add transactional tenant-scoped writes.
-- [ ] Add indexes for Discord guild ID, player ID, Ally Code, and plan version lookups.
+- [ ] Add indexes for Discord guild ID, player ID, Ally Code, and plan versions.
 - [ ] Add backup/restore procedure.
-- [ ] Migrate pilot JSON state into the database safely.
-- [ ] Remove single-file state-size bottleneck after migration.
+- [ ] Migrate pilot JSON state safely.
+- [ ] Remove the single-file state-size bottleneck.
 
-## Monetization / entitlement layer
+## Monetization / entitlements
 
 - [ ] Define Free / Officer / Guild Pro / higher-tier feature matrix.
 - [ ] Decide production payment provider(s) and Discord-native vs external billing approach.
@@ -430,14 +391,14 @@ The current atomic JSON-on-Railway-Volume state is suitable for pilot validation
 ## Legal / platform launch review
 
 - [ ] Review Discord production application requirements and app-install permissions before public launch.
-- [ ] Review commercial use of SWGOH/EA/CG names, data, imagery, and third-party data sources before paid public launch.
+- [ ] Review commercial use of SWGOH/EA/CG names, data, imagery, and third-party sources before paid public launch.
 - [ ] Record permissions/licenses/terms relied on for each external data/image source.
 
 ---
 
-# Current Railway configuration checklist
+# Current Railway configuration
 
-Known configured variables from the pilot deployment:
+Known pilot variables:
 
 ```text
 DISCORD_APPLICATION_ID
@@ -464,12 +425,12 @@ Swgoh-App Railway Volume → /data
 
 ## Setup
 
-`/tb setup` requires one of:
+`/tb setup` requires:
 
-- Discord Manage Guild / Manage Server permission; or
-- Discord Administrator permission.
+- Manage Guild / Manage Server; or
+- Administrator.
 
-A configured officer role cannot bootstrap setup before it exists.
+The custom officer role cannot bootstrap itself before setup exists.
 
 ## Officer commands
 
@@ -477,7 +438,7 @@ Guild-wide officer commands require:
 
 - Manage Guild; or
 - Administrator; or
-- a durably configured officer role where the command supports configured-role authorization.
+- the durably configured `@Commands Officer` role where configured-role authorization applies.
 
 ## Linked-member self-service
 
@@ -490,7 +451,7 @@ Normal linked members may use self-only behavior for:
 /tb availability
 ```
 
-They cannot use the optional `member` target to act on another Discord user unless officer-authorized.
+They cannot act on another Discord member unless officer-authorized.
 
 ---
 
@@ -500,32 +461,35 @@ The bot should refuse/degrade safely when:
 
 - Discord request signature is invalid;
 - signed `application_id` mismatches the deployment;
-- pilot guild restriction fails during the pilot;
-- `/tb setup` has no valid bootstrap Ally Code;
+- pilot guild restriction fails;
+- setup has no valid bootstrap Ally Code;
 - durable shared state is unavailable for a write command;
 - live SWGOH gateway is unavailable when live verification is required;
-- link target is not in the bound SWGOH guild;
+- link target is not in the bound guild;
 - GIVE/KEEP target unit is not owned by the linked player;
-- a non-officer tries to target another Discord member;
+- a non-officer targets another Discord member;
 - verified mission evidence is incomplete.
 
-Safe clears such as `DEFAULT` preference or `AVAILABLE` may remove stale controls during an upstream outage where implemented, because clearing a restriction is safer than leaving an obsolete one stuck indefinitely.
+Safe clears such as `DEFAULT` preference or `AVAILABLE` may remove stale controls during an upstream outage where implemented.
 
 ---
 
 # Immediate next action — do not skip
 
-1. Create the `SWGOH Officer` Discord role.
-2. Assign `SWGOH Officer` to the pilot operator account.
-3. Confirm the role appears in `/tb setup officer_role`.
-4. Run `/tb setup` with `channel:#bot-for-raid` and `officer_role:@SWGOH Officer`.
-5. Capture the exact Discord result.
-6. Only after setup succeeds, proceed to `/tb sync`.
+1. In Discord run `/tb link`.
+2. Set `member` to the pilot operator Discord account.
+3. Enter that player's actual 9-digit SWGOH Ally Code.
+4. Submit the command.
+5. Capture the exact Discord response.
+6. If successful, run `/tb links`.
+7. Then run `/tb me`.
+8. Only after player identity is verified do we proceed to availability/preferences.
 
 ---
 
-## Change log
+# Change log
 
-- 2026-08-17: Added explicit Discord officer-role creation checkpoint before `/tb setup`; recorded the Ally Code seed as configured and retained `/tb setup` as the active stage.
-- 2026-08-17: Converted this document into the authoritative master checklist and reset the active checkpoint to `/tb setup`.
-- 2026-08-17: Recorded successful `/tb` registration, live signed interaction response, Railway `/data` Volume mount, existing member-link/preference/availability functionality, safety roadmap, and parked commercial scaling work.
+- 2026-08-17: `/tb setup` succeeded with `#bot-for-raid` and `@Commands Officer`; durable atomic write and audit event verified.
+- 2026-08-17: `/tb sync` succeeded against live guild **Ludus Venatus**, hydrating **50/50** rosters at **574,260,422 GP** with refreshed cache state. Active checkpoint advanced to Stage 6 player linking.
+- 2026-08-17: Added explicit Discord officer-role creation checkpoint before setup.
+- 2026-08-17: Converted this document into the authoritative master checklist and recorded Discord registration, signed interactions, Railway `/data` Volume, player-link/preference/availability functionality, safety roadmap, and parked commercial scaling work.
