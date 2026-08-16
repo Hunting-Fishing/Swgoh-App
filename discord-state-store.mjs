@@ -44,6 +44,12 @@ function donationPreference(value) {
   return text;
 }
 
+function memberAvailability(value) {
+  const text = clean(value).toLowerCase();
+  if (!new Set(["available", "unavailable"]).has(text)) throw new Error("Member availability must be AVAILABLE or UNAVAILABLE.");
+  return text;
+}
+
 function phase(value) {
   const text = clean(value).toUpperCase();
   if (!/^P[1-6]$/.test(text)) throw new Error("ROTE phase must be P1 through P6.");
@@ -127,6 +133,7 @@ function defaultGuild(discordGuildId, now) {
     officerRoleIds: [],
     userLinks: {},
     memberPreferences: {},
+    memberAvailability: {},
     planVersions: [],
     createdAt: now,
     updatedAt: now,
@@ -138,11 +145,26 @@ function ensureMemberPreferences(guild) {
   return guild.memberPreferences;
 }
 
+function ensureMemberAvailability(guild) {
+  if (!guild.memberAvailability || typeof guild.memberAvailability !== "object" || Array.isArray(guild.memberAvailability)) guild.memberAvailability = {};
+  return guild.memberAvailability;
+}
+
 function clearPreferencesForDiscordUser(guild, discordUserId) {
   const preferences = ensureMemberPreferences(guild);
   for (const [key, row] of Object.entries(preferences)) {
     if (row?.discordUserId === discordUserId) delete preferences[key];
   }
+}
+
+function clearAvailabilityForDiscordUser(guild, discordUserId) {
+  const availability = ensureMemberAvailability(guild);
+  delete availability[discordUserId];
+}
+
+function clearMemberControlsForDiscordUser(guild, discordUserId) {
+  clearPreferencesForDiscordUser(guild, discordUserId);
+  clearAvailabilityForDiscordUser(guild, discordUserId);
 }
 
 export function createDiscordStateStore(env = process.env, options = {}) {
@@ -309,7 +331,7 @@ export function createDiscordStateStore(env = process.env, options = {}) {
           }
         }
         const previous = guild.userLinks[userId];
-        if (previous?.swgohAllyCode && previous.swgohAllyCode !== normalizedAllyCode) clearPreferencesForDiscordUser(guild, userId);
+        if (previous?.swgohAllyCode && previous.swgohAllyCode !== normalizedAllyCode) clearMemberControlsForDiscordUser(guild, userId);
         guild.userLinks[userId] = {
           discordUserId: userId,
           swgohAllyCode: normalizedAllyCode,
@@ -334,7 +356,7 @@ export function createDiscordStateStore(env = process.env, options = {}) {
           error.code = "PLAYER_LINK_NOT_FOUND";
           throw error;
         }
-        clearPreferencesForDiscordUser(guild, userId);
+        clearMemberControlsForDiscordUser(guild, userId);
         delete guild.userLinks[userId];
         return previous;
       });
@@ -381,6 +403,47 @@ export function createDiscordStateStore(env = process.env, options = {}) {
           updatedAt: timestamp,
         };
         preferences[key] = row;
+        return row;
+      });
+    },
+    async setMemberAvailability({ discordGuildId, discordUserId, availability, actorDiscordUserId = "" }) {
+      const userId = snowflake(discordUserId, "Discord user ID");
+      const normalizedAvailability = memberAvailability(availability);
+      return mutate({
+        discordGuildId,
+        actorDiscordUserId,
+        action: normalizedAvailability === "available" ? "member-availability-cleared" : "member-unavailable-set",
+        details: { discordUserId: userId, availability: normalizedAvailability },
+      }, (guild, _state, timestamp) => {
+        const link = guild.userLinks?.[userId];
+        if (!link) {
+          const error = new Error("That Discord user must have a durable SWGOH player link before TB availability can be changed.");
+          error.code = "PLAYER_LINK_NOT_FOUND";
+          throw error;
+        }
+        const rows = ensureMemberAvailability(guild);
+        if (normalizedAvailability === "available") {
+          const previous = rows[userId] || null;
+          delete rows[userId];
+          return {
+            discordUserId: userId,
+            memberId: clean(link.playerId) || link.swgohAllyCode,
+            playerId: clean(link.playerId),
+            swgohAllyCode: link.swgohAllyCode,
+            availability: "available",
+            cleared: true,
+            previous,
+          };
+        }
+        const row = {
+          discordUserId: userId,
+          memberId: clean(link.playerId) || link.swgohAllyCode,
+          playerId: clean(link.playerId),
+          swgohAllyCode: link.swgohAllyCode,
+          availability: "unavailable",
+          updatedAt: timestamp,
+        };
+        rows[userId] = row;
         return row;
       });
     },
