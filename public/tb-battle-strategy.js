@@ -5,6 +5,8 @@ import { dsGeoBattleStrategyForMission } from "./tb-battle-strategy-dsgeo-data.j
 import { dsGeoFleetBattleStrategyForMission } from "./tb-battle-strategy-dsgeo-fleet-data.js";
 import { lsGeoBattleStrategyForMission } from "./tb-battle-strategy-lsgeo-data.js";
 import { lsGeoFleetBattleStrategyForMission } from "./tb-battle-strategy-lsgeo-fleet-data.js";
+import { hothDsBattleStrategyForMission } from "./tb-battle-strategy-hoth-ds-data.js";
+import { hothDsFleetBattleStrategyForMission } from "./tb-battle-strategy-hoth-ds-fleet-data.js";
 import { rotePhaseOneBattleStrategyForMission } from "./tb-battle-strategy-rote-p1-data.js";
 import { mandaloreBattleStrategyForMission } from "./tb-battle-strategy-mandalore-data.js";
 import { rotePriorityBattleStrategyForMission } from "./tb-battle-strategy-rote-priority-data.js";
@@ -81,6 +83,7 @@ function resolvedStrategy(missionId, mission = null, analysis = null) {
   const tbId = String(mission?.tbId || analysis?.tbId || "");
   const allowDsGeoLegacyIds = !tbId || tbId === "geo-separatist";
   const allowLsGeoLegacyIds = !tbId || tbId === "geo-republic";
+  const allowHothDsLegacyIds = !tbId || tbId === "hoth-imperial";
 
   return mandaloreBattleStrategyForMission(missionId)
     || rotePriorityBattleStrategyForMission(missionId)
@@ -95,6 +98,8 @@ function resolvedStrategy(missionId, mission = null, analysis = null) {
     || roteGenericBattleStrategyForMission(missionId)
     || (allowLsGeoLegacyIds ? lsGeoFleetBattleStrategyForMission(missionId) : null)
     || (allowLsGeoLegacyIds ? lsGeoBattleStrategyForMission(missionId) : null)
+    || (allowHothDsLegacyIds ? hothDsFleetBattleStrategyForMission(missionId) : null)
+    || (allowHothDsLegacyIds ? hothDsBattleStrategyForMission(missionId) : null)
     || (allowDsGeoLegacyIds ? dsGeoFleetBattleStrategyForMission(missionId) : null)
     || (allowDsGeoLegacyIds ? dsGeoBattleStrategyForMission(missionId) : null)
     || (allowDsGeoLegacyIds ? watBattleStrategyForMission(missionId) : null)
