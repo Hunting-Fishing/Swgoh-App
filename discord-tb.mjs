@@ -3,6 +3,7 @@ import { discordStateStore } from "./discord-state-store.mjs";
 import { createDiscordTbLiveServices } from "./discord-tb-live.mjs";
 import { linkDiscordGuildPlayer, unlinkDiscordGuildPlayer } from "./discord-player-link-service.mjs";
 import { setDiscordDonationPreference } from "./discord-donation-preference-service.mjs";
+import { getDiscordLinkedPlayerSnapshot } from "./discord-linked-player-service.mjs";
 
 const ED25519_SPKI_PREFIX = Buffer.from("302a300506032b6570032100", "hex");
 const MAX_INTERACTION_BYTES = 1024 * 1024;
@@ -10,8 +11,9 @@ const EPHEMERAL_FLAG = 1 << 6;
 const MAX_DISCORD_CONTENT = 1900;
 const ADMINISTRATOR_PERMISSION = 1n << 3n;
 const MANAGE_GUILD_PERMISSION = 1n << 5n;
-const DEFERRED_SUBCOMMANDS = new Set(["setup", "sync", "phase", "assignments", "farms", "link", "unlink", "links", "preference", "preferences"]);
-const STATE_SUBCOMMANDS = new Set(["link", "unlink", "links", "preference", "preferences"]);
+const DEFERRED_SUBCOMMANDS = new Set(["setup", "sync", "phase", "assignments", "farms", "link", "unlink", "links", "me", "preference", "preferences"]);
+const STATE_SUBCOMMANDS = new Set(["link", "unlink", "links", "me", "preference", "preferences"]);
+const MEMBER_SELF_SERVICE_SUBCOMMANDS = new Set(["me", "preference", "preferences"]);
 
 export const DISCORD_INTERACTION_TYPES = Object.freeze({
   PING: 1,
@@ -102,6 +104,16 @@ export async function discordTbMemberHasConfiguredOfficerRole(interaction = {}, 
   }
 }
 
+export function discordTbSelfServiceTargetAllowed(interaction = {}) {
+  const subcommand = discordTbSubcommand(interaction);
+  if (!MEMBER_SELF_SERVICE_SUBCOMMANDS.has(subcommand)) return false;
+  const actorDiscordUserId = snowflake(interaction?.member?.user?.id);
+  if (!actorDiscordUserId) return false;
+  if (subcommand === "me") return true;
+  const requestedDiscordUserId = snowflake(discordTbOption(interaction, "member"));
+  return !requestedDiscordUserId || requestedDiscordUserId === actorDiscordUserId;
+}
+
 export function discordTbConfig(env = process.env) {
   const applicationId = snowflake(env.DISCORD_APPLICATION_ID);
   const publicKey = clean(env.DISCORD_PUBLIC_KEY).toLowerCase();
@@ -144,7 +156,8 @@ export function discordTbPublicStatus(env = process.env) {
     officerAuthorization: "manage-guild-administrator-or-configured-role",
     setupAuthorization: "manage-guild-or-administrator",
     playerLinkAuthorization: "officer-only-live-guild-membership-verified",
-    donationPreferenceAuthorization: "officer-only-linked-player-live-unit-verified",
+    donationPreferenceAuthorization: "linked-member-self-or-officer-live-unit-verified",
+    memberSelfService: "linked-player-only",
     interactionsPath: "/api/discord/interactions",
     mode: "http-interactions",
   });
@@ -296,7 +309,8 @@ function statusMessage(interaction, config) {
     `Mission redundancy target: ${config.redundancyTarget}`,
     "Officer authorization: Manage Guild / Administrator, or a durably configured officer role",
     "Setup authorization: Manage Guild or Administrator only",
-    "Player identity: officer-managed, live guild-membership verified, durably audited",
+    "Player identity: officer-managed, guild-membership verified, durably audited",
+    "Member self-service: linked members can read their own profile and manage only their own GIVE/KEEP preferences",
     "Donation preferences: durable GIVE/KEEP overrides feed the live mission-safe planner",
     `Proactive outbound delivery: ${config.deliveryEnabled ? "enabled" : "disabled"}`,
     "Publishing and DMs remain disabled.",
@@ -404,6 +418,22 @@ function formatPlayerLinksResult(guild = {}) {
   return truncateContent(lines.join("\n"));
 }
 
+function formatLinkedPlayerSnapshot(result = {}) {
+  const member = result.member || {};
+  const units = Array.isArray(member.units) ? member.units : [];
+  const lines = [
+    "**SWGOH Command Center · My Linked Player**",
+    `Discord member: <@${safeText(result.discordUserId)}>`,
+    `SWGOH player: **${safeText(member.name, "linked guild member")}** · **${displayAllyCode(result?.link?.swgohAllyCode)}**`,
+    `Guild: **${safeText(result.guildName, "bound guild")}**`,
+    `Galactic Power: **${number(member.galacticPower)}**`,
+    `Hydrated roster units: **${units.length}**`,
+    `Roster cache: **${safeText(result.rosterCache)}**`,
+    "This is your own durable Discord ↔ SWGOH link. No guild state was changed.",
+  ];
+  return truncateContent(lines.join("\n"));
+}
+
 function formatDonationPreferenceResult(result = {}) {
   const pref = safeText(result.preference, "default").toUpperCase();
   const verification = result.verification || {};
@@ -414,7 +444,7 @@ function formatDonationPreferenceResult(result = {}) {
     `Preference: **${pref}**`,
   ];
   if (pref === "GIVE" || pref === "KEEP") {
-    lines.push(`Live ownership check: **verified**${verification.playerName ? ` for **${safeText(verification.playerName)}**` : ""}`);
+    lines.push(`Ownership check: **verified against the bound guild roster**${verification.playerName ? ` for **${safeText(verification.playerName)}**` : ""}`);
     lines.push(pref === "GIVE"
       ? "Planner effect: this member is favored as a donor for this unit when legal."
       : "Planner effect: this member is pushed to the end of the donor order and used only when safer owners are exhausted.");
@@ -663,19 +693,40 @@ export async function executeDiscordTbDeferredCommand(interaction, config = disc
     return formatPlayerLinksResult(guild);
   }
 
+  if (subcommand === "me") {
+    const stateStore = services?.stateStore || discordStateStore;
+    requireDurableIdentityState(stateStore);
+    const discordGuildId = snowflake(interaction?.guild_id);
+    const discordUserId = snowflake(interaction?.member?.user?.id);
+    if (!discordGuildId) throw new Error("A valid Discord guild is required for /tb me.");
+    if (!discordUserId) throw new Error("A valid Discord member identity is required for /tb me.");
+    const reader = typeof services?.getDiscordLinkedPlayerSnapshot === "function" ? services.getDiscordLinkedPlayerSnapshot : getDiscordLinkedPlayerSnapshot;
+    const result = await reader({
+      discordGuildId,
+      discordUserId,
+      stateStore,
+      ...(services?.rosterService ? { rosterService: services.rosterService } : {}),
+    });
+    return formatLinkedPlayerSnapshot(result);
+  }
+
   if (subcommand === "preference") {
     const stateStore = services?.stateStore || discordStateStore;
     requireDurableIdentityState(stateStore);
     const discordGuildId = snowflake(interaction?.guild_id);
     const actorDiscordUserId = snowflake(interaction?.member?.user?.id);
-    const discordUserId = snowflake(discordTbOption(interaction, "member"));
+    const requestedDiscordUserId = snowflake(discordTbOption(interaction, "member"));
+    const discordUserId = requestedDiscordUserId || actorDiscordUserId;
     const baseId = unitBaseId(discordTbOption(interaction, "unit"));
     const preference = donationPreference(discordTbOption(interaction, "preference"));
     if (!discordGuildId) throw new Error("A valid Discord guild is required for /tb preference.");
-    if (!actorDiscordUserId) throw new Error("A valid Discord officer identity is required for /tb preference.");
-    if (!discordUserId) throw new Error("Choose a linked Discord member for /tb preference.");
+    if (!actorDiscordUserId) throw new Error("A valid Discord member identity is required for /tb preference.");
+    if (!discordUserId) throw new Error("No valid linked Discord member was resolved for /tb preference.");
     if (!baseId) throw new Error("Enter a valid SWGOH unit Base ID for /tb preference.");
     if (!preference) throw new Error("Choose GIVE, DEFAULT, or KEEP for /tb preference.");
+    if (services.authorizedAsOfficer === false && discordUserId !== actorDiscordUserId) {
+      throw new Error("Normal members may change donation preferences only for their own linked SWGOH player.");
+    }
     const transaction = typeof services?.setDiscordDonationPreference === "function" ? services.setDiscordDonationPreference : setDiscordDonationPreference;
     const result = await transaction({
       discordGuildId,
@@ -695,11 +746,19 @@ export async function executeDiscordTbDeferredCommand(interaction, config = disc
     requireDurableIdentityState(stateStore);
     if (typeof stateStore?.readGuild !== "function") throw new Error("Durable Discord guild reader is unavailable.");
     const discordGuildId = snowflake(interaction?.guild_id);
-    const requestedUserId = snowflake(discordTbOption(interaction, "member"));
+    const actorDiscordUserId = snowflake(interaction?.member?.user?.id);
+    const requestedDiscordUserId = snowflake(discordTbOption(interaction, "member"));
     if (!discordGuildId) throw new Error("A valid Discord guild is required for /tb preferences.");
+    if (services.authorizedAsOfficer === false && requestedDiscordUserId && requestedDiscordUserId !== actorDiscordUserId) {
+      throw new Error("Normal members may view donation preferences only for their own linked SWGOH player.");
+    }
+    const scopeDiscordUserId = requestedDiscordUserId || (services.authorizedAsOfficer === false ? actorDiscordUserId : "");
     const guild = await stateStore.readGuild(discordGuildId);
     if (!guild) throw new Error("This Discord server has not completed durable /tb setup yet.");
-    return formatDonationPreferencesResult(guild, requestedUserId);
+    if (services.authorizedAsOfficer === false && !guild?.userLinks?.[actorDiscordUserId]) {
+      throw new Error("Your Discord account does not have a SWGOH player link in this server yet.");
+    }
+    return formatDonationPreferencesResult(guild, scopeDiscordUserId);
   }
 
   if (subcommand === "sync") {
@@ -827,15 +886,22 @@ export async function handleDiscordInteractionRequest(request, response, env = p
   const subcommand = discordTbSubcommand(interaction);
   const bootstrapAuthorized = discordTbMemberHasOfficerPermission(interaction);
   const stateStore = services?.stateStore || discordStateStore;
-  let authorized = bootstrapAuthorized;
-  if (!authorized && subcommand !== "setup") {
-    authorized = await discordTbMemberHasConfiguredOfficerRole(interaction, stateStore);
+  let officerAuthorized = bootstrapAuthorized;
+  if (!officerAuthorized && subcommand !== "setup") {
+    officerAuthorized = await discordTbMemberHasConfiguredOfficerRole(interaction, stateStore);
   }
+  const selfServiceAuthorized = !officerAuthorized && discordTbSelfServiceTargetAllowed(interaction);
+  const authorized = officerAuthorized || selfServiceAuthorized;
 
   if (!authorized) {
-    const content = subcommand === "setup"
-      ? "Bootstrap permission required. `/tb setup` requires Manage Server (Manage Guild) or Administrator permission even when an officer role is configured."
-      : "Officer permission required. `/tb` requires Manage Server (Manage Guild), Administrator, or a durably configured officer role.";
+    let content;
+    if (subcommand === "setup") {
+      content = "Bootstrap permission required. `/tb setup` requires Manage Server (Manage Guild) or Administrator permission even when an officer role is configured.";
+    } else if (MEMBER_SELF_SERVICE_SUBCOMMANDS.has(subcommand)) {
+      content = "Member self-service is limited to your own linked SWGOH player. Officers may target other linked guild members.";
+    } else {
+      content = "Officer permission required. `/tb` requires Manage Server (Manage Guild), Administrator, or a durably configured officer role.";
+    }
     jsonResponse(response, 200, ephemeral(content));
     return true;
   }
@@ -844,12 +910,12 @@ export async function handleDiscordInteractionRequest(request, response, env = p
   jsonResponse(response, 200, commandResponse);
   if (commandResponse.type === DISCORD_RESPONSE_TYPES.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE) {
     if (subcommand === "setup") {
-      scheduleDeferredDiscordCommand(interaction, config, { ...services, stateStore });
+      scheduleDeferredDiscordCommand(interaction, config, { ...services, stateStore, authorizedAsOfficer: officerAuthorized });
       return true;
     }
 
     if (STATE_SUBCOMMANDS.has(subcommand)) {
-      scheduleDeferredDiscordCommand(interaction, config, { ...services, stateStore });
+      scheduleDeferredDiscordCommand(interaction, config, { ...services, stateStore, authorizedAsOfficer: officerAuthorized });
       return true;
     }
 
@@ -862,7 +928,7 @@ export async function handleDiscordInteractionRequest(request, response, env = p
         ...(typeof services?.fetch === "function" ? { fetch: services.fetch } : {}),
         stateStore,
       });
-    scheduleDeferredDiscordCommand(interaction, config, { ...liveServices, stateStore });
+    scheduleDeferredDiscordCommand(interaction, config, { ...liveServices, stateStore, authorizedAsOfficer: officerAuthorized });
   }
   return true;
 }
