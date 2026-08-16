@@ -20,6 +20,7 @@
   <link rel="stylesheet" href="/guild-rote-pro.css?v=20260815-pro10">
   <link rel="stylesheet" href="/guild-rote-safe-operations.css?v=20260816-guildsafe1">
   <link rel="stylesheet" href="/guild-tb-phase-command-board.css?v=20260817-guildtb1">
+  <link rel="stylesheet" href="/guild-command-page.css?v=20260817-guildpage1">
   <link rel="stylesheet" href="/guild-rote-mission-coverage.css?v=20260816-guildmission1">
   <link rel="stylesheet" href="/guild-rote-redundancy-target.css?v=20260816-guildredundancy1">
   <link rel="stylesheet" href="/guild-rote-officer-export.css?v=20260816-guildexport1">
@@ -74,95 +75,33 @@
           </div>
           <div id="intelligenceStatus" class="status ready">Live roster</div>
         </div>
-
         <div id="intelligenceSummary" class="collection-summary intelligence-summary"></div>
-
         <div class="intelligence-columns">
-          <section>
-            <div class="section-heading">
-              <div>
-                <div class="kicker">OWNED ROSTER</div>
-                <h3>Roster-Built Squads</h3>
-              </div>
-            </div>
-            <div id="squadGrid" class="squad-grid"></div>
-          </section>
-
+          <section><div class="section-heading"><div><div class="kicker">OWNED ROSTER</div><h3>Roster-Built Squads</h3></div></div><div id="squadGrid" class="squad-grid"></div></section>
           <section class="profile-intelligence">
-            <div>
-              <div class="kicker">PUBLIC PROFILE DATA</div>
-              <h3>Profile Stats</h3>
-              <div id="profileStatsGrid" class="profile-stat-grid"></div>
-            </div>
-            <div>
-              <div class="kicker">GRAND ARENA</div>
-              <h3>Recent GAC Status</h3>
-              <div id="seasonGrid" class="season-grid"></div>
-            </div>
+            <div><div class="kicker">PUBLIC PROFILE DATA</div><h3>Profile Stats</h3><div id="profileStatsGrid" class="profile-stat-grid"></div></div>
+            <div><div class="kicker">GRAND ARENA</div><h3>Recent GAC Status</h3><div id="seasonGrid" class="season-grid"></div></div>
           </section>
         </div>
       </section>
 
       <section id="controls" class="controls card hidden">
         <input id="search" placeholder="Search owned unit, faction, role…">
-        <select id="unitType">
-          <option value="All">Characters + Ships</option>
-          <option value="Character">Characters</option>
-          <option value="Ship">Ships</option>
-        </select>
-        <select id="alignment">
-          <option value="All">All alignments</option>
-          <option value="Light">Light</option>
-          <option value="Dark">Dark</option>
-          <option value="Neutral">Neutral</option>
-          <option value="Unknown">Unknown</option>
-        </select>
-        <select id="sort">
-          <option value="power">Power</option>
-          <option value="speed">Speed</option>
-          <option value="relic">Relic</option>
-          <option value="readiness">Upgrade completion</option>
-          <option value="name">Name</option>
-        </select>
+        <select id="unitType"><option value="All">Characters + Ships</option><option value="Character">Characters</option><option value="Ship">Ships</option></select>
+        <select id="alignment"><option value="All">All alignments</option><option value="Light">Light</option><option value="Dark">Dark</option><option value="Neutral">Neutral</option><option value="Unknown">Unknown</option></select>
+        <select id="sort"><option value="power">Power</option><option value="speed">Speed</option><option value="relic">Relic</option><option value="readiness">Upgrade completion</option><option value="name">Name</option></select>
         <span id="count" class="count"></span>
       </section>
-
       <section id="roster" class="grid hidden"></section>
-
-      <section id="empty" class="empty card">
-        <div class="orb"></div>
-        <h3>No live roster loaded</h3>
-        <p>The static game database below is available to everyone. Enter a 9-digit Ally Code to overlay a current player's ownership, GP, relics and ability progression.</p>
-      </section>
+      <section id="empty" class="empty card"><div class="orb"></div><h3>No live roster loaded</h3><p>The static game database below is available to everyone. Enter a 9-digit Ally Code to overlay a current player's ownership, GP, relics and ability progression.</p></section>
 
       <section class="database card">
-        <div class="database-heading">
-          <div>
-            <div class="kicker">STATIC GAME DATABASE</div>
-            <h3>All Player-Obtainable Units</h3>
-            <p>Characters, ships, factions, gear tiers and ability definitions are shared across every user and refreshed only when the game version changes.</p>
-          </div>
-          <div id="catalogStatus" class="status">Loading static game data…</div>
-        </div>
+        <div class="database-heading"><div><div class="kicker">STATIC GAME DATABASE</div><h3>All Player-Obtainable Units</h3><p>Characters, ships, factions, gear tiers and ability definitions are shared across every user and refreshed only when the game version changes.</p></div><div id="catalogStatus" class="status">Loading static game data…</div></div>
         <div class="catalog-controls">
           <input id="catalogSearch" placeholder="Search all characters, ships, factions…">
-          <select id="catalogType">
-            <option value="Character" selected>Characters</option>
-            <option value="Ship">Ships</option>
-            <option value="All">Characters + Ships</option>
-          </select>
-          <select id="catalogAlignment">
-            <option value="All">All alignments</option>
-            <option value="Light">Light</option>
-            <option value="Dark">Dark</option>
-            <option value="Neutral">Neutral</option>
-            <option value="Unknown">Unknown</option>
-          </select>
-          <select id="catalogSort">
-            <option value="name">Name</option>
-            <option value="type">Unit type</option>
-            <option value="abilities">Ability count</option>
-          </select>
+          <select id="catalogType"><option value="Character" selected>Characters</option><option value="Ship">Ships</option><option value="All">Characters + Ships</option></select>
+          <select id="catalogAlignment"><option value="All">All alignments</option><option value="Light">Light</option><option value="Dark">Dark</option><option value="Neutral">Neutral</option><option value="Unknown">Unknown</option></select>
+          <select id="catalogSort"><option value="name">Name</option><option value="type">Unit type</option><option value="abilities">Ability count</option></select>
           <span id="catalogCount" class="count"></span>
         </div>
         <div id="catalogGrid" class="catalog-grid"></div>
@@ -172,7 +111,7 @@
   </div>
 
   <dialog id="details" class="details"></dialog>
-  <script src="/live-fetch-cache.js?v=20260816-cache2"></script>
+  <script src="/live-fetch-cache.js?v=20260817-cache3"></script>
   <script type="module" src="/app.js?v=20260815-pro10"></script>
   <script type="module" src="/ui-fixes.js?v=20260815-pro10"></script>
   <script type="module" src="/workspace-tabs.js?v=20260815-pro10"></script>
@@ -201,6 +140,7 @@
   <script type="module" src="/guild-rote-member-plan-handoff.js?v=20260816-guildplan2"></script>
   <script type="module" src="/guild-rote-officer-export.js?v=20260816-guildexport2"></script>
   <script type="module" src="/guild-rote-strategy-audit.js?v=20260816-guildstrategy1"></script>
+  <script type="module" src="/guild-command-page.js?v=20260817-guildpage1"></script>
   <script type="module" src="/mods-pro.js?v=20260815-pro10"></script>
   <script type="module" src="/mod-optimizer-pro.js?v=20260815-pro10"></script>
 </body>
