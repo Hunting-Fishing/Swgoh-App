@@ -2,6 +2,7 @@ import http from "node:http";
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { accountOnboarding } from "./account-onboarding.mjs";
 import { withCapabilityContract } from "./capability-contract.mjs";
 import { discordStateStore } from "./discord-state-store.mjs";
 import { discordTbPublicStatus, handleDiscordInteractionRequest } from "./discord-tb.mjs";
@@ -375,6 +376,11 @@ const server = http.createServer(async (request, response) => {
 
   if (url.pathname.startsWith("/api/auth/")) {
     const handled = await supabaseAuthSession.handle(request, response, url);
+    if (handled) return;
+  }
+
+  if (url.pathname.startsWith("/api/account/")) {
+    const handled = await accountOnboarding.handle(request, response, url);
     if (handled) return;
   }
 
