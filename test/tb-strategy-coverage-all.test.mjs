@@ -43,7 +43,7 @@ test("recommendation-only legacy missions remain partial instead of being promot
 
 test("existing KAM and Wat battle packs are surfaced by the legacy audit", () => {
   const kam = territoryBattleStrategyCoverage(findMission(GEO_LS_TERRITORIES, "p3-kam"));
-  assert.notEqual(kam.coverage, "missing");
+  assert.equal(kam.coverage, "covered");
   assert.equal(kam.strategyAvailable, true);
 
   const wat = territoryBattleStrategyCoverage(findMission(DS_GEO_TERRITORIES, "s3"));
@@ -60,16 +60,28 @@ test("DS Geo audit separates verified and partial strategy evidence", () => {
   }
 });
 
+test("LS Geo audit separates tested exact missions from partial entry-only packs", () => {
+  for (const id of ["p1-mid-sm", "p2-mid-gas", "p3-kam", "p4-bot-501"]) {
+    assert.equal(territoryBattleStrategyCoverage(findMission(GEO_LS_TERRITORIES, id)).coverage, "covered", `${id} should be covered`);
+  }
+  for (const id of ["p2-bot-sm", "p4-mid-sm", "p1-fleet", "p2-fleet-sm", "p3-fleet-sm", "p4-fleet-sm"]) {
+    assert.equal(territoryBattleStrategyCoverage(findMission(GEO_LS_TERRITORIES, id)).coverage, "partial", `${id} should stay partial`);
+  }
+});
+
 test("coverage gaps can be filtered by Territory Battle and state", () => {
   const geoLsPartial = territoryBattleCoverageGaps({ tbId: TB_COVERAGE_IDS.GEO_LS, coverage: "partial" });
   assert.ok(geoLsPartial.length > 0);
   assert.ok(geoLsPartial.every((row) => row.tbId === TB_COVERAGE_IDS.GEO_LS && row.coverage === "partial"));
+  assert.ok(geoLsPartial.some((row) => row.missionId === "p4-fleet-sm"));
 });
 
 test("all-TB coverage modules parse", () => {
   for (const path of [
     new URL("../public/ds-geo-mission-overrides.js", import.meta.url),
     new URL("../public/tb-strategy-coverage-all.js", import.meta.url),
+    new URL("../public/tb-battle-strategy-lsgeo-data.js", import.meta.url),
+    new URL("../public/tb-battle-strategy-lsgeo-fleet-data.js", import.meta.url),
     new URL("../scripts/report-all-tb-strategy-coverage.mjs", import.meta.url),
   ]) execFileSync(process.execPath, ["--check", path.pathname]);
 });
