@@ -111,9 +111,9 @@ form?.addEventListener('submit', async (event) => {
     });
 
     if (result?.authenticated) {
-      setMessage(mode === 'signup' ? 'Account created. Opening Command Center…' : 'Authenticated. Opening Command Center…', 'success');
+      setMessage(mode === 'signup' ? 'Account created. Opening secure onboarding…' : 'Authenticated. Opening secure onboarding…', 'success');
       window.setTimeout(() => {
-        window.location.assign('/?auth=success');
+        window.location.assign('/onboarding');
       }, 450);
       return;
     }

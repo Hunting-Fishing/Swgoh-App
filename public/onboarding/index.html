@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#050914">
+  <title>Onboarding · SWGOH Command Center</title>
+  <link rel="stylesheet" href="/onboarding.css?v=20260817a">
+</head>
+<body>
+  <main class="onboard-shell">
+    <div class="onboard-top">
+      <a class="onboard-brand" href="/">SWGOH <span>Command Center</span></a>
+      <button class="onboard-signout" type="button" data-signout>Sign out</button>
+    </div>
+
+    <section class="onboard-hero">
+      <div class="onboard-kicker">Secure Player & Guild Enrollment</div>
+      <h1>Establish your command identity.</h1>
+      <p>Your account, SWGOH player and Guild are linked as separate identities. We verify that you control the Ally Code before activating Guild access or saving full Guild analytics.</p>
+    </section>
+
+    <nav class="onboard-steps" aria-label="Onboarding progress">
+      <div class="onboard-step" data-step="account"><strong>01 · Account</strong>Signed-in Command Center identity</div>
+      <div class="onboard-step" data-step="player"><strong>02 · Player</strong>Link your live SWGOH Ally Code</div>
+      <div class="onboard-step" data-step="verify"><strong>03 · Verify</strong>Prove control and activate Guild access</div>
+    </nav>
+
+    <section class="onboard-panel">
+      <div class="onboard-message" data-message role="status" aria-live="polite"></div>
+
+      <div data-view="loading">
+        <h2>Checking command identity…</h2>
+        <p class="onboard-panel-copy">Reading your signed-in account and tenant enrollment state.</p>
+      </div>
+
+      <div class="hidden" data-view="signin">
+        <h2>Sign in required</h2>
+        <p class="onboard-panel-copy">Onboarding is available only to a signed-up Command Center user. This prevents anonymous requests from creating permanent player or Guild records.</p>
+        <a class="onboard-button" href="/login" style="display:inline-grid;place-items:center;text-decoration:none">Sign in</a>
+      </div>
+
+      <div class="hidden" data-view="link">
+        <h2>Link your SWGOH player</h2>
+        <p class="onboard-panel-copy">Enter your own 9-digit Ally Code. This creates a pending identity only; it does not yet grant access to the Guild workspace.</p>
+        <form class="onboard-form" data-link-form>
+          <div class="onboard-field">
+            <label for="allyCode">Ally Code</label>
+            <input id="allyCode" name="allyCode" type="text" inputmode="numeric" autocomplete="off" maxlength="11" placeholder="123-456-789" required>
+          </div>
+          <button class="onboard-button" type="submit" data-link-button>Link Player</button>
+        </form>
+      </div>
+
+      <div class="hidden identity-card" data-view="pending">
+        <h2>Player found — verification required</h2>
+        <p class="onboard-panel-copy">The live game lookup found your player and Guild. The relationship remains pending until you prove control of the player profile.</p>
+        <div class="identity-line">
+          <span class="identity-badge" data-player-name></span>
+          <span class="identity-badge" data-player-ally></span>
+          <span class="identity-badge" data-guild-name></span>
+        </div>
+        <button class="onboard-button" type="button" data-start-verification>Start Ownership Verification</button>
+      </div>
+
+      <div class="hidden challenge-card" data-view="challenge">
+        <h2>Change one in-game profile cosmetic</h2>
+        <p class="onboard-panel-copy">Command Center selected a cosmetic that the live SWGOH profile reports as unlocked. Temporarily select it in-game, then return here and verify.</p>
+        <div class="challenge-target">
+          <small data-challenge-type>Target</small>
+          <strong data-challenge-target></strong>
+        </div>
+        <ol class="challenge-instructions">
+          <li>Open your SWGOH player profile.</li>
+          <li data-challenge-action>Change the requested profile cosmetic to the target shown above.</li>
+          <li>Save the profile change and return to this page.</li>
+          <li>Click <strong>Verify Live Profile</strong>. We force-refresh the game data rather than trusting a cached value.</li>
+        </ol>
+        <div class="challenge-actions">
+          <button class="onboard-button" type="button" data-check-verification>Verify Live Profile</button>
+          <button class="onboard-button secondary" type="button" data-refresh-state>Refresh Status</button>
+        </div>
+        <p class="onboard-panel-copy" style="margin:0">Challenge expires: <span data-challenge-expiry></span></p>
+      </div>
+
+      <div class="hidden verified-card" data-view="verified">
+        <strong>✓ Player identity verified</strong>
+        <p>Your Command Center account is linked to the verified SWGOH player and the matching Guild membership is active. Permanent Guild synchronization can now be scoped to this authenticated tenant.</p>
+        <div class="challenge-actions">
+          <a class="onboard-button" href="/guild" style="display:inline-grid;place-items:center;text-decoration:none">Open Guild Command Center</a>
+          <a class="onboard-button secondary" href="/" style="display:inline-grid;place-items:center;text-decoration:none">Player Command Center</a>
+        </div>
+      </div>
+    </section>
+  </main>
+  <script type="module" src="/onboarding.js?v=20260817a"></script>
+</body>
+</html>
