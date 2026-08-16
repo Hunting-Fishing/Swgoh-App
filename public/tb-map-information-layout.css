@@ -244,7 +244,12 @@
   font-size: .56rem;
 }
 
-/* Real ROTE art remains the map surface; pins are intentionally compact. */
+/* The ROTE source map is 750x500. Match that canvas so planet pins stay aligned. */
+.tb-rote-fan-map {
+  min-height: 0 !important;
+  aspect-ratio: 3 / 2;
+}
+
 .tb-rote-fan-map .rote-galaxy-lines,
 .tb-rote-fan-map .rote-map-phase-label {
   display: none;
@@ -255,8 +260,8 @@
 }
 
 .tb-rote-fan-map .rote-planet-node.tb-rote-map-pin {
-  width: 64px;
-  min-height: 64px;
+  width: 50px;
+  min-height: 50px;
   padding: 0;
   border-radius: 50%;
   background: rgba(4, 11, 23, .56);
@@ -268,8 +273,8 @@
 .tb-rote-fan-map .rote-planet-node.tb-rote-map-pin .rote-planet-orb {
   left: 50%;
   top: 50%;
-  width: 54px;
-  height: 54px;
+  width: 44px;
+  height: 44px;
   transform: translate(-50%, -50%);
 }
 
@@ -304,7 +309,7 @@
 }
 
 .tb-rote-fan-map .rote-planet-node.tb-rote-map-pin.selected {
-  transform: translate(-50%, -50%) scale(1.1);
+  transform: translate(-50%, -50%) scale(1.14);
   z-index: 6;
 }
 
@@ -477,13 +482,18 @@
     height: 48px;
   }
 
+  .tb-rote-fan-map {
+    min-height: 470px !important;
+    aspect-ratio: auto;
+  }
+
   .tb-rote-fan-map .rote-planet-node.tb-rote-map-pin {
-    width: 52px;
-    min-height: 52px;
+    width: 44px;
+    min-height: 44px;
   }
 
   .tb-rote-fan-map .rote-planet-node.tb-rote-map-pin .rote-planet-orb {
-    width: 44px;
-    height: 44px;
+    width: 38px;
+    height: 38px;
   }
 }
