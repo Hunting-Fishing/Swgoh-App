@@ -18,7 +18,9 @@ Available guild-scoped commands:
 /tb farms phase:P1..P6
 ```
 
-All current `/tb` commands default to the Discord `MANAGE_GUILD` permission while the pilot is officer-only.
+All current `/tb` commands default to the Discord `MANAGE_GUILD` permission while the pilot is officer-only. The HTTP interaction handler independently enforces `MANAGE_GUILD` or `ADMINISTRATOR` from the signed guild interaction before command execution or deferred live work begins; command visibility alone is not treated as authorization.
+
+A custom Discord role named "SWGOH Officer" is not automatically trusted just because of its name. During this pilot, members using `/tb` must actually have Manage Server / Manage Guild or Administrator permission. Configurable role IDs can be added after durable guild↔Discord state exists.
 
 ### What each command does
 
@@ -45,6 +47,8 @@ DISCORD_APPLICATION_ID=<Discord application ID>
 DISCORD_PUBLIC_KEY=<Discord application public key>
 DISCORD_DEFAULT_GUILD_ID=<pilot Discord server ID>
 ```
+
+The server verifies both the Ed25519 signature and, for application commands, that the signed interaction's `application_id` matches `DISCORD_APPLICATION_ID`.
 
 Required to register guild-scoped commands:
 
@@ -82,7 +86,7 @@ Set the Interactions Endpoint URL to:
 https://<SWGOH-APP-HOST>/api/discord/interactions
 ```
 
-Discord will verify the endpoint with a signed PING. The endpoint rejects unsigned or incorrectly signed requests.
+Discord will verify the endpoint with a signed PING. The endpoint rejects unsigned or incorrectly signed requests. Signed PING verification is intentionally accepted before member-permission checks so Discord can validate the endpoint without a guild member context.
 
 ## Register the guild command
 
@@ -96,7 +100,7 @@ The registration script bulk-overwrites the pilot guild command definition for `
 
 ## Pilot acceptance test
 
-Run these in the configured pilot Discord server:
+Run these as a member who has Manage Server / Manage Guild or Administrator permission in the configured pilot Discord server:
 
 ```text
 /tb status
@@ -106,9 +110,12 @@ Run these in the configured pilot Discord server:
 /tb farms phase:P1
 ```
 
+Also test once with a normal member who lacks both permissions; `/tb` must return an ephemeral officer-permission error and must not begin live TB work.
+
 Expected boundaries:
 
 - responses are ephemeral;
+- server-side authorization requires Manage Guild or Administrator, independently of Discord command visibility;
 - `/tb sync` reports the live guild name, hydrated roster count, and guild GP;
 - `/tb phase` reports the same phase-level command metrics and risk queue as the web Phase Command Board;
 - `/tb assignments` reports mission-safe assignment coverage, unfilled slots, mission protections, and HELP/risk assignments;
@@ -122,6 +129,8 @@ Expected boundaries:
 The bot refuses or degrades safely when:
 
 - the Discord request signature is invalid;
+- an application command's signed `application_id` does not match this deployment;
+- the invoking guild member lacks Manage Guild and Administrator permission;
 - the request is from a Discord server other than `DISCORD_DEFAULT_GUILD_ID`;
 - `DISCORD_DEFAULT_ALLY_CODE` is missing or invalid;
 - `/tb phase` does not contain a valid P1-P6 phase;
@@ -133,13 +142,13 @@ Generic fleet gates without complete selectable-ship evidence are not converted 
 
 ## Next implementation layer
 
-Do not enable public publishing or member self-service until shared server-side guild state exists.
+Do not enable public publishing or member self-service until durable shared server-side guild state exists.
 
 Next required production work:
 
 1. Discord OAuth and durable SWGOH player ↔ Discord user links.
 2. Durable SWGOH guild ↔ Discord server/channel connection.
-3. Server-side officer authorization and audit log.
+3. Durable officer role configuration plus append-only audit log.
 4. Persistent preferences, ignores, reserves, locks, phase layouts, and plan versions.
 5. `/tb publish` preview/approve/publish flow.
 6. Queued channel mentions and per-member DMs with retry/error reporting.
