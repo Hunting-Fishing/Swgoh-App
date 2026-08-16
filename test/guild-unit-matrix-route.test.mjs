@@ -23,7 +23,7 @@ test("Unit Matrix stays inside Guild navigation and overview", () => {
 
 test("TB tables receive exact unit ownership deep links", () => {
   assert.match(router, /enhanceTbTables/);
-  assert.match(router, /data-guild-unit-matrix-enhanced/);
+  assert.match(router, /guildUnitMatrixEnhanced/);
   assert.match(router, /phaseFromRow/);
   assert.match(router, /unit: baseId/);
   assert.match(css, /guild-rote-unit-matrix-link/);
