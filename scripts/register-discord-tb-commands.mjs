@@ -2,13 +2,22 @@ import { discordTbConfig } from "../discord-tb.mjs";
 
 const API_VERSION = "v10";
 const config = discordTbConfig(process.env);
+const phaseChoices = ["P1", "P2", "P3", "P4", "P5", "P6"].map((phase) => ({ name: phase, value: phase }));
 
-const phaseOption = {
+const optionalPhaseOption = {
   type: 3,
   name: "phase",
   description: "Optional ROTE phase scope",
   required: false,
-  choices: ["P1", "P2", "P3", "P4", "P5", "P6"].map((phase) => ({ name: phase, value: phase })),
+  choices: phaseChoices,
+};
+
+const requiredPhaseOption = {
+  type: 3,
+  name: "phase",
+  description: "ROTE phase to inspect",
+  required: true,
+  choices: phaseChoices,
 };
 
 if (!config.commandRegistrationConfigured) {
@@ -34,15 +43,21 @@ if (!config.commandRegistrationConfigured) {
         },
         {
           type: 1,
+          name: "phase",
+          description: "Show the officer Phase Command Board summary for one ROTE phase",
+          options: [requiredPhaseOption],
+        },
+        {
+          type: 1,
           name: "assignments",
           description: "Preview the current mission-safe ROTE Operation assignment draft",
-          options: [phaseOption],
+          options: [optionalPhaseOption],
         },
         {
           type: 1,
           name: "farms",
           description: "Show the highest-impact ROTE mission farms from the live guild roster",
-          options: [phaseOption],
+          options: [optionalPhaseOption],
         },
       ],
     },

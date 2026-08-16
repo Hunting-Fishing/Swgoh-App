@@ -11,6 +11,7 @@ Available guild-scoped commands:
 ```text
 /tb status
 /tb sync
+/tb phase phase:P1..P6
 /tb assignments
 /tb assignments phase:P1..P6
 /tb farms
@@ -23,9 +24,12 @@ All current `/tb` commands default to the Discord `MANAGE_GUILD` permission whil
 
 - `/tb status` — immediate nonsecret integration/configuration status.
 - `/tb sync` — force-refreshes the configured pilot SWGOH guild roster from the live Comlink gateway. It does not mutate TB planning state.
+- `/tb phase phase:P1..P6` — renders the shared web Phase Command Board model into Discord for one explicitly selected nominal ROTE phase: mission entry coverage, redundancy, Operation fill, risky donors, protected units, officer alerts, farm priorities, and highest-burden members.
 - `/tb assignments` — builds a fresh read-only mission-safe ROTE Operation draft from the live guild roster, normalized Operation requirements, static catalog, and verified mission protection model.
 - `/tb farms` — returns the highest-impact mission farm targets from the verified guild mission coverage model.
-- `phase:P1..P6` — optionally limits the Discord output to one nominal ROTE phase.
+- `phase:P1..P6` — optionally limits assignment/farm output to one nominal ROTE phase; `/tb phase` requires the phase explicitly.
+
+The bot does not infer the currently active in-game ROTE phase. Officers select P1-P6 explicitly until a verified live TB-state source is available.
 
 Long-running reads acknowledge Discord immediately with an ephemeral deferred response and then edit the original interaction response when the live calculation is complete.
 
@@ -88,7 +92,7 @@ After the Railway variables are present, run:
 npm run discord:register-tb
 ```
 
-The registration script bulk-overwrites the pilot guild command definition for `/tb`, so the new `farms` and phase options appear immediately as guild-scoped commands.
+The registration script bulk-overwrites the pilot guild command definition for `/tb`, so the `phase`, `assignments`, `farms`, and P1-P6 options appear as one officer command surface.
 
 ## Pilot acceptance test
 
@@ -97,6 +101,7 @@ Run these in the configured pilot Discord server:
 ```text
 /tb status
 /tb sync
+/tb phase phase:P1
 /tb assignments phase:P1
 /tb farms phase:P1
 ```
@@ -105,6 +110,7 @@ Expected boundaries:
 
 - responses are ephemeral;
 - `/tb sync` reports the live guild name, hydrated roster count, and guild GP;
+- `/tb phase` reports the same phase-level command metrics and risk queue as the web Phase Command Board;
 - `/tb assignments` reports mission-safe assignment coverage, unfilled slots, mission protections, and HELP/risk assignments;
 - `/tb farms` reports verified mission-impact farm targets;
 - no command publishes to a public channel;
@@ -118,6 +124,7 @@ The bot refuses or degrades safely when:
 - the Discord request signature is invalid;
 - the request is from a Discord server other than `DISCORD_DEFAULT_GUILD_ID`;
 - `DISCORD_DEFAULT_ALLY_CODE` is missing or invalid;
+- `/tb phase` does not contain a valid P1-P6 phase;
 - the live SWGOH gateway is unavailable;
 - the static catalog is unavailable;
 - verified mission evidence is incomplete.
