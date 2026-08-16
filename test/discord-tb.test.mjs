@@ -1,13 +1,16 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { generateKeyPairSync, sign } from "node:crypto";
+import { Readable } from "node:stream";
 import {
   discordTbConfig,
+  discordTbMemberHasOfficerPermission,
   discordTbPhase,
   discordTbPublicStatus,
   discordTbSubcommand,
   editDiscordOriginalResponse,
   executeDiscordTbDeferredCommand,
+  handleDiscordInteractionRequest,
   handleDiscordTbCommand,
   verifyDiscordInteraction,
 } from "../discord-tb.mjs";
@@ -16,6 +19,44 @@ function testKeys() {
   const { publicKey, privateKey } = generateKeyPairSync("ed25519");
   const der = publicKey.export({ format: "der", type: "spki" });
   return { publicKeyHex: der.subarray(-32).toString("hex"), privateKey };
+}
+
+function signedInteractionRequest(interaction, privateKey, timestamp = "1786887600") {
+  const rawBody = Buffer.from(JSON.stringify(interaction), "utf8");
+  const message = Buffer.concat([Buffer.from(timestamp, "utf8"), rawBody]);
+  const signature = sign(null, message, privateKey).toString("hex");
+  const request = Readable.from([rawBody]);
+  request.headers = {
+    "x-signature-ed25519": signature,
+    "x-signature-timestamp": timestamp,
+  };
+  return request;
+}
+
+function captureResponse() {
+  const result = { status: null, headers: null, body: "" };
+  return {
+    result,
+    response: {
+      writeHead(status, headers) {
+        result.status = status;
+        result.headers = headers;
+      },
+      end(chunk = "") {
+        result.body += String(chunk || "");
+      },
+    },
+  };
+}
+
+function authEnv(publicKeyHex) {
+  return {
+    DISCORD_TB_INTERACTIONS_ENABLED: "true",
+    DISCORD_APPLICATION_ID: "123456789012345678",
+    DISCORD_PUBLIC_KEY: publicKeyHex,
+    DISCORD_DEFAULT_GUILD_ID: "987654321098765432",
+    DISCORD_DEFAULT_ALLY_CODE: "123456789",
+  };
 }
 
 test("Discord interaction verification accepts the exact signed timestamp+body and rejects mutations", () => {
@@ -30,7 +71,7 @@ test("Discord interaction verification accepts the exact signed timestamp+body a
   assert.equal(verifyDiscordInteraction({ publicKey: publicKeyHex, signature: "00", timestamp, rawBody }), false);
 });
 
-test("Discord public status exposes configuration booleans but never secret values", () => {
+test("Discord public status exposes configuration booleans and auth policy but never secret values", () => {
   const env = {
     DISCORD_TB_INTERACTIONS_ENABLED: "true",
     DISCORD_TB_DELIVERY_ENABLED: "false",
@@ -49,6 +90,7 @@ test("Discord public status exposes configuration booleans but never secret valu
   assert.equal(status.commandRegistrationConfigured, true);
   assert.equal(status.pilotGuildLiveConfigured, true);
   assert.equal(status.redundancyTarget, 4);
+  assert.equal(status.officerAuthorization, "manage-guild-or-administrator");
   assert.equal(serialized.includes("super-secret-token"), false);
   assert.equal(serialized.includes("ab".repeat(32)), false);
   assert.equal(serialized.includes("123456789"), false);
@@ -63,6 +105,83 @@ test("invalid public key leaves the interaction configuration fail-closed", () =
   assert.equal(config.interactionsEnabled, true);
   assert.equal(config.configured, false);
   assert.equal(config.publicKey, "");
+});
+
+test("officer authorization accepts Manage Guild or Administrator and rejects malformed/missing permissions", () => {
+  assert.equal(discordTbMemberHasOfficerPermission({ member: { permissions: "32" } }), true);
+  assert.equal(discordTbMemberHasOfficerPermission({ member: { permissions: "8" } }), true);
+  assert.equal(discordTbMemberHasOfficerPermission({ member: { permissions: "40" } }), true);
+  assert.equal(discordTbMemberHasOfficerPermission({ member: { permissions: "0" } }), false);
+  assert.equal(discordTbMemberHasOfficerPermission({}), false);
+  assert.equal(discordTbMemberHasOfficerPermission({ member: { permissions: "-1" } }), false);
+  assert.equal(discordTbMemberHasOfficerPermission({ member: { permissions: "not-a-bitset" } }), false);
+});
+
+test("signed application commands are rejected server-side when the member lacks officer permission", async () => {
+  const { publicKeyHex, privateKey } = testKeys();
+  const interaction = {
+    type: 2,
+    application_id: "123456789012345678",
+    guild_id: "987654321098765432",
+    member: { permissions: "0", user: { id: "111111111111111111" } },
+    data: { name: "tb", options: [{ type: 1, name: "status" }] },
+  };
+  const request = signedInteractionRequest(interaction, privateKey);
+  const captured = captureResponse();
+
+  await handleDiscordInteractionRequest(request, captured.response, authEnv(publicKeyHex));
+  assert.equal(captured.result.status, 200);
+  const body = JSON.parse(captured.result.body);
+  assert.equal(body.type, 4);
+  assert.equal(body.data.flags, 64);
+  assert.match(body.data.content, /Officer permission required/);
+});
+
+test("signed application commands with Manage Guild permission pass the server-side officer gate", async () => {
+  const { publicKeyHex, privateKey } = testKeys();
+  const interaction = {
+    type: 2,
+    application_id: "123456789012345678",
+    guild_id: "987654321098765432",
+    member: { permissions: "32", user: { id: "111111111111111111" } },
+    data: { name: "tb", options: [{ type: 1, name: "status" }] },
+  };
+  const request = signedInteractionRequest(interaction, privateKey);
+  const captured = captureResponse();
+
+  await handleDiscordInteractionRequest(request, captured.response, authEnv(publicKeyHex));
+  assert.equal(captured.result.status, 200);
+  const body = JSON.parse(captured.result.body);
+  assert.equal(body.type, 4);
+  assert.match(body.data.content, /SWGOH Command Center · TB/);
+  assert.match(body.data.content, /server-enforced/);
+});
+
+test("signed application commands from a different Discord application are rejected", async () => {
+  const { publicKeyHex, privateKey } = testKeys();
+  const interaction = {
+    type: 2,
+    application_id: "999999999999999999",
+    guild_id: "987654321098765432",
+    member: { permissions: "32" },
+    data: { name: "tb", options: [{ type: 1, name: "status" }] },
+  };
+  const request = signedInteractionRequest(interaction, privateKey);
+  const captured = captureResponse();
+
+  await handleDiscordInteractionRequest(request, captured.response, authEnv(publicKeyHex));
+  assert.equal(captured.result.status, 401);
+  assert.match(JSON.parse(captured.result.body).error, /application does not match/);
+});
+
+test("signed Discord PING remains valid without guild member permissions", async () => {
+  const { publicKeyHex, privateKey } = testKeys();
+  const request = signedInteractionRequest({ type: 1 }, privateKey);
+  const captured = captureResponse();
+
+  await handleDiscordInteractionRequest(request, captured.response, authEnv(publicKeyHex));
+  assert.equal(captured.result.status, 200);
+  assert.deepEqual(JSON.parse(captured.result.body), { type: 1 });
 });
 
 test("/tb status is ephemeral and pilot-guild restricted", () => {
