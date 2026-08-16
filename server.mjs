@@ -99,10 +99,10 @@ async function requestGateway(pathname, includeKey, timeoutMs = requestTimeoutMs
       signal: controller.signal,
     });
 
-    const text = await response.text();
+    const textBody = await response.text();
     let body;
     try {
-      body = text ? JSON.parse(text) : {};
+      body = textBody ? JSON.parse(textBody) : {};
     } catch {
       body = { error: "The live gateway returned invalid JSON." };
     }
@@ -236,6 +236,7 @@ async function handleApi(request, response, url) {
           maxEntries: guildCacheMaxEntries,
           shared: false,
           coldRequestTimeoutSeconds: Math.round(guildRequestTimeoutMs / 1000),
+          explicitRefresh: true,
         },
         roteOperations: {
           source: "swgoh-utils/gamedata",
@@ -292,10 +293,15 @@ async function handleApi(request, response, url) {
   if (guildMatch) {
     try {
       const allyCode = guildMatch[1];
-      const cached = await guildCache.getOrLoad(allyCode, () => loadGuildRoster(allyCode));
+      const forceRefresh = url.searchParams.get("refresh") === "1";
+      if (forceRefresh) guildCache.delete(allyCode);
+      const cached = await guildCache.getOrLoad(allyCode, () => loadGuildRoster(allyCode), {
+        staleWhileRevalidate: !forceRefresh,
+      });
       writeJson(response, 200, cached.value, {
         "X-Guild-Source": "comlink-live",
         "X-Guild-Cache": cached.cache,
+        "X-Guild-Refresh": forceRefresh ? "requested" : "normal",
         Age: String(Math.max(0, Math.floor((cached.ageMs || 0) / 1000))),
       });
     } catch (error) {
