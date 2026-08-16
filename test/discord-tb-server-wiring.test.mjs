@@ -35,15 +35,18 @@ test("guild command registration is explicit, officer-first, and phase-aware", (
   assert.match(registerScript, /default_member_permissions: "32"/);
   assert.match(registerScript, /name: "status"/);
   assert.match(registerScript, /name: "sync"/);
+  assert.match(registerScript, /name: "phase"/);
+  assert.match(registerScript, /description: "ROTE phase to inspect"/);
+  assert.match(registerScript, /required: true/);
   assert.match(registerScript, /name: "assignments"/);
   assert.match(registerScript, /name: "farms"/);
-  assert.match(registerScript, /name: "phase"/);
   assert.match(registerScript, /Authorization: `Bot \$\{config\.botToken\}`/);
 });
 
-test("live Discord TB reads use the shared mission-safe planner and never require browser state", () => {
+test("live Discord TB reads use the shared mission-safe and Phase Command models and never require browser state", () => {
   assert.match(liveService, /buildGuildRoteOperationSafety/);
   assert.match(liveService, /planGuildRoteSafeAssignments/);
+  assert.match(liveService, /buildGuildTbPhaseCommand/);
   assert.match(liveService, /\/v1\/guild\/by-player\//);
   assert.doesNotMatch(liveService, /localStorage|document\.|window\./);
 });
