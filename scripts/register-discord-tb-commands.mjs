@@ -12,8 +12,6 @@ if (!config.commandRegistrationConfigured) {
       type: 1,
       name: "tb",
       description: "SWGOH Territory Battle guild command",
-      integration_types: [0],
-      contexts: [0],
       default_member_permissions: "32",
       options: [
         {
