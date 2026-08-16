@@ -4,6 +4,7 @@ import { createDiscordTbLiveServices } from "./discord-tb-live.mjs";
 import { linkDiscordGuildPlayer, unlinkDiscordGuildPlayer } from "./discord-player-link-service.mjs";
 import { setDiscordDonationPreference } from "./discord-donation-preference-service.mjs";
 import { getDiscordLinkedPlayerSnapshot } from "./discord-linked-player-service.mjs";
+import { setDiscordMemberAvailability } from "./discord-member-availability-service.mjs";
 
 const ED25519_SPKI_PREFIX = Buffer.from("302a300506032b6570032100", "hex");
 const MAX_INTERACTION_BYTES = 1024 * 1024;
@@ -11,9 +12,9 @@ const EPHEMERAL_FLAG = 1 << 6;
 const MAX_DISCORD_CONTENT = 1900;
 const ADMINISTRATOR_PERMISSION = 1n << 3n;
 const MANAGE_GUILD_PERMISSION = 1n << 5n;
-const DEFERRED_SUBCOMMANDS = new Set(["setup", "sync", "phase", "assignments", "farms", "link", "unlink", "links", "me", "preference", "preferences"]);
-const STATE_SUBCOMMANDS = new Set(["link", "unlink", "links", "me", "preference", "preferences"]);
-const MEMBER_SELF_SERVICE_SUBCOMMANDS = new Set(["me", "preference", "preferences"]);
+const DEFERRED_SUBCOMMANDS = new Set(["setup", "sync", "phase", "assignments", "farms", "link", "unlink", "links", "me", "preference", "preferences", "availability"]);
+const STATE_SUBCOMMANDS = new Set(["link", "unlink", "links", "me", "preference", "preferences", "availability"]);
+const MEMBER_SELF_SERVICE_SUBCOMMANDS = new Set(["me", "preference", "preferences", "availability"]);
 
 export const DISCORD_INTERACTION_TYPES = Object.freeze({
   PING: 1,
@@ -53,6 +54,11 @@ function unitBaseId(value) {
 function donationPreference(value) {
   const text = clean(value).toLowerCase();
   return new Set(["give", "default", "keep"]).has(text) ? text : "";
+}
+
+function memberAvailability(value) {
+  const text = clean(value).toLowerCase();
+  return new Set(["available", "unavailable"]).has(text) ? text : "";
 }
 
 function displayAllyCode(value) {
@@ -157,6 +163,7 @@ export function discordTbPublicStatus(env = process.env) {
     setupAuthorization: "manage-guild-or-administrator",
     playerLinkAuthorization: "officer-only-live-guild-membership-verified",
     donationPreferenceAuthorization: "linked-member-self-or-officer-live-unit-verified",
+    memberAvailabilityAuthorization: "linked-member-self-or-officer-live-membership-verified",
     memberSelfService: "linked-player-only",
     interactionsPath: "/api/discord/interactions",
     mode: "http-interactions",
@@ -310,8 +317,9 @@ function statusMessage(interaction, config) {
     "Officer authorization: Manage Guild / Administrator, or a durably configured officer role",
     "Setup authorization: Manage Guild or Administrator only",
     "Player identity: officer-managed, guild-membership verified, durably audited",
-    "Member self-service: linked members can read their own profile and manage only their own GIVE/KEEP preferences",
+    "Member self-service: linked members can read their own profile and manage only their own preferences/availability",
     "Donation preferences: durable GIVE/KEEP overrides feed the live mission-safe planner",
+    "Availability: durable UNAVAILABLE removes that linked member from planner candidate assignments",
     `Proactive outbound delivery: ${config.deliveryEnabled ? "enabled" : "disabled"}`,
     "Publishing and DMs remain disabled.",
   ];
@@ -391,7 +399,7 @@ function formatPlayerUnlinkResult(result = {}) {
     "**SWGOH Command Center · Player Link Removed**",
     `Discord member: <@${safeText(result.discordUserId)}>`,
     `Removed Ally Code: **${displayAllyCode(removed.swgohAllyCode)}**`,
-    "The unlink is durable and audited. Any stored unit preferences for this Discord member were cleared. No TB plan or delivery state was changed.",
+    "The unlink is durable and audited. Stored unit preferences and availability for this Discord member were cleared. No TB plan or delivery state was changed.",
   ];
   return truncateContent(lines.join("\n"));
 }
@@ -478,6 +486,39 @@ function formatDonationPreferencesResult(guild = {}, discordUserId = "") {
   return truncateContent(lines.join("\n"));
 }
 
+function formatMemberAvailabilityResult(result = {}) {
+  const state = safeText(result.availability, "available").toUpperCase();
+  const verification = result.verification || {};
+  const lines = [
+    "**SWGOH Command Center · TB Availability**",
+    `Discord member: <@${safeText(result.discordUserId)}>`,
+    `State: **${state}**`,
+  ];
+  if (state === "UNAVAILABLE") {
+    lines.push(`Guild check: **verified against bound guild roster**${verification.playerName ? ` for **${safeText(verification.playerName)}**` : ""}`);
+    lines.push("Planner effect: this member is removed from ROTE Operation donor candidates until marked AVAILABLE again.");
+  } else {
+    lines.push("Planner effect: any explicit availability exclusion was cleared; the member can be considered normally again.");
+  }
+  lines.push("The change is durable and audited. No assignments were published and no DMs were sent.");
+  return truncateContent(lines.join("\n"));
+}
+
+function formatMemberAvailabilityStatus(guild = {}, discordUserId = "") {
+  const row = guild?.memberAvailability?.[discordUserId];
+  const state = row?.availability === "unavailable" ? "UNAVAILABLE" : "AVAILABLE";
+  const lines = [
+    "**SWGOH Command Center · TB Availability**",
+    `Discord member: <@${safeText(discordUserId)}>`,
+    `State: **${state}**`,
+    state === "UNAVAILABLE"
+      ? "Planner effect: this linked member is currently excluded from ROTE Operation donor candidates."
+      : "Planner effect: this linked member has no explicit availability exclusion.",
+    "No guild state was changed by this status read.",
+  ];
+  return truncateContent(lines.join("\n"));
+}
+
 function formatSyncResult(result = {}) {
   const guild = result.guild || result;
   const members = Array.isArray(guild?.members) ? guild.members : [];
@@ -503,11 +544,12 @@ function formatAssignmentsResult(result = {}, phase = "") {
   const help = assignments.filter((row) => row?.safety?.help).length;
   const criticalProtections = Number(safety?.summary?.criticalProtections || 0);
   const preferenceCount = Number(result?.planningControls?.preferenceCount || 0);
+  const unavailableMemberCount = Number(result?.planningControls?.unavailableMemberCount || 0);
   const lines = [
     `**ROTE Mission-Safe Assignments · ${phaseScope(phase)}**`,
     `Guild: **${guildName(result.guild)}**`,
     `Assigned: **${assignments.length}/${total} (${coverage}%)** · Unfilled: **${unfilled.length}**`,
-    `Mission protections: **${Number(safety?.summary?.protectedUnits || 0)}** · Critical: **${criticalProtections}** · GIVE/KEEP overrides: **${preferenceCount}** · HELP/risk assignments: **${help}**`,
+    `Mission protections: **${Number(safety?.summary?.protectedUnits || 0)}** · Critical: **${criticalProtections}** · GIVE/KEEP: **${preferenceCount}** · Unavailable: **${unavailableMemberCount}** · HELP/risk: **${help}**`,
   ];
 
   if (assignments.length) {
@@ -524,7 +566,7 @@ function formatAssignmentsResult(result = {}, phase = "") {
     if (unfilled.length > 5) lines.push(`• +${unfilled.length - 5} more unfilled slots`);
   }
 
-  lines.push("", "_Read-only draft: this command consumes stored preferences but does not publish assignments, change locks/ignores, or send DMs._");
+  lines.push("", "_Read-only draft: this command consumes stored preferences/availability but does not publish assignments, change locks, or send DMs._");
   return truncateContent(lines.join("\n"));
 }
 
@@ -558,13 +600,14 @@ function formatPhaseCommandResult(result = {}) {
   const command = result.phaseCommand || {};
   const summary = command.summary || {};
   const preferenceCount = Number(result?.planningControls?.preferenceCount || 0);
+  const unavailableMemberCount = Number(result?.planningControls?.unavailableMemberCount || 0);
   const lines = [
     `**ROTE Phase Command · ${safeText(command.phase, "P1")}**`,
     `Guild: **${guildName(result.guild)}** · Hydrated: **${Number(summary.hydratedMembers || 0)}/${Number(summary.totalMembers || 0)}**`,
     `Mission entry: **${Number(summary.exactCoveragePercent || 0)}% exact coverage** · Zero: **${Number(summary.zeroCoverageMissions || 0)}** · Single-owner: **${Number(summary.singleOwnerMissions || 0)}**`,
     `Redundancy (${Number(command.redundancyTarget || 2)} owners): **${Number(summary.redundancyCoveragePercent || 0)}%** · Partial-evidence missions: **${Number(summary.partialEvidenceMissions || 0)}**`,
     `Operations: **${Number(summary.assignedOperationSlots || 0)}/${Number(summary.operationSlots || 0)} (${Number(summary.operationCoveragePercent || 0)}%)** · Unfilled: **${Number(summary.unfilledOperationSlots || 0)}** · Risky donors: **${Number(summary.riskyAssignments || 0)}**`,
-    `Protected units: **${Number(summary.protectedUnits || 0)}** · GIVE/KEEP overrides: **${preferenceCount}** · Farm priorities: **${Number(summary.farmPriorities || 0)}**`,
+    `Protected units: **${Number(summary.protectedUnits || 0)}** · GIVE/KEEP: **${preferenceCount}** · Unavailable: **${unavailableMemberCount}** · Farm priorities: **${Number(summary.farmPriorities || 0)}**`,
   ];
 
   const alerts = Array.isArray(command.alerts) ? command.alerts : [];
@@ -585,7 +628,7 @@ function formatPhaseCommandResult(result = {}) {
     }
   }
 
-  lines.push("", "_Same phase model as the web Command Board. Read-only output; stored preferences are consumed but publishing and DMs remain disabled._");
+  lines.push("", "_Same phase model as the web Command Board. Read-only output; stored preferences/availability are consumed but publishing and DMs remain disabled._");
   return truncateContent(lines.join("\n"));
 }
 
@@ -759,6 +802,42 @@ export async function executeDiscordTbDeferredCommand(interaction, config = disc
       throw new Error("Your Discord account does not have a SWGOH player link in this server yet.");
     }
     return formatDonationPreferencesResult(guild, scopeDiscordUserId);
+  }
+
+  if (subcommand === "availability") {
+    const stateStore = services?.stateStore || discordStateStore;
+    requireDurableIdentityState(stateStore);
+    if (typeof stateStore?.readGuild !== "function") throw new Error("Durable Discord guild reader is unavailable.");
+    const discordGuildId = snowflake(interaction?.guild_id);
+    const actorDiscordUserId = snowflake(interaction?.member?.user?.id);
+    const requestedDiscordUserId = snowflake(discordTbOption(interaction, "member"));
+    const discordUserId = requestedDiscordUserId || actorDiscordUserId;
+    const requestedStateRaw = clean(discordTbOption(interaction, "state"));
+    const requestedState = memberAvailability(requestedStateRaw);
+    if (!discordGuildId) throw new Error("A valid Discord guild is required for /tb availability.");
+    if (!actorDiscordUserId) throw new Error("A valid Discord member identity is required for /tb availability.");
+    if (!discordUserId) throw new Error("No valid linked Discord member was resolved for /tb availability.");
+    if (requestedStateRaw && !requestedState) throw new Error("Choose AVAILABLE or UNAVAILABLE for /tb availability.");
+    if (services.authorizedAsOfficer === false && discordUserId !== actorDiscordUserId) {
+      throw new Error("Normal members may change or view TB availability only for their own linked SWGOH player.");
+    }
+
+    const guild = await stateStore.readGuild(discordGuildId);
+    if (!guild) throw new Error("This Discord server has not completed durable /tb setup yet.");
+    if (!guild?.userLinks?.[discordUserId]) throw new Error("That Discord member does not have a SWGOH player link in this server yet.");
+    if (!requestedState) return formatMemberAvailabilityStatus(guild, discordUserId);
+
+    const transaction = typeof services?.setDiscordMemberAvailability === "function" ? services.setDiscordMemberAvailability : setDiscordMemberAvailability;
+    const result = await transaction({
+      discordGuildId,
+      discordUserId,
+      memberAvailability: requestedState,
+      actorDiscordUserId,
+      stateStore,
+      ...(services?.rosterService ? { rosterService: services.rosterService } : {}),
+      ...(services?.linkedPlayerReader ? { linkedPlayerReader: services.linkedPlayerReader } : {}),
+    });
+    return formatMemberAvailabilityResult(result);
   }
 
   if (subcommand === "sync") {
