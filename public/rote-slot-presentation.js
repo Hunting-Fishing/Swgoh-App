@@ -42,9 +42,16 @@ function currentContext() {
 }
 
 function candidateSection(inspector) {
-  return [...inspector.querySelectorAll(":scope > .rote-zoom-section")].find((section) => {
+  const sections = [...inspector.querySelectorAll(":scope > .rote-zoom-section")];
+  const headed = sections.find((section) => {
     const label = normalize(section.querySelector(".rote-zoom-section-head span")?.textContent);
     return label === "your legal units" || label === "eligible flex units" || label === "gate matching owned ships";
+  });
+  if (headed) return headed;
+
+  return sections.find((section) => {
+    const text = normalize(section.querySelector(":scope > .rote-zoom-empty")?.textContent);
+    return text.startsWith("no owned character currently matches") || text === "roster eligibility has not been calculated";
   }) || null;
 }
 
