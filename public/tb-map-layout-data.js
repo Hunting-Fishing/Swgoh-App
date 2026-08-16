@@ -1,30 +1,33 @@
+// Presentation geometry only. Marker centers are derived from the GenSkaar ROTE
+// map marker positions at revision 932c5d4d2e7a29b23baa37f759cd1254459a97a2.
+// Territory click geometry lives separately in rote-territory-polygons-data.js.
 export const ROTE_MAP_GEOMETRY = Object.freeze({
-  mustafar: Object.freeze({ x: 40, y: 78, lane: "dark" }),
-  corellia: Object.freeze({ x: 50, y: 70, lane: "mixed" }),
-  coruscant: Object.freeze({ x: 60, y: 78, lane: "light" }),
+  mustafar: Object.freeze({ x: 40.5, y: 76.75, lane: "dark" }),
+  corellia: Object.freeze({ x: 49.5, y: 69.75, lane: "mixed" }),
+  coruscant: Object.freeze({ x: 58.5, y: 76.75, lane: "light" }),
 
-  geonosis: Object.freeze({ x: 34, y: 68, lane: "dark" }),
-  felucia: Object.freeze({ x: 50, y: 58, lane: "mixed" }),
-  bracca: Object.freeze({ x: 66, y: 68, lane: "light" }),
+  geonosis: Object.freeze({ x: 36.5, y: 66.75, lane: "dark" }),
+  felucia: Object.freeze({ x: 52.5, y: 56.75, lane: "mixed" }),
+  bracca: Object.freeze({ x: 62.5, y: 66.75, lane: "light" }),
 
-  dathomir: Object.freeze({ x: 27, y: 58, lane: "dark" }),
-  tatooine: Object.freeze({ x: 50, y: 47, lane: "mixed" }),
-  kashyyyk: Object.freeze({ x: 73, y: 58, lane: "light" }),
+  dathomir: Object.freeze({ x: 25.5, y: 67.75, lane: "dark" }),
+  tatooine: Object.freeze({ x: 47.5, y: 46.75, lane: "mixed" }),
+  kashyyyk: Object.freeze({ x: 74.5, y: 66.75, lane: "light" }),
 
-  haven: Object.freeze({ x: 20, y: 48, lane: "dark" }),
-  kessel: Object.freeze({ x: 50, y: 36, lane: "mixed" }),
-  lothal: Object.freeze({ x: 80, y: 48, lane: "light" }),
+  haven: Object.freeze({ x: 20.5, y: 56.75, lane: "dark" }),
+  kessel: Object.freeze({ x: 57.5, y: 36.75, lane: "mixed" }),
+  lothal: Object.freeze({ x: 79.5, y: 56.75, lane: "light" }),
 
-  malachor: Object.freeze({ x: 15, y: 37, lane: "dark" }),
-  vandor: Object.freeze({ x: 50, y: 25, lane: "mixed" }),
-  kafrene: Object.freeze({ x: 85, y: 37, lane: "light" }),
+  malachor: Object.freeze({ x: 19, y: 41.25, lane: "dark" }),
+  vandor: Object.freeze({ x: 52.5, y: 25.75, lane: "mixed" }),
+  kafrene: Object.freeze({ x: 79.5, y: 40.75, lane: "light" }),
 
-  "death-star": Object.freeze({ x: 19, y: 22, lane: "dark" }),
-  hoth: Object.freeze({ x: 50, y: 14, lane: "mixed" }),
-  scarif: Object.freeze({ x: 81, y: 22, lane: "light" }),
+  "death-star": Object.freeze({ x: 20.5, y: 28.75, lane: "dark" }),
+  hoth: Object.freeze({ x: 61.5, y: 18.75, lane: "mixed" }),
+  scarif: Object.freeze({ x: 78.5, y: 27.75, lane: "light" }),
 
-  zeffo: Object.freeze({ x: 86, y: 67, lane: "bonus" }),
-  mandalore: Object.freeze({ x: 72, y: 47, lane: "bonus" }),
+  zeffo: Object.freeze({ x: 62.5, y: 50.75, lane: "bonus" }),
+  mandalore: Object.freeze({ x: 40.5, y: 37.75, lane: "bonus" }),
 });
 
 export const ROTE_PHASE_ORDER = Object.freeze(["P1", "P2", "P3", "P4", "P5", "P6", "Bonus"]);
