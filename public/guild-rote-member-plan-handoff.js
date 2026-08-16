@@ -39,6 +39,10 @@ export function guildFarmKey(memberName, unitName) {
   return `${normalize(memberName)}|${normalize(unitName)}`;
 }
 
+export function snapshotMatchesAllyCode(snapshot, allyCode) {
+  return digits(snapshot?.allyCode || snapshot?.body?.player?.allyCode) === digits(allyCode);
+}
+
 async function loadCatalog() {
   if (state.catalogPromise) return state.catalogPromise;
   state.catalogPromise = fetch("/data/catalog.json?guild-farm-handoff=1", { cache: "no-cache" })
@@ -169,19 +173,40 @@ function loadMemberRoster(allyCode) {
   return true;
 }
 
-function planMemberUpgrade(button) {
+function waitForLiveAllyCode(allyCode, timeoutMs = 10000) {
+  const wanted = digits(allyCode);
+  if (wanted.length !== 9) return Promise.resolve(false);
+  if (snapshotMatchesAllyCode(window.__swgohLiveSnapshot, wanted)) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    const started = Date.now();
+    const check = () => {
+      if (snapshotMatchesAllyCode(window.__swgohLiveSnapshot, wanted)) {
+        resolve(true);
+        return;
+      }
+      if (Date.now() - started >= timeoutMs) {
+        resolve(false);
+        return;
+      }
+      setTimeout(check, 100);
+    };
+    check();
+  });
+}
+
+async function planMemberUpgrade(button) {
   const allyCode = digits(button.dataset.guildPlanAllyCode);
   const baseId = String(button.dataset.guildPlanBaseId || "");
   if (!allyCode || !baseId || !loadMemberRoster(allyCode)) return;
-  setTimeout(() => {
-    window.dispatchEvent(new CustomEvent("swgoh:gear-plan-unit", {
-      detail: {
-        baseId,
-        gear: Number(button.dataset.guildPlanGear || 13),
-        relic: Number(button.dataset.guildPlanRelic || 0),
-      },
-    }));
-  }, 75);
+  const loaded = await waitForLiveAllyCode(allyCode);
+  if (!loaded) return;
+  window.dispatchEvent(new CustomEvent("swgoh:gear-plan-unit", {
+    detail: {
+      baseId,
+      gear: Number(button.dataset.guildPlanGear || 13),
+      relic: Number(button.dataset.guildPlanRelic || 0),
+    },
+  }));
 }
 
 function install() {
@@ -194,7 +219,7 @@ function install() {
     if (plan) {
       event.preventDefault();
       event.stopImmediatePropagation();
-      planMemberUpgrade(plan);
+      planMemberUpgrade(plan).catch(() => {});
       return;
     }
     const load = event.target.closest?.("[data-guild-load-member]");
