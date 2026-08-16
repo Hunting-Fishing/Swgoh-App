@@ -2,14 +2,8 @@ import { rotePlanetById } from "./rote-map-data.js";
 import { ROTE_MISSIONS_BY_PLANET } from "./rote-mission-data.js";
 import { TB_MISSION_VISUAL_ASSETS } from "./tb-visual-assets-data.js";
 import { hydrateCombatPreparation } from "./tb-combat-prep-ui.js";
-import { ROTE_P1_MISSION_MAP_SOURCE, roteP1MissionMap } from "./rote-mission-map-p1-data.js";
-import { roteP2MissionMap } from "./rote-mission-map-p2-data.js";
-import { roteP3MissionMap } from "./rote-mission-map-p3-data.js";
-import { roteZeffoMissionMap } from "./rote-mission-map-zeffo-data.js";
-import { roteP4MissionMap } from "./rote-mission-map-p4-data.js";
-import { roteMandaloreMissionMap } from "./rote-mission-map-mandalore-data.js";
-import { roteP5MissionMap } from "./rote-mission-map-p5-data.js";
-import { roteP6MissionMap } from "./rote-mission-map-p6-data.js";
+import { ROTE_P1_MISSION_MAP_SOURCE } from "./rote-mission-map-p1-data.js";
+import { roteMissionMap } from "./rote-mission-map-registry.js";
 
 const selectedNodeByPlanet = new Map();
 let scheduled = false;
@@ -28,17 +22,6 @@ function selectedPlanetId() {
 
 function liveBody() {
   return window.__swgohLiveSnapshot?.body || null;
-}
-
-function sourceMissionMap(planetId) {
-  return roteP1MissionMap(planetId)
-    || roteP2MissionMap(planetId)
-    || roteP3MissionMap(planetId)
-    || roteZeffoMissionMap(planetId)
-    || roteP4MissionMap(planetId)
-    || roteMandaloreMissionMap(planetId)
-    || roteP5MissionMap(planetId)
-    || roteP6MissionMap(planetId);
 }
 
 function phaseLabel(planetId) {
@@ -157,7 +140,7 @@ function enhanceAll() {
   const board = document.getElementById("roteMissionBoard");
   if (!board) return;
   const planetId = selectedPlanetId();
-  const map = sourceMissionMap(planetId);
+  const map = roteMissionMap(planetId);
   if (!map) {
     removeUnsupportedPanel(board);
     return;
