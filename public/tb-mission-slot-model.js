@@ -5,16 +5,22 @@ const positiveInt = (value, fallback = 0) => {
   return Number.isFinite(number) && number > 0 ? Math.floor(number) : fallback;
 };
 
-function memberIdentity(member = {}) {
-  const baseId = String(member?.baseId || "").trim();
-  const name = normalizeRosterName(member?.name || "");
-  return baseId ? `id:${baseId}` : name ? `name:${name}` : "";
+function identitySets(members = []) {
+  const baseIds = new Set();
+  const names = new Set();
+  for (const member of members) {
+    const baseId = String(member?.baseId || "").trim();
+    const name = normalizeRosterName(member?.name || "");
+    if (baseId) baseIds.add(baseId);
+    if (name) names.add(name);
+  }
+  return { baseIds, names };
 }
 
-function unitIdentity(unit = {}) {
+function matchesIdentity(unit = {}, identities) {
   const baseId = String(unit?.baseId || "").trim();
   const name = normalizeRosterName(unit?.name || "");
-  return baseId ? `id:${baseId}` : name ? `name:${name}` : "";
+  return Boolean((baseId && identities.baseIds.has(baseId)) || (name && identities.names.has(name)));
 }
 
 export function missionSquadSize(mission = {}) {
@@ -28,14 +34,11 @@ export function missionSlotModel(mission = {}, eligibility = {}) {
   const entry = mission?.entry || {};
   const squadSize = missionSquadSize(mission);
   const mandatoryMembers = Array.isArray(entry.mandatoryMembers) ? entry.mandatoryMembers : [];
-  const mandatoryIdentities = new Set(mandatoryMembers.map(memberIdentity).filter(Boolean));
+  const mandatoryIdentities = identitySets(mandatoryMembers);
   const mandatorySlots = mandatoryMembers.length;
   const flexSlots = squadSize > 0 ? Math.max(0, squadSize - mandatorySlots) : 0;
   const candidates = Array.isArray(eligibility?.candidates) ? eligibility.candidates : [];
-  const flexCandidates = candidates.filter((unit) => {
-    const identity = unitIdentity(unit);
-    return !identity || !mandatoryIdentities.has(identity);
-  });
+  const flexCandidates = candidates.filter((unit) => !matchesIdentity(unit, mandatoryIdentities));
   const fixedSquad = squadSize > 0 && mandatorySlots >= squadSize;
   const flexShortfall = Math.max(0, flexSlots - flexCandidates.length);
 
