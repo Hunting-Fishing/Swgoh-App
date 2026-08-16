@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { withCapabilityContract } from "./capability-contract.mjs";
 import { discordStateStore } from "./discord-state-store.mjs";
 import { discordTbPublicStatus, handleDiscordInteractionRequest } from "./discord-tb.mjs";
+import { resolveGuildPlanningOverlay } from "./guild-planning-overlay.mjs";
 import { guildRosterService } from "./guild-roster-service.mjs";
 import { LiveRosterCache } from "./live-roster-cache.mjs";
 import { aggregateRoteOperations } from "./rote-operations.mjs";
@@ -262,6 +263,24 @@ async function handleApi(request, response, url) {
       const status = [400, 401, 404, 429, 503].includes(error?.status) ? error.status : 502;
       writeJson(response, status, {
         error: error?.name === "AbortError" ? "The live equipped-mod request timed out." : error?.message || "The live equipped-mod pipeline is unavailable.",
+      });
+    }
+    return true;
+  }
+
+  const planningOverlayMatch = url.pathname.match(/^\/api\/guild\/by-player\/(\d{9})\/planning-overlay$/);
+  if (planningOverlayMatch) {
+    try {
+      const lookupAllyCode = planningOverlayMatch[1];
+      const cached = await guildRosterService.getGuildRoster(lookupAllyCode, { staleWhileRevalidate: false });
+      const overlay = await resolveGuildPlanningOverlay(cached.value);
+      writeJson(response, 200, overlay, {
+        "X-Guild-Planning-Overlay": overlay.bound ? "bound" : "unbound",
+        "X-Guild-Planning-Source": overlay.source,
+      });
+    } catch (error) {
+      writeJson(response, 502, {
+        error: error?.message || "The guild planning overlay is unavailable.",
       });
     }
     return true;
