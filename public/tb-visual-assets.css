@@ -135,11 +135,6 @@
   filter: saturate(.78) contrast(1.03);
 }
 
-.dsgeo-map.tb-campaign-image-map > * {
-  position: relative;
-  z-index: 1;
-}
-
 .dsgeo-map.tb-campaign-image-map .dsgeo-map-lines {
   position: absolute;
   z-index: 1;
