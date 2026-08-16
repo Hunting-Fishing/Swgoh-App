@@ -1,6 +1,7 @@
 import { roteMissionMap } from "./rote-mission-map-registry.js";
 import {
   isRoteInfrastructureNode,
+  missionEntryRule,
   missionRosterEligibility,
   resolveRoteMissionNodes,
 } from "./rote-mission-node-eligibility.js";
@@ -107,6 +108,13 @@ export function describeEntryGap(gap = {}) {
   return parts.length ? parts.join(" · ") : "Entry gate met";
 }
 
+export function missionPoolEvidence(mission = {}) {
+  const rule = missionEntryRule(mission);
+  if (String(rule.unitType || "Character").toLowerCase() !== "ship") return "exact";
+  if (rule.allowedBaseIds.length || rule.requiredBaseIds.length || rule.categories.length || rule.alignments.length) return "exact";
+  return "gate-only";
+}
+
 export function missionPlanningSummary(eligibility = {}) {
   if (!eligibility?.loaded) {
     return Object.freeze({
@@ -114,7 +122,7 @@ export function missionPlanningSummary(eligibility = {}) {
       tone: "neutral",
       label: "Roster not evaluated",
       poolCount: 0,
-      poolTarget: Number(eligibility?.poolTarget || eligibility?.squadSize || 0),
+      poolTarget: Number(eligibility?.poolTarget ?? eligibility?.squadSize ?? 0),
       poolShortfall: 0,
       mandatoryReady: 0,
       mandatoryTotal: 0,
@@ -124,7 +132,7 @@ export function missionPlanningSummary(eligibility = {}) {
 
   const candidates = Array.isArray(eligibility.candidates) ? eligibility.candidates : [];
   const mandatory = Array.isArray(eligibility.mandatory) ? eligibility.mandatory : [];
-  const poolTarget = Math.max(0, Number(eligibility.poolTarget || eligibility.squadSize || 0));
+  const poolTarget = Math.max(0, Number(eligibility.poolTarget ?? eligibility.squadSize ?? 0));
   const poolShortfall = Math.max(0, poolTarget - candidates.length);
   const mandatoryBlockers = mandatory.filter((row) => !row.legal);
   const mandatoryReady = mandatory.length - mandatoryBlockers.length;
@@ -184,11 +192,11 @@ function currentMissionContext() {
   return { overlay, inspector, planetId, node, mission: node.mission };
 }
 
-function blockerRowMarkup(row = {}) {
+function blockerRowMarkup(row = {}, knownGateOnly = false) {
   const unit = row.unit || {};
   const baseId = String(row.baseId || row.member?.baseId || unit.baseId || "");
   const name = String(row.name || row.member?.name || unit.name || baseId || "Required unit");
-  const state = !row.owned ? "NOT OWNED" : row.legal ? "READY" : "BELOW ENTRY GATE";
+  const state = !row.owned ? "NOT OWNED" : row.legal ? (knownGateOnly ? "KNOWN GATE MET" : "READY") : (knownGateOnly ? "BELOW KNOWN GATE" : "BELOW ENTRY GATE");
   const inspect = baseId ? ` data-inspect-base-id="${escapeAttr(baseId)}"` : "";
   return `<button type="button" class="rote-plan-blocker"${inspect}>
     <span><strong>${escapeHtml(name)}</strong><small>${escapeHtml(state)}</small></span>
@@ -196,8 +204,9 @@ function blockerRowMarkup(row = {}) {
   </button>`;
 }
 
-function recommendationMarkup(body, mission) {
+function recommendationMarkup(body, mission, evidence) {
   const recommendations = mission.recommendations || [];
+  const knownGateOnly = evidence === "gate-only";
   if (!recommendations.length) {
     return '<div class="rote-plan-empty">No mission-specific team recommendation is encoded yet. Use the legal pool and Squad Workbench for manual planning.</div>';
   }
@@ -205,15 +214,22 @@ function recommendationMarkup(body, mission) {
   return recommendations.map((recommendation) => {
     const fit = recommendationRosterFit(body, mission, recommendation);
     const summary = recommendationPlanningSummary(fit);
-    const tone = summary.complete ? "success" : summary.owned === summary.total && summary.total ? "warning" : "danger";
+    const tone = knownGateOnly ? "warning" : summary.complete ? "success" : summary.owned === summary.total && summary.total ? "warning" : "danger";
     const blockers = summary.blockers.slice(0, 5);
+    const status = knownGateOnly
+      ? `${summary.legal}/${summary.total} KNOWN GATES`
+      : summary.complete ? "READY" : `${summary.legal}/${summary.total} LEGAL`;
+    const gateMetric = knownGateOnly ? "meet encoded gates" : "at entry gate";
+    const readyNote = knownGateOnly
+      ? "Every encoded team member meets the known gates, but full fleet legality is not inferred without a complete allow-list."
+      : "Every encoded team member is owned and legal for the mission entry gate.";
     return `<article class="rote-plan-team ${tone}">
       <header>
-        <div><span>RECOMMENDED TEAM FIT</span><strong>${escapeHtml(recommendation.name || "Team")}</strong></div>
-        <b>${summary.complete ? "READY" : `${summary.legal}/${summary.total} LEGAL`}</b>
+        <div><span>${knownGateOnly ? "RECOMMENDED TEAM · PARTIAL EVIDENCE" : "RECOMMENDED TEAM FIT"}</span><strong>${escapeHtml(recommendation.name || "Team")}</strong></div>
+        <b>${escapeHtml(status)}</b>
       </header>
-      <div class="rote-plan-team-metrics"><span>${summary.owned}/${summary.total} owned</span><span>${summary.legal}/${summary.total} at entry gate</span></div>
-      ${blockers.length ? `<div class="rote-plan-blockers compact">${blockers.map(blockerRowMarkup).join("")}</div>` : '<div class="rote-plan-ready-note">Every encoded team member is owned and legal for the mission entry gate.</div>'}
+      <div class="rote-plan-team-metrics"><span>${summary.owned}/${summary.total} owned</span><span>${summary.legal}/${summary.total} ${escapeHtml(gateMetric)}</span></div>
+      ${blockers.length ? `<div class="rote-plan-blockers compact">${blockers.map((row) => blockerRowMarkup(row, knownGateOnly)).join("")}</div>` : `<div class="rote-plan-ready-note">${escapeHtml(readyNote)}</div>`}
     </article>`;
   }).join("");
 }
@@ -234,23 +250,34 @@ function panelMarkup(context, body) {
 
   const eligibility = missionRosterEligibility(body, context.mission);
   const summary = missionPlanningSummary(eligibility);
+  const evidence = missionPoolEvidence(context.mission);
+  const knownGateOnly = evidence === "gate-only";
   const blockers = summary.mandatoryBlockers;
   const depthText = summary.poolTarget ? `${summary.poolCount}/${summary.poolTarget}` : `${summary.poolCount}`;
-  const depthNote = summary.poolShortfall > 0 ? `${summary.poolShortfall} more legal unit${summary.poolShortfall === 1 ? "" : "s"} needed` : "Legal depth gate met";
+  const depthNote = summary.poolShortfall > 0
+    ? `${summary.poolShortfall} more ${knownGateOnly ? "gate-matching ship" : "legal unit"}${summary.poolShortfall === 1 ? "" : "s"} needed`
+    : knownGateOnly ? "Known ship gate depth met" : "Legal depth gate met";
   const mandatoryText = summary.mandatoryTotal ? `${summary.mandatoryReady}/${summary.mandatoryTotal}` : "None";
+  const tone = knownGateOnly ? "warning" : summary.tone;
+  const headline = knownGateOnly ? "Known fleet gate coverage" : summary.label;
+  const percentLabel = knownGateOnly ? `${eligibility.percent || 0}% KNOWN GATE` : `${eligibility.percent || 0}% ENTRY`;
+  const depthLabel = knownGateOnly ? "KNOWN SHIP GATE" : "LEGAL DEPTH";
+  const statusLabel = knownGateOnly ? "PARTIAL" : summary.status.toUpperCase();
+  const statusNote = knownGateOnly ? "Do not infer full fleet legality" : eligibility.ready ? "Can enter now" : "Roster action required";
 
-  return `<section class="rote-plan-cockpit ${summary.tone}" data-rote-plan-cockpit>
+  return `<section class="rote-plan-cockpit ${tone}" data-rote-plan-cockpit>
     <header>
-      <div><span>MISSION PLANNING COCKPIT</span><strong>${escapeHtml(summary.label)}</strong></div>
-      <b>${escapeHtml(String(eligibility.percent || 0))}% ENTRY</b>
+      <div><span>MISSION PLANNING COCKPIT</span><strong>${escapeHtml(headline)}</strong></div>
+      <b>${escapeHtml(percentLabel)}</b>
     </header>
+    ${knownGateOnly ? '<div class="rote-plan-evidence-note">Fleet evidence is incomplete: the encoded record confirms known thresholds and mandatory ships, but not a complete selectable-ship allow-list. This cockpit will not claim full fleet legality.</div>' : ""}
     <div class="rote-plan-kpis">
-      <article><span>LEGAL DEPTH</span><strong>${escapeHtml(depthText)}</strong><small>${escapeHtml(depthNote)}</small></article>
+      <article><span>${escapeHtml(depthLabel)}</span><strong>${escapeHtml(depthText)}</strong><small>${escapeHtml(depthNote)}</small></article>
       <article><span>MANDATORY</span><strong>${escapeHtml(mandatoryText)}</strong><small>${blockers.length ? `${blockers.length} blocker${blockers.length === 1 ? "" : "s"}` : "Mandatory gate met"}</small></article>
-      <article><span>STATUS</span><strong>${escapeHtml(summary.status.toUpperCase())}</strong><small>${eligibility.ready ? "Can enter now" : "Roster action required"}</small></article>
+      <article><span>STATUS</span><strong>${escapeHtml(statusLabel)}</strong><small>${escapeHtml(statusNote)}</small></article>
     </div>
-    ${blockers.length ? `<div class="rote-plan-section"><div class="rote-plan-section-head"><span>MANDATORY BLOCKERS</span><b>${blockers.length}</b></div><div class="rote-plan-blockers">${blockers.map(blockerRowMarkup).join("")}</div></div>` : '<div class="rote-plan-ready-note">No mandatory-unit blocker is preventing mission entry.</div>'}
-    <div class="rote-plan-section"><div class="rote-plan-section-head"><span>RECOMMENDED TEAM READINESS</span><b>${context.mission.recommendations?.length || 0}</b></div>${recommendationMarkup(body, context.mission)}</div>
+    ${blockers.length ? `<div class="rote-plan-section"><div class="rote-plan-section-head"><span>MANDATORY BLOCKERS</span><b>${blockers.length}</b></div><div class="rote-plan-blockers">${blockers.map((row) => blockerRowMarkup(row, knownGateOnly)).join("")}</div></div>` : '<div class="rote-plan-ready-note">No mandatory-unit blocker is preventing the encoded mission gate.</div>'}
+    <div class="rote-plan-section"><div class="rote-plan-section-head"><span>RECOMMENDED TEAM READINESS</span><b>${context.mission.recommendations?.length || 0}</b></div>${recommendationMarkup(body, context.mission, evidence)}</div>
     <div class="rote-plan-actions"><button type="button" data-rote-plan-open-roster>Open Roster Workspace</button><span>Click any blocker to inspect that unit.</span></div>
   </section>`;
 }
