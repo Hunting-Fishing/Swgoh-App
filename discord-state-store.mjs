@@ -45,6 +45,11 @@ function normalizeRoleIds(roleIds, { allowUndefined = false } = {}) {
   return normalized;
 }
 
+function rejectEveryoneRole(discordGuildId, roleIds) {
+  if (!Array.isArray(roleIds)) return;
+  if (roleIds.includes(discordGuildId)) throw new Error("The Discord @everyone role cannot be configured as an officer role.");
+}
+
 function isInside(basePath, targetPath) {
   const relative = path.relative(path.resolve(basePath), path.resolve(targetPath));
   return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
@@ -213,11 +218,13 @@ export function createDiscordStateStore(env = process.env, options = {}) {
       return state.guilds[guildId] ? structuredClone(state.guilds[guildId]) : null;
     },
     async bootstrapGuild({ discordGuildId, swgohAllyCode, commandChannelId = "", officerRoleIds, actorDiscordUserId = "" }) {
+      const guildId = snowflake(discordGuildId, "Discord guild ID");
       const normalizedAllyCode = allyCode(swgohAllyCode);
       const normalizedChannelId = commandChannelId ? snowflake(commandChannelId, "Discord command channel ID") : "";
       const normalizedRoleIds = normalizeRoleIds(officerRoleIds, { allowUndefined: true });
+      rejectEveryoneRole(guildId, normalizedRoleIds);
       return mutate({
-        discordGuildId,
+        discordGuildId: guildId,
         actorDiscordUserId,
         action: "guild-bootstrap-updated",
         details: {
@@ -247,9 +254,11 @@ export function createDiscordStateStore(env = process.env, options = {}) {
       });
     },
     async setOfficerRoleIds({ discordGuildId, roleIds = [], actorDiscordUserId = "" }) {
+      const guildId = snowflake(discordGuildId, "Discord guild ID");
       const normalized = normalizeRoleIds(roleIds);
+      rejectEveryoneRole(guildId, normalized);
       return mutate({
-        discordGuildId,
+        discordGuildId: guildId,
         actorDiscordUserId,
         action: "officer-roles-updated",
         details: { roleIds: normalized },
