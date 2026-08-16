@@ -1,3 +1,5 @@
+import { legacyTbGlobalMechanicsForMission } from "./tb-legacy-global-mechanics-data.js";
+
 const LEGACY_TB_IDS = new Set([
   "geo-separatist",
   "geo-republic",
@@ -32,11 +34,13 @@ function sourceRow(value, tbId) {
 
 function normalizedSources(mission = {}) {
   const tbId = text(mission.tbId);
+  const global = legacyTbGlobalMechanicsForMission(mission);
   const rows = [
     ...(Array.isArray(mission.sources) ? mission.sources : []),
     ...(Array.isArray(mission.recommendations)
       ? mission.recommendations.flatMap((row) => Array.isArray(row?.sourceIds) ? row.sourceIds : [])
       : []),
+    ...(global.source ? [global.source] : []),
   ].map((value) => sourceRow(value, tbId)).filter(Boolean);
 
   const unique = new Map();
@@ -78,11 +82,37 @@ function entryGateSummary(mission = {}) {
   return bits.length ? bits.join(" · ") : "the canonical mission-entry gate";
 }
 
+function globalMechanicSummary(mission = {}) {
+  const global = legacyTbGlobalMechanicsForMission(mission);
+  if (!global.mechanics.length) return "";
+  return ` Verified TB-wide mechanic${global.mechanics.length === 1 ? "" : "s"}: ${global.mechanics.map((row) => row.name).join(" + ")}.`;
+}
+
 function planningSummary(mission = {}) {
   const recommendations = Array.isArray(mission.recommendations) ? mission.recommendations.length : 0;
   const mechanics = Array.isArray(mission.mechanics) ? mission.mechanics.length : 0;
   const waves = Array.isArray(mission.waves) ? mission.waves.length : 0;
-  return `This legacy Territory Battle mission has canonical entry/planning data but no independently verified mission-specific execution pack yet. Enforce ${entryGateSummary(mission)}${recommendations ? ` and rank ${recommendations} sourced/planning team core${recommendations === 1 ? "" : "s"} against the live roster` : ""}${mechanics ? ` while respecting ${mechanics} recorded mission mechanic${mechanics === 1 ? "" : "s"}` : ""}${waves ? ` across ${waves} recorded wave${waves === 1 ? "" : "s"}` : ""}. Exact current enemy sequencing remains intentionally unverified.`;
+  return `This legacy Territory Battle mission has canonical entry/planning data but no independently verified mission-specific execution pack yet. Enforce ${entryGateSummary(mission)}${recommendations ? ` and rank ${recommendations} sourced/planning team core${recommendations === 1 ? "" : "s"} against the live roster` : ""}${mechanics ? ` while respecting ${mechanics} recorded mission mechanic${mechanics === 1 ? "" : "s"}` : ""}${waves ? ` across ${waves} recorded wave${waves === 1 ? "" : "s"}` : ""}.${globalMechanicSummary(mission)} Exact current enemy sequencing remains intentionally unverified.`;
+}
+
+function globalMechanicStage(mission = {}) {
+  const global = legacyTbGlobalMechanicsForMission(mission);
+  if (!global.mechanics.length && !global.conditional.length) return null;
+  const steps = [
+    ...global.mechanics.map((mechanic) => step(
+      `tb-global-${mechanic.id}`,
+      `${mechanic.name}: ${mechanic.response}`,
+      { priority: mechanic.conditional ? "high" : "critical", mechanicId: mechanic.id, confidence: mechanic.conditional ? "conditional-platoon-state" : "current-reference" },
+    )),
+    ...global.conditional.map((warning, index) => step(
+      `tb-conditional-${index + 1}`,
+      warning,
+      { priority: "info", confidence: "guild-state-dependent" },
+    )),
+  ];
+  return stage("tb-global-mechanics", "Territory Battle mechanics · mode-specific planning", steps, {
+    objective: "Exploit verified TB-wide bonuses while keeping platoon-dependent abilities conditional on the guild's actual battle state.",
+  });
 }
 
 function planningStages(mission = {}) {
@@ -127,10 +157,11 @@ function planningStages(mission = {}) {
 
   return [
     stage("preflight", "Preflight · legality and roster fit", preflight, { objective: "Enter with a legal roster and the strongest evidence-supported planning core available." }),
+    globalMechanicStage(mission),
     stage("opening", `Opening · identify the ${isFleet ? "fleet" : "wave"} failure condition`, opening, { objective: "Prevent the first dangerous enemy action from breaking the selected team engine." }),
     stage("battle-loop", isFleet ? "Battle · adaptive fleet control" : "Battle · control, focus, sustain", battle, { objective: "Convert the legal team engine into stable board control without inventing a fixed enemy script." }),
     stage("transition", isFleet ? "Closeout · preserve fleet options" : "Wave transition · preserve cooldowns", transition, { objective: "Carry as much control and flexibility as possible into the next mission state." }),
-  ];
+  ].filter(Boolean);
 }
 
 export function legacyPlanningBattleStrategyForMission(mission = {}) {
@@ -142,13 +173,14 @@ export function legacyPlanningBattleStrategyForMission(mission = {}) {
   const mechanics = Array.isArray(mission.mechanics) ? mission.mechanics : [];
   const enemies = Array.isArray(mission.enemies) ? mission.enemies : [];
   const waves = Array.isArray(mission.waves) ? mission.waves : [];
+  const global = legacyTbGlobalMechanicsForMission(mission);
 
   return Object.freeze({
     id: `legacy-plan:${tbId}:${missionId}`,
     missionId,
     title: `${text(mission.name || missionId)} · Planning Strategy`,
     status: "mission-planning-partial",
-    confidence: "mission-data-partial",
+    confidence: "mission-data-plus-global-mechanics-partial",
     lastVerified: mission.lastVerified || null,
     sources: normalizedSources(mission),
     summary: planningSummary(mission),
@@ -165,8 +197,9 @@ export function legacyPlanningBattleStrategyForMission(mission = {}) {
       "Attached roster recommendations are planning evidence, not proof of an exact current battle rotation.",
       "A fixed enemy spawn, target order, speed threshold, or reinforcement sequence is not asserted without mission-specific evidence.",
       "Canonical mandatory units and entry thresholds are hard gates; other recommended team members remain advisory unless separately verified.",
-      ...(mechanics.length || enemies.length || waves.length ? [] : ["This mission has limited encounter-detail data in the current registry; tactical guidance must remain especially conservative."]),
+      ...(global.conditional.length ? ["Platoon/territory-state strategic abilities can change the battle; the fallback does not assume a specific guild completion level."] : []),
+      ...(mechanics.length || enemies.length || waves.length || global.mechanics.length ? [] : ["This mission has limited encounter-detail data in the current registry; tactical guidance must remain especially conservative."]),
     ],
-    evidenceBoundary: `Generated from the canonical ${tbId} mission record: entry rules, ${recommendations.length} recommendation core${recommendations.length === 1 ? "" : "s"}, ${mechanics.length} recorded mechanic${mechanics.length === 1 ? "" : "s"}, ${enemies.length} enemy reference${enemies.length === 1 ? "" : "s"}, and ${waves.length} wave value${waves.length === 1 ? "" : "s"}. This is intentionally PARTIAL planning guidance. It does not claim a verified mission-specific enemy script, deterministic target order, guaranteed win rate, or unsupported stat threshold.`,
+    evidenceBoundary: `Generated from the canonical ${tbId} mission record plus ${global.mechanics.length} verified TB-wide mechanic${global.mechanics.length === 1 ? "" : "s"}: entry rules, ${recommendations.length} recommendation core${recommendations.length === 1 ? "" : "s"}, ${mechanics.length} recorded mission mechanic${mechanics.length === 1 ? "" : "s"}, ${enemies.length} enemy reference${enemies.length === 1 ? "" : "s"}, and ${waves.length} wave value${waves.length === 1 ? "" : "s"}. Platoon-dependent strategic abilities remain conditional on actual guild state. This is intentionally PARTIAL planning guidance. It does not claim a verified mission-specific enemy script, deterministic target order, guaranteed win rate, or unsupported stat threshold.`,
   });
 }
