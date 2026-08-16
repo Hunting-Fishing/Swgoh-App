@@ -38,6 +38,25 @@ if (!config.commandRegistrationConfigured) {
         },
         {
           type: 1,
+          name: "setup",
+          description: "Durably bind this pilot server, channel, and optional officer role",
+          options: [
+            {
+              type: 7,
+              name: "channel",
+              description: "Channel for future TB delivery; defaults to the current channel",
+              required: false,
+            },
+            {
+              type: 8,
+              name: "officer_role",
+              description: "Role allowed to use officer read commands",
+              required: false,
+            },
+          ],
+        },
+        {
+          type: 1,
           name: "sync",
           description: "Force-refresh the pilot guild roster from the live SWGOH gateway",
         },
