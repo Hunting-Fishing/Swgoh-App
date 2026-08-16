@@ -8,8 +8,12 @@ export const STRATEGY_COVERAGE = Object.freeze({
   MISSING: "missing",
 });
 
-function strategyEvidence(missionId) {
-  return evaluateBattleStrategy({ missionId: String(missionId || ""), members: [] });
+function strategyEvidence(mission = {}) {
+  return evaluateBattleStrategy({
+    missionId: String(mission.id || ""),
+    tbId: String(mission.tbId || ""),
+    members: [],
+  }, mission);
 }
 
 function hasPlanningEvidence(mission = {}) {
@@ -29,7 +33,7 @@ function explicitlyPartial(strategy = {}) {
 }
 
 export function missionStrategyCoverage(mission = {}) {
-  const strategy = strategyEvidence(mission.id);
+  const strategy = strategyEvidence(mission);
   const hasStrategy = strategy?.available === true;
   const strategyComplete = hasStrategy
     && !explicitlyPartial(strategy)
