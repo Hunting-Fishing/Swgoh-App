@@ -34,7 +34,11 @@ function configFromEnv(env = process.env) {
   });
 }
 
-async function fetchGuildRoster(allyCode, config, fetchImpl) {
+function cacheKey(allyCode, includeActivity = false) {
+  return `${allyCode}:${includeActivity ? "activity" : "roster"}`;
+}
+
+async function fetchGuildRoster(allyCode, config, fetchImpl, options = {}) {
   if (!config.gatewayUrl) {
     const error = new Error("SWGOH_GATEWAY_URL is not configured.");
     error.status = 503;
@@ -46,11 +50,13 @@ async function fetchGuildRoster(allyCode, config, fetchImpl) {
     throw error;
   }
 
+  const includeActivity = options.includeActivity === true;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), config.requestTimeoutMs);
   try {
+    const suffix = includeActivity ? "?activity=1" : "";
     const response = await fetchImpl(
-      `${config.gatewayUrl}/v1/guild/by-player/${encodeURIComponent(allyCode)}/roster`,
+      `${config.gatewayUrl}/v1/guild/by-player/${encodeURIComponent(allyCode)}/roster${suffix}`,
       {
         method: "GET",
         headers: {
@@ -97,28 +103,36 @@ export function createGuildRosterService(env = process.env, options = {}) {
     ...(typeof options.now === "function" ? { now: options.now } : {}),
   });
 
-  const load = (allyCode) => fetchGuildRoster(allyCode, config, fetchImpl);
+  const load = (allyCode, includeActivity) => fetchGuildRoster(allyCode, config, fetchImpl, { includeActivity });
 
   async function getGuildRoster(allyCode, options = {}) {
-    const key = normalizeAllyCode(allyCode);
+    const normalized = normalizeAllyCode(allyCode);
+    const includeActivity = options.includeActivity === true;
+    const key = cacheKey(normalized, includeActivity);
     if (options.forceRefresh) {
-      const value = await cache.refresh(key, () => load(key));
-      return Object.freeze({ value, cache: "refreshed", ageMs: 0 });
+      const value = await cache.refresh(key, () => load(normalized, includeActivity));
+      return Object.freeze({ value, cache: "refreshed", ageMs: 0, includeActivity });
     }
-    return cache.getOrLoad(key, () => load(key), {
+    const result = await cache.getOrLoad(key, () => load(normalized, includeActivity), {
       staleWhileRevalidate: options.staleWhileRevalidate !== false,
     });
+    return Object.freeze({ ...result, includeActivity });
   }
 
   return Object.freeze({
     async getGuildRoster(allyCode, options = {}) {
       return getGuildRoster(allyCode, options);
     },
-    async refreshGuildRoster(allyCode) {
-      return getGuildRoster(allyCode, { forceRefresh: true, staleWhileRevalidate: false });
+    async refreshGuildRoster(allyCode, options = {}) {
+      return getGuildRoster(allyCode, {
+        ...options,
+        forceRefresh: true,
+        staleWhileRevalidate: false,
+      });
     },
-    inspect(allyCode) {
-      return cache.inspect(normalizeAllyCode(allyCode));
+    inspect(allyCode, options = {}) {
+      const normalized = normalizeAllyCode(allyCode);
+      return cache.inspect(cacheKey(normalized, options.includeActivity === true));
     },
     status() {
       return Object.freeze({
@@ -129,6 +143,7 @@ export function createGuildRosterService(env = process.env, options = {}) {
         shared: false,
         sharedAcrossInstances: false,
         sharedBetweenWebAndDiscord: true,
+        activityMode: "opt-in-separate-cache-key",
         coldRequestTimeoutSeconds: Math.round(config.requestTimeoutMs / 1000),
       });
     },
@@ -136,5 +151,6 @@ export function createGuildRosterService(env = process.env, options = {}) {
 }
 
 // One process-wide instance is imported by both the HTTP API and Discord command path.
+// Rich Guild activity is opt-in and kept on a cache key distinct from ordinary roster reads.
 // This intentionally does not claim cross-instance/distributed cache sharing.
 export const guildRosterService = createGuildRosterService(process.env);
