@@ -16,7 +16,7 @@ test("Guild is split into dedicated addressable pages", () => {
 });
 
 test("home Guild workspace control becomes a route link instead of opening an embedded panel", () => {
-  assert.match(routes, /button\[data-workspace-tab=\\"guild\\"\]/);
+  assert.ok(routes.includes('button[data-workspace-tab="guild"]'));
   assert.match(routes, /document\.createElement\("a"\)/);
   assert.match(routes, /button\.replaceWith\(link\)/);
   assert.match(routes, /link\.textContent = "Guild"/);
