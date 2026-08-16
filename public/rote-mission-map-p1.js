@@ -1,7 +1,9 @@
+import { rotePlanetById } from "./rote-map-data.js";
 import { ROTE_MISSIONS_BY_PLANET } from "./rote-mission-data.js";
 import { TB_MISSION_VISUAL_ASSETS } from "./tb-visual-assets-data.js";
 import { hydrateCombatPreparation } from "./tb-combat-prep-ui.js";
 import { ROTE_P1_MISSION_MAP_SOURCE, roteP1MissionMap } from "./rote-mission-map-p1-data.js";
+import { roteP2MissionMap } from "./rote-mission-map-p2-data.js";
 
 const selectedNodeByPlanet = new Map();
 let scheduled = false;
@@ -20,6 +22,15 @@ function selectedPlanetId() {
 
 function liveBody() {
   return window.__swgohLiveSnapshot?.body || null;
+}
+
+function sourceMissionMap(planetId) {
+  return roteP1MissionMap(planetId) || roteP2MissionMap(planetId);
+}
+
+function phaseLabel(planetId) {
+  const phase = String(rotePlanetById(planetId)?.phase || "");
+  return /^P\d+$/.test(phase) ? `PHASE ${phase.slice(1)}` : phase || "ROTE";
 }
 
 function missionIcon(type) {
@@ -64,6 +75,7 @@ function detailMarkup(node) {
       <div><span>Entry / requirement</span><strong>${escapeHtml(node.requirement)}</strong></div>
       <div><span>Reward / territory value</span><strong>${escapeHtml(node.reward)}</strong></div>
     </div>
+    ${node.note ? `<div class="rote-source-boundary evidence-note">${escapeHtml(node.note)}</div>` : ""}
     ${linked
       ? body
         ? `<div class="rote-source-live-prep" data-tb-combat-mission="${escapeAttr(node.missionId)}" data-tb-combat-team="${escapeAttr(node.teamId)}"><span>Loading live roster preparation…</span></div>`
@@ -100,14 +112,14 @@ function renderPanel(board, planetId, map) {
 
   panel.innerHTML = `
     <div class="rote-source-mission-map-head">
-      <div><span>SOURCE MISSION MAP · PHASE 1</span><strong>${escapeHtml(planetId.charAt(0).toUpperCase() + planetId.slice(1))}</strong><small>Click a mission icon for requirements and live preparation where a verified internal mapping exists.</small></div>
+      <div><span>SOURCE MISSION MAP · ${escapeHtml(phaseLabel(planetId))}</span><strong>${escapeHtml(planetId.charAt(0).toUpperCase() + planetId.slice(1))}</strong><small>Click a mission icon for requirements and live preparation where a verified internal mapping exists.</small></div>
       <b>${map.nodes.length} NODES</b>
     </div>
     <div class="rote-source-mission-map" role="group" aria-label="${escapeAttr(planetId)} mission positions" style="--rote-source-planet:url(&quot;${escapeAttr(map.background)}&quot;)">
       ${map.nodes.map((node) => nodeMarkup(node, node.id === selectedNode.id)).join("")}
     </div>
     ${detailMarkup(selectedNode)}
-    <small class="rote-source-mission-credit">Mission layout reference: GenSkaar ROTE · pinned revision ${escapeHtml(ROTE_P1_MISSION_MAP_SOURCE.revision.slice(0, 12))}. Source coordinates are preserved; unlinked nodes are not assigned guessed strategy records.</small>`;
+    <small class="rote-source-mission-credit">Mission layout reference: GenSkaar ROTE · pinned revision ${escapeHtml(ROTE_P1_MISSION_MAP_SOURCE.revision.slice(0, 12))}. Current evidence overrides stale requirement text; unlinked nodes are not assigned guessed strategy records.</small>`;
 
   for (const button of panel.querySelectorAll("[data-rote-source-mission]")) {
     button.addEventListener("click", () => {
@@ -131,7 +143,7 @@ function enhanceAll() {
   const board = document.getElementById("roteMissionBoard");
   if (!board) return;
   const planetId = selectedPlanetId();
-  const map = roteP1MissionMap(planetId);
+  const map = sourceMissionMap(planetId);
   if (!map) {
     removeUnsupportedPanel(board);
     return;
