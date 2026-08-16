@@ -79,10 +79,34 @@ function assignmentCountMap(rows = []) {
   return map;
 }
 
-function safetyBand({ owned, qualifiesAny, operationContext, preference, protection }) {
+function ignoredMemberSet(rows = []) {
+  const set = new Set();
+  for (const row of asArray(rows)) {
+    if (typeof row === "string" || typeof row === "number") {
+      const value = text(row);
+      if (value) set.add(value);
+      continue;
+    }
+    for (const value of [row?.memberId, row?.playerId, row?.id, row?.allyCode, row?.memberName, row?.name]) {
+      const key = text(value);
+      if (key) set.add(key);
+    }
+  }
+  return set;
+}
+
+function memberUnavailable(member = {}, id = "", ignored = new Set()) {
+  return [id, member?.playerId, member?.id, member?.allyCode, member?.name]
+    .map(text)
+    .filter(Boolean)
+    .some((value) => ignored.has(value));
+}
+
+function safetyBand({ owned, qualifiesAny, operationContext, preference, protection, unavailable }) {
   if (!owned) return "missing";
   if (!operationContext) return "owned";
   if (!qualifiesAny) return "below";
+  if (unavailable) return "unavailable";
   if (preference === "give") return "give";
   if (preference === "keep") return "keep";
   if (protection) return "protected";
@@ -90,7 +114,7 @@ function safetyBand({ owned, qualifiesAny, operationContext, preference, protect
 }
 
 function safetyRank(band) {
-  return ({ give: 0, safe: 1, owned: 1, protected: 2, keep: 3, below: 4, missing: 5 })[band] ?? 9;
+  return ({ give: 0, safe: 1, owned: 1, protected: 2, keep: 3, unavailable: 4, below: 5, missing: 6 })[band] ?? 9;
 }
 
 function memberUnit(member = {}, baseId = "", catalogIndex = new Map()) {
@@ -115,6 +139,7 @@ export function buildGuildUnitOwnershipMatrix({
   preferences = [],
   protections = [],
   assignments = [],
+  ignoredMembers = [],
 } = {}) {
   const catalogIndex = staticUnitIndex(catalog);
   const staticUnit = catalogIndex.get(String(baseId || "")) || null;
@@ -122,6 +147,7 @@ export function buildGuildUnitOwnershipMatrix({
   const prefMap = preferenceMap(preferences);
   const protectMap = protectionMap(protections);
   const assignedMap = assignmentCountMap(assignments);
+  const ignored = ignoredMemberSet(ignoredMembers);
   const members = asArray(guildSnapshot?.members).map((member, index) => {
     const id = memberId(member, index);
     const unit = memberUnit(member, baseId, catalogIndex);
@@ -129,7 +155,8 @@ export function buildGuildUnitOwnershipMatrix({
     const preference = prefMap.get(`${id}|${String(baseId)}`) || "default";
     const protection = phase ? protectMap.get(`${id}|${String(phase)}|${String(baseId)}`) || null : null;
     const assigned = phase ? finite(assignedMap.get(`${id}|${String(phase)}|${String(baseId)}`), 0) : 0;
-    const band = safetyBand({ owned: Boolean(unit), qualifiesAny: qualifyingSlots > 0, operationContext: Boolean(requirement), preference, protection });
+    const unavailable = memberUnavailable(member, id, ignored);
+    const band = safetyBand({ owned: Boolean(unit), qualifiesAny: qualifyingSlots > 0, operationContext: Boolean(requirement), preference, protection, unavailable });
     return Object.freeze({
       id,
       playerId: text(member?.playerId || member?.id),
@@ -137,6 +164,7 @@ export function buildGuildUnitOwnershipMatrix({
       memberName: text(member?.name || id),
       memberGp: finite(member?.galacticPower, 0),
       rosterAvailable: Boolean(member?.rosterAvailable),
+      unavailable,
       unit,
       owned: Boolean(unit),
       stars: finite(unit?.stars, 0),
@@ -161,6 +189,7 @@ export function buildGuildUnitOwnershipMatrix({
   const safe = members.filter((row) => ["safe", "give"].includes(row.band));
   const protectedOwners = members.filter((row) => row.band === "protected");
   const keepOwners = members.filter((row) => row.band === "keep");
+  const unavailableOwners = members.filter((row) => row.band === "unavailable");
   const assignedOwners = members.filter((row) => row.assigned > 0);
   const sevenStar = owners.filter((row) => row.stars >= 7);
   const relic5 = owners.filter((row) => row.relic >= 5);
@@ -191,6 +220,7 @@ export function buildGuildUnitOwnershipMatrix({
       safeOwners: safe.length,
       protectedOwners: protectedOwners.length,
       keepOwners: keepOwners.length,
+      unavailableOwners: unavailableOwners.length,
       assignedOwners: assignedOwners.length,
       demand: requirement?.demand || 0,
       averageUnitGp: unitGpValues.length ? Math.round(unitGpValues.reduce((sum, value) => sum + value, 0) / unitGpValues.length) : 0,
@@ -209,6 +239,7 @@ export function filterGuildUnitOwnershipRows(rows = [], options = {}) {
     if (ownership === "Qualifying" && row.qualifyingSlots <= 0) return false;
     if (ownership === "Safe" && !["safe", "give"].includes(row.band)) return false;
     if (ownership === "Protected" && !["protected", "keep"].includes(row.band)) return false;
+    if (ownership === "Unavailable" && row.band !== "unavailable") return false;
     if (!search) return true;
     return [row.memberName, row.allyCode, row.playerId, row.band, ...(asArray(row.protection?.reasons))]
       .join(" ").toLowerCase().replace(/-/g, "").includes(search);
