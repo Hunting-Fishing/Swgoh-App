@@ -37,6 +37,10 @@ function normalizedPreference(value) {
   return text === "give" || text === "keep" ? text : "";
 }
 
+function normalizedMemberId(row = {}) {
+  return String(row?.memberId || row?.playerId || row?.swgohAllyCode || "").trim();
+}
+
 export async function resolveDiscordGuildAllyCode({ allyCode, interaction = {}, stateStore = discordStateStore } = {}) {
   const fallback = normalizedAllyCode(allyCode);
   const discordGuildId = normalizedSnowflake(interaction?.guild_id);
@@ -82,10 +86,10 @@ async function readDiscordPlanningControls(binding, stateStore) {
     && typeof stateStore?.status === "function"
     && typeof stateStore?.readGuild === "function",
   );
-  if (!canRead) return Object.freeze({ preferences: Object.freeze([]) });
+  if (!canRead) return Object.freeze({ preferences: Object.freeze([]), ignoredMembers: Object.freeze([]) });
 
   const status = stateStore.status();
-  if (!status?.enabled || !status?.durable) return Object.freeze({ preferences: Object.freeze([]) });
+  if (!status?.enabled || !status?.durable) return Object.freeze({ preferences: Object.freeze([]), ignoredMembers: Object.freeze([]) });
 
   let guild;
   try {
@@ -99,14 +103,20 @@ async function readDiscordPlanningControls(binding, stateStore) {
 
   const preferences = Object.values(guild?.memberPreferences && typeof guild.memberPreferences === "object" ? guild.memberPreferences : {})
     .map((row) => ({
-      memberId: String(row?.memberId || row?.playerId || row?.swgohAllyCode || "").trim(),
+      memberId: normalizedMemberId(row),
       baseId: normalizedBaseId(row?.baseId),
       preference: normalizedPreference(row?.preference),
     }))
     .filter((row) => row.memberId && row.baseId && row.preference);
 
+  const ignoredMembers = Object.values(guild?.memberAvailability && typeof guild.memberAvailability === "object" ? guild.memberAvailability : {})
+    .filter((row) => String(row?.availability || "").toLowerCase() === "unavailable")
+    .map((row) => normalizedMemberId(row))
+    .filter(Boolean);
+
   return Object.freeze({
     preferences: Object.freeze(preferences.map((row) => Object.freeze(row))),
+    ignoredMembers: Object.freeze([...new Set(ignoredMembers)]),
   });
 }
 
@@ -183,8 +193,6 @@ async function loadOperations(config, fetchImpl) {
 
 function selectGuildRosterService(env, options, fetchImpl) {
   if (options.guildRosterService) return options.guildRosterService;
-  // Production server and Discord imports share this exact process-wide service.
-  // Custom env/fetch instances used by tests remain isolated and deterministic.
   if (env === process.env && !options.fetch) return guildRosterService;
   return createGuildRosterService(env, { fetch: fetchImpl, ...(typeof options.now === "function" ? { now: options.now } : {}) });
 }
@@ -197,7 +205,7 @@ function normalizeGuildResult(result) {
   });
 }
 
-async function buildPlanningSnapshot({ allyCode, redundancyTarget, guildBindingSource, preferences = [] }, config, fetchImpl, sharedGuildService) {
+async function buildPlanningSnapshot({ allyCode, redundancyTarget, guildBindingSource, preferences = [], ignoredMembers = [] }, config, fetchImpl, sharedGuildService) {
   const [guildCacheResult, operations, catalog] = await Promise.all([
     sharedGuildService.getGuildRoster(allyCode, { staleWhileRevalidate: false }),
     loadOperations(config, fetchImpl),
@@ -208,13 +216,17 @@ async function buildPlanningSnapshot({ allyCode, redundancyTarget, guildBindingS
   const plan = planGuildRoteSafeAssignments(guildResult.guild, operations, {
     protections: safety.protections,
     preferences,
+    ignoredMembers,
   });
   return Object.freeze({
     guild: guildResult.guild,
     cache: guildResult.cache,
     guildAgeMs: guildResult.ageMs,
     guildBindingSource,
-    planningControls: Object.freeze({ preferenceCount: preferences.length }),
+    planningControls: Object.freeze({
+      preferenceCount: preferences.length,
+      unavailableMemberCount: ignoredMembers.length,
+    }),
     operations,
     safety,
     plan,
@@ -255,6 +267,7 @@ export function createDiscordTbLiveServices(env = process.env, options = {}) {
         redundancyTarget: args.redundancyTarget ?? 2,
         guildBindingSource: binding.source,
         preferences: controls.preferences,
+        ignoredMembers: controls.ignoredMembers,
       }, config, fetchImpl, sharedGuildService);
     },
     async buildPhaseCommand(args = {}) {
@@ -264,6 +277,7 @@ export function createDiscordTbLiveServices(env = process.env, options = {}) {
         redundancyTarget: args.redundancyTarget ?? 2,
         guildBindingSource: binding.source,
         preferences: controls.preferences,
+        ignoredMembers: controls.ignoredMembers,
       }, config, fetchImpl, sharedGuildService);
       const phaseCommand = buildGuildTbPhaseCommand({
         guildSnapshot: snapshot.guild,
