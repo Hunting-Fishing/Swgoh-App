@@ -1,6 +1,7 @@
 import { createPublicKey, verify as cryptoVerify } from "node:crypto";
 import { discordStateStore } from "./discord-state-store.mjs";
 import { createDiscordTbLiveServices } from "./discord-tb-live.mjs";
+import { linkDiscordGuildPlayer, unlinkDiscordGuildPlayer } from "./discord-player-link-service.mjs";
 
 const ED25519_SPKI_PREFIX = Buffer.from("302a300506032b6570032100", "hex");
 const MAX_INTERACTION_BYTES = 1024 * 1024;
@@ -8,7 +9,8 @@ const EPHEMERAL_FLAG = 1 << 6;
 const MAX_DISCORD_CONTENT = 1900;
 const ADMINISTRATOR_PERMISSION = 1n << 3n;
 const MANAGE_GUILD_PERMISSION = 1n << 5n;
-const DEFERRED_SUBCOMMANDS = new Set(["setup", "sync", "phase", "assignments", "farms"]);
+const DEFERRED_SUBCOMMANDS = new Set(["setup", "sync", "phase", "assignments", "farms", "link", "unlink", "links"]);
+const IDENTITY_SUBCOMMANDS = new Set(["link", "unlink", "links"]);
 
 export const DISCORD_INTERACTION_TYPES = Object.freeze({
   PING: 1,
@@ -38,6 +40,11 @@ function snowflake(value) {
 function allyCode(value) {
   const digits = clean(value).replace(/\D/g, "");
   return /^\d{9}$/.test(digits) ? digits : "";
+}
+
+function displayAllyCode(value) {
+  const digits = allyCode(value);
+  return digits ? `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}` : "unknown";
 }
 
 function boundedInteger(value, fallback, min, max) {
@@ -125,6 +132,7 @@ export function discordTbPublicStatus(env = process.env) {
     redundancyTarget: config.redundancyTarget,
     officerAuthorization: "manage-guild-administrator-or-configured-role",
     setupAuthorization: "manage-guild-or-administrator",
+    playerLinkAuthorization: "officer-only-live-guild-membership-verified",
     interactionsPath: "/api/discord/interactions",
     mode: "http-interactions",
   });
@@ -276,6 +284,7 @@ function statusMessage(interaction, config) {
     `Mission redundancy target: ${config.redundancyTarget}`,
     "Officer authorization: Manage Guild / Administrator, or a durably configured officer role",
     "Setup authorization: Manage Guild or Administrator only",
+    "Player identity: officer-managed, live guild-membership verified, durably audited",
     `Proactive outbound delivery: ${config.deliveryEnabled ? "enabled" : "disabled"}`,
     "Publishing and DMs remain disabled.",
   ];
@@ -332,6 +341,53 @@ function formatSetupResult(guild = {}, roleWasProvided = false) {
     lines.push(`Officer roles: **${roleIds.length} configured** (existing role configuration preserved)`);
   }
   lines.push("Setup was written atomically with an audit event. Publishing and DMs are still disabled.");
+  return truncateContent(lines.join("\n"));
+}
+
+function formatPlayerLinkResult(result = {}, discordUserId = "") {
+  const link = result.link || {};
+  const verification = result.verification || {};
+  const lines = [
+    "**SWGOH Command Center · Player Link Saved**",
+    `Discord member: <@${safeText(discordUserId)}>`,
+    `SWGOH player: **${safeText(verification.playerName, "verified guild member")}** · **${displayAllyCode(link.swgohAllyCode || verification.claimedAllyCode)}**`,
+    `Guild: **${safeText(verification.guildName, "bound guild")}**`,
+    `Guild membership check: **verified live** · binding: **${safeText(verification.guildBindingSource)}**`,
+    "The link is durable and audited. This does not enable DMs or assignment publishing yet.",
+  ];
+  return truncateContent(lines.join("\n"));
+}
+
+function formatPlayerUnlinkResult(result = {}) {
+  const removed = result.removed || {};
+  const lines = [
+    "**SWGOH Command Center · Player Link Removed**",
+    `Discord member: <@${safeText(result.discordUserId)}>`,
+    `Removed Ally Code: **${displayAllyCode(removed.swgohAllyCode)}**`,
+    "The unlink is durable and audited. No TB plan or delivery state was changed.",
+  ];
+  return truncateContent(lines.join("\n"));
+}
+
+function formatPlayerLinksResult(guild = {}) {
+  const links = Object.values(guild?.userLinks && typeof guild.userLinks === "object" ? guild.userLinks : {})
+    .filter((row) => snowflake(row?.discordUserId) && allyCode(row?.swgohAllyCode))
+    .sort((a, b) => String(a.discordUserId).localeCompare(String(b.discordUserId)));
+  const lines = [
+    "**SWGOH Command Center · Discord ↔ SWGOH Links**",
+    `Discord server: **${safeText(guild?.discordGuildId)}**`,
+    `Linked members: **${links.length}**`,
+  ];
+  if (!links.length) {
+    lines.push("", "No player links are configured yet. Officers can use `/tb link member:<user> ally_code:<code>`.");
+  } else {
+    lines.push("");
+    for (const row of links.slice(0, 24)) {
+      lines.push(`• <@${row.discordUserId}> ↔ **${displayAllyCode(row.swgohAllyCode)}**${row.playerId ? ` · player ID ${safeText(row.playerId)}` : ""}`);
+    }
+    if (links.length > 24) lines.push(`• +${links.length - 24} more durable links`);
+  }
+  lines.push("", "_Mentions are suppressed; this command does not ping linked members._");
   return truncateContent(lines.join("\n"));
 }
 
@@ -449,6 +505,15 @@ function deferredErrorMessage(error) {
   return truncateContent(`**SWGOH Command Center · TB command failed**\n${message}\nNo TB plan, publishing, or DM state was changed.`);
 }
 
+function requireDurableIdentityState(stateStore) {
+  if (typeof stateStore?.status !== "function") throw new Error("Durable Discord state service is unavailable.");
+  const status = stateStore.status();
+  if (!status?.enabled || !status?.durable) {
+    throw new Error(`Durable Discord state is not ready (${safeText(status?.reason, "storage unavailable")}). Attach a persistent Railway Volume before managing player links.`);
+  }
+  return status;
+}
+
 export async function executeDiscordTbDeferredCommand(interaction, config = discordTbConfig(), services = {}) {
   const subcommand = discordTbSubcommand(interaction);
   const phase = discordTbPhase(interaction);
@@ -483,6 +548,60 @@ export async function executeDiscordTbDeferredCommand(interaction, config = disc
       actorDiscordUserId,
     });
     return formatSetupResult(guild, Boolean(officerRoleId));
+  }
+
+  if (subcommand === "link") {
+    const stateStore = services?.stateStore || discordStateStore;
+    requireDurableIdentityState(stateStore);
+    const discordGuildId = snowflake(interaction?.guild_id);
+    const actorDiscordUserId = snowflake(interaction?.member?.user?.id);
+    const discordUserId = snowflake(discordTbOption(interaction, "member"));
+    const claimedAllyCode = allyCode(discordTbOption(interaction, "ally_code"));
+    if (!discordGuildId) throw new Error("A valid Discord guild is required for /tb link.");
+    if (!actorDiscordUserId) throw new Error("A valid Discord officer identity is required for /tb link.");
+    if (!discordUserId) throw new Error("Choose a Discord member to link.");
+    if (!claimedAllyCode) throw new Error("Enter a valid 9-digit SWGOH Ally Code for /tb link.");
+    const transaction = typeof services?.linkDiscordGuildPlayer === "function" ? services.linkDiscordGuildPlayer : linkDiscordGuildPlayer;
+    const result = await transaction({
+      discordGuildId,
+      discordUserId,
+      claimedAllyCode,
+      actorDiscordUserId,
+      fallbackGuildAllyCode: config.pilotAllyCode,
+      stateStore,
+      ...(services?.rosterService ? { rosterService: services.rosterService } : {}),
+    });
+    return formatPlayerLinkResult(result, discordUserId);
+  }
+
+  if (subcommand === "unlink") {
+    const stateStore = services?.stateStore || discordStateStore;
+    requireDurableIdentityState(stateStore);
+    const discordGuildId = snowflake(interaction?.guild_id);
+    const actorDiscordUserId = snowflake(interaction?.member?.user?.id);
+    const discordUserId = snowflake(discordTbOption(interaction, "member"));
+    if (!discordGuildId) throw new Error("A valid Discord guild is required for /tb unlink.");
+    if (!actorDiscordUserId) throw new Error("A valid Discord officer identity is required for /tb unlink.");
+    if (!discordUserId) throw new Error("Choose a Discord member to unlink.");
+    const transaction = typeof services?.unlinkDiscordGuildPlayer === "function" ? services.unlinkDiscordGuildPlayer : unlinkDiscordGuildPlayer;
+    const result = await transaction({
+      discordGuildId,
+      discordUserId,
+      actorDiscordUserId,
+      stateStore,
+    });
+    return formatPlayerUnlinkResult(result);
+  }
+
+  if (subcommand === "links") {
+    const stateStore = services?.stateStore || discordStateStore;
+    requireDurableIdentityState(stateStore);
+    if (typeof stateStore?.readGuild !== "function") throw new Error("Durable Discord guild reader is unavailable.");
+    const discordGuildId = snowflake(interaction?.guild_id);
+    if (!discordGuildId) throw new Error("A valid Discord guild is required for /tb links.");
+    const guild = await stateStore.readGuild(discordGuildId);
+    if (!guild) throw new Error("This Discord server has not completed durable /tb setup yet.");
+    return formatPlayerLinksResult(guild);
   }
 
   if (subcommand === "sync") {
@@ -627,6 +746,11 @@ export async function handleDiscordInteractionRequest(request, response, env = p
   jsonResponse(response, 200, commandResponse);
   if (commandResponse.type === DISCORD_RESPONSE_TYPES.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE) {
     if (subcommand === "setup") {
+      scheduleDeferredDiscordCommand(interaction, config, { ...services, stateStore });
+      return true;
+    }
+
+    if (IDENTITY_SUBCOMMANDS.has(subcommand)) {
       scheduleDeferredDiscordCommand(interaction, config, { ...services, stateStore });
       return true;
     }
