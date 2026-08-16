@@ -17,8 +17,8 @@ async function campaignMissions(id) {
   if (dataPromises.has(id)) return dataPromises.get(id);
   const promise = (async () => {
     if (id === "geo-separatist") {
-      const data = await import("./ds-geo-data.js?v=20260815-tbcombat5");
-      return data.DS_GEO_TERRITORIES.flatMap((territory) => territory.missions);
+      const data = await import("./ds-geo-mission-overrides.js?v=20260816-dsgeo-strategy1");
+      return data.DS_GEO_MISSIONS;
     }
     if (id === "geo-republic") {
       const data = await import("./geo-ls-data.js?v=20260815-tbcombat5");
