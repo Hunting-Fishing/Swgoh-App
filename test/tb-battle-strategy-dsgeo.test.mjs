@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { extractAbilitySemantics } from "../public/kit-semantics.js";
 import { DS_GEO_BATTLE_STRATEGIES, dsGeoBattleStrategyForMission } from "../public/tb-battle-strategy-dsgeo-data.js";
-import { DS_GEO_MISSIONS } from "../public/ds-geo-data.js";
+import { DS_GEO_MISSIONS } from "../public/ds-geo-mission-overrides.js";
 import { evaluateBattleStrategy } from "../public/tb-battle-strategy.js";
 import { missionStrategyCoverage } from "../public/tb-strategy-coverage.js";
 
@@ -40,12 +40,34 @@ function geos({ leaderFirst = true } = {}) {
 
 const mission = (id) => DS_GEO_MISSIONS.find((row) => row.id === id);
 
-test("DS Geo high-value resolver owns Acklay, Wat and Jabba packs", () => {
-  assert.deepEqual(Object.keys(DS_GEO_BATTLE_STRATEGIES), ["s2", "s3", "s5"]);
-  assert.equal(dsGeoBattleStrategyForMission("s2"), DS_GEO_BATTLE_STRATEGIES.s2);
-  assert.equal(dsGeoBattleStrategyForMission("s3"), DS_GEO_BATTLE_STRATEGIES.s3);
-  assert.equal(dsGeoBattleStrategyForMission("s5"), DS_GEO_BATTLE_STRATEGIES.s5);
+test("DS Geo resolver owns the prioritized special/restricted strategy packs", () => {
+  assert.deepEqual(Object.keys(DS_GEO_BATTLE_STRATEGIES), ["s1", "s2", "c8", "s3", "c21", "s4", "s5"]);
+  for (const id of ["s1", "s2", "c8", "s3", "c21", "s4", "s5"]) {
+    assert.equal(dsGeoBattleStrategyForMission(id), DS_GEO_BATTLE_STRATEGIES[id]);
+  }
   assert.equal(dsGeoBattleStrategyForMission("c1"), null);
+});
+
+test("canonical DS Geo overrides preserve mission count and hard gates", () => {
+  assert.equal(DS_GEO_MISSIONS.length, 28);
+
+  const p1 = mission("s1");
+  assert.match(p1.name, /Nute Gunray/i);
+  assert.deepEqual(p1.entry.mandatoryMembers.map((row) => row.baseId), [
+    "NUTEGUNRAY",
+    "B1BATTLEDROIDV2",
+    "B2SUPERBATTLEDROID",
+    "DROIDEKA",
+  ]);
+  assert.ok(!p1.entry.mandatoryMembers.some((row) => row.baseId === "MAGNAGUARD"), "MagnaGuard must remain a recommendation, not a fabricated hard gate");
+
+  const p2 = mission("c8");
+  assert.equal(p2.entry.verified, true);
+  assert.deepEqual(p2.entry.mandatoryMembers.map((row) => row.baseId), ["COUNTDOOKU", "ASAJVENTRESS"]);
+
+  assert.ok(mission("c21").entry.mandatoryMembers.some((row) => row.baseId === "COUNTDOOKU"));
+  assert.ok(mission("s4").entry.mandatoryMembers.some((row) => row.baseId === "WATTAMBOR"));
+  assert.match(mission("s2").name, /Acklay/i);
 });
 
 test("Acklay strategy uses the tested Enrage -> Jedi AoE control loop", () => {
@@ -67,7 +89,7 @@ test("Acklay strategy blocks a non-GBA leader", () => {
   assert.ok(analysis.blockers.some((row) => row.type === "leader" && row.expected === "GEONOSIANBROODALPHA"));
 });
 
-test("Wat clone is promoted to covered without claiming deterministic odds", () => {
+test("Wat shard strategy is promoted to covered without deterministic odds", () => {
   const strategy = DS_GEO_BATTLE_STRATEGIES.s3;
   assert.equal(strategy.confidence, "community-validated");
   assert.match(strategy.evidenceBoundary, /does not mean deterministic or guaranteed/i);
@@ -77,14 +99,24 @@ test("Wat clone is promoted to covered without claiming deterministic odds", () 
   assert.equal("winPercent" in strategy, false);
 });
 
-test("Acklay and Jabba DS Geo specials are strategy-covered", () => {
-  for (const id of ["s2", "s5"]) {
+test("P1 Nute, Acklay, Wat shard, P4 Dooku and Jabba are strategy-covered", () => {
+  for (const id of ["s1", "s2", "s3", "c21", "s5"]) {
     const coverage = missionStrategyCoverage(mission(id));
     assert.equal(coverage.coverage, "covered", `${id} should be covered`);
     assert.equal(coverage.strategyAvailable, true);
     assert.ok(coverage.sourceCount > 0);
     assert.ok(coverage.stageCount > 0);
   }
+});
+
+test("P2 Dooku/Asajj and P4 Wat remain explicitly partial", () => {
+  for (const id of ["c8", "s4"]) {
+    const coverage = missionStrategyCoverage(mission(id));
+    assert.equal(coverage.coverage, "partial", `${id} must stay partial until battle sequencing is re-verified`);
+    assert.equal(coverage.strategyAvailable, true);
+    assert.match(`${coverage.strategyStatus} ${coverage.confidence}`, /partial/i);
+  }
+  assert.match(DS_GEO_BATTLE_STRATEGIES.s4.evidenceBoundary, /cannot surface as VERIFIED STRATEGY AVAILABLE yet/i);
 });
 
 test("legacy DS Geo ids do not leak across Territory Battle context", () => {
@@ -118,8 +150,11 @@ test("DS Geo strategy packs preserve evidence boundaries and reject fabricated w
 
 test("DS Geo strategy modules parse", () => {
   for (const path of [
+    new URL("../public/ds-geo-mission-overrides.js", import.meta.url),
     new URL("../public/tb-battle-strategy-dsgeo-data.js", import.meta.url),
     new URL("../public/tb-battle-strategy.js", import.meta.url),
     new URL("../public/tb-strategy-coverage.js", import.meta.url),
+    new URL("../public/tb-strategy-coverage-all.js", import.meta.url),
+    new URL("../public/tb-combat-overlay.js", import.meta.url),
   ]) execFileSync(process.execPath, ["--check", path.pathname]);
 });
