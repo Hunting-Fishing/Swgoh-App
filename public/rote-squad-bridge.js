@@ -13,6 +13,7 @@
 
   let roteMissionPromise = null;
   let tbCombatPromise = null;
+  let roteSlotPromise = null;
   let kitIntelligencePromise = null;
   const loadTbEnhancements = () => {
     roteMissionPromise ||= import("/rote-mission-pro.js?v=20260815-rotemission2").catch((error) => {
@@ -23,7 +24,11 @@
       tbCombatPromise = null;
       console.error("TB combat preparation failed to load", error);
     });
-    return Promise.allSettled([roteMissionPromise, tbCombatPromise]);
+    roteSlotPromise ||= import("/rote-slot-presentation.js?v=20260816-slots1").catch((error) => {
+      roteSlotPromise = null;
+      console.error("ROTE mission slot presentation failed to load", error);
+    });
+    return Promise.allSettled([roteMissionPromise, tbCombatPromise, roteSlotPromise]);
   };
 
   const loadKitIntelligence = (baseId) => {
