@@ -92,7 +92,11 @@ test("Discord PING response remains before application/member authorization for 
 
 test("web API and Discord production path import the same process-wide guild roster service", () => {
   assert.match(server, /import \{ guildRosterService \} from "\.\/guild-roster-service\.mjs"/);
-  assert.match(server, /guildRosterService\.getGuildRoster\(allyCode, \{ staleWhileRevalidate: true \}\)/);
+  assert.match(server, /const forceRefresh = url\.searchParams\.get\("refresh"\) === "1"/);
+  assert.match(server, /guildRosterService\.getGuildRoster\(allyCode, \{/);
+  assert.match(server, /forceRefresh,/);
+  assert.match(server, /staleWhileRevalidate: !forceRefresh/);
+  assert.match(server, /"X-Guild-Refresh": forceRefresh \? "requested" : "normal"/);
   assert.match(server, /guildRosterCache: guildRosterService\.status\(\)/);
   assert.doesNotMatch(server, /const guildCache = new LiveRosterCache/);
 
