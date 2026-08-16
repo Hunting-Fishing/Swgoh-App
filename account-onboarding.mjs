@@ -1,4 +1,5 @@
 import { guildRosterService } from './guild-roster-service.mjs';
+import { playerVerification } from './player-verification.mjs';
 import { supabaseAuthSession } from './supabase-auth-session.mjs';
 import { supabaseCoreStore } from './supabase-core-store.mjs';
 
@@ -55,6 +56,16 @@ function httpError(message, status, code) {
   error.status = status;
   error.code = code;
   return error;
+}
+
+function assertSameOrigin(request) {
+  const origin = clean(request?.headers?.origin);
+  if (!origin) return;
+  const host = clean(request?.headers?.['x-forwarded-host'] || request?.headers?.host);
+  const proto = clean(clean(request?.headers?.['x-forwarded-proto']).split(',')[0]) || 'https';
+  if (!host || origin !== `${proto}://${host}`) {
+    throw httpError('Cross-origin account request rejected.', 403, 'CROSS_ORIGIN_REJECTED');
+  }
 }
 
 async function readJsonBody(request) {
@@ -241,6 +252,9 @@ export function createAccountOnboarding(options = {}) {
 
   async function handle(request, response, url) {
     if (!url.pathname.startsWith('/api/account/')) return false;
+    if (url.pathname.startsWith('/api/account/verification')) {
+      return playerVerification.handle(request, response, url);
+    }
     try {
       const user = await requireUser(request);
 
@@ -250,6 +264,7 @@ export function createAccountOnboarding(options = {}) {
       }
 
       if (request.method === 'POST' && url.pathname === '/api/account/link-player') {
+        assertSameOrigin(request);
         const body = await readJsonBody(request);
         const lookupAllyCode = allyCode(body?.allyCode);
         if (!lookupAllyCode) throw httpError('A valid 9-digit Ally Code is required.', 400, 'INVALID_ALLY_CODE');
