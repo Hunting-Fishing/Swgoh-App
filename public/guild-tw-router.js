@@ -81,6 +81,10 @@ function ensureSubnav() {
     guildNav.insertAdjacentElement("afterend", nav);
   }
   const active = sectionFromPath();
+  const allyCode = currentAllyCode();
+  const renderKey = `${active}|${allyCode}`;
+  if (nav.dataset.renderKey === renderKey) return true;
+  nav.dataset.renderKey = renderKey;
   nav.innerHTML = TW_ROUTES.map(([id, path, label]) => `<a class="${id === active ? "active" : ""}" href="${routeUrl(path)}">${escapeHtml(label)}</a>`).join("");
   return true;
 }
@@ -126,6 +130,8 @@ function install() {
   observer.observe(document.body, { childList: true, subtree: true });
   window.addEventListener("swgoh:guild-command-snapshot", () => {
     state.renderedKey = "";
+    const nav = document.getElementById("guildTwSubnav");
+    if (nav) nav.dataset.renderKey = "";
     setTimeout(() => renderTwRoute(true), 0);
   });
 }
