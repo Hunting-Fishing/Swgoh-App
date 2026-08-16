@@ -123,9 +123,10 @@ function ensureRotePhaseDeck() {
   deck.dataset.signature = signature;
 
   const planets = rotePlanetsForPhase(ROTE_PLANETS, selectedRotePhase);
+  const heading = selectedRotePhase === "Bonus" ? "Bonus Planets" : `Phase ${selectedRotePhase.slice(1)} Territory Overview`;
   deck.innerHTML = `
     <div class="tb-phase-deck-head">
-      <div><div class="kicker">PHASE TERRITORY INTELLIGENCE</div><h3>Phase ${escapeHtml(selectedRotePhase.replace("P", ""))}${selectedRotePhase === "Bonus" ? "Bonus Planets" : " Territory Overview"}</h3><p>Use the phase row for information. Use the map for navigation. Open a territory for mission and roster detail.</p></div>
+      <div><div class="kicker">PHASE TERRITORY INTELLIGENCE</div><h3>${escapeHtml(heading)}</h3><p>Use the phase row for information. Use the map for navigation. Open a territory for mission and roster detail.</p></div>
       <div class="tb-phase-deck-legend"><span class="dark">Dark</span><span class="mixed">Mixed</span><span class="light">Light</span><span class="bonus">Bonus</span></div>
     </div>
     <div class="tb-phase-tabs">${ROTE_PHASE_ORDER.map(rotePhaseButton).join("")}</div>
@@ -185,10 +186,10 @@ function enhanceLegacyMapCard(card) {
   if (!groups.size) return;
 
   card.classList.add("tb-information-layout");
-  let phase = legacyPhaseByCard.get(card);
   const selected = card.querySelector(".dsgeo-territory.selected");
   const selectedPhase = parseLegacyPhase(selected?.querySelector(".dsgeo-phase")?.textContent || "");
-  if (!phase || !groups.has(phase)) phase = selectedPhase || [...groups.keys()].sort((a, b) => a - b)[0];
+  let phase = selectedPhase || legacyPhaseByCard.get(card);
+  if (!phase || !groups.has(phase)) phase = [...groups.keys()].sort((a, b) => a - b)[0];
   legacyPhaseByCard.set(card, phase);
 
   let deck = card.querySelector(":scope > .tb-legacy-phase-deck");
@@ -208,7 +209,10 @@ function enhanceLegacyMapCard(card) {
 
   for (const button of deck.querySelectorAll("[data-tb-legacy-phase]")) {
     button.addEventListener("click", () => {
-      legacyPhaseByCard.set(card, Number(button.dataset.tbLegacyPhase || phase));
+      const nextPhase = Number(button.dataset.tbLegacyPhase || phase);
+      legacyPhaseByCard.set(card, nextPhase);
+      const first = groups.get(nextPhase)?.[0];
+      if (first) first.click();
       deck.dataset.signature = "";
       scheduleEnhance();
     });
