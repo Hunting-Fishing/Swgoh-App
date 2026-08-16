@@ -50,14 +50,18 @@ test("recommended-team loader resolves missing Base IDs from the static catalog 
   assert.deepEqual(recommendationBaseIds(recommendation, { byId, byName }), ["QIRA", "YOUNGHAN"]);
 });
 
-test("zoom workspace loader and CSS retire the side board without deleting it", () => {
+test("zoom workspace retires the side board and preserves the full source-aspect map beneath a floating inspector", () => {
   const index = fs.readFileSync(new URL("../public/index.html", import.meta.url), "utf8");
   const css = fs.readFileSync(new URL("../public/rote-planet-zoom-workspace.css", import.meta.url), "utf8");
+  const overlayCss = fs.readFileSync(new URL("../public/rote-planet-zoom-overlay.css", import.meta.url), "utf8");
   const js = fs.readFileSync(new URL("../public/rote-planet-zoom-workspace.js", import.meta.url), "utf8");
   assert.match(index, /rote-planet-zoom-workspace\.css/);
+  assert.match(index, /rote-planet-zoom-overlay\.css/);
   assert.match(index, /rote-planet-zoom-workspace\.js/);
   assert.match(css, /#roteMissionBoard\s*\{\s*display:\s*none\s*!important;/s);
   assert.match(css, /grid-template-columns:\s*minmax\(0,\s*1fr\)/);
+  assert.match(overlayCss, /\.rote-zoom-stage\s*\{[^}]*position:\s*absolute;[^}]*inset:\s*0;/s);
+  assert.match(overlayCss, /\.rote-zoom-inspector\s*\{[^}]*position:\s*absolute;[^}]*right:\s*0;[^}]*width:\s*clamp\(/s);
   assert.match(js, /REQUIRED UNITS/);
   assert.match(js, /EXACT ALLOWED SET/);
   assert.match(js, /YOUR LEGAL UNITS/);
