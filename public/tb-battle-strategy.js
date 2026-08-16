@@ -9,6 +9,7 @@ import { hothDsBattleStrategyForMission } from "./tb-battle-strategy-hoth-ds-dat
 import { hothDsFleetBattleStrategyForMission } from "./tb-battle-strategy-hoth-ds-fleet-data.js";
 import { hothLsBattleStrategyForMission } from "./tb-battle-strategy-hoth-ls-data.js";
 import { hothLsFleetBattleStrategyForMission } from "./tb-battle-strategy-hoth-ls-fleet-data.js";
+import { legacyPlanningBattleStrategyForMission } from "./tb-battle-strategy-legacy-planning-data.js";
 import { rotePhaseOneBattleStrategyForMission } from "./tb-battle-strategy-rote-p1-data.js";
 import { mandaloreBattleStrategyForMission } from "./tb-battle-strategy-mandalore-data.js";
 import { rotePriorityBattleStrategyForMission } from "./tb-battle-strategy-rote-priority-data.js";
@@ -108,7 +109,8 @@ function resolvedStrategy(missionId, mission = null, analysis = null) {
     || (allowDsGeoLegacyIds ? dsGeoFleetBattleStrategyForMission(missionId) : null)
     || (allowDsGeoLegacyIds ? dsGeoBattleStrategyForMission(missionId) : null)
     || (allowDsGeoLegacyIds ? watBattleStrategyForMission(missionId) : null)
-    || battleStrategyForMission(missionId);
+    || battleStrategyForMission(missionId)
+    || legacyPlanningBattleStrategyForMission(mission);
 }
 
 function resolvedSources(strategy) {
