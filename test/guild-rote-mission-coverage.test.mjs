@@ -14,6 +14,9 @@ import {
 const catalog = [
   { baseId: "JEDI_A", name: "Jedi A", unitType: "Character", alignment: "Light", factions: ["Jedi"], categories: ["Jedi"] },
   { baseId: "JEDI_B", name: "Jedi B", unitType: "Character", alignment: "Light", factions: ["Jedi"], categories: ["Jedi"] },
+  { baseId: "JEDI_C", name: "Jedi C", unitType: "Character", alignment: "Light", factions: ["Jedi"], categories: ["Jedi"] },
+  { baseId: "JEDI_D", name: "Jedi D", unitType: "Character", alignment: "Light", factions: ["Jedi"], categories: ["Jedi"] },
+  { baseId: "JEDI_E", name: "Jedi E", unitType: "Character", alignment: "Light", factions: ["Jedi"], categories: ["Jedi"] },
   { baseId: "SHIP_A", name: "Ship A", unitType: "Ship", alignment: "Light", factions: ["Rebel"], categories: ["Rebel"] },
 ];
 
@@ -23,12 +26,14 @@ const jediMission = {
   entry: {
     verified: true,
     unitType: "Character",
-    squadSize: 2,
+    squadSize: 5,
     relicMin: 5,
     requiredCategories: ["Jedi"],
     categoryMode: "all",
   },
 };
+
+const liveJedi = (baseId, relic = 5) => ({ baseId, name: catalog.find((unit) => unit.baseId === baseId)?.name || baseId, relic, gear: 13, stars: 7 });
 
 test("guild member enrichment restores static faction and unit-type data", () => {
   const member = enrichGuildRoteMember({
@@ -36,7 +41,7 @@ test("guild member enrichment restores static faction and unit-type data", () =>
     name: "Player One",
     rosterAvailable: true,
     units: [
-      { baseId: "JEDI_A", name: "Jedi A", relic: 5, gear: 13, stars: 7 },
+      liveJedi("JEDI_A"),
       { baseId: "SHIP_A", name: "Ship A", stars: 7 },
     ],
   }, catalog);
@@ -58,10 +63,7 @@ test("member mission readiness distinguishes exact-ready and near-ready rosters"
     name: "Ready",
     rosterAvailable: true,
     galacticPower: 10_000_000,
-    units: [
-      { baseId: "JEDI_A", name: "Jedi A", relic: 5, gear: 13, stars: 7 },
-      { baseId: "JEDI_B", name: "Jedi B", relic: 5, gear: 13, stars: 7 },
-    ],
+    units: ["JEDI_A", "JEDI_B", "JEDI_C", "JEDI_D", "JEDI_E"].map((baseId) => liveJedi(baseId)),
   }, catalog);
   const close = enrichGuildRoteMember({
     playerId: "close",
@@ -69,8 +71,11 @@ test("member mission readiness distinguishes exact-ready and near-ready rosters"
     rosterAvailable: true,
     galacticPower: 9_000_000,
     units: [
-      { baseId: "JEDI_A", name: "Jedi A", relic: 5, gear: 13, stars: 7 },
-      { baseId: "JEDI_B", name: "Jedi B", relic: 4, gear: 13, stars: 7 },
+      liveJedi("JEDI_A"),
+      liveJedi("JEDI_B"),
+      liveJedi("JEDI_C"),
+      liveJedi("JEDI_D"),
+      liveJedi("JEDI_E", 4),
     ],
   }, catalog);
 
@@ -80,6 +85,7 @@ test("member mission readiness distinguishes exact-ready and near-ready rosters"
   assert.equal(readyResult.poolShortfall, 0);
   assert.equal(closeResult.exactReady, false);
   assert.equal(closeResult.poolShortfall, 1);
+  assert.equal(closeResult.percent, 80);
   assert.equal(closeResult.close, true);
   assert.ok(compareGuildMissionCandidates(readyResult, closeResult) < 0);
 });
