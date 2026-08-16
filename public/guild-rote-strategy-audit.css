@@ -1,0 +1,185 @@
+.guild-strategy-audit {
+  margin-top: 14px;
+  padding: 0;
+  overflow: hidden;
+  border-color: rgba(126, 151, 186, .3);
+  background: linear-gradient(180deg, rgba(7, 18, 32, .98), rgba(5, 12, 24, .99));
+}
+
+.guild-strategy-audit > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  cursor: pointer;
+  list-style: none;
+}
+.guild-strategy-audit > summary::-webkit-details-marker { display: none; }
+.guild-strategy-audit > summary > div { display: grid; gap: 2px; }
+.guild-strategy-audit > summary span,
+.guild-strategy-summary span,
+.guild-strategy-state span,
+.guild-strategy-mission span,
+.guild-strategy-entry span,
+.guild-strategy-pack span {
+  color: #6ad8e8;
+  font-size: .49rem;
+  font-weight: 900;
+  letter-spacing: .08em;
+}
+.guild-strategy-audit > summary strong { color: #edf6ff; font-size: .76rem; }
+.guild-strategy-audit > summary small { color: #8398b4; font-size: .5rem; }
+.guild-strategy-audit > summary > b {
+  padding: 5px 8px;
+  border: 1px solid #304a67;
+  border-radius: 999px;
+  color: #9fb4cc;
+  font-size: .52rem;
+  white-space: nowrap;
+}
+.guild-strategy-audit[open] > summary { border-bottom: 1px solid #1d3149; }
+
+.guild-strategy-audit-body { display: grid; gap: 10px; padding: 12px 14px 14px; }
+.guild-strategy-boundary {
+  padding: 8px 10px;
+  border: 1px solid rgba(232, 190, 88, .28);
+  border-radius: 9px;
+  background: rgba(100, 75, 19, .12);
+  color: #c7b178;
+  font-size: .55rem;
+  line-height: 1.5;
+}
+.guild-strategy-boundary strong { color: #efd68f; }
+
+.guild-strategy-summary {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 6px;
+}
+.guild-strategy-summary article {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid #203650;
+  border-radius: 9px;
+  background: rgba(4, 13, 25, .72);
+}
+.guild-strategy-summary article.research { border-color: rgba(233, 191, 89, .38); }
+.guild-strategy-summary article.roster { border-color: rgba(239, 110, 120, .38); }
+.guild-strategy-summary strong { color: #edf6ff; font-size: .9rem; }
+.guild-strategy-summary small { color: #7e93af; font-size: .47rem; line-height: 1.35; }
+
+.guild-strategy-toolbar {
+  display: grid;
+  grid-template-columns: minmax(100px, .5fr) minmax(155px, .75fr) minmax(145px, .7fr) minmax(220px, 1.15fr) auto;
+  gap: 7px;
+  align-items: end;
+  padding: 9px;
+  border: 1px solid #1e334c;
+  border-radius: 10px;
+  background: rgba(5, 15, 29, .76);
+}
+.guild-strategy-toolbar label {
+  display: grid;
+  gap: 4px;
+  color: #66d7e8;
+  font-size: .49rem;
+  font-weight: 900;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+.guild-strategy-toolbar input,
+.guild-strategy-toolbar select {
+  width: 100%;
+  min-width: 0;
+  height: 34px;
+  padding: 0 8px;
+  border: 1px solid #29425f;
+  border-radius: 7px;
+  outline: none;
+  background: #071425;
+  color: #dce9f8;
+  font-size: .6rem;
+}
+.guild-strategy-toolbar input:focus,
+.guild-strategy-toolbar select:focus { border-color: #62d6e5; }
+.guild-strategy-toolbar > button,
+.guild-strategy-row > button {
+  height: 34px;
+  padding: 0 9px;
+  border: 1px solid #345b77;
+  border-radius: 8px;
+  background: #092036;
+  color: #daf6fa;
+  font-size: .5rem;
+  font-weight: 900;
+  white-space: nowrap;
+}
+.guild-strategy-toolbar > button:hover,
+.guild-strategy-row > button:hover { border-color: #67d9e8; }
+
+.guild-strategy-list { display: grid; gap: 6px; }
+.guild-strategy-row {
+  display: grid;
+  grid-template-columns: 116px minmax(205px, 1.15fr) minmax(120px, .55fr) minmax(210px, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 8px;
+  border: 1px solid #223952;
+  border-radius: 9px;
+  background: rgba(5, 15, 28, .84);
+}
+.guild-strategy-row.tone-research { border-color: rgba(233, 191, 89, .42); }
+.guild-strategy-row.tone-roster { border-color: rgba(239, 110, 120, .44); }
+.guild-strategy-row.tone-partial { border-color: rgba(129, 151, 184, .34); }
+.guild-strategy-row.tone-evidence { border-color: rgba(103, 237, 182, .3); }
+.guild-strategy-state,
+.guild-strategy-mission,
+.guild-strategy-entry,
+.guild-strategy-pack { display: grid; gap: 2px; min-width: 0; }
+.guild-strategy-state strong { color: #eaf4ff; font-size: .72rem; }
+.guild-strategy-state small,
+.guild-strategy-mission small,
+.guild-strategy-entry small,
+.guild-strategy-pack small { color: #7f94af; font-size: .47rem; line-height: 1.35; }
+.guild-strategy-mission strong,
+.guild-strategy-entry strong,
+.guild-strategy-pack strong {
+  overflow: hidden;
+  color: #eaf3fd;
+  font-size: .61rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.guild-strategy-mission > span { color: #62d4e5; }
+
+.guild-strategy-loading,
+.guild-strategy-empty {
+  padding: 16px;
+  border: 1px dashed #2a4663;
+  border-radius: 9px;
+  color: #8ba0ba;
+  font-size: .61rem;
+  text-align: center;
+}
+.guild-strategy-loading.danger { border-color: rgba(239, 110, 120, .4); color: #efaaa8; }
+
+@media (max-width: 1180px) {
+  .guild-strategy-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .guild-strategy-toolbar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .guild-strategy-toolbar .search { grid-column: 1 / -1; }
+  .guild-strategy-row { grid-template-columns: 105px minmax(190px, 1fr) minmax(120px, .6fr) auto; }
+  .guild-strategy-pack { grid-column: 2 / -1; }
+}
+
+@media (max-width: 720px) {
+  .guild-strategy-audit > summary { align-items: flex-start; flex-direction: column; }
+  .guild-strategy-summary,
+  .guild-strategy-toolbar { grid-template-columns: 1fr; }
+  .guild-strategy-toolbar .search { grid-column: auto; }
+  .guild-strategy-row { grid-template-columns: 1fr; }
+  .guild-strategy-pack { grid-column: auto; }
+  .guild-strategy-row > button { width: 100%; }
+}
