@@ -24,8 +24,29 @@ const significantTokens = (value) => normalizeText(value)
 
 const normalizedNodeType = (type) => type === "reva" ? "special" : String(type || "combat");
 
+function withRoteNeutralAlignment(mission = {}) {
+  if (String(mission?.entry?.unitType || "Character").toLowerCase() !== "character") return mission;
+  const entry = mission.entry || {};
+  let allowedAlignments = Array.isArray(entry.allowedAlignments) ? [...entry.allowedAlignments] : [];
+  if (allowedAlignments.length) {
+    if (!allowedAlignments.some((value) => String(value).toLowerCase() === "neutral")) allowedAlignments.push("Neutral");
+  } else if (entry.alignment && entry.alignment !== "Mixed") {
+    allowedAlignments = [String(entry.alignment), "Neutral"];
+  } else {
+    allowedAlignments = ["Light", "Dark", "Neutral"];
+  }
+  return {
+    ...mission,
+    entry: {
+      ...entry,
+      alignment: null,
+      allowedAlignments,
+    },
+  };
+}
+
 export function normalizedRoteMissionsForPlanet(planetId) {
-  return normalizeRoteMissions(roteMissionsForPlanet(planetId));
+  return normalizeRoteMissions(roteMissionsForPlanet(planetId)).map(withRoteNeutralAlignment);
 }
 
 function missionSearchText(mission) {
