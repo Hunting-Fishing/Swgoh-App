@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { missionSlotModel, missionSlotSummary } from "../public/tb-mission-slot-model.js";
+import { effectiveAllowedBaseIds, rosterUnitMeetsEntry } from "../public/tb-mission-intelligence.js";
 import { ROTE_MISSIONS_BY_PLANET } from "../public/rote-mission-data.js";
 import { GEO_LS_TERRITORIES } from "../public/geo-ls-data.js";
 
@@ -41,6 +42,24 @@ assert.equal(fixedModel.flexSlots, 0);
 assert.equal(fixedModel.fixedSquad, true);
 assert.deepEqual(fixedModel.flexCandidates, []);
 assert.equal(missionSlotSummary(gasAhsoka), "2 slots · 2 required · fixed squad");
+
+const implicitFixedMission = {
+  entry: {
+    verified: true,
+    unitType: "Character",
+    squadSize: 2,
+    allowedBaseIds: [],
+    requiredBaseIds: [],
+    requiredCategories: [],
+    mandatoryMembers: [
+      { name: "Required A", baseId: "REQ_A" },
+      { name: "Required B", baseId: "REQ_B" },
+    ],
+  },
+};
+assert.deepEqual(effectiveAllowedBaseIds(implicitFixedMission.entry), ["REQ_A", "REQ_B"]);
+assert.equal(rosterUnitMeetsEntry({ baseId: "REQ_A", unitType: "Character" }, implicitFixedMission), true);
+assert.equal(rosterUnitMeetsEntry({ baseId: "UNRELATED", unitType: "Character" }, implicitFixedMission), false);
 
 const bracca = ROTE_MISSIONS_BY_PLANET.bracca.find((mission) => mission.id === "bracca-zeffo-unlock");
 assert.ok(bracca, "Bracca Zeffo unlock mission should exist");
