@@ -2,6 +2,27 @@ import { DS_GEO_TERRITORIES as RAW_DS_GEO_TERRITORIES } from "./ds-geo-data.js";
 
 const member = (name, baseId, extra = {}) => ({ name, baseId, ...extra });
 
+const P1_NUTE_DROIDS = Object.freeze({
+  id: "dsgeo-p1-nute-droids",
+  name: "Nute + B1 + B2 + Droideka + MagnaGuard",
+  confidence: "community",
+  verifiedLegal: true,
+  sourceIds: ["swgohgg", "swgoh-wiki", "swgohtv-p1-nute"],
+  members: [
+    member("Nute Gunray", "NUTEGUNRAY"),
+    member("B1 Battle Droid", "B1BATTLEDROIDV2"),
+    member("B2 Super Battle Droid", "B2SUPERBATTLEDROID"),
+    member("Droideka", "DROIDEKA"),
+    member("IG-100 MagnaGuard", "MAGNAGUARD"),
+  ],
+  strategy: [
+    "Use Nute lead and establish Extortion/control before committing the droid burst cycle.",
+    "Preserve B1's sustain engine and use B2 to clear disruptive enemy buffs/taunts.",
+    "MagnaGuard is the tested fifth slot for this composition, not a hard mission-entry portrait gate.",
+  ],
+  lastVerified: "2026-08-16",
+});
+
 function withMandatory(entry = {}, mandatoryMembers = [], notes = "") {
   return {
     ...entry,
@@ -30,6 +51,7 @@ export function normalizeDsGeoMission(mission = {}) {
       ],
       "Current unit mission listings identify Nute Gunray, B1 Battle Droid, B2 Super Battle Droid and Droideka in this Phase 1 Canyons special mission. The fifth slot remains a legal Separatist flex slot here; MagnaGuard is a tested recommendation, not asserted as a hard mandatory portrait gate.",
     );
+    next.recommendations = [P1_NUTE_DROIDS, ...next.recommendations.filter((row) => row.id !== P1_NUTE_DROIDS.id)];
   }
 
   if (next.id === "s2") {
@@ -74,6 +96,7 @@ export function normalizeDsGeoMission(mission = {}) {
       [member("Wat Tambor", "WATTAMBOR", { bypassPool: false })],
       "Phase 4 Rear Flank special mission. Wat Tambor is required; all selected Separatists must meet the 7-star, 16,500+ power gate.",
     );
+    next.recommendations = [...next.recommendations].sort((a, b) => Number(b.id === "dooku-wat-seps") - Number(a.id === "dooku-wat-seps"));
   }
 
   return next;
