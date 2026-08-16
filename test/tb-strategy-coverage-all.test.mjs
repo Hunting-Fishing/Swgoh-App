@@ -34,13 +34,27 @@ test("all-TB audit consumes corrected DS Geo mission contracts", () => {
   assert.ok(s4.entry.mandatoryMembers.some((row) => row.baseId === "WATTAMBOR"));
 });
 
-test("recommendation-only legacy missions remain partial instead of being promoted to verified strategy", () => {
+test("ordinary legacy missions now resolve to explicit partial planning strategies", () => {
   const mission = findMission(GEO_LS_TERRITORIES, "p1-mid-cm1");
   const row = territoryBattleStrategyCoverage(mission);
   assert.equal(row.coverage, "partial");
-  assert.equal(row.planningAvailable, true);
+  assert.equal(row.strategyAvailable, true);
+  assert.match(row.strategyId, /^legacy-plan:geo-republic:/);
   assert.ok(row.recommendationCount > 0);
-  assert.match(row.reason, /no sourced mission-specific battle stages/i);
+  assert.match(`${row.strategyStatus} ${row.confidence}`, /partial/i);
+  assert.match(row.reason, /explicitly marks the pack partial or unverified/i);
+});
+
+test("legacy TB matrix has no unresolved missing strategy records", () => {
+  const report = allTerritoryBattleStrategyCoverageReport();
+  for (const tbId of [TB_COVERAGE_IDS.GEO_DS, TB_COVERAGE_IDS.GEO_LS, TB_COVERAGE_IDS.HOTH_DS, TB_COVERAGE_IDS.HOTH_LS]) {
+    assert.equal(report.byTb[tbId].counts.missing, 0, `${tbId} should have zero unresolved mission strategy records`);
+    assert.equal(
+      report.byTb[tbId].counts.covered + report.byTb[tbId].counts.partial,
+      report.byTb[tbId].counts.total,
+      `${tbId} should be completely classified as covered or partial`,
+    );
+  }
 });
 
 test("existing KAM and Wat battle packs are surfaced by the legacy audit", () => {
@@ -106,6 +120,7 @@ test("all-TB coverage modules parse", () => {
   for (const path of [
     new URL("../public/ds-geo-mission-overrides.js", import.meta.url),
     new URL("../public/tb-strategy-coverage-all.js", import.meta.url),
+    new URL("../public/tb-battle-strategy-legacy-planning-data.js", import.meta.url),
     new URL("../public/tb-battle-strategy-lsgeo-data.js", import.meta.url),
     new URL("../public/tb-battle-strategy-lsgeo-fleet-data.js", import.meta.url),
     new URL("../public/tb-battle-strategy-hoth-ds-data.js", import.meta.url),
