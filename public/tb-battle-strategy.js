@@ -74,7 +74,10 @@ function priorityRank(value) {
   return order[normalized(value)] ?? 5;
 }
 
-function resolvedStrategy(missionId) {
+function resolvedStrategy(missionId, mission = null, analysis = null) {
+  const tbId = String(mission?.tbId || analysis?.tbId || "");
+  const allowDsGeoLegacyIds = !tbId || tbId === "geo-separatist";
+
   return mandaloreBattleStrategyForMission(missionId)
     || rotePriorityBattleStrategyForMission(missionId)
     || roteFactionBattleStrategyForMission(missionId)
@@ -86,8 +89,8 @@ function resolvedStrategy(missionId) {
     || rotePhaseOneBattleStrategyForMission(missionId)
     || roteFleetBattleStrategyForMission(missionId)
     || roteGenericBattleStrategyForMission(missionId)
-    || dsGeoBattleStrategyForMission(missionId)
-    || watBattleStrategyForMission(missionId)
+    || (allowDsGeoLegacyIds ? dsGeoBattleStrategyForMission(missionId) : null)
+    || (allowDsGeoLegacyIds ? watBattleStrategyForMission(missionId) : null)
     || battleStrategyForMission(missionId);
 }
 
@@ -96,7 +99,7 @@ function resolvedSources(strategy) {
 }
 
 export function evaluateBattleStrategy(analysis, mission = null) {
-  const strategy = resolvedStrategy(analysis?.missionId || mission?.id);
+  const strategy = resolvedStrategy(analysis?.missionId || mission?.id, mission, analysis);
   if (!strategy) {
     return {
       available: false,
