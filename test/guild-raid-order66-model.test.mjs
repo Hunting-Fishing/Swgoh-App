@@ -72,8 +72,9 @@ test("five-character pools remain arithmetic roster depth only", () => {
   const expandedCatalog = [...catalog,
     { baseId: "P2", name: "Pirate Two", unitType: "Character", factions: ["Pirate"] },
     { baseId: "P3", name: "Pirate Three", unitType: "Character", factions: ["Pirate"] },
+    { baseId: "P4", name: "Pirate Four", unitType: "Character", factions: ["Pirate"] },
   ];
-  const expandedGuild = { members: [{ ...guild.members[0], units: [...guild.members[0].units, owned("P2", 7), owned("P3", 7)] }] };
+  const expandedGuild = { members: [{ ...guild.members[0], units: [...guild.members[0].units, owned("P2", 7), owned("P3", 7), owned("P4", 7)] }] };
   const model = buildGuildOrder66Capability(expandedGuild, expandedCatalog);
   assert.equal(model.members[0].bands.r7, 5);
   assert.equal(model.members[0].fiveCharacterPools.r7, 1);
