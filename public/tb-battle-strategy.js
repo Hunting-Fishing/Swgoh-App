@@ -3,6 +3,7 @@ import { battleStrategyForMission, battleStrategySources } from "./tb-battle-str
 import { watBattleStrategyForMission } from "./tb-battle-strategy-wat-data.js";
 import { dsGeoBattleStrategyForMission } from "./tb-battle-strategy-dsgeo-data.js";
 import { dsGeoFleetBattleStrategyForMission } from "./tb-battle-strategy-dsgeo-fleet-data.js";
+import { lsGeoBattleStrategyForMission } from "./tb-battle-strategy-lsgeo-data.js";
 import { rotePhaseOneBattleStrategyForMission } from "./tb-battle-strategy-rote-p1-data.js";
 import { mandaloreBattleStrategyForMission } from "./tb-battle-strategy-mandalore-data.js";
 import { rotePriorityBattleStrategyForMission } from "./tb-battle-strategy-rote-priority-data.js";
@@ -78,6 +79,7 @@ function priorityRank(value) {
 function resolvedStrategy(missionId, mission = null, analysis = null) {
   const tbId = String(mission?.tbId || analysis?.tbId || "");
   const allowDsGeoLegacyIds = !tbId || tbId === "geo-separatist";
+  const allowLsGeoLegacyIds = !tbId || tbId === "geo-republic";
 
   return mandaloreBattleStrategyForMission(missionId)
     || rotePriorityBattleStrategyForMission(missionId)
@@ -90,6 +92,7 @@ function resolvedStrategy(missionId, mission = null, analysis = null) {
     || rotePhaseOneBattleStrategyForMission(missionId)
     || roteFleetBattleStrategyForMission(missionId)
     || roteGenericBattleStrategyForMission(missionId)
+    || (allowLsGeoLegacyIds ? lsGeoBattleStrategyForMission(missionId) : null)
     || (allowDsGeoLegacyIds ? dsGeoFleetBattleStrategyForMission(missionId) : null)
     || (allowDsGeoLegacyIds ? dsGeoBattleStrategyForMission(missionId) : null)
     || (allowDsGeoLegacyIds ? watBattleStrategyForMission(missionId) : null)
