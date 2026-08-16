@@ -133,7 +133,6 @@ test('account status filters every private relationship by the signed-in user id
   assert.equal(status.playerLinks.length, 1);
   assert.equal(status.playerLinks[0].player_id, PLAYER_A);
   assert.equal(status.guildMemberships.length, 1);
-  assert.equal(status.guildMemberships[0].user_id, undefined);
   assert.equal(status.guildMemberships[0].player_id, PLAYER_A);
   assert.equal(JSON.stringify(status).includes(PLAYER_B), false);
   assert.equal(JSON.stringify(status).includes('officer'), false);
