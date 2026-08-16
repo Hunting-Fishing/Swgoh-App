@@ -29,7 +29,9 @@ if (!config.commandRegistrationConfigured) {
       type: 1,
       name: "tb",
       description: "SWGOH Territory Battle guild command",
-      default_member_permissions: "32",
+      // Picker visibility stays broad in the pilot so a configured officer role can invoke the command.
+      // Signed server-side authorization remains authoritative; role-specific Discord command overwrites
+      // require a user OAuth Bearer token and are a later integration layer.
       options: [
         {
           type: 1,
