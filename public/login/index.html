@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#050914">
+  <title>Sign In · SWGOH Command Center</title>
+  <link rel="stylesheet" href="/auth.css?v=20260817a">
+</head>
+<body class="auth-body" data-auth-mode="login">
+  <main class="auth-shell">
+    <section class="auth-brand" aria-labelledby="brand-title">
+      <div class="auth-eyebrow">Secure Command Access</div>
+      <h1 id="brand-title">SWGOH <span>Command Center</span></h1>
+      <p class="auth-brand-copy">One command layer for your roster, Guild intelligence, Territory Battles, Territory Wars, raids and long-term progression analytics.</p>
+      <div class="auth-capabilities" aria-label="Command Center capabilities">
+        <span>Live Roster</span><span>Guild Analytics</span><span>ROTE Operations</span><span>TW Intelligence</span><span>Raid Command</span>
+      </div>
+      <div class="auth-security-note">
+        <div class="auth-security-icon">⌁</div>
+        <div>Your saved account, Guild workspace and officer data are isolated by authenticated tenant access. Session credentials remain in secure HttpOnly cookies and are not exposed to page JavaScript.</div>
+      </div>
+    </section>
+
+    <section class="auth-panel" aria-labelledby="auth-title">
+      <header class="auth-panel-header">
+        <p class="auth-panel-kicker">Identity Verification</p>
+        <h2 id="auth-title">Sign in</h2>
+        <p class="auth-panel-subtitle">Access your Command Center account and authorized Guild workspaces.</p>
+      </header>
+
+      <div class="auth-session-card" data-session-card>
+        <strong>Command session already active</strong>
+        <p>You are signed in as <span data-session-email></span>.</p>
+        <div class="auth-session-actions">
+          <a href="/">Continue to Command Center</a>
+          <button type="button" data-signout>Sign out</button>
+        </div>
+      </div>
+
+      <form class="auth-form" data-auth-form autocomplete="on">
+        <div class="auth-message" data-auth-message role="status" aria-live="polite"></div>
+        <div class="auth-field">
+          <label for="email">Email</label>
+          <input id="email" name="email" type="email" autocomplete="email" inputmode="email" maxlength="320" placeholder="commander@example.com" required>
+        </div>
+        <div class="auth-field auth-password">
+          <label for="password">Password</label>
+          <div class="auth-input-wrap">
+            <input id="password" name="password" type="password" autocomplete="current-password" maxlength="128" required>
+            <button class="auth-show-password" type="button" data-toggle-password="password" aria-label="Show password">Show</button>
+          </div>
+        </div>
+        <button class="auth-submit" type="submit" data-auth-submit>Enter Command Center</button>
+      </form>
+
+      <p class="auth-switch">New commander? <a href="/signup">Create an account</a></p>
+      <div class="auth-footer-row">
+        <a class="auth-home-link" href="/">← Public Command Center</a>
+        <span>Account data is tenant-scoped.</span>
+      </div>
+    </section>
+  </main>
+  <script type="module" src="/auth-page.js?v=20260817a"></script>
+</body>
+</html>
