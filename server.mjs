@@ -9,6 +9,8 @@ import { resolveGuildPlanningOverlay } from "./guild-planning-overlay.mjs";
 import { guildRosterService } from "./guild-roster-service.mjs";
 import { LiveRosterCache } from "./live-roster-cache.mjs";
 import { aggregateRoteOperations } from "./rote-operations.mjs";
+import { supabaseAuthSession } from "./supabase-auth-session.mjs";
+import { supabaseCoreStore } from "./supabase-core-store.mjs";
 
 const port = positiveNumber(process.env.PORT, 8080);
 const gatewayUrl = trimUrl(process.env.SWGOH_GATEWAY_URL);
@@ -200,6 +202,8 @@ async function handleApi(request, response, url) {
         status: gateway?.status === "configured" ? "ready" : "needs-configuration",
         liveOnly: true,
         gateway,
+        auth: supabaseAuthSession.status(),
+        persistence: supabaseCoreStore.status(),
         discordTb: discordPublicStatus(),
         rosterCache: {
           mode: "process-local-coalesced-swr-lru",
@@ -227,6 +231,8 @@ async function handleApi(request, response, url) {
       writeJson(response, error?.status || 502, {
         status: "unavailable",
         liveOnly: true,
+        auth: supabaseAuthSession.status(),
+        persistence: supabaseCoreStore.status(),
         discordTb: discordPublicStatus(),
         error: error?.name === "AbortError" ? "The live gateway timed out." : error?.message || "The live gateway is unavailable.",
       });
@@ -366,6 +372,11 @@ async function serveStatic(response, pathname) {
 
 const server = http.createServer(async (request, response) => {
   const url = new URL(request.url || "/", "http://localhost");
+
+  if (url.pathname.startsWith("/api/auth/")) {
+    const handled = await supabaseAuthSession.handle(request, response, url);
+    if (handled) return;
+  }
 
   if (request.method === "POST" && url.pathname === "/api/discord/interactions") {
     await handleDiscordInteractionRequest(request, response);
