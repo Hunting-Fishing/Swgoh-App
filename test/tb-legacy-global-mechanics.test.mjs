@@ -43,10 +43,12 @@ test("LS Geo fleet context keeps Formations conditional on platoon state", () =>
 });
 
 test("Imperial Hoth partial planning includes Imperial Might and Malice", () => {
-  const row = legacyPlanningBattleStrategyForMission(mission("hoth-imperial", "p1-flank-cm1"));
+  const sample = mission("hoth-imperial", "p1-flank-cm1");
+  const context = legacyTbGlobalMechanicsForMission(sample);
+  assert.ok(context.mechanics.some((row) => row.name === "Imperial Might" && /Lifesteal/i.test(row.rule)));
+  const row = legacyPlanningBattleStrategyForMission(sample);
   assert.match(row.summary, /Imperial Might/i);
   assert.match(row.summary, /Malice/i);
-  assert.match(JSON.stringify(row.stages), /Lifesteal/i);
   assert.match(JSON.stringify(row.stages), /opening buff dispel/i);
 });
 
