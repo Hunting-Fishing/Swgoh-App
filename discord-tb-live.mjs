@@ -27,6 +27,16 @@ function normalizedSnowflake(value) {
   return /^\d{16,22}$/.test(text) ? text : "";
 }
 
+function normalizedBaseId(value) {
+  const text = String(value || "").trim().toUpperCase();
+  return /^[A-Z0-9_:-]{2,80}$/.test(text) ? text : "";
+}
+
+function normalizedPreference(value) {
+  const text = String(value || "").trim().toLowerCase();
+  return text === "give" || text === "keep" ? text : "";
+}
+
 export async function resolveDiscordGuildAllyCode({ allyCode, interaction = {}, stateStore = discordStateStore } = {}) {
   const fallback = normalizedAllyCode(allyCode);
   const discordGuildId = normalizedSnowflake(interaction?.guild_id);
@@ -63,6 +73,41 @@ export async function resolveDiscordGuildAllyCode({ allyCode, interaction = {}, 
   }
   if (!fallback) throw new Error("This Discord server has no durable SWGOH guild binding and no fallback Ally Code is configured.");
   return Object.freeze({ allyCode: fallback, source: "explicit-fallback", discordGuildId });
+}
+
+async function readDiscordPlanningControls(binding, stateStore) {
+  const discordGuildId = normalizedSnowflake(binding?.discordGuildId);
+  const canRead = Boolean(
+    discordGuildId
+    && typeof stateStore?.status === "function"
+    && typeof stateStore?.readGuild === "function",
+  );
+  if (!canRead) return Object.freeze({ preferences: Object.freeze([]) });
+
+  const status = stateStore.status();
+  if (!status?.enabled || !status?.durable) return Object.freeze({ preferences: Object.freeze([]) });
+
+  let guild;
+  try {
+    guild = await stateStore.readGuild(discordGuildId);
+  } catch (error) {
+    const wrapped = new Error("Durable Discord planning controls could not be read; refusing to build a plan without persisted member controls.");
+    wrapped.code = "DISCORD_PLANNING_CONTROLS_READ_FAILED";
+    wrapped.cause = error;
+    throw wrapped;
+  }
+
+  const preferences = Object.values(guild?.memberPreferences && typeof guild.memberPreferences === "object" ? guild.memberPreferences : {})
+    .map((row) => ({
+      memberId: String(row?.memberId || row?.playerId || row?.swgohAllyCode || "").trim(),
+      baseId: normalizedBaseId(row?.baseId),
+      preference: normalizedPreference(row?.preference),
+    }))
+    .filter((row) => row.memberId && row.baseId && row.preference);
+
+  return Object.freeze({
+    preferences: Object.freeze(preferences.map((row) => Object.freeze(row))),
+  });
 }
 
 async function fetchJson(url, options = {}, timeoutMs = 35_000, fetchImpl = fetch) {
@@ -152,7 +197,7 @@ function normalizeGuildResult(result) {
   });
 }
 
-async function buildPlanningSnapshot({ allyCode, redundancyTarget, guildBindingSource }, config, fetchImpl, sharedGuildService) {
+async function buildPlanningSnapshot({ allyCode, redundancyTarget, guildBindingSource, preferences = [] }, config, fetchImpl, sharedGuildService) {
   const [guildCacheResult, operations, catalog] = await Promise.all([
     sharedGuildService.getGuildRoster(allyCode, { staleWhileRevalidate: false }),
     loadOperations(config, fetchImpl),
@@ -162,12 +207,14 @@ async function buildPlanningSnapshot({ allyCode, redundancyTarget, guildBindingS
   const safety = buildGuildRoteOperationSafety(guildResult.guild, catalog, { redundancyTarget });
   const plan = planGuildRoteSafeAssignments(guildResult.guild, operations, {
     protections: safety.protections,
+    preferences,
   });
   return Object.freeze({
     guild: guildResult.guild,
     cache: guildResult.cache,
     guildAgeMs: guildResult.ageMs,
     guildBindingSource,
+    planningControls: Object.freeze({ preferenceCount: preferences.length }),
     operations,
     safety,
     plan,
@@ -188,6 +235,12 @@ export function createDiscordTbLiveServices(env = process.env, options = {}) {
     });
   }
 
+  async function resolvePlanningRequest(args = {}) {
+    const binding = await resolveRequestGuild(args);
+    const controls = await readDiscordPlanningControls(binding, stateStore);
+    return { binding, controls };
+  }
+
   return Object.freeze({
     fetch: fetchImpl,
     async syncGuild(args = {}) {
@@ -196,19 +249,21 @@ export function createDiscordTbLiveServices(env = process.env, options = {}) {
       return Object.freeze({ ...result, guildBindingSource: binding.source });
     },
     async buildPlan(args = {}) {
-      const binding = await resolveRequestGuild(args);
+      const { binding, controls } = await resolvePlanningRequest(args);
       return buildPlanningSnapshot({
         allyCode: binding.allyCode,
         redundancyTarget: args.redundancyTarget ?? 2,
         guildBindingSource: binding.source,
+        preferences: controls.preferences,
       }, config, fetchImpl, sharedGuildService);
     },
     async buildPhaseCommand(args = {}) {
-      const binding = await resolveRequestGuild(args);
+      const { binding, controls } = await resolvePlanningRequest(args);
       const snapshot = await buildPlanningSnapshot({
         allyCode: binding.allyCode,
         redundancyTarget: args.redundancyTarget ?? 2,
         guildBindingSource: binding.source,
+        preferences: controls.preferences,
       }, config, fetchImpl, sharedGuildService);
       const phaseCommand = buildGuildTbPhaseCommand({
         guildSnapshot: snapshot.guild,
