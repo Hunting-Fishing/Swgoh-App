@@ -51,6 +51,24 @@ async function loadOperations() {
   return state.operations;
 }
 
+async function loadPlanningOverlay(guildCode) {
+  try {
+    const overlay = await fetchJson(`/api/guild/by-player/${guildCode}/planning-overlay`);
+    return overlay && typeof overlay === "object" ? overlay : { bound: false, source: "none", reason: "invalid-overlay" };
+  } catch (error) {
+    return {
+      bound: false,
+      durable: false,
+      source: "none",
+      reason: "overlay-request-failed",
+      error: String(error?.message || "Planning overlay unavailable"),
+      preferences: [],
+      ignoredMembers: [],
+      unavailableMembers: [],
+    };
+  }
+}
+
 function redundancyTarget() {
   let value = Number(window.__swgohGuildRoteRedundancyTarget || 0);
   if (!Number.isFinite(value) || value <= 0) {
@@ -63,15 +81,27 @@ function readJson(key) {
   try { return JSON.parse(localStorage.getItem(key) || "{}"); } catch { return {}; }
 }
 
-function planningControls(guildId) {
-  if (!guildId) return { locks: [], reservations: [], preferences: [], ignoredMembers: [] };
+function planningControls(guildId, durableOverlay = {}) {
+  if (!guildId) return { locks: [], reservations: [], preferences: [], ignoredMembers: [], planningOverlay: durableOverlay };
   const officer = readJson(`swgoh-roster-command:guild-rote-officer:${guildId}`);
   const safety = readJson(`swgoh-roster-command:guild-rote-safety:${guildId}`);
+  const preferenceMap = new Map();
+  for (const row of Array.isArray(safety?.preferences) ? safety.preferences : []) {
+    if (!row?.memberId || !row?.baseId) continue;
+    preferenceMap.set(`${String(row.memberId)}|${String(row.baseId).toUpperCase()}`, row);
+  }
+  for (const row of Array.isArray(durableOverlay?.preferences) ? durableOverlay.preferences : []) {
+    if (!row?.memberId || !row?.baseId) continue;
+    preferenceMap.set(`${String(row.memberId)}|${String(row.baseId).toUpperCase()}`, row);
+  }
+  const ignored = new Set((Array.isArray(safety?.ignoredMembers) ? safety.ignoredMembers : []).map(String));
+  for (const memberId of Array.isArray(durableOverlay?.ignoredMembers) ? durableOverlay.ignoredMembers : []) ignored.add(String(memberId));
   return {
     locks: Array.isArray(officer?.locks) ? officer.locks : [],
     reservations: Array.isArray(officer?.reservations) ? officer.reservations : [],
-    preferences: Array.isArray(safety?.preferences) ? safety.preferences : [],
-    ignoredMembers: Array.isArray(safety?.ignoredMembers) ? safety.ignoredMembers : [],
+    preferences: [...preferenceMap.values()],
+    ignoredMembers: [...ignored],
+    planningOverlay: durableOverlay,
   };
 }
 
@@ -134,14 +164,15 @@ async function renderMemberProfile(force = false) {
   target.dataset.guildMemberCommand = "true";
   target.innerHTML = '<section class="guild-page-card"><div class="workspace-note">Building cross-mode guild member profile…</div></section>';
   try {
-    const [guildBody, catalog, operations, modelModule, pageModule] = await Promise.all([
+    const [guildBody, catalog, operations, durableOverlay, modelModule, pageModule] = await Promise.all([
       fetchJson(`/api/guild/by-player/${guildCode}/roster`),
       loadCatalog(),
       loadOperations(),
+      loadPlanningOverlay(guildCode),
       import("./guild-member-command-model.js"),
       import("./guild-member-command-page.js"),
     ]);
-    const controls = planningControls(String(guildBody?.guild?.id || ""));
+    const controls = planningControls(String(guildBody?.guild?.id || ""), durableOverlay);
     const profile = modelModule.buildGuildMemberCommandProfile({
       guildSnapshot: guildBody,
       catalog,
