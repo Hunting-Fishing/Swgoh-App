@@ -39,35 +39,11 @@ export const ORDER66_RAID = Object.freeze({
 });
 
 const FALLBACK_EXACT_NAMES = Object.freeze([
-  "Omega (Fugitive)",
-  "Batcher",
-  "Hunter (Mercenary)",
-  "Wrecker (Mercenary)",
-  "Crosshair (Scarred)",
-  "CC-1119 ‘Appo’",
-  "CC-1119 \"Appo\"",
-  "CX-2",
-  "Disguised Clone Trooper",
-  "RC-1262 ‘Scorch’",
-  "RC-1262 \"Scorch\"",
-  "Grand Moff Tarkin",
-  "Jedi Master Mace Windu",
-  "Jocasta Nu",
-  "Depa Bilaba",
-  "Depa Billaba",
-  "Jedi Temple Guard",
-  "Aayla Secura",
-  "Barriss Offee",
-  "Eeth Koth",
-  "Ima-Gun Di",
-  "Jedi Consular",
-  "Jedi Knight Guardian",
-  "Kelleran Beq",
-  "Kit Fisto",
-  "Luminara Unduli",
-  "Plo Koon",
-  "Qui-Gon Jinn",
-  "Shaak Ti",
+  "Omega (Fugitive)", "Batcher", "Hunter (Mercenary)", "Wrecker (Mercenary)", "Crosshair (Scarred)",
+  "CC-1119 ‘Appo’", "CC-1119 \"Appo\"", "CX-2", "Disguised Clone Trooper", "RC-1262 ‘Scorch’", "RC-1262 \"Scorch\"",
+  "Grand Moff Tarkin", "Jedi Master Mace Windu", "Jocasta Nu", "Depa Bilaba", "Depa Billaba", "Jedi Temple Guard",
+  "Aayla Secura", "Barriss Offee", "Eeth Koth", "Ima-Gun Di", "Jedi Consular", "Jedi Knight Guardian", "Kelleran Beq",
+  "Kit Fisto", "Luminara Unduli", "Plo Koon", "Qui-Gon Jinn", "Shaak Ti",
 ]);
 
 const FALLBACK_NAME_SET = new Set(FALLBACK_EXACT_NAMES.map(normalize));
@@ -76,13 +52,14 @@ const JEDI_VANGUARD_HINTS = new Set(["jedi vanguard"]);
 const DARK_CLONE_HINTS = new Set(["dark side clone trooper", "dark side clone troopers"]);
 
 function unitLabels(unit = {}) {
-  const values = [
-    ...asArray(unit.factions),
-    ...asArray(unit.categories),
-    ...asArray(unit.categoryIds),
-    ...asArray(unit.tags),
-  ];
-  return values.map((value) => normalize(typeof value === "string" ? value : value?.name || value?.id || value?.categoryId)).filter(Boolean);
+  return [...asArray(unit.factions), ...asArray(unit.categories), ...asArray(unit.categoryIds), ...asArray(unit.tags)]
+    .map((value) => normalize(typeof value === "string" ? value : value?.name || value?.id || value?.categoryId))
+    .filter(Boolean);
+}
+
+function unitType(unit = {}) {
+  const direct = normalize(unit?.unitType || unit?.combatType || unit?.type);
+  return direct === "ship" || direct === "2" ? "Ship" : "Character";
 }
 
 function hasAnyLabel(labels, set) {
@@ -103,14 +80,10 @@ export function order66EligibilityEvidence(unit = {}) {
 
 export function resolveOrder66EligibleUnits(catalog = []) {
   const rows = asArray(catalog)
-    .filter((unit) => String(unit?.unitType || "Character") !== "Ship")
+    .filter((unit) => unitType(unit) === "Character")
     .map((unit) => ({ unit, evidence: order66EligibilityEvidence(unit) }))
     .filter((row) => row.evidence.allowed)
-    .map((row) => Object.freeze({
-      ...row.unit,
-      eligibilitySource: row.evidence.source,
-      raidGroup: row.evidence.group,
-    }))
+    .map((row) => Object.freeze({ ...row.unit, eligibilitySource: row.evidence.source, raidGroup: row.evidence.group }))
     .sort((a, b) => String(a.name || a.baseId).localeCompare(String(b.name || b.baseId)));
   const tagCount = rows.filter((row) => row.eligibilitySource === "catalog-tag").length;
   return Object.freeze({
