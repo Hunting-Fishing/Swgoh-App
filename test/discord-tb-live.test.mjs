@@ -10,7 +10,7 @@ function jsonResponse(body, status = 200) {
   };
 }
 
-test("Discord live TB services hydrate the guild and run the real mission-safe Operation planner", async () => {
+test("Discord live TB services hydrate the guild and run the real mission-safe Operation and phase command models", async () => {
   const calls = [];
   const fetchImpl = async (url) => {
     calls.push(String(url));
@@ -87,6 +87,15 @@ test("Discord live TB services hydrate the guild and run the real mission-safe O
   assert.equal(result.plan.assignments[0].member.name, "Test Officer");
   assert.equal(result.plan.assignments[0].baseId, "DISCORD_TEST_UNIT");
   assert.equal(result.safety.redundancyTarget, 2);
+
+  const phaseResult = await services.buildPhaseCommand({ allyCode: "999888777", redundancyTarget: 2, phase: "P1" });
+  assert.equal(phaseResult.phaseCommand.phase, "P1");
+  assert.equal(phaseResult.phaseCommand.summary.totalMembers, 1);
+  assert.equal(phaseResult.phaseCommand.summary.hydratedMembers, 1);
+  assert.equal(phaseResult.phaseCommand.summary.operationSlots, 1);
+  assert.equal(phaseResult.phaseCommand.summary.assignedOperationSlots, 1);
+  assert.equal(phaseResult.phaseCommand.summary.unfilledOperationSlots, 0);
+  assert.equal(phaseResult.phaseCommand.summary.operationCoveragePercent, 100);
 
   assert.equal(calls.filter((url) => url.includes("/v1/guild/by-player/")).length, 1);
   assert.equal(calls.filter((url) => url === "https://example.test/rote.json").length, 1);
