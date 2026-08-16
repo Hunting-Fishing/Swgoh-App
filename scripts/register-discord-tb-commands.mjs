@@ -34,14 +34,18 @@ if (!config.commandRegistrationConfigured) {
       type: 1,
       name: "tb",
       description: "SWGOH Territory Battle guild command",
-      // Picker visibility stays broad in the pilot so a configured officer role can invoke the command.
-      // Signed server-side authorization remains authoritative; role-specific Discord command overwrites
-      // require a user OAuth Bearer token and are a later integration layer.
+      // Picker visibility stays broad in the pilot so configured officers and linked members can invoke
+      // the appropriate subcommands. Signed server-side authorization remains authoritative.
       options: [
         {
           type: 1,
           name: "status",
           description: "Show the SWGOH Command Center TB integration status",
+        },
+        {
+          type: 1,
+          name: "me",
+          description: "Show your own linked SWGOH player from the bound live guild roster",
         },
         {
           type: 1,
@@ -76,7 +80,7 @@ if (!config.commandRegistrationConfigured) {
             {
               type: 3,
               name: "ally_code",
-              description: "9-digit SWGOH Ally Code; guild membership is checked live",
+              description: "9-digit SWGOH Ally Code; guild membership is checked against the bound roster",
               required: true,
               min_length: 9,
               max_length: 11,
@@ -104,13 +108,13 @@ if (!config.commandRegistrationConfigured) {
         {
           type: 1,
           name: "preference",
-          description: "Set a verified GIVE/DEFAULT/KEEP unit preference for a linked member",
+          description: "Set a GIVE/DEFAULT/KEEP unit preference for your linked player or a guildmate",
           options: [
             {
               type: 6,
               name: "member",
-              description: "Linked Discord member whose unit preference should change",
-              required: true,
+              description: "Optional member target; normal members may target only themselves",
+              required: false,
             },
             {
               type: 3,
@@ -137,7 +141,7 @@ if (!config.commandRegistrationConfigured) {
             {
               type: 6,
               name: "member",
-              description: "Optional linked member scope",
+              description: "Optional member scope; normal members may view only themselves",
               required: false,
             },
           ],
