@@ -1,27 +1,19 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { createGuildRosterService, guildRosterService } from "./guild-roster-service.mjs";
 import { aggregateRoteOperations } from "./rote-operations.mjs";
 import { buildGuildRoteOperationSafety } from "./public/guild-rote-operation-safety.js";
 import { planGuildRoteSafeAssignments } from "./public/guild-rote-safe-planner.js";
 import { buildGuildTbPhaseCommand } from "./public/guild-tb-phase-command-model.js";
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "public");
-const guildCache = new Map();
 const roteCache = { value: null, expiresAt: 0, promise: null };
 const catalogCache = { value: null, promise: null };
 
 function positiveNumber(value, fallback) {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-}
-
-function trimUrl(value) {
-  return String(value || "").trim().replace(/\/+$/, "");
-}
-
-function validGuildRoster(body) {
-  return body?.source === "live" && body?.guild && Array.isArray(body?.members);
 }
 
 async function fetchJson(url, options = {}, timeoutMs = 35_000, fetchImpl = fetch) {
@@ -65,43 +57,10 @@ async function loadCatalog() {
 }
 
 function createConfig(env) {
-  const gatewayUrl = trimUrl(env.SWGOH_GATEWAY_URL);
-  const gatewayApiKey = String(env.SWGOH_GATEWAY_API_KEY || "").trim();
   const requestTimeoutMs = positiveNumber(env.SWGOH_REQUEST_TIMEOUT_MS, 35_000);
-  const guildRequestTimeoutMs = positiveNumber(env.SWGOH_GUILD_REQUEST_TIMEOUT_MS, 120_000);
-  const guildCacheMs = positiveNumber(env.SWGOH_GUILD_CACHE_FRESH_SECONDS, 600) * 1000;
   const roteOperationsUrl = String(env.SWGOH_ROTE_OPERATIONS_URL || "https://raw.githubusercontent.com/swgoh-utils/gamedata/main/swgoh_rote_operations.json").trim();
   const roteCacheMs = positiveNumber(env.SWGOH_ROTE_CACHE_SECONDS, 21_600) * 1000;
-  return { gatewayUrl, gatewayApiKey, requestTimeoutMs, guildRequestTimeoutMs, guildCacheMs, roteOperationsUrl, roteCacheMs };
-}
-
-async function loadGuild(allyCode, config, fetchImpl, force = false) {
-  if (!config.gatewayUrl) throw new Error("SWGOH_GATEWAY_URL is not configured.");
-  if (!config.gatewayApiKey) throw new Error("SWGOH_GATEWAY_API_KEY is not configured.");
-
-  const key = String(allyCode);
-  const cached = guildCache.get(key);
-  if (!force && cached && cached.expiresAt > Date.now()) {
-    return { guild: cached.value, cache: "fresh" };
-  }
-
-  const body = await fetchJson(
-    `${config.gatewayUrl}/v1/guild/by-player/${encodeURIComponent(key)}/roster`,
-    {
-      method: "GET",
-      headers: {
-        Accept: "application/json",
-        "X-API-Key": config.gatewayApiKey,
-        "User-Agent": "SWGOH-Command-Center (discord-tb-live)",
-      },
-    },
-    config.guildRequestTimeoutMs,
-    fetchImpl,
-  );
-
-  if (!validGuildRoster(body)) throw new Error("The live gateway returned an unexpected guild roster response.");
-  guildCache.set(key, { value: body, expiresAt: Date.now() + config.guildCacheMs });
-  return { guild: body, cache: force ? "refreshed" : cached ? "expired-refreshed" : "miss" };
+  return { requestTimeoutMs, roteOperationsUrl, roteCacheMs };
 }
 
 async function loadOperations(config, fetchImpl) {
@@ -128,12 +87,29 @@ async function loadOperations(config, fetchImpl) {
   return roteCache.promise;
 }
 
-async function buildPlanningSnapshot({ allyCode, redundancyTarget }, config, fetchImpl) {
-  const [guildResult, operations, catalog] = await Promise.all([
-    loadGuild(allyCode, config, fetchImpl, false),
+function selectGuildRosterService(env, options, fetchImpl) {
+  if (options.guildRosterService) return options.guildRosterService;
+  // Production server and Discord imports share this exact process-wide service.
+  // Custom env/fetch instances used by tests remain isolated and deterministic.
+  if (env === process.env && !options.fetch) return guildRosterService;
+  return createGuildRosterService(env, { fetch: fetchImpl, ...(typeof options.now === "function" ? { now: options.now } : {}) });
+}
+
+function normalizeGuildResult(result) {
+  return Object.freeze({
+    guild: result?.value,
+    cache: String(result?.cache || "unknown"),
+    ageMs: Number(result?.ageMs || 0),
+  });
+}
+
+async function buildPlanningSnapshot({ allyCode, redundancyTarget }, config, fetchImpl, sharedGuildService) {
+  const [guildCacheResult, operations, catalog] = await Promise.all([
+    sharedGuildService.getGuildRoster(allyCode, { staleWhileRevalidate: false }),
     loadOperations(config, fetchImpl),
     loadCatalog(),
   ]);
+  const guildResult = normalizeGuildResult(guildCacheResult);
   const safety = buildGuildRoteOperationSafety(guildResult.guild, catalog, { redundancyTarget });
   const plan = planGuildRoteSafeAssignments(guildResult.guild, operations, {
     protections: safety.protections,
@@ -141,6 +117,7 @@ async function buildPlanningSnapshot({ allyCode, redundancyTarget }, config, fet
   return Object.freeze({
     guild: guildResult.guild,
     cache: guildResult.cache,
+    guildAgeMs: guildResult.ageMs,
     operations,
     safety,
     plan,
@@ -150,17 +127,18 @@ async function buildPlanningSnapshot({ allyCode, redundancyTarget }, config, fet
 export function createDiscordTbLiveServices(env = process.env, options = {}) {
   const config = createConfig(env);
   const fetchImpl = options.fetch || fetch;
+  const sharedGuildService = selectGuildRosterService(env, options, fetchImpl);
 
   return Object.freeze({
     fetch: fetchImpl,
     async syncGuild({ allyCode }) {
-      return loadGuild(allyCode, config, fetchImpl, true);
+      return normalizeGuildResult(await sharedGuildService.refreshGuildRoster(allyCode));
     },
     async buildPlan({ allyCode, redundancyTarget = 2 }) {
-      return buildPlanningSnapshot({ allyCode, redundancyTarget }, config, fetchImpl);
+      return buildPlanningSnapshot({ allyCode, redundancyTarget }, config, fetchImpl, sharedGuildService);
     },
     async buildPhaseCommand({ allyCode, redundancyTarget = 2, phase = "P1" }) {
-      const snapshot = await buildPlanningSnapshot({ allyCode, redundancyTarget }, config, fetchImpl);
+      const snapshot = await buildPlanningSnapshot({ allyCode, redundancyTarget }, config, fetchImpl, sharedGuildService);
       const phaseCommand = buildGuildTbPhaseCommand({
         guildSnapshot: snapshot.guild,
         coverage: snapshot.safety.coverage,
