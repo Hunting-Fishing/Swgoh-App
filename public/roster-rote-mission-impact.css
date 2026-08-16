@@ -1,0 +1,142 @@
+.pro-roster-mission-impact {
+  display: grid;
+  gap: 9px;
+  margin-bottom: 12px;
+  padding: 11px;
+  border-color: rgba(80, 180, 211, .28);
+  background: linear-gradient(180deg, rgba(7, 20, 35, .96), rgba(5, 14, 27, .96));
+}
+
+.pro-roster-mission-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.pro-roster-mission-head > div { display: grid; gap: 2px; }
+.pro-roster-mission-head span,
+.pro-roster-mission-summary span,
+.pro-roster-mission-filters label {
+  color: #68d9e9;
+  font-size: .49rem;
+  font-weight: 900;
+  letter-spacing: .08em;
+}
+.pro-roster-mission-head strong { color: #eaf4ff; font-size: .69rem; }
+.pro-roster-mission-head small { color: #8297b2; font-size: .5rem; }
+.pro-roster-mission-head > b {
+  padding: 5px 8px;
+  border: 1px solid rgba(103, 237, 182, .28);
+  border-radius: 999px;
+  color: #a8ebcc;
+  font-size: .51rem;
+  white-space: nowrap;
+}
+
+.pro-roster-mission-summary {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+}
+.pro-roster-mission-summary article {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 7px;
+  border: 1px solid #20364f;
+  border-radius: 8px;
+  background: rgba(4, 13, 25, .7);
+}
+.pro-roster-mission-summary article.warning { border-color: rgba(233, 191, 89, .36); }
+.pro-roster-mission-summary strong { color: #edf6ff; font-size: .83rem; }
+.pro-roster-mission-summary small { color: #7d92ad; font-size: .46rem; line-height: 1.35; }
+
+.pro-roster-mission-filters {
+  display: grid;
+  grid-template-columns: minmax(190px, .85fr) minmax(190px, .85fr) 1fr;
+  gap: 7px;
+  align-items: end;
+}
+.pro-roster-mission-filters label { display: grid; gap: 4px; }
+.pro-roster-mission-filters select {
+  width: 100%;
+  height: 34px;
+  padding: 0 8px;
+  border: 1px solid #29445f;
+  border-radius: 7px;
+  outline: none;
+  background: #071425;
+  color: #dce9f8;
+  font-size: .6rem;
+}
+.pro-roster-mission-filters select:focus { border-color: #64d7e7; }
+.pro-roster-mission-filters > span {
+  padding-bottom: 8px;
+  color: #8499b5;
+  font-size: .52rem;
+  text-align: right;
+}
+
+.pro-roster-mission-boundary {
+  padding: 7px 9px;
+  border: 1px solid rgba(232, 190, 88, .25);
+  border-radius: 8px;
+  background: rgba(99, 73, 17, .1);
+  color: #bda871;
+  font-size: .51rem;
+  line-height: 1.45;
+}
+.pro-roster-mission-boundary strong { color: #ead08a; }
+
+.pro-mission-impact-cell {
+  min-width: 108px;
+  vertical-align: middle;
+}
+.pro-mission-impact-cell > button,
+.pro-mission-impact-cell > strong,
+.pro-mission-impact-cell > span {
+  display: block;
+}
+.pro-mission-impact-cell small {
+  display: block;
+  margin-top: 2px;
+  color: #7d92ad;
+  font-size: .46rem;
+}
+.pro-mission-impact-link,
+.pro-mission-farm-link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #83ddea;
+  font-size: .54rem;
+  font-weight: 900;
+  text-align: left;
+}
+.pro-mission-farm-link { color: #e9bd72; }
+.pro-mission-impact-link:hover,
+.pro-mission-farm-link:hover { text-decoration: underline; }
+.pro-mission-none { color: #60758f; }
+
+.pro-roster-mission-loading {
+  padding: 10px;
+  border: 1px dashed #29445f;
+  border-radius: 8px;
+  color: #8499b4;
+  font-size: .58rem;
+  text-align: center;
+}
+.pro-roster-mission-loading.danger { border-color: rgba(239, 110, 120, .4); color: #efaaa8; }
+
+@media (max-width: 900px) {
+  .pro-roster-mission-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pro-roster-mission-filters { grid-template-columns: 1fr 1fr; }
+  .pro-roster-mission-filters > span { grid-column: 1 / -1; padding-bottom: 0; text-align: left; }
+}
+
+@media (max-width: 560px) {
+  .pro-roster-mission-head { flex-direction: column; }
+  .pro-roster-mission-summary,
+  .pro-roster-mission-filters { grid-template-columns: 1fr; }
+  .pro-roster-mission-filters > span { grid-column: auto; }
+}
