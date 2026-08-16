@@ -276,6 +276,13 @@ export function createDiscordStateStore(env = process.env, options = {}) {
         action: "player-linked",
         details: { discordUserId: userId, swgohAllyCode: normalizedAllyCode },
       }, (guild, _state, timestamp) => {
+        for (const linked of Object.values(guild.userLinks || {})) {
+          if (linked?.discordUserId !== userId && linked?.swgohAllyCode === normalizedAllyCode) {
+            const error = new Error("That SWGOH Ally Code is already linked to another Discord user in this server.");
+            error.code = "ALLY_CODE_ALREADY_LINKED";
+            throw error;
+          }
+        }
         const previous = guild.userLinks[userId];
         guild.userLinks[userId] = {
           discordUserId: userId,
@@ -285,6 +292,24 @@ export function createDiscordStateStore(env = process.env, options = {}) {
           updatedAt: timestamp,
         };
         return guild.userLinks[userId];
+      });
+    },
+    async unlinkPlayer({ discordGuildId, discordUserId, actorDiscordUserId = "" }) {
+      const userId = snowflake(discordUserId, "Discord user ID");
+      return mutate({
+        discordGuildId,
+        actorDiscordUserId,
+        action: "player-unlinked",
+        details: { discordUserId: userId },
+      }, (guild) => {
+        const previous = guild.userLinks?.[userId];
+        if (!previous) {
+          const error = new Error("That Discord user does not have a player link in this server.");
+          error.code = "PLAYER_LINK_NOT_FOUND";
+          throw error;
+        }
+        delete guild.userLinks[userId];
+        return previous;
       });
     },
     async savePlanVersion({ discordGuildId, rotePhase, versionId = "", summary = {}, actorDiscordUserId = "" }) {
