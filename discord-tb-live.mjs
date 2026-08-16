@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { discordStateStore } from "./discord-state-store.mjs";
 import { createGuildRosterService, guildRosterService } from "./guild-roster-service.mjs";
 import { aggregateRoteOperations } from "./rote-operations.mjs";
 import { buildGuildRoteOperationSafety } from "./public/guild-rote-operation-safety.js";
@@ -14,6 +15,54 @@ const catalogCache = { value: null, promise: null };
 function positiveNumber(value, fallback) {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function normalizedAllyCode(value) {
+  const digits = String(value || "").replace(/\D/g, "");
+  return /^\d{9}$/.test(digits) ? digits : "";
+}
+
+function normalizedSnowflake(value) {
+  const text = String(value || "").trim();
+  return /^\d{16,22}$/.test(text) ? text : "";
+}
+
+export async function resolveDiscordGuildAllyCode({ allyCode, interaction = {}, stateStore = discordStateStore } = {}) {
+  const fallback = normalizedAllyCode(allyCode);
+  const discordGuildId = normalizedSnowflake(interaction?.guild_id);
+  const canReadDurableState = Boolean(
+    discordGuildId
+    && typeof stateStore?.status === "function"
+    && typeof stateStore?.readGuild === "function",
+  );
+
+  if (!canReadDurableState) {
+    if (!fallback) throw new Error("No valid SWGOH guild Ally Code is available for this Discord request.");
+    return Object.freeze({ allyCode: fallback, source: "explicit-fallback", discordGuildId: discordGuildId || "" });
+  }
+
+  const status = stateStore.status();
+  if (!status?.enabled || !status?.durable) {
+    if (!fallback) throw new Error("Durable Discord guild state is unavailable and no fallback Ally Code is configured.");
+    return Object.freeze({ allyCode: fallback, source: "explicit-fallback", discordGuildId });
+  }
+
+  let guild;
+  try {
+    guild = await stateStore.readGuild(discordGuildId);
+  } catch (error) {
+    const wrapped = new Error("Durable Discord guild binding could not be read; refusing to use a possibly stale fallback guild.");
+    wrapped.code = "DISCORD_GUILD_BINDING_READ_FAILED";
+    wrapped.cause = error;
+    throw wrapped;
+  }
+
+  const durableAllyCode = normalizedAllyCode(guild?.swgohAllyCode);
+  if (durableAllyCode) {
+    return Object.freeze({ allyCode: durableAllyCode, source: "durable-guild-binding", discordGuildId });
+  }
+  if (!fallback) throw new Error("This Discord server has no durable SWGOH guild binding and no fallback Ally Code is configured.");
+  return Object.freeze({ allyCode: fallback, source: "explicit-fallback", discordGuildId });
 }
 
 async function fetchJson(url, options = {}, timeoutMs = 35_000, fetchImpl = fetch) {
@@ -103,7 +152,7 @@ function normalizeGuildResult(result) {
   });
 }
 
-async function buildPlanningSnapshot({ allyCode, redundancyTarget }, config, fetchImpl, sharedGuildService) {
+async function buildPlanningSnapshot({ allyCode, redundancyTarget, guildBindingSource }, config, fetchImpl, sharedGuildService) {
   const [guildCacheResult, operations, catalog] = await Promise.all([
     sharedGuildService.getGuildRoster(allyCode, { staleWhileRevalidate: false }),
     loadOperations(config, fetchImpl),
@@ -118,6 +167,7 @@ async function buildPlanningSnapshot({ allyCode, redundancyTarget }, config, fet
     guild: guildResult.guild,
     cache: guildResult.cache,
     guildAgeMs: guildResult.ageMs,
+    guildBindingSource,
     operations,
     safety,
     plan,
@@ -128,23 +178,44 @@ export function createDiscordTbLiveServices(env = process.env, options = {}) {
   const config = createConfig(env);
   const fetchImpl = options.fetch || fetch;
   const sharedGuildService = selectGuildRosterService(env, options, fetchImpl);
+  const stateStore = options.stateStore || discordStateStore;
+
+  async function resolveRequestGuild(args = {}) {
+    return resolveDiscordGuildAllyCode({
+      allyCode: args.allyCode,
+      interaction: args.interaction,
+      stateStore,
+    });
+  }
 
   return Object.freeze({
     fetch: fetchImpl,
-    async syncGuild({ allyCode }) {
-      return normalizeGuildResult(await sharedGuildService.refreshGuildRoster(allyCode));
+    async syncGuild(args = {}) {
+      const binding = await resolveRequestGuild(args);
+      const result = normalizeGuildResult(await sharedGuildService.refreshGuildRoster(binding.allyCode));
+      return Object.freeze({ ...result, guildBindingSource: binding.source });
     },
-    async buildPlan({ allyCode, redundancyTarget = 2 }) {
-      return buildPlanningSnapshot({ allyCode, redundancyTarget }, config, fetchImpl, sharedGuildService);
+    async buildPlan(args = {}) {
+      const binding = await resolveRequestGuild(args);
+      return buildPlanningSnapshot({
+        allyCode: binding.allyCode,
+        redundancyTarget: args.redundancyTarget ?? 2,
+        guildBindingSource: binding.source,
+      }, config, fetchImpl, sharedGuildService);
     },
-    async buildPhaseCommand({ allyCode, redundancyTarget = 2, phase = "P1" }) {
-      const snapshot = await buildPlanningSnapshot({ allyCode, redundancyTarget }, config, fetchImpl, sharedGuildService);
+    async buildPhaseCommand(args = {}) {
+      const binding = await resolveRequestGuild(args);
+      const snapshot = await buildPlanningSnapshot({
+        allyCode: binding.allyCode,
+        redundancyTarget: args.redundancyTarget ?? 2,
+        guildBindingSource: binding.source,
+      }, config, fetchImpl, sharedGuildService);
       const phaseCommand = buildGuildTbPhaseCommand({
         guildSnapshot: snapshot.guild,
         coverage: snapshot.safety.coverage,
         safePlan: snapshot.plan,
         safety: snapshot.safety,
-        phase,
+        phase: args.phase || "P1",
       });
       return Object.freeze({ ...snapshot, phaseCommand });
     },
