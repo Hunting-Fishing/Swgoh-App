@@ -1,0 +1,414 @@
+.guild-mission-coverage {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 14px;
+  border-color: rgba(92, 190, 218, .28);
+  background:
+    radial-gradient(circle at 92% 0%, rgba(40, 125, 159, .14), transparent 34%),
+    linear-gradient(180deg, rgba(7, 19, 34, .98), rgba(5, 13, 25, .99));
+}
+
+.guild-mission-header,
+.guild-mission-section-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.guild-mission-header > div,
+.guild-mission-section-head > div {
+  display: grid;
+  gap: 4px;
+}
+
+.guild-mission-header h2,
+.guild-mission-section-head h3 {
+  margin: 0;
+  color: #eff7ff;
+}
+
+.guild-mission-header p,
+.guild-mission-section-head p {
+  max-width: 860px;
+  margin: 0;
+  color: #8ba0bb;
+  font-size: .64rem;
+  line-height: 1.5;
+}
+
+.guild-mission-section-head > div > span,
+.guild-mission-summary span,
+.guild-mission-best span,
+.guild-mission-depth span,
+.guild-farm-person span,
+.guild-farm-unit span,
+.guild-farm-impact span,
+.guild-member-coverage-row span,
+.guild-lead-row span {
+  color: #66d7e8;
+  font-size: .49rem;
+  font-weight: 900;
+  letter-spacing: .08em;
+}
+
+.guild-mission-section-head > b {
+  color: #9db2ca;
+  font-size: .6rem;
+}
+
+.guild-mission-summary {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.guild-mission-summary article {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid #213850;
+  border-radius: 9px;
+  background: rgba(4, 13, 25, .72);
+}
+
+.guild-mission-summary article.warning { border-color: rgba(233, 191, 89, .35); }
+.guild-mission-summary article.danger { border-color: rgba(239, 110, 120, .38); }
+
+.guild-mission-summary strong {
+  color: #eef6ff;
+  font-size: .92rem;
+}
+
+.guild-mission-summary small {
+  color: #7f94af;
+  font-size: .48rem;
+  line-height: 1.35;
+}
+
+.guild-mission-boundary {
+  padding: 8px 10px;
+  border: 1px solid rgba(231, 190, 88, .28);
+  border-radius: 9px;
+  background: rgba(102, 75, 17, .12);
+  color: #c8b177;
+  font-size: .56rem;
+  line-height: 1.5;
+}
+
+.guild-mission-boundary strong { color: #efd48e; }
+
+.guild-mission-toolbar {
+  display: grid;
+  grid-template-columns: minmax(330px, 1.4fr) minmax(110px, .5fr) minmax(120px, .55fr) minmax(220px, 1fr) auto;
+  gap: 7px;
+  align-items: end;
+  padding: 9px;
+  border: 1px solid #1e334c;
+  border-radius: 10px;
+  background: rgba(5, 15, 29, .77);
+}
+
+.guild-mission-toolbar label {
+  display: grid;
+  gap: 4px;
+  color: #66d7e8;
+  font-size: .5rem;
+  font-weight: 900;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+
+.guild-mission-toolbar input,
+.guild-mission-toolbar select {
+  width: 100%;
+  min-width: 0;
+  height: 34px;
+  padding: 0 8px;
+  border: 1px solid #29425f;
+  border-radius: 7px;
+  outline: none;
+  background: #071425;
+  color: #dbe8f7;
+  font-size: .61rem;
+}
+
+.guild-mission-toolbar input:focus,
+.guild-mission-toolbar select:focus { border-color: #62d4e4; }
+
+.guild-mission-toolbar > button,
+.guild-mission-tabs button,
+.guild-mission-open,
+.guild-farm-inspect,
+.guild-lead-row > button,
+.guild-farm-refs button {
+  border: 1px solid #315470;
+  border-radius: 7px;
+  background: #091c30;
+  color: #d7f5fa;
+  font-size: .52rem;
+  font-weight: 900;
+}
+
+.guild-mission-toolbar > button {
+  height: 34px;
+  padding: 0 9px;
+  white-space: nowrap;
+}
+
+.guild-mission-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.guild-mission-tabs button {
+  min-height: 34px;
+  padding: 5px 7px;
+  color: #879cb8;
+}
+
+.guild-mission-tabs button.active {
+  border-color: #5fd6e6;
+  background: #0b283d;
+  color: #e3fbff;
+}
+
+.guild-mission-list,
+.guild-lead-list,
+.guild-farm-list,
+.guild-member-coverage-list {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.guild-mission-row {
+  display: grid;
+  grid-template-columns: 92px minmax(190px, 1.3fr) minmax(150px, .8fr) minmax(140px, .65fr) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 8px;
+  border: 1px solid #223952;
+  border-radius: 9px;
+  background: rgba(5, 15, 28, .86);
+}
+
+.guild-mission-row.tone-zero { border-color: rgba(239, 110, 120, .46); }
+.guild-mission-row.tone-fragile { border-color: rgba(232, 180, 74, .44); }
+.guild-mission-row.tone-thin { border-color: rgba(233, 213, 100, .32); }
+.guild-mission-row.tone-deep { border-color: rgba(103, 237, 182, .31); }
+.guild-mission-row.tone-partial { border-color: rgba(133, 150, 181, .31); }
+
+.guild-mission-status,
+.guild-mission-best,
+.guild-mission-depth,
+.guild-farm-person,
+.guild-farm-unit,
+.guild-farm-impact,
+.guild-lead-row > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.guild-mission-status span {
+  color: #9cb0c9;
+  font-size: .43rem;
+  font-weight: 900;
+}
+
+.guild-mission-status strong {
+  color: #eef6ff;
+  font-size: .88rem;
+}
+
+.guild-mission-status small,
+.guild-mission-best small,
+.guild-mission-depth small,
+.guild-farm-person small,
+.guild-farm-unit small,
+.guild-farm-impact small,
+.guild-lead-row small {
+  color: #7c91ac;
+  font-size: .46rem;
+  line-height: 1.35;
+}
+
+.guild-mission-identity {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.guild-mission-identity > span {
+  color: #61d3e4;
+  font-size: .48rem;
+  font-weight: 900;
+}
+
+.guild-mission-identity strong,
+.guild-mission-best strong,
+.guild-mission-depth strong,
+.guild-farm-person strong,
+.guild-farm-unit strong,
+.guild-farm-impact strong,
+.guild-lead-row strong,
+.guild-member-coverage-row strong {
+  overflow: hidden;
+  color: #e9f2fc;
+  font-size: .62rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.guild-mission-identity small {
+  overflow: hidden;
+  color: #8ca1ba;
+  font-size: .5rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.guild-mission-open,
+.guild-farm-inspect,
+.guild-lead-row > button {
+  padding: 7px 8px;
+  white-space: nowrap;
+}
+
+.guild-mission-open:hover,
+.guild-farm-inspect:hover,
+.guild-lead-row > button:hover,
+.guild-farm-refs button:hover,
+.guild-mission-toolbar > button:hover { border-color: #62d7e7; }
+
+.guild-lead-row {
+  display: grid;
+  grid-template-columns: minmax(190px, 1.2fr) minmax(150px, .8fr) minmax(220px, 1.1fr) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 8px;
+  border: 1px solid #223952;
+  border-radius: 9px;
+  background: rgba(5, 15, 28, .84);
+}
+
+.guild-lead-row.blocked { border-color: rgba(239, 110, 120, .42); }
+.guild-lead-row > div:first-child > span { color: #63d4e5; }
+
+.guild-farm-row {
+  display: grid;
+  grid-template-columns: minmax(135px, .6fr) minmax(180px, .9fr) minmax(110px, .45fr) minmax(240px, 1.2fr) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 8px;
+  border: 1px solid #233b56;
+  border-radius: 9px;
+  background: rgba(5, 15, 28, .84);
+}
+
+.guild-farm-unit small { color: #e0b89c; }
+
+.guild-farm-refs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.guild-farm-refs button {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+  padding: 5px;
+  text-align: left;
+}
+
+.guild-farm-refs button span {
+  color: #63d4e5;
+  font-size: .43rem;
+}
+
+.guild-farm-refs button strong {
+  overflow: hidden;
+  color: #dce8f6;
+  font-size: .47rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.guild-member-coverage-row {
+  display: grid;
+  grid-template-columns: minmax(170px, 1.1fr) repeat(5, minmax(90px, .52fr));
+  gap: 6px;
+  align-items: center;
+  padding: 8px;
+  border: 1px solid #223952;
+  border-radius: 9px;
+  background: rgba(5, 15, 28, .84);
+}
+
+.guild-member-coverage-row > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.guild-member-coverage-row > div:first-child span {
+  color: #8398b4;
+  font-size: .49rem;
+}
+
+.guild-member-coverage-row > div.danger {
+  padding: 5px;
+  border: 1px solid rgba(239, 110, 120, .3);
+  border-radius: 7px;
+  background: rgba(91, 30, 36, .12);
+}
+
+.guild-mission-loading,
+.guild-mission-empty {
+  display: grid;
+  gap: 4px;
+  padding: 14px;
+  border: 1px dashed #2c4764;
+  border-radius: 9px;
+  color: #8fa4bd;
+  font-size: .62rem;
+  text-align: center;
+}
+
+.guild-mission-loading strong { color: #e6f0fa; }
+.guild-mission-loading.danger { border-color: rgba(239, 110, 120, .4); color: #efaaa8; }
+
+@media (max-width: 1220px) {
+  .guild-mission-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .guild-mission-toolbar { grid-template-columns: 1fr 1fr; }
+  .guild-mission-tabs { grid-column: 1 / -1; }
+  .guild-mission-row { grid-template-columns: 82px minmax(180px, 1.2fr) minmax(145px, .8fr) auto; }
+  .guild-mission-depth { grid-column: 2 / -1; }
+  .guild-farm-row { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .guild-farm-refs { grid-column: 1 / -1; }
+  .guild-farm-inspect { justify-self: start; }
+  .guild-member-coverage-row { grid-template-columns: minmax(160px, 1fr) repeat(3, minmax(90px, .55fr)); }
+}
+
+@media (max-width: 720px) {
+  .guild-mission-header,
+  .guild-mission-section-head { flex-direction: column; }
+  .guild-mission-summary,
+  .guild-mission-toolbar,
+  .guild-mission-tabs { grid-template-columns: 1fr; }
+  .guild-mission-row,
+  .guild-lead-row,
+  .guild-farm-row,
+  .guild-member-coverage-row { grid-template-columns: 1fr; }
+  .guild-mission-depth,
+  .guild-farm-refs { grid-column: auto; }
+  .guild-farm-refs { grid-template-columns: 1fr; }
+  .guild-mission-open,
+  .guild-farm-inspect,
+  .guild-lead-row > button { width: 100%; }
+}
