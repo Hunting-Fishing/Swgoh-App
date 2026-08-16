@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 const SCHEMA_VERSION = 1;
@@ -36,6 +36,13 @@ function phase(value) {
   const text = clean(value).toUpperCase();
   if (!/^P[1-6]$/.test(text)) throw new Error("ROTE phase must be P1 through P6.");
   return text;
+}
+
+function normalizeRoleIds(roleIds, { allowUndefined = false } = {}) {
+  if (roleIds == null && allowUndefined) return null;
+  const normalized = [...new Set((Array.isArray(roleIds) ? roleIds : []).map((value) => snowflake(value, "Discord officer role ID")))].sort();
+  if (normalized.length > 25) throw new Error("At most 25 Discord officer role IDs may be configured per guild.");
+  return normalized;
 }
 
 function isInside(basePath, targetPath) {
@@ -155,8 +162,14 @@ export function createDiscordStateStore(env = process.env, options = {}) {
     if (Buffer.byteLength(payload, "utf8") > config.maxStateBytes) throw new Error("Discord state write exceeds the configured size limit.");
     await mkdir(config.directory, { recursive: true, mode: 0o700 });
     const temporary = path.join(config.directory, `.discord-state-${process.pid}-${uuid()}.tmp`);
-    await writeFile(temporary, payload, { encoding: "utf8", mode: 0o600 });
-    await rename(temporary, stateFile);
+    try {
+      await writeFile(temporary, payload, { encoding: "utf8", mode: 0o600 });
+      await rename(temporary, stateFile);
+    } finally {
+      await unlink(temporary).catch((error) => {
+        if (error?.code !== "ENOENT") throw error;
+      });
+    }
   }
 
   function exclusive(work) {
@@ -199,6 +212,26 @@ export function createDiscordStateStore(env = process.env, options = {}) {
       const state = await readUnlocked();
       return state.guilds[guildId] ? structuredClone(state.guilds[guildId]) : null;
     },
+    async bootstrapGuild({ discordGuildId, swgohAllyCode, commandChannelId = "", officerRoleIds, actorDiscordUserId = "" }) {
+      const normalizedAllyCode = allyCode(swgohAllyCode);
+      const normalizedChannelId = commandChannelId ? snowflake(commandChannelId, "Discord command channel ID") : "";
+      const normalizedRoleIds = normalizeRoleIds(officerRoleIds, { allowUndefined: true });
+      return mutate({
+        discordGuildId,
+        actorDiscordUserId,
+        action: "guild-bootstrap-updated",
+        details: {
+          swgohAllyCode: normalizedAllyCode,
+          commandChannelId: normalizedChannelId || null,
+          officerRoleIds: normalizedRoleIds,
+        },
+      }, (guild) => {
+        guild.swgohAllyCode = normalizedAllyCode;
+        guild.commandChannelId = normalizedChannelId;
+        if (normalizedRoleIds !== null) guild.officerRoleIds = normalizedRoleIds;
+        return guild;
+      });
+    },
     async upsertGuildConnection({ discordGuildId, swgohAllyCode, commandChannelId = "", actorDiscordUserId = "" }) {
       const normalizedAllyCode = allyCode(swgohAllyCode);
       const normalizedChannelId = commandChannelId ? snowflake(commandChannelId, "Discord command channel ID") : "";
@@ -214,8 +247,7 @@ export function createDiscordStateStore(env = process.env, options = {}) {
       });
     },
     async setOfficerRoleIds({ discordGuildId, roleIds = [], actorDiscordUserId = "" }) {
-      const normalized = [...new Set((Array.isArray(roleIds) ? roleIds : []).map((value) => snowflake(value, "Discord officer role ID")))].sort();
-      if (normalized.length > 25) throw new Error("At most 25 Discord officer role IDs may be configured per guild.");
+      const normalized = normalizeRoleIds(roleIds);
       return mutate({
         discordGuildId,
         actorDiscordUserId,
