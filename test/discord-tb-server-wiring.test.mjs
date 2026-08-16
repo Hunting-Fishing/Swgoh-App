@@ -9,6 +9,7 @@ const registerScript = await readFile(new URL("../scripts/register-discord-tb-co
 const discordTransport = await readFile(new URL("../discord-tb.mjs", import.meta.url), "utf8");
 const liveService = await readFile(new URL("../discord-tb-live.mjs", import.meta.url), "utf8");
 const guildService = await readFile(new URL("../guild-roster-service.mjs", import.meta.url), "utf8");
+const discordState = await readFile(new URL("../discord-state-store.mjs", import.meta.url), "utf8");
 
 test("server accepts POST only for the signed Discord interactions endpoint before the GET-only API router", () => {
   const route = server.indexOf('request.method === "POST" && url.pathname === "/api/discord/interactions"');
@@ -18,18 +19,36 @@ test("server accepts POST only for the signed Discord interactions endpoint befo
   assert.match(server, /handleDiscordInteractionRequest\(request, response\)/);
 });
 
-test("server exposes a nonsecret Discord configuration status endpoint", () => {
+test("server exposes nonsecret Discord command and durable-state readiness", () => {
   assert.match(server, /\/api\/discord\/status/);
+  assert.match(server, /import \{ discordStateStore \} from "\.\/discord-state-store\.mjs"/);
+  assert.match(server, /durableState: discordStateStore\.status\(\)/);
   assert.match(server, /discordTbPublicStatus\(\)/);
 });
 
-test("Discord environment example is disabled by default and contains no secret value", () => {
+test("Discord environment example is disabled/fail-closed by default and contains no secret value", () => {
   assert.match(envExample, /DISCORD_TB_INTERACTIONS_ENABLED=false/);
   assert.match(envExample, /DISCORD_TB_DELIVERY_ENABLED=false/);
   assert.match(envExample, /DISCORD_PUBLIC_KEY=\n/);
   assert.match(envExample, /DISCORD_BOT_TOKEN=\n/);
   assert.match(envExample, /DISCORD_DEFAULT_ALLY_CODE=\n/);
   assert.match(envExample, /DISCORD_TB_REDUNDANCY_TARGET=2/);
+  assert.match(envExample, /SWGOH_STATE_DIR=\n/);
+  assert.match(envExample, /SWGOH_STATE_STORAGE_CONFIRMED_DURABLE=false/);
+  assert.match(envExample, /SWGOH_STATE_MAX_BYTES=5242880/);
+});
+
+test("durable state auto-detects a Railway volume but does not claim arbitrary local paths are durable", () => {
+  assert.match(discordState, /RAILWAY_VOLUME_MOUNT_PATH/);
+  assert.match(discordState, /SWGOH_STATE_STORAGE_CONFIRMED_DURABLE/);
+  assert.match(discordState, /state-directory-not-confirmed-durable/);
+  assert.match(discordState, /atomic-json-volume/);
+  assert.match(discordState, /discord-state-v1\.json/);
+});
+
+test("current Discord interaction transport remains read-only and does not mutate durable state", () => {
+  assert.doesNotMatch(discordTransport, /discordStateStore|createDiscordStateStore/);
+  assert.doesNotMatch(discordTransport, /upsertGuildConnection|setOfficerRoleIds|linkPlayer|savePlanVersion/);
 });
 
 test("guild command registration is explicit, officer-first, and phase-aware", () => {
