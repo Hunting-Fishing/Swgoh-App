@@ -1,4 +1,5 @@
-import { DS_GEO_TERRITORIES, DS_GEO_SOURCES, dsGeoTerritoryById } from "./ds-geo-data.js";
+import { DS_GEO_SOURCES } from "./ds-geo-data.js";
+import { DS_GEO_TERRITORIES, dsGeoTerritoryById } from "./ds-geo-mission-overrides.js";
 import { legalRosterCandidates, missionRosterEntrySummary, recommendationLabel, recommendationRosterFit, recommendationUpgradeRows } from "./tb-mission-intelligence.js";
 
 const escapeHtml = (value) => String(value ?? "")
