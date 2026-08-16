@@ -7,6 +7,8 @@ import { lsGeoBattleStrategyForMission } from "./tb-battle-strategy-lsgeo-data.j
 import { lsGeoFleetBattleStrategyForMission } from "./tb-battle-strategy-lsgeo-fleet-data.js";
 import { hothDsBattleStrategyForMission } from "./tb-battle-strategy-hoth-ds-data.js";
 import { hothDsFleetBattleStrategyForMission } from "./tb-battle-strategy-hoth-ds-fleet-data.js";
+import { hothLsBattleStrategyForMission } from "./tb-battle-strategy-hoth-ls-data.js";
+import { hothLsFleetBattleStrategyForMission } from "./tb-battle-strategy-hoth-ls-fleet-data.js";
 import { rotePhaseOneBattleStrategyForMission } from "./tb-battle-strategy-rote-p1-data.js";
 import { mandaloreBattleStrategyForMission } from "./tb-battle-strategy-mandalore-data.js";
 import { rotePriorityBattleStrategyForMission } from "./tb-battle-strategy-rote-priority-data.js";
@@ -84,6 +86,7 @@ function resolvedStrategy(missionId, mission = null, analysis = null) {
   const allowDsGeoLegacyIds = !tbId || tbId === "geo-separatist";
   const allowLsGeoLegacyIds = !tbId || tbId === "geo-republic";
   const allowHothDsLegacyIds = !tbId || tbId === "hoth-imperial";
+  const allowHothLsLegacyIds = !tbId || tbId === "hoth-rebel";
 
   return mandaloreBattleStrategyForMission(missionId)
     || rotePriorityBattleStrategyForMission(missionId)
@@ -100,6 +103,8 @@ function resolvedStrategy(missionId, mission = null, analysis = null) {
     || (allowLsGeoLegacyIds ? lsGeoBattleStrategyForMission(missionId) : null)
     || (allowHothDsLegacyIds ? hothDsFleetBattleStrategyForMission(missionId) : null)
     || (allowHothDsLegacyIds ? hothDsBattleStrategyForMission(missionId) : null)
+    || (allowHothLsLegacyIds ? hothLsFleetBattleStrategyForMission(missionId) : null)
+    || (allowHothLsLegacyIds ? hothLsBattleStrategyForMission(missionId) : null)
     || (allowDsGeoLegacyIds ? dsGeoFleetBattleStrategyForMission(missionId) : null)
     || (allowDsGeoLegacyIds ? dsGeoBattleStrategyForMission(missionId) : null)
     || (allowDsGeoLegacyIds ? watBattleStrategyForMission(missionId) : null)
