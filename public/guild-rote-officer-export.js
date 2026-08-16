@@ -14,6 +14,11 @@ const digits = (value) => String(value || "").replace(/\D/g, "").slice(0, 9);
 const cleanCell = (value) => String(value ?? "").replace(/[\t\r\n]+/g, " ").replace(/\s+/g, " ").trim();
 const number = (value) => new Intl.NumberFormat().format(Number(value || 0));
 
+function currentRedundancyTarget() {
+  const value = Number(window.__swgohGuildRoteRedundancyTarget || 2);
+  return Math.max(1, Math.min(5, Number.isFinite(value) ? Math.trunc(value) : 2));
+}
+
 function memberProgress(evaluation = {}) {
   if (!evaluation?.member) return "No candidate";
   if (evaluation.exactReady) return "Entry ready";
@@ -92,12 +97,13 @@ export function truncateOfficerBrief(text, maxLength = 1850) {
 
 export function buildOfficerBrief(coverage = {}, guildName = "Guild", options = {}) {
   const summary = coverage.summary || {};
+  const redundancyTarget = Math.max(1, Math.min(5, Number(coverage.redundancyTarget || options.redundancyTarget || 2)));
   const maxZero = Math.max(0, Number(options.maxZero ?? 6));
   const maxFragile = Math.max(0, Number(options.maxFragile ?? 6));
   const maxFarms = Math.max(0, Number(options.maxFarms ?? 8));
   const lines = [
     `**ROTE Officer Brief — ${cleanCell(guildName || "Guild")}**`,
-    `Exact entry coverage: **${Number(summary.exactCoveragePercent || 0)}%** · 2+ redundancy: **${Number(summary.redundancyCoveragePercent || 0)}%**`,
+    `Exact entry coverage: **${Number(summary.exactCoveragePercent || 0)}%** · ${redundancyTarget}+ redundancy: **${Number(summary.redundancyCoveragePercent || 0)}%**`,
     `Hydrated rosters: **${Number(summary.hydratedMembers || 0)}/${Number(summary.totalMembers || 0)}** · Zero coverage: **${Number(summary.zeroCoverageMissions || 0)}** · Single-owner: **${Number(summary.fragileMissions || 0)}** · Partial fleet evidence: **${Number(summary.partialEvidenceMissions || 0)}**`,
   ];
 
@@ -123,7 +129,7 @@ export function buildOfficerBrief(coverage = {}, guildName = "Guild", options = 
 
   const farms = (coverage.farms || []).slice(0, maxFarms);
   if (farms.length) {
-    lines.push("", "**🛠 Highest-Impact Farms**");
+    lines.push("", `**🛠 Highest-Impact Farms · ${redundancyTarget}-Owner Target**`);
     for (const row of farms) {
       lines.push(`• ${cleanCell(row.member?.name || "member")} — ${cleanCell(row.unitName || row.baseId)} → ${cleanCell(row.gapLabel)} · ${Number(row.missionImpact || 0)} mission${Number(row.missionImpact || 0) === 1 ? "" : "s"}`);
     }
@@ -151,7 +157,8 @@ async function loadCatalog() {
 async function loadCoverage(force = false) {
   const allyCode = digits(document.getElementById("allyCode")?.value);
   if (allyCode.length !== 9) throw new Error("Load a 9-digit Ally Code first.");
-  const key = `${allyCode}:${state.catalog.length}`;
+  const target = currentRedundancyTarget();
+  const key = `${allyCode}:${state.catalog.length}:${target}`;
   if (!force && state.coverage && state.coverageKey === key) return state.coverage;
   if (state.loading) throw new Error("Guild coverage is already loading.");
   state.loading = true;
@@ -163,8 +170,8 @@ async function loadCoverage(force = false) {
     const guild = await response.json();
     if (!response.ok || !Array.isArray(guild?.members)) throw new Error(guild?.error || "Guild roster is unavailable.");
     state.guild = guild;
-    state.coverage = buildGuildRoteMissionCoverage(guild, catalog, { redundancyTarget: 2 });
-    state.coverageKey = `${allyCode}:${catalog.length}`;
+    state.coverage = buildGuildRoteMissionCoverage(guild, catalog, { redundancyTarget: target });
+    state.coverageKey = `${allyCode}:${catalog.length}:${target}`;
     return state.coverage;
   } finally {
     state.loading = false;
@@ -226,7 +233,7 @@ async function runExport(type) {
       label = "officer brief";
     }
     const copied = await copyText(text);
-    status(copied ? `Copied ${label}.` : `Copy was blocked. Select the data from the dashboard instead.`, copied ? "success" : "danger");
+    status(copied ? `Copied ${label} for ${coverage.redundancyTarget}-owner coverage.` : `Copy was blocked. Select the data from the dashboard instead.`, copied ? "success" : "danger");
   } catch (error) {
     status(error?.message || "Officer export failed.", "danger");
   }
@@ -234,7 +241,7 @@ async function runExport(type) {
 
 function exportMarkup() {
   return `<section class="guild-officer-export" data-guild-officer-export>
-    <div><span>OFFICER EXPORT CENTER</span><strong>Share the current ROTE plan</strong><small>Discord brief is compact; TSV exports paste directly into Sheets or Excel.</small></div>
+    <div><span>OFFICER EXPORT CENTER</span><strong>Share the current ROTE plan</strong><small>Discord brief and farm TSV follow the selected Coverage Target; mission leads are based on exact-ready members.</small></div>
     <div class="guild-officer-export-actions">
       <button type="button" data-guild-export="brief">Copy Officer Brief</button>
       <button type="button" data-guild-export="leads">Copy Mission Leads TSV</button>
@@ -275,6 +282,11 @@ function install() {
     state.coverage = null;
     state.coverageKey = "";
     state.guild = null;
+  });
+  window.addEventListener("swgoh:guild-rote-redundancy-target", () => {
+    state.coverage = null;
+    state.coverageKey = "";
+    status(`Coverage target changed to ${currentRedundancyTarget()} ready owner${currentRedundancyTarget() === 1 ? "" : "s"}. Exports will use the new target.`);
   });
   scheduleInstall();
 }
