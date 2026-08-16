@@ -1,6 +1,6 @@
 # SWGOH Command Center Discord Bot — Pilot Runbook
 
-Status: live read-only TB pilot
+Status: live read-only TB pilot; durable state foundation available but mutation commands remain disabled.
 
 ## Current command surface
 
@@ -20,7 +20,7 @@ Available guild-scoped commands:
 
 All current `/tb` commands default to the Discord `MANAGE_GUILD` permission while the pilot is officer-only. The HTTP interaction handler independently enforces `MANAGE_GUILD` or `ADMINISTRATOR` from the signed guild interaction before command execution or deferred live work begins; command visibility alone is not treated as authorization.
 
-A custom Discord role named "SWGOH Officer" is not automatically trusted just because of its name. During this pilot, members using `/tb` must actually have Manage Server / Manage Guild or Administrator permission. Configurable role IDs can be added after durable guild↔Discord state exists.
+A custom Discord role named "SWGOH Officer" is not automatically trusted just because of its name. During this pilot, members using `/tb` must actually have Manage Server / Manage Guild or Administrator permission. Configurable role IDs will use the durable state layer before they are trusted by the command handler.
 
 ### What each command does
 
@@ -78,6 +78,28 @@ Keep proactive publishing disabled during this slice:
 DISCORD_TB_DELIVERY_ENABLED=false
 ```
 
+## Durable state readiness
+
+Durable state is required before configurable officer roles, player linking, plan approvals, or publishing are connected to commands.
+
+On Railway, attach a Volume to the SWGOH App service. The app automatically recognizes `RAILWAY_VOLUME_MOUNT_PATH` and uses a `swgoh-command-center` directory beneath that mount. Do not point `SWGOH_STATE_DIR` at an ordinary container directory and assume it is persistent.
+
+After the Volume is mounted, check:
+
+```text
+GET /api/discord/status
+```
+
+The response should report:
+
+```text
+durableState.enabled = true
+durableState.durable = true
+durableState.reason = ready
+```
+
+See `docs/DISCORD_DURABLE_STATE.md` for the storage contract, limits, and deployment instructions.
+
 ## Discord Developer Portal
 
 Set the Interactions Endpoint URL to:
@@ -120,6 +142,7 @@ Expected boundaries:
 - `/tb phase` reports the same phase-level command metrics and risk queue as the web Phase Command Board;
 - `/tb assignments` reports mission-safe assignment coverage, unfilled slots, mission protections, and HELP/risk assignments;
 - `/tb farms` reports verified mission-impact farm targets;
+- durable storage readiness does not itself enable any write command;
 - no command publishes to a public channel;
 - no command sends DMs;
 - no command changes locks, ignores, donation preferences, reserves, or in-game TB completion state.
@@ -138,17 +161,19 @@ The bot refuses or degrades safely when:
 - the static catalog is unavailable;
 - verified mission evidence is incomplete.
 
+The durable state layer separately remains disabled when no confirmed persistent storage path is available.
+
 Generic fleet gates without complete selectable-ship evidence are not converted into exact-ready claims.
 
 ## Next implementation layer
 
-Do not enable public publishing or member self-service until durable shared server-side guild state exists.
+Do not enable public publishing or member self-service merely because the state store exists. Durable storage must first report ready and then be wired through authorized, audited command flows.
 
 Next required production work:
 
-1. Discord OAuth and durable SWGOH player ↔ Discord user links.
-2. Durable SWGOH guild ↔ Discord server/channel connection.
-3. Durable officer role configuration plus append-only audit log.
-4. Persistent preferences, ignores, reserves, locks, phase layouts, and plan versions.
-5. `/tb publish` preview/approve/publish flow.
-6. Queued channel mentions and per-member DMs with retry/error reporting.
+1. Persist the pilot SWGOH guild ↔ Discord server/channel connection.
+2. Persist configurable officer role IDs while retaining Manage Guild/Administrator as bootstrap authority.
+3. Add Discord OAuth / verified SWGOH player ↔ Discord user links.
+4. Persist preferences, ignores, reserves, locks, phase layouts, and plan versions.
+5. Build `/tb publish` as preview → approve → publish with audit entries.
+6. Add queued channel mentions and per-member DMs with retry/error reporting.
