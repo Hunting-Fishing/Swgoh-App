@@ -49,6 +49,7 @@ test("Corellia Qi'ra special exposes required units separately from the legal po
   assert.equal(rule.unitType, "Character");
   assert.equal(rule.squadSize, 5);
   assert.deepEqual(rule.threshold, ["7★", "R5+"]);
+  assert.deepEqual(rule.alignments, ["Light", "Dark", "Neutral"]);
   assert.deepEqual(rule.mandatory.map((member) => member.baseId), ["QIRA", "YOUNGHAN"]);
 
   const body = {
@@ -56,6 +57,7 @@ test("Corellia Qi'ra special exposes required units separately from the legal po
       unit("QIRA", "Qi'ra", { relic: 5, alignment: "Light" }),
       unit("YOUNGHAN", "Young Han Solo", { relic: 5, alignment: "Light" }),
       unit("VADER", "Darth Vader", { relic: 5, alignment: "Dark" }),
+      unit("HONDO", "Hondo Ohnaka", { relic: 5, alignment: "Neutral" }),
       unit("JEDIKNIGHTREVAN", "Jedi Knight Revan", { relic: 5, alignment: "Light", factions: ["Jedi"] }),
       unit("BOBAFETT", "Boba Fett", { relic: 5, alignment: "Dark" }),
       unit("LOWGEAR", "Below Gate", { relic: 4, alignment: "Light" }),
@@ -68,8 +70,44 @@ test("Corellia Qi'ra special exposes required units separately from the legal po
   assert.ok(eligibility.mandatory.every((row) => row.legal));
   assert.deepEqual(
     eligibility.candidates.map((candidate) => candidate.baseId).sort(),
-    ["BOBAFETT", "JEDIKNIGHTREVAN", "QIRA", "VADER", "YOUNGHAN"].sort(),
+    ["BOBAFETT", "HONDO", "JEDIKNIGHTREVAN", "QIRA", "VADER", "YOUNGHAN"].sort(),
   );
+});
+
+test("Neutral characters are legal on Light, Dark and Mixed ROTE alignment gates without admitting the opposite side", () => {
+  const light = normalizedRoteMissionsForPlanet("coruscant").find((item) => item.id === "coruscant-generic-1");
+  const dark = normalizedRoteMissionsForPlanet("mustafar").find((item) => item.id === "mustafar-generic-1");
+  const mixed = normalizedRoteMissionsForPlanet("corellia").find((item) => item.id === "corellia-generic-1");
+  const body = {
+    units: [
+      unit("LIGHT", "Light Unit", { relic: 5, alignment: "Light" }),
+      unit("DARK", "Dark Unit", { relic: 5, alignment: "Dark" }),
+      unit("NEUTRAL", "Neutral Unit", { relic: 5, alignment: "Neutral" }),
+    ],
+    ships: [],
+  };
+  assert.deepEqual(missionRosterEligibility(body, light).candidates.map((candidate) => candidate.baseId).sort(), ["LIGHT", "NEUTRAL"]);
+  assert.deepEqual(missionRosterEligibility(body, dark).candidates.map((candidate) => candidate.baseId).sort(), ["DARK", "NEUTRAL"]);
+  assert.deepEqual(missionRosterEligibility(body, mixed).candidates.map((candidate) => candidate.baseId).sort(), ["DARK", "LIGHT", "NEUTRAL"]);
+});
+
+test("Felucia Hondo is treated as a legal Neutral mandatory unit even while mission-type evidence remains disputed", () => {
+  const mission = normalizedRoteMissionsForPlanet("felucia").find((item) => item.id === "felucia-hondo");
+  const body = {
+    units: [
+      unit("HONDO", "Hondo Ohnaka", { relic: 6, alignment: "Neutral" }),
+      unit("LIGHT1", "Light One", { relic: 6, alignment: "Light" }),
+      unit("LIGHT2", "Light Two", { relic: 6, alignment: "Light" }),
+      unit("DARK1", "Dark One", { relic: 6, alignment: "Dark" }),
+      unit("DARK2", "Dark Two", { relic: 6, alignment: "Dark" }),
+    ],
+    ships: [],
+  };
+  const eligibility = missionRosterEligibility(body, mission);
+  assert.equal(eligibility.mandatory.length, 1);
+  assert.equal(eligibility.mandatory[0].baseId, "HONDO");
+  assert.equal(eligibility.mandatory[0].legal, true);
+  assert.equal(eligibility.ready, true);
 });
 
 test("category missions return only units that are actually legal for that mission", () => {
@@ -78,13 +116,14 @@ test("category missions return only units that are actually legal for that missi
     units: [
       unit("JEDIKNIGHTREVAN", "Jedi Knight Revan", { relic: 5, factions: ["Jedi"] }),
       unit("MACEWINDU", "Mace Windu", { relic: 5, categories: ["Jedi"] }),
+      unit("NEUTRALJEDI", "Neutral Jedi", { relic: 5, alignment: "Neutral", factions: ["Jedi"] }),
       unit("HANSOLO", "Han Solo", { relic: 5, factions: ["Rebel"] }),
       unit("VADER", "Darth Vader", { relic: 9, alignment: "Dark", factions: ["Empire", "Sith"] }),
     ],
     ships: [],
   };
   const eligibility = missionRosterEligibility(body, mission);
-  assert.deepEqual(eligibility.candidates.map((candidate) => candidate.baseId).sort(), ["JEDIKNIGHTREVAN", "MACEWINDU"].sort());
+  assert.deepEqual(eligibility.candidates.map((candidate) => candidate.baseId).sort(), ["JEDIKNIGHTREVAN", "MACEWINDU", "NEUTRALJEDI"].sort());
   assert.deepEqual(eligibility.rule.categories, ["Jedi"]);
 });
 
