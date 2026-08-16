@@ -298,8 +298,8 @@ export function handleDiscordTbCommand(interaction, config = discordTbConfig()) 
   }
 
   if (DEFERRED_SUBCOMMANDS.has(subcommand)) {
-    if (!config.pilotAllyCode) {
-      return ephemeral("Live guild commands are not configured yet. Set `DISCORD_DEFAULT_ALLY_CODE` on the SWGOH App Railway service to a 9-digit Ally Code from the pilot guild.");
+    if (subcommand === "setup" && !config.pilotAllyCode) {
+      return ephemeral("Initial `/tb setup` requires `DISCORD_DEFAULT_ALLY_CODE` to contain a 9-digit Ally Code from the guild. After setup persists the Discord→SWGOH guild binding, live read commands no longer require that fallback.");
     }
     return deferredEphemeral();
   }
@@ -452,9 +452,11 @@ function deferredErrorMessage(error) {
 export async function executeDiscordTbDeferredCommand(interaction, config = discordTbConfig(), services = {}) {
   const subcommand = discordTbSubcommand(interaction);
   const phase = discordTbPhase(interaction);
-  if (!config.pilotAllyCode) throw new Error("DISCORD_DEFAULT_ALLY_CODE is not configured.");
 
   if (subcommand === "setup") {
+    if (!config.pilotAllyCode) {
+      throw new Error("Initial /tb setup requires DISCORD_DEFAULT_ALLY_CODE. After durable setup, live read commands resolve the persisted Discord guild binding first.");
+    }
     const stateStore = services?.stateStore;
     if (typeof stateStore?.status !== "function" || typeof stateStore?.bootstrapGuild !== "function") {
       throw new Error("Durable Discord state service is unavailable.");
@@ -634,7 +636,10 @@ export async function handleDiscordInteractionRequest(request, response, env = p
       || typeof services?.buildPhaseCommand === "function";
     const liveServices = hasInjectedLiveServices
       ? services
-      : createDiscordTbLiveServices(env, typeof services?.fetch === "function" ? { fetch: services.fetch } : {});
+      : createDiscordTbLiveServices(env, {
+        ...(typeof services?.fetch === "function" ? { fetch: services.fetch } : {}),
+        stateStore,
+      });
     scheduleDeferredDiscordCommand(interaction, config, { ...liveServices, stateStore });
   }
   return true;
