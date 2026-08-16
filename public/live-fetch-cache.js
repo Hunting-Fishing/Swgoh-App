@@ -1,8 +1,16 @@
 (() => {
   const nativeFetch = window.fetch.bind(window);
-  const TTL_MS = 25_000;
+  const TTL = Object.freeze({
+    player: 25_000,
+    guild: 25_000,
+    catalog: 300_000,
+    operations: 60_000,
+    error: 1_000,
+  });
   const cache = new Map();
   const inflight = new Map();
+
+  const digits = (value) => String(value || "").replace(/\D/g, "").slice(0, 9);
 
   function requestInfo(input, init = {}) {
     const method = String(init?.method || (input instanceof Request ? input.method : "GET") || "GET").toUpperCase();
@@ -14,8 +22,58 @@
       return null;
     }
     if (url.origin !== window.location.origin) return null;
-    const match = url.pathname.match(/^\/api\/player\/(\d{9})$/);
-    return match ? { key: url.pathname, allyCode: match[1] } : null;
+
+    const player = url.pathname.match(/^\/api\/player\/(\d{9})$/);
+    if (player) {
+      return {
+        kind: "player",
+        key: url.pathname,
+        allyCode: player[1],
+        ttlMs: TTL.player,
+      };
+    }
+
+    const guildRoster = url.pathname.match(/^\/api\/guild\/by-player\/(\d{9})\/roster$/);
+    if (guildRoster) {
+      return {
+        kind: "guild-roster",
+        key: url.pathname,
+        allyCode: guildRoster[1],
+        ttlMs: TTL.guild,
+      };
+    }
+
+    const guild = url.pathname.match(/^\/api\/guild\/by-player\/(\d{9})$/);
+    if (guild) {
+      return {
+        kind: "guild",
+        key: url.pathname,
+        allyCode: guild[1],
+        ttlMs: TTL.guild,
+      };
+    }
+
+    if (url.pathname === "/data/catalog.json") {
+      return {
+        kind: "catalog",
+        // Feature-specific query strings all request the same versioned static file.
+        // Canonicalizing the key prevents repeated downloads of a large catalog.
+        key: url.pathname,
+        allyCode: "",
+        ttlMs: TTL.catalog,
+      };
+    }
+
+    if (url.pathname === "/api/rote/operations") {
+      return {
+        kind: "operations",
+        key: url.pathname,
+        allyCode: "",
+        ttlMs: TTL.operations,
+      };
+    }
+
+    return null;
   }
 
   function responseFrom(entry) {
@@ -26,15 +84,45 @@
     });
   }
 
-  function publishSnapshot(allyCode, text) {
+  function publishSnapshot(info, text) {
     try {
       const body = JSON.parse(text);
-      if (body?.source !== "live" || !body?.player || !Array.isArray(body?.units)) return;
-      window.__swgohLiveSnapshot = {
-        allyCode,
-        body,
-        fetchedAt: Date.now(),
-      };
+      const fetchedAt = Date.now();
+      if (info.kind === "player") {
+        if (body?.source !== "live" || !body?.player || !Array.isArray(body?.units)) return;
+        window.__swgohLiveSnapshot = {
+          allyCode: info.allyCode,
+          body,
+          fetchedAt,
+        };
+        return;
+      }
+      if (info.kind === "guild-roster") {
+        if (!Array.isArray(body?.members)) return;
+        window.__swgohGuildRosterSnapshot = {
+          allyCode: info.allyCode,
+          body,
+          fetchedAt,
+        };
+        return;
+      }
+      if (info.kind === "guild") {
+        window.__swgohGuildSnapshot = {
+          allyCode: info.allyCode,
+          body,
+          fetchedAt,
+        };
+        return;
+      }
+      if (info.kind === "catalog") {
+        if (!Array.isArray(body?.units)) return;
+        window.__swgohCatalogSnapshot = { body, fetchedAt };
+        return;
+      }
+      if (info.kind === "operations") {
+        if (!Array.isArray(body?.requirements)) return;
+        window.__swgohRoteOperationsSnapshot = { body, fetchedAt };
+      }
     } catch {
       // Leave malformed/non-JSON responses to the original consumer.
     }
@@ -46,7 +134,13 @@
     }
   }
 
-  window.fetch = async function sharedRosterFetch(input, init = {}) {
+  function deleteMatching(predicate) {
+    for (const key of [...cache.keys()]) {
+      if (predicate(key)) cache.delete(key);
+    }
+  }
+
+  window.fetch = async function sharedDataFetch(input, init = {}) {
     const info = requestInfo(input, init);
     if (!info) return nativeFetch(input, init);
 
@@ -67,11 +161,11 @@
         status: response.status,
         statusText: response.statusText,
         headers: [...response.headers.entries()],
-        expiresAt: Date.now() + (response.ok ? TTL_MS : 1_000),
+        expiresAt: Date.now() + (response.ok ? info.ttlMs : TTL.error),
       };
       if (response.ok) {
         cache.set(info.key, entry);
-        publishSnapshot(info.allyCode, body);
+        publishSnapshot(info, body);
       }
       return entry;
     }).finally(() => {
@@ -83,12 +177,52 @@
     return responseFrom(entry);
   };
 
+  // Backward-compatible API used by existing player-roster features.
   window.__swgohRosterFetchCache = {
     clear(allyCode = "") {
-      const digits = String(allyCode || "").replace(/\D/g, "").slice(0, 9);
-      if (digits.length === 9) cache.delete(`/api/player/${digits}`);
-      else cache.clear();
+      const code = digits(allyCode);
+      if (code.length === 9) cache.delete(`/api/player/${code}`);
+      else deleteMatching((key) => key.startsWith("/api/player/"));
     },
-    ttlMs: TTL_MS,
+    ttlMs: TTL.player,
+  };
+
+  window.__swgohSharedFetchCache = {
+    clear(kind = "", allyCode = "") {
+      const code = digits(allyCode);
+      if (!kind) {
+        cache.clear();
+        return;
+      }
+      if (kind === "player") {
+        if (code.length === 9) cache.delete(`/api/player/${code}`);
+        else deleteMatching((key) => key.startsWith("/api/player/"));
+        return;
+      }
+      if (kind === "guild") {
+        if (code.length === 9) {
+          cache.delete(`/api/guild/by-player/${code}`);
+          cache.delete(`/api/guild/by-player/${code}/roster`);
+        } else {
+          deleteMatching((key) => key.startsWith("/api/guild/by-player/"));
+        }
+        return;
+      }
+      if (kind === "catalog") {
+        cache.delete("/data/catalog.json");
+        return;
+      }
+      if (kind === "operations") cache.delete("/api/rote/operations");
+    },
+    stats() {
+      purgeExpired();
+      return {
+        cached: cache.size,
+        inflight: inflight.size,
+        keys: [...cache.keys()],
+        ttlMs: { ...TTL },
+      };
+    },
+    ttlMs: { ...TTL },
   };
 })();
