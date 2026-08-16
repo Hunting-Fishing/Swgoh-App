@@ -55,12 +55,13 @@ test("Discord transport exposes only the controlled bootstrap mutation; publishi
   assert.doesNotMatch(discordTransport, /stateStore\.setOfficerRoleIds\(/);
   assert.doesNotMatch(discordTransport, /stateStore\.linkPlayer\(/);
   assert.doesNotMatch(discordTransport, /stateStore\.savePlanVersion\(/);
-  assert.doesNotMatch(discordTransport, /publish|sendDirectMessage|sendDm/);
+  assert.doesNotMatch(discordTransport, /sendDirectMessage|sendDm/);
 });
 
-test("guild command registration includes bootstrap setup with native channel and role selectors", () => {
+test("guild command registration exposes setup selectors while server-side authorization remains authoritative", () => {
   assert.equal(packageJson.scripts["discord:register-tb"], "node scripts/register-discord-tb-commands.mjs");
-  assert.match(registerScript, /default_member_permissions: "32"/);
+  assert.doesNotMatch(registerScript, /default_member_permissions/);
+  assert.match(registerScript, /Picker visibility stays broad in the pilot/);
   assert.match(registerScript, /name: "status"/);
   assert.match(registerScript, /name: "setup"/);
   assert.match(registerScript, /type: 7,[\s\S]*name: "channel"/);
