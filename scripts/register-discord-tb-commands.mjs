@@ -29,6 +29,29 @@ const requiredPhaseOption = {
   choices: phaseChoices,
 };
 
+function assertRequiredOptionsBeforeOptional(options = [], path = "command") {
+  let sawOptionalParameter = false;
+
+  for (const option of options) {
+    const isSubcommand = option?.type === 1 || option?.type === 2;
+    if (!isSubcommand) {
+      if (option?.required === true) {
+        if (sawOptionalParameter) {
+          throw new Error(
+            `Invalid Discord command schema at ${path}: required option '${option.name}' appears after an optional option.`,
+          );
+        }
+      } else {
+        sawOptionalParameter = true;
+      }
+    }
+
+    if (Array.isArray(option?.options)) {
+      assertRequiredOptionsBeforeOptional(option.options, `${path} ${option.name}`);
+    }
+  }
+}
+
 if (!config.commandRegistrationConfigured) {
   console.error("Discord command registration requires DISCORD_APPLICATION_ID, DISCORD_BOT_TOKEN, and DISCORD_DEFAULT_GUILD_ID.");
   process.exitCode = 1;
@@ -135,12 +158,6 @@ if (!config.commandRegistrationConfigured) {
           description: "Set a GIVE/DEFAULT/KEEP unit preference for your linked player or a guildmate",
           options: [
             {
-              type: 6,
-              name: "member",
-              description: "Optional member target; normal members may target only themselves",
-              required: false,
-            },
-            {
               type: 3,
               name: "unit",
               description: "SWGOH unit Base ID, for example JEDIKNIGHTCAL",
@@ -154,6 +171,12 @@ if (!config.commandRegistrationConfigured) {
               description: "Donation preference used by the mission-safe ROTE planner",
               required: true,
               choices: preferenceChoices,
+            },
+            {
+              type: 6,
+              name: "member",
+              description: "Optional member target; normal members may target only themselves",
+              required: false,
             },
           ],
         },
@@ -197,6 +220,10 @@ if (!config.commandRegistrationConfigured) {
     },
   ];
 
+  for (const command of commands) {
+    assertRequiredOptionsBeforeOptional(command.options, `/${command.name}`);
+  }
+
   const endpoint = `https://discord.com/api/${API_VERSION}/applications/${config.applicationId}/guilds/${config.pilotGuildId}/commands`;
   const response = await fetch(endpoint, {
     method: "PUT",
@@ -218,7 +245,7 @@ if (!config.commandRegistrationConfigured) {
 
   if (!response.ok) {
     console.error(`Discord command registration failed with HTTP ${response.status}.`);
-    console.error(body);
+    console.error(typeof body === "string" ? body : JSON.stringify(body, null, 2));
     process.exitCode = 1;
   } else {
     const registered = Array.isArray(body) ? body : [];
