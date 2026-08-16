@@ -6,6 +6,7 @@ const server = await readFile(new URL("../server.mjs", import.meta.url), "utf8")
 const envExample = await readFile(new URL("../.env.example", import.meta.url), "utf8");
 const packageJson = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
 const registerScript = await readFile(new URL("../scripts/register-discord-tb-commands.mjs", import.meta.url), "utf8");
+const liveService = await readFile(new URL("../discord-tb-live.mjs", import.meta.url), "utf8");
 
 test("server accepts POST only for the signed Discord interactions endpoint before the GET-only API router", () => {
   const route = server.indexOf('request.method === "POST" && url.pathname === "/api/discord/interactions"');
@@ -25,13 +26,24 @@ test("Discord environment example is disabled by default and contains no secret 
   assert.match(envExample, /DISCORD_TB_DELIVERY_ENABLED=false/);
   assert.match(envExample, /DISCORD_PUBLIC_KEY=\n/);
   assert.match(envExample, /DISCORD_BOT_TOKEN=\n/);
+  assert.match(envExample, /DISCORD_DEFAULT_ALLY_CODE=\n/);
+  assert.match(envExample, /DISCORD_TB_REDUNDANCY_TARGET=2/);
 });
 
-test("guild command registration is explicit and officer-first", () => {
+test("guild command registration is explicit, officer-first, and phase-aware", () => {
   assert.equal(packageJson.scripts["discord:register-tb"], "node scripts/register-discord-tb-commands.mjs");
   assert.match(registerScript, /default_member_permissions: "32"/);
   assert.match(registerScript, /name: "status"/);
   assert.match(registerScript, /name: "sync"/);
   assert.match(registerScript, /name: "assignments"/);
+  assert.match(registerScript, /name: "farms"/);
+  assert.match(registerScript, /name: "phase"/);
   assert.match(registerScript, /Authorization: `Bot \$\{config\.botToken\}`/);
+});
+
+test("live Discord TB reads use the shared mission-safe planner and never require browser state", () => {
+  assert.match(liveService, /buildGuildRoteOperationSafety/);
+  assert.match(liveService, /planGuildRoteSafeAssignments/);
+  assert.match(liveService, /\/v1\/guild\/by-player\//);
+  assert.doesNotMatch(liveService, /localStorage|document\.|window\./);
 });

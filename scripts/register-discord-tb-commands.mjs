@@ -3,6 +3,14 @@ import { discordTbConfig } from "../discord-tb.mjs";
 const API_VERSION = "v10";
 const config = discordTbConfig(process.env);
 
+const phaseOption = {
+  type: 3,
+  name: "phase",
+  description: "Optional ROTE phase scope",
+  required: false,
+  choices: ["P1", "P2", "P3", "P4", "P5", "P6"].map((phase) => ({ name: phase, value: phase })),
+};
+
 if (!config.commandRegistrationConfigured) {
   console.error("Discord command registration requires DISCORD_APPLICATION_ID, DISCORD_BOT_TOKEN, and DISCORD_DEFAULT_GUILD_ID.");
   process.exitCode = 1;
@@ -17,17 +25,24 @@ if (!config.commandRegistrationConfigured) {
         {
           type: 1,
           name: "status",
-          description: "Show the Roster Command TB integration status",
+          description: "Show the SWGOH Command Center TB integration status",
         },
         {
           type: 1,
           name: "sync",
-          description: "Request a guild roster refresh (scaffolded; not enabled yet)",
+          description: "Force-refresh the pilot guild roster from the live SWGOH gateway",
         },
         {
           type: 1,
           name: "assignments",
-          description: "Show the current guild-safe ROTE assignment state (publishing next stage)",
+          description: "Preview the current mission-safe ROTE Operation assignment draft",
+          options: [phaseOption],
+        },
+        {
+          type: 1,
+          name: "farms",
+          description: "Show the highest-impact ROTE mission farms from the live guild roster",
+          options: [phaseOption],
         },
       ],
     },
@@ -39,7 +54,7 @@ if (!config.commandRegistrationConfigured) {
     headers: {
       Authorization: `Bot ${config.botToken}`,
       "Content-Type": "application/json",
-      "User-Agent": "SWGOH-Roster-Command (guild-tb-command-registration)",
+      "User-Agent": "SWGOH-Command-Center (guild-tb-command-registration)",
     },
     body: JSON.stringify(commands),
   });

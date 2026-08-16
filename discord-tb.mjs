@@ -1,8 +1,11 @@
 import { createPublicKey, verify as cryptoVerify } from "node:crypto";
+import { createDiscordTbLiveServices } from "./discord-tb-live.mjs";
 
 const ED25519_SPKI_PREFIX = Buffer.from("302a300506032b6570032100", "hex");
 const MAX_INTERACTION_BYTES = 1024 * 1024;
 const EPHEMERAL_FLAG = 1 << 6;
+const MAX_DISCORD_CONTENT = 1900;
+const DEFERRED_SUBCOMMANDS = new Set(["sync", "assignments", "farms"]);
 
 export const DISCORD_INTERACTION_TYPES = Object.freeze({
   PING: 1,
@@ -29,11 +32,24 @@ function snowflake(value) {
   return /^\d{16,22}$/.test(text) ? text : "";
 }
 
+function allyCode(value) {
+  const digits = clean(value).replace(/\D/g, "");
+  return /^\d{9}$/.test(digits) ? digits : "";
+}
+
+function boundedInteger(value, fallback, min, max) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(min, Math.min(max, Math.trunc(parsed)));
+}
+
 export function discordTbConfig(env = process.env) {
   const applicationId = snowflake(env.DISCORD_APPLICATION_ID);
   const publicKey = clean(env.DISCORD_PUBLIC_KEY).toLowerCase();
   const botToken = clean(env.DISCORD_BOT_TOKEN);
   const pilotGuildId = snowflake(env.DISCORD_DEFAULT_GUILD_ID);
+  const pilotAllyCode = allyCode(env.DISCORD_DEFAULT_ALLY_CODE);
+  const redundancyTarget = boundedInteger(env.DISCORD_TB_REDUNDANCY_TARGET, 2, 1, 5);
   const interactionsEnabled = boolEnv(env.DISCORD_TB_INTERACTIONS_ENABLED, false);
   const deliveryEnabled = boolEnv(env.DISCORD_TB_DELIVERY_ENABLED, false);
   const validPublicKey = /^[0-9a-f]{64}$/.test(publicKey);
@@ -43,10 +59,13 @@ export function discordTbConfig(env = process.env) {
     publicKey: validPublicKey ? publicKey : "",
     botToken,
     pilotGuildId,
+    pilotAllyCode,
+    redundancyTarget,
     interactionsEnabled,
     deliveryEnabled,
     configured: Boolean(applicationId && validPublicKey),
     commandRegistrationConfigured: Boolean(applicationId && botToken && pilotGuildId),
+    pilotGuildLiveConfigured: Boolean(pilotGuildId && pilotAllyCode),
   });
 }
 
@@ -59,8 +78,10 @@ export function discordTbPublicStatus(env = process.env) {
     publicKeyConfigured: Boolean(config.publicKey),
     botTokenConfigured: Boolean(config.botToken),
     pilotGuildConfigured: Boolean(config.pilotGuildId),
+    pilotGuildLiveConfigured: config.pilotGuildLiveConfigured,
     commandRegistrationConfigured: config.commandRegistrationConfigured,
     deliveryEnabled: config.deliveryEnabled,
+    redundancyTarget: config.redundancyTarget,
     interactionsPath: "/api/discord/interactions",
     mode: "http-interactions",
   });
@@ -123,9 +144,24 @@ function commandOptions(interaction = {}) {
   return Array.isArray(interaction?.data?.options) ? interaction.data.options : [];
 }
 
+function activeSubcommand(interaction = {}) {
+  return commandOptions(interaction).find((row) => Number(row?.type) === 1 || Number(row?.type) === 2) || null;
+}
+
 export function discordTbSubcommand(interaction = {}) {
-  const option = commandOptions(interaction).find((row) => Number(row?.type) === 1 || Number(row?.type) === 2);
-  return String(option?.name || "status").toLowerCase();
+  return String(activeSubcommand(interaction)?.name || "status").toLowerCase();
+}
+
+export function discordTbOption(interaction = {}, name) {
+  const optionName = String(name || "").toLowerCase();
+  const subcommand = activeSubcommand(interaction);
+  const options = Array.isArray(subcommand?.options) ? subcommand.options : [];
+  return options.find((row) => String(row?.name || "").toLowerCase() === optionName)?.value ?? null;
+}
+
+export function discordTbPhase(interaction = {}) {
+  const phase = String(discordTbOption(interaction, "phase") || "").toUpperCase();
+  return /^P[1-6]$/.test(phase) ? phase : "";
 }
 
 function ephemeral(content) {
@@ -139,15 +175,58 @@ function ephemeral(content) {
   };
 }
 
+function deferredEphemeral() {
+  return {
+    type: DISCORD_RESPONSE_TYPES.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE,
+    data: { flags: EPHEMERAL_FLAG },
+  };
+}
+
+function truncateContent(value, maxLength = MAX_DISCORD_CONTENT) {
+  const source = String(value || "");
+  const limit = Math.max(80, Math.min(2000, Number(maxLength || MAX_DISCORD_CONTENT)));
+  if (source.length <= limit) return source;
+  const suffix = "\n…more details are available in the SWGOH Command Center web app.";
+  const available = Math.max(1, limit - suffix.length);
+  const sliced = source.slice(0, available);
+  const boundary = sliced.lastIndexOf("\n");
+  return `${boundary > available * 0.55 ? sliced.slice(0, boundary) : sliced}${suffix}`.slice(0, limit);
+}
+
+function safeText(value, fallback = "unknown") {
+  const text = String(value ?? "").replace(/[\r\n]+/g, " ").replace(/\s+/g, " ").trim();
+  return text || fallback;
+}
+
+function number(value) {
+  return new Intl.NumberFormat("en-US").format(Number(value || 0));
+}
+
+function guildName(guild = {}) {
+  return safeText(guild?.guild?.name || guild?.name || "Guild");
+}
+
+function hydratedMembers(guild = {}) {
+  return (Array.isArray(guild?.members) ? guild.members : []).filter((member) => member?.rosterAvailable).length;
+}
+
+function guildGp(guild = {}) {
+  const members = Array.isArray(guild?.members) ? guild.members : [];
+  const sum = members.reduce((total, member) => total + Number(member?.galacticPower || 0), 0);
+  return Number(guild?.guild?.galacticPower || guild?.galacticPower || sum || 0);
+}
+
 function statusMessage(interaction, config) {
   const guild = String(interaction?.guild_id || "Direct message / unknown guild");
   const lines = [
-    "**SWGOH Roster Command · TB**",
+    "**SWGOH Command Center · TB**",
     `HTTP interactions: ${config.interactionsEnabled ? "enabled" : "disabled"}`,
     `Guild: ${guild}`,
-    `Pilot guild restriction: ${config.pilotGuildId || "not configured"}`,
-    `Outbound delivery: ${config.deliveryEnabled ? "enabled" : "disabled"}`,
-    "Guild roster and ROTE planning remain read-only from Discord in this scaffold.",
+    `Pilot Discord server: ${config.pilotGuildId || "not configured"}`,
+    `Pilot SWGOH guild seed: ${config.pilotAllyCode ? "configured" : "not configured"}`,
+    `Mission redundancy target: ${config.redundancyTarget}`,
+    `Proactive outbound delivery: ${config.deliveryEnabled ? "enabled" : "disabled"}`,
+    "Live slash-command reads are isolated from publishing, DMs, and officer mutations.",
   ];
   return lines.join("\n");
 }
@@ -163,16 +242,169 @@ export function handleDiscordTbCommand(interaction, config = discordTbConfig()) 
 
   const subcommand = discordTbSubcommand(interaction);
   if (subcommand === "status") return ephemeral(statusMessage(interaction, config));
-  if (subcommand === "sync") {
-    return ephemeral("Guild sync is scaffolded but not enabled from Discord yet. Use the web app's Guild / TB workspace to refresh the live guild roster.");
+
+  if (DEFERRED_SUBCOMMANDS.has(subcommand)) {
+    if (!config.pilotAllyCode) {
+      return ephemeral("Live guild commands are not configured yet. Set `DISCORD_DEFAULT_ALLY_CODE` on the SWGOH App Railway service to a 9-digit Ally Code from the pilot guild.");
+    }
+    return deferredEphemeral();
   }
-  if (subcommand === "assignments") {
-    return ephemeral("Guild-safe ROTE assignments are available in the web app. Discord publishing will be enabled after guild↔Discord identity and officer authorization are persisted server-side.");
-  }
+
   return ephemeral(`Unknown /tb subcommand: ${subcommand}`);
 }
 
-export async function handleDiscordInteractionRequest(request, response, env = process.env) {
+function phaseScope(value) {
+  return value ? String(value).toUpperCase() : "All phases";
+}
+
+function assignmentLabel(row = {}) {
+  const unit = safeText(row.name || row.baseId, "unit");
+  const member = safeText(row.member?.name, "unassigned");
+  const status = safeText(row.safety?.status || "SAFE", "SAFE");
+  return `• ${safeText(row.phase, "?")} · ${unit} → **${member}**${status === "SAFE" ? "" : ` · ${status}`}`;
+}
+
+function formatSyncResult(result = {}) {
+  const guild = result.guild || result;
+  const members = Array.isArray(guild?.members) ? guild.members : [];
+  const lines = [
+    `**SWGOH Command Center · Guild Sync**`,
+    `Guild: **${guildName(guild)}**`,
+    `Live roster refresh: **complete**`,
+    `Hydrated rosters: **${hydratedMembers(guild)}/${members.length}**`,
+    `Guild GP: **${number(guildGp(guild))}**`,
+    `Cache state: **${safeText(result.cache || "refreshed")}**`,
+    "No TB assignments or officer state were changed.",
+  ];
+  return truncateContent(lines.join("\n"));
+}
+
+function formatAssignmentsResult(result = {}, phase = "") {
+  const plan = result.plan || {};
+  const safety = result.safety || {};
+  const assignments = (Array.isArray(plan.assignments) ? plan.assignments : []).filter((row) => !phase || String(row.phase) === phase);
+  const unfilled = (Array.isArray(plan.unfilled) ? plan.unfilled : []).filter((row) => !phase || String(row.phase) === phase);
+  const total = assignments.length + unfilled.length;
+  const coverage = total ? Math.round((assignments.length / total) * 1000) / 10 : 0;
+  const help = assignments.filter((row) => row?.safety?.help).length;
+  const criticalProtections = Number(safety?.summary?.criticalProtections || 0);
+  const lines = [
+    `**ROTE Mission-Safe Assignments · ${phaseScope(phase)}**`,
+    `Guild: **${guildName(result.guild)}**`,
+    `Assigned: **${assignments.length}/${total} (${coverage}%)** · Unfilled: **${unfilled.length}**`,
+    `Mission protections: **${Number(safety?.summary?.protectedUnits || 0)}** · Critical: **${criticalProtections}** · HELP/risk assignments: **${help}**`,
+  ];
+
+  if (assignments.length) {
+    lines.push("", "**Assignment preview**");
+    for (const row of assignments.slice(0, 12)) lines.push(assignmentLabel(row));
+    if (assignments.length > 12) lines.push(`• +${assignments.length - 12} more assignments in the web planner`);
+  }
+
+  if (unfilled.length) {
+    lines.push("", "**Needs officer attention**");
+    for (const row of unfilled.slice(0, 5)) {
+      lines.push(`• ${safeText(row.phase, "?")} · ${safeText(row.name || row.baseId, "unit")} — ${Number(row.safeOwners || 0)} safe / ${Number(row.availableOwners || 0)} available owners`);
+    }
+    if (unfilled.length > 5) lines.push(`• +${unfilled.length - 5} more unfilled slots`);
+  }
+
+  lines.push("", "_Read-only draft: publishing, locks, ignores, preferences, and DMs are not changed by this command._");
+  return truncateContent(lines.join("\n"));
+}
+
+function formatFarmsResult(result = {}, phase = "") {
+  const farms = Array.isArray(result?.safety?.coverage?.farms) ? result.safety.coverage.farms : [];
+  const filtered = farms.filter((row) => {
+    if (!phase) return true;
+    return (Array.isArray(row?.missionRefs) ? row.missionRefs : []).some((mission) => String(mission?.phase || "") === phase);
+  });
+  const lines = [
+    `**ROTE Highest-Impact Farms · ${phaseScope(phase)}**`,
+    `Guild: **${guildName(result.guild)}**`,
+    `Mission redundancy target: **${Number(result?.safety?.redundancyTarget || 2)} ready owners**`,
+  ];
+
+  if (!filtered.length) {
+    lines.push("", "No mission-impact farm targets were found for this scope from the currently hydrated roster data.");
+  } else {
+    lines.push("");
+    for (const row of filtered.slice(0, 10)) {
+      lines.push(`• **${safeText(row.member?.name, "member")}** — ${safeText(row.unitName || row.baseId, "unit")} → ${safeText(row.gapLabel, "upgrade needed")} · ${Number(row.missionImpact || 0)} mission impact`);
+    }
+    if (filtered.length > 10) lines.push(`• +${filtered.length - 10} more farm targets in the web planner`);
+  }
+
+  lines.push("", "_Farm priorities come from verified mission-entry coverage; partial fleet evidence stays fail-closed._");
+  return truncateContent(lines.join("\n"));
+}
+
+function deferredErrorMessage(error) {
+  const message = safeText(error?.name === "AbortError" ? "The live SWGOH request timed out." : error?.message, "The live TB command failed.");
+  return truncateContent(`**SWGOH Command Center · TB command failed**\n${message}\nNo guild settings or assignments were changed.`);
+}
+
+export async function executeDiscordTbDeferredCommand(interaction, config = discordTbConfig(), services = {}) {
+  const subcommand = discordTbSubcommand(interaction);
+  const phase = discordTbPhase(interaction);
+  if (!config.pilotAllyCode) throw new Error("DISCORD_DEFAULT_ALLY_CODE is not configured.");
+
+  if (subcommand === "sync") {
+    if (typeof services.syncGuild !== "function") throw new Error("Discord guild sync service is unavailable.");
+    const result = await services.syncGuild({ allyCode: config.pilotAllyCode, interaction });
+    return formatSyncResult(result);
+  }
+
+  if (subcommand === "assignments" || subcommand === "farms") {
+    if (typeof services.buildPlan !== "function") throw new Error("Discord TB planning service is unavailable.");
+    const result = await services.buildPlan({
+      allyCode: config.pilotAllyCode,
+      redundancyTarget: config.redundancyTarget,
+      phase,
+      interaction,
+    });
+    return subcommand === "farms" ? formatFarmsResult(result, phase) : formatAssignmentsResult(result, phase);
+  }
+
+  throw new Error(`Unsupported deferred /tb subcommand: ${subcommand}`);
+}
+
+export async function editDiscordOriginalResponse(interaction, config, content, fetchImpl = fetch) {
+  const applicationId = snowflake(config?.applicationId);
+  const token = clean(interaction?.token);
+  if (!applicationId || !token) throw new Error("Discord interaction follow-up identifiers are missing.");
+
+  const endpoint = `https://discord.com/api/v10/webhooks/${applicationId}/${encodeURIComponent(token)}/messages/@original`;
+  const response = await fetchImpl(endpoint, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      "User-Agent": "SWGOH-Command-Center (discord-tb-interactions)",
+    },
+    body: JSON.stringify({
+      content: truncateContent(content),
+      allowed_mentions: { parse: [] },
+    }),
+  });
+
+  if (!response?.ok) {
+    const text = typeof response?.text === "function" ? await response.text() : "";
+    throw new Error(`Discord interaction response edit failed with HTTP ${response?.status || "unknown"}${text ? `: ${text.slice(0, 200)}` : ""}.`);
+  }
+  return true;
+}
+
+function scheduleDeferredDiscordCommand(interaction, config, services) {
+  Promise.resolve()
+    .then(() => executeDiscordTbDeferredCommand(interaction, config, services))
+    .catch((error) => deferredErrorMessage(error))
+    .then((content) => editDiscordOriginalResponse(interaction, config, content, services?.fetch || fetch))
+    .catch((error) => {
+      console.error("Discord deferred TB response failed:", error?.message || error);
+    });
+}
+
+export async function handleDiscordInteractionRequest(request, response, env = process.env, services = {}) {
   const config = discordTbConfig(env);
   if (!config.interactionsEnabled) {
     jsonResponse(response, 503, { error: "Discord TB interactions are disabled." });
@@ -222,6 +454,13 @@ export async function handleDiscordInteractionRequest(request, response, env = p
     return true;
   }
 
-  jsonResponse(response, 200, handleDiscordTbCommand(interaction, config));
+  const commandResponse = handleDiscordTbCommand(interaction, config);
+  jsonResponse(response, 200, commandResponse);
+  if (commandResponse.type === DISCORD_RESPONSE_TYPES.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE) {
+    const liveServices = typeof services?.syncGuild === "function" || typeof services?.buildPlan === "function"
+      ? services
+      : createDiscordTbLiveServices(env);
+    scheduleDeferredDiscordCommand(interaction, config, liveServices);
+  }
   return true;
 }
