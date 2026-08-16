@@ -46,6 +46,24 @@ function assignmentRequirement(row) {
   return row?.unitType === "Ship" ? `${number(row?.requiredRarity)}★` : `R${number(row?.requiredRelic)}`;
 }
 
+function availabilityBadge(profile) {
+  const availability = profile?.availability || {};
+  if (availability.unavailable) {
+    const source = availability.source === "durable-discord" ? "VERIFIED DISCORD STATE" : "LOCAL OFFICER STATE";
+    return `<span class="guild-member-availability unavailable">UNAVAILABLE FOR OPERATIONS · ${escapeHtml(source)}</span>`;
+  }
+  if (availability.durableBound) return '<span class="guild-member-availability available">AVAILABLE · DURABLE GUILD STATE</span>';
+  return '<span class="guild-member-availability neutral">AVAILABILITY NOT DURABLY LINKED</span>';
+}
+
+function operationEmpty(profile) {
+  if (profile?.availability?.unavailable) {
+    const when = profile.availability.updatedAt ? ` · updated ${new Date(profile.availability.updatedAt).toLocaleString()}` : "";
+    return `<div class="guild-member-availability-note"><strong>Excluded from automatic Operations:</strong> this member is currently marked unavailable${escapeHtml(when)}. Roster capability is still shown, but the safe allocator does not assign them.</div>`;
+  }
+  return '<div class="guild-member-clean">No Operation assignments in the current safe draft.</div>';
+}
+
 function renderTb(profile) {
   const tb = profile.tb;
   const ally = profile.member.allyCode;
@@ -56,7 +74,7 @@ function renderTb(profile) {
     <div class="guild-member-section-stats">${stat("Exact-Ready Missions", tb.exactReady, "good")}${stat("Sole-Owner Missions", tb.soleOwner, tb.soleOwner ? "warn" : "good")}${stat("Close Missions", tb.close)}${stat("Mission Leads", tb.missionLeads)}${stat("Operation Assignments", tb.operationAssignedCount)}${stat("HELP / Risk Assignments", tb.operationRiskCount, tb.operationRiskCount ? "warn" : "good")}${stat("Protected Units", tb.protectedUnits.length)}${stat("Partial Known Gates", tb.knownGate)}</div>
     <div class="guild-member-two-col">
       <div class="guild-member-panel"><h3>Sole-owner mission dependency</h3>${sole.length ? `<div class="guild-member-list">${sole.map((row) => `<div><strong>${escapeHtml(missionRef(row))}</strong><span>${escapeHtml(row.phase || "")}</span></div>`).join("")}</div>` : '<div class="guild-member-clean">No exact mission currently depends on this member as its only ready owner.</div>'}</div>
-      <div class="guild-member-panel"><h3>Current safe Operation draft</h3>${assignments.length ? `<div class="guild-member-list">${assignments.map((row) => `<div class="${row?.safety?.help ? "risk" : ""}"><strong>${escapeHtml(row.name || row.baseId)} · ${escapeHtml(assignmentRequirement(row))}</strong><span>${escapeHtml(row.phase || "")} · ${escapeHtml(row.conflictId || "Operation")}${row?.safety?.help ? " · HELP" : ""}</span></div>`).join("")}</div>` : '<div class="guild-member-clean">No Operation assignments in the current safe draft.</div>'}</div>
+      <div class="guild-member-panel"><h3>Current safe Operation draft</h3>${assignments.length ? `<div class="guild-member-list">${assignments.map((row) => `<div class="${row?.safety?.help ? "risk" : ""}"><strong>${escapeHtml(row.name || row.baseId)} · ${escapeHtml(assignmentRequirement(row))}</strong><span>${escapeHtml(row.phase || "")} · ${escapeHtml(row.conflictId || "Operation")}${row?.safety?.help ? " · HELP" : ""}</span></div>`).join("")}</div>` : operationEmpty(profile)}</div>
     </div>
     ${farms.length ? `<div class="guild-member-panel"><h3>Guild mission upgrade pressure</h3><div class="guild-member-farm-grid">${farms.map((row) => `<div><strong>${escapeHtml(row.unitName || row.baseId)}</strong><span>${escapeHtml(row.gapLabel || "Upgrade needed")}</span><small>${number(row.missionImpact || 0)} mission impact · ${number(row.mandatoryImpact || 0)} mandatory</small><a href="${escapeAttr(route("/guild/units", ally, { unit: row.baseId }))}">Guild ownership →</a></div>`).join("")}</div></div>` : ""}
   </section>`;
@@ -88,7 +106,7 @@ export function renderGuildMemberCommandPage({ target, profile } = {}) {
   const hydrated = profile.hydration?.hydrated || profile.hydration?.requested || 0;
   const ally = member.allyCode;
   target.innerHTML = `
-    <section class="guild-member-command-header"><div><div class="kicker">GUILD MEMBER COMMAND PROFILE</div><h1>${escapeHtml(member.name)}</h1><p>${escapeHtml(formatAllyCode(ally))} · ${number(member.galacticPower)} GP · ${member.rosterAvailable ? "Hydrated live roster" : "Roster unavailable"}</p><div class="guild-member-header-links"><a href="${escapeAttr(route("/guild/members", ally))}">← Guild Members</a><a href="${escapeAttr(playerLink(ally))}">Open Player Roster →</a></div></div><div class="guild-member-rank-grid">${stat("Guild GP Rank", rankLabel(profile.ranks.gp, hydrated))}${stat("TB Coverage Rank", rankLabel(profile.ranks.tb, hydrated))}${stat("TW R7 Depth Rank", rankLabel(profile.ranks.tw, hydrated))}${stat("Raid R7 Depth Rank", rankLabel(profile.ranks.raid, hydrated))}</div></section>
+    <section class="guild-member-command-header"><div><div class="kicker">GUILD MEMBER COMMAND PROFILE</div><h1>${escapeHtml(member.name)}</h1><p>${escapeHtml(formatAllyCode(ally))} · ${number(member.galacticPower)} GP · ${member.rosterAvailable ? "Hydrated live roster" : "Roster unavailable"}</p><div class="guild-member-availability-row">${availabilityBadge(profile)}</div><div class="guild-member-header-links"><a href="${escapeAttr(route("/guild/members", ally))}">← Guild Members</a><a href="${escapeAttr(playerLink(ally))}">Open Player Roster →</a></div></div><div class="guild-member-rank-grid">${stat("Guild GP Rank", rankLabel(profile.ranks.gp, hydrated))}${stat("TB Coverage Rank", rankLabel(profile.ranks.tb, hydrated))}${stat("TW R7 Depth Rank", rankLabel(profile.ranks.tw, hydrated))}${stat("Raid R7 Depth Rank", rankLabel(profile.ranks.raid, hydrated))}</div></section>
     <nav class="guild-member-subnav" aria-label="Guild member profile"><a href="#guildMemberOverview">Overview</a><a href="#guildMemberTb">TB</a><a href="#guildMemberTw">TW</a><a href="#guildMemberRaid">Raids</a></nav>
     <section class="guild-member-section" id="guildMemberOverview"><div class="guild-member-section-head"><div><div class="kicker">ROSTER FOUNDATION</div><h2>Member overview</h2></div><a href="${escapeAttr(route("/guild/units", ally))}">Open Unit Matrix →</a></div><div class="guild-member-overview-stats">${stat("Total GP", number(member.galacticPower))}${stat("Character GP", number(member.characterGp))}${stat("Ship GP", number(member.shipGp))}${stat("Characters", number(member.characterCount))}${stat("Ships", number(member.shipCount))}${stat("Galactic Legends", number(member.galacticLegendCount), "good")}${stat("R7+ Characters", number(member.relic7))}${stat("R9 Characters", number(member.relic9))}</div><div class="guild-member-mode-grid">${modeCard("TB", "Territory Battles", `${tbSentence(profile)}`, route("/guild/tb", ally), `<strong>${number(profile.tb.exactReady)}</strong><span>exact-ready missions</span>`)}${modeCard("TW", "Territory Wars", `${twSentence(profile)}`, route("/guild/tw", ally), `<strong>${number(profile.tw.r7Factions)}</strong><span>R7 faction cores</span>`)}${modeCard("RAID", "Order 66 Raid", `${raidSentence(profile)}`, route("/guild/raids", ally), `<strong>${number(profile.raid.bands.r7 || 0)}</strong><span>R7+ eligible units</span>`)}</div></section>
     ${renderTb(profile)}
@@ -98,6 +116,7 @@ export function renderGuildMemberCommandPage({ target, profile } = {}) {
 }
 
 function tbSentence(profile) {
+  if (profile.availability?.unavailable) return `Roster capability remains visible, but this member is currently excluded from automatic Operation assignment because they are marked unavailable.`;
   if (profile.tb.soleOwner) return `${profile.tb.soleOwner} exact ROTE mission${profile.tb.soleOwner === 1 ? "" : "s"} currently depend on this member as the only exact-ready owner.`;
   return `${profile.tb.exactReady} exact ROTE mission entries are currently available from this roster.`;
 }
