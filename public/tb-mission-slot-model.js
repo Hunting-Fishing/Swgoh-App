@@ -37,9 +37,11 @@ export function missionSlotModel(mission = {}, eligibility = {}) {
   const mandatoryIdentities = identitySets(mandatoryMembers);
   const mandatorySlots = mandatoryMembers.length;
   const flexSlots = squadSize > 0 ? Math.max(0, squadSize - mandatorySlots) : 0;
-  const candidates = Array.isArray(eligibility?.candidates) ? eligibility.candidates : [];
-  const flexCandidates = candidates.filter((unit) => !matchesIdentity(unit, mandatoryIdentities));
   const fixedSquad = squadSize > 0 && mandatorySlots >= squadSize;
+  const candidates = Array.isArray(eligibility?.candidates) ? eligibility.candidates : [];
+  const flexCandidates = fixedSquad
+    ? []
+    : candidates.filter((unit) => !matchesIdentity(unit, mandatoryIdentities));
   const flexShortfall = Math.max(0, flexSlots - flexCandidates.length);
 
   return Object.freeze({
