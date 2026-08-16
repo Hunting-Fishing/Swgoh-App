@@ -49,7 +49,7 @@ test("internal roster-preparation links resolve only to existing mission recomme
       );
     }
   }
-  assert.equal(linked, 5, "only the five unambiguous P1 strategy/recommendation mappings should be linked");
+  assert.equal(linked, 6, "only the six unambiguous P1 strategy/recommendation mappings should be linked");
 });
 
 test("generic, deployment and Operations nodes remain unforced", () => {
