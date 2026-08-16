@@ -1,6 +1,7 @@
 import { createPublicKey, verify as cryptoVerify } from "node:crypto";
 import { discordStateStore } from "./discord-state-store.mjs";
 import { createDiscordTbLiveServices } from "./discord-tb-live.mjs";
+import { linkDiscordGuildPlayer, unlinkDiscordGuildPlayer } from "./discord-player-link-service.mjs";
 
 const ED25519_SPKI_PREFIX = Buffer.from("302a300506032b6570032100", "hex");
 const MAX_INTERACTION_BYTES = 1024 * 1024;
@@ -8,7 +9,8 @@ const EPHEMERAL_FLAG = 1 << 6;
 const MAX_DISCORD_CONTENT = 1900;
 const ADMINISTRATOR_PERMISSION = 1n << 3n;
 const MANAGE_GUILD_PERMISSION = 1n << 5n;
-const DEFERRED_SUBCOMMANDS = new Set(["setup", "sync", "phase", "assignments", "farms"]);
+const DEFERRED_SUBCOMMANDS = new Set(["setup", "link", "unlink", "sync", "phase", "assignments", "farms"]);
+const ADMIN_MUTATION_SUBCOMMANDS = new Set(["setup", "link", "unlink"]);
 
 export const DISCORD_INTERACTION_TYPES = Object.freeze({
   PING: 1,
@@ -125,6 +127,7 @@ export function discordTbPublicStatus(env = process.env) {
     redundancyTarget: config.redundancyTarget,
     officerAuthorization: "manage-guild-administrator-or-configured-role",
     setupAuthorization: "manage-guild-or-administrator",
+    identityMutationAuthorization: "manage-guild-or-administrator",
     interactionsPath: "/api/discord/interactions",
     mode: "http-interactions",
   });
@@ -276,6 +279,7 @@ function statusMessage(interaction, config) {
     `Mission redundancy target: ${config.redundancyTarget}`,
     "Officer authorization: Manage Guild / Administrator, or a durably configured officer role",
     "Setup authorization: Manage Guild or Administrator only",
+    "Player-link mutations: Manage Guild or Administrator only",
     `Proactive outbound delivery: ${config.deliveryEnabled ? "enabled" : "disabled"}`,
     "Publishing and DMs remain disabled.",
   ];
@@ -295,6 +299,13 @@ export function handleDiscordTbCommand(interaction, config = discordTbConfig()) 
   if (subcommand === "status") return ephemeral(statusMessage(interaction, config));
   if (subcommand === "phase" && !discordTbPhase(interaction)) {
     return ephemeral("Choose a ROTE phase from P1 through P6 for `/tb phase`.");
+  }
+  if (subcommand === "link") {
+    if (!snowflake(discordTbOption(interaction, "user"))) return ephemeral("Choose a valid Discord user for `/tb link`.");
+    if (!allyCode(discordTbOption(interaction, "ally_code"))) return ephemeral("Enter a valid 9-digit SWGOH Ally Code for `/tb link`.");
+  }
+  if (subcommand === "unlink" && !snowflake(discordTbOption(interaction, "user"))) {
+    return ephemeral("Choose a valid Discord user for `/tb unlink`.");
   }
 
   if (DEFERRED_SUBCOMMANDS.has(subcommand)) {
@@ -332,6 +343,33 @@ function formatSetupResult(guild = {}, roleWasProvided = false) {
     lines.push(`Officer roles: **${roleIds.length} configured** (existing role configuration preserved)`);
   }
   lines.push("Setup was written atomically with an audit event. Publishing and DMs are still disabled.");
+  return truncateContent(lines.join("\n"));
+}
+
+function formatPlayerLinkResult(result = {}) {
+  const verification = result.verification || {};
+  const link = result.link || {};
+  const lines = [
+    "**SWGOH Command Center · Player Link Saved**",
+    `Discord user: <@${safeText(link.discordUserId)}>`,
+    `SWGOH player: **${safeText(verification.playerName, "player")}**`,
+    `Ally Code: **${safeText(link.swgohAllyCode)}**`,
+    `Bound guild: **${safeText(verification.guildName, "guild")}**`,
+    "Verification: **Ally Code is present in the bound live guild roster**",
+    "Guild membership was verified; this does not independently prove personal account ownership.",
+    "The identity link was written durably with an audit event.",
+  ];
+  return truncateContent(lines.join("\n"));
+}
+
+function formatPlayerUnlinkResult(result = {}) {
+  const removed = result.removed || {};
+  const lines = [
+    "**SWGOH Command Center · Player Link Removed**",
+    `Discord user: <@${safeText(result.discordUserId || removed.discordUserId)}>`,
+    `Former Ally Code: **${safeText(removed.swgohAllyCode)}**`,
+    "The identity link was removed durably with an audit event.",
+  ];
   return truncateContent(lines.join("\n"));
 }
 
@@ -446,7 +484,7 @@ function formatPhaseCommandResult(result = {}) {
 
 function deferredErrorMessage(error) {
   const message = safeText(error?.name === "AbortError" ? "The live SWGOH request timed out." : error?.message, "The TB command failed.");
-  return truncateContent(`**SWGOH Command Center · TB command failed**\n${message}\nNo TB plan, publishing, or DM state was changed.`);
+  return truncateContent(`**SWGOH Command Center · TB command failed**\n${message}\nNo TB plan, player-link, publishing, or DM state was changed.`);
 }
 
 export async function executeDiscordTbDeferredCommand(interaction, config = discordTbConfig(), services = {}) {
@@ -483,6 +521,43 @@ export async function executeDiscordTbDeferredCommand(interaction, config = disc
       actorDiscordUserId,
     });
     return formatSetupResult(guild, Boolean(officerRoleId));
+  }
+
+  if (subcommand === "link") {
+    const discordGuildId = snowflake(interaction?.guild_id);
+    const actorDiscordUserId = snowflake(interaction?.member?.user?.id);
+    const discordUserId = snowflake(discordTbOption(interaction, "user"));
+    const claimedAllyCode = allyCode(discordTbOption(interaction, "ally_code"));
+    if (!discordGuildId) throw new Error("A valid Discord guild is required for /tb link.");
+    if (!actorDiscordUserId) throw new Error("A valid Discord administrator identity is required for /tb link.");
+    if (!discordUserId) throw new Error("A valid target Discord user is required for /tb link.");
+    if (!claimedAllyCode) throw new Error("A valid 9-digit SWGOH Ally Code is required for /tb link.");
+    const linkService = typeof services?.linkGuildPlayer === "function" ? services.linkGuildPlayer : linkDiscordGuildPlayer;
+    const result = await linkService({
+      discordGuildId,
+      discordUserId,
+      claimedAllyCode,
+      actorDiscordUserId,
+      stateStore: services?.stateStore || discordStateStore,
+    });
+    return formatPlayerLinkResult(result);
+  }
+
+  if (subcommand === "unlink") {
+    const discordGuildId = snowflake(interaction?.guild_id);
+    const actorDiscordUserId = snowflake(interaction?.member?.user?.id);
+    const discordUserId = snowflake(discordTbOption(interaction, "user"));
+    if (!discordGuildId) throw new Error("A valid Discord guild is required for /tb unlink.");
+    if (!actorDiscordUserId) throw new Error("A valid Discord administrator identity is required for /tb unlink.");
+    if (!discordUserId) throw new Error("A valid target Discord user is required for /tb unlink.");
+    const unlinkService = typeof services?.unlinkGuildPlayer === "function" ? services.unlinkGuildPlayer : unlinkDiscordGuildPlayer;
+    const result = await unlinkService({
+      discordGuildId,
+      discordUserId,
+      actorDiscordUserId,
+      stateStore: services?.stateStore || discordStateStore,
+    });
+    return formatPlayerUnlinkResult(result);
   }
 
   if (subcommand === "sync") {
@@ -610,15 +685,21 @@ export async function handleDiscordInteractionRequest(request, response, env = p
   const subcommand = discordTbSubcommand(interaction);
   const bootstrapAuthorized = discordTbMemberHasOfficerPermission(interaction);
   const stateStore = services?.stateStore || discordStateStore;
+  const administrativeMutation = ADMIN_MUTATION_SUBCOMMANDS.has(subcommand);
   let authorized = bootstrapAuthorized;
-  if (!authorized && subcommand !== "setup") {
+  if (!authorized && !administrativeMutation) {
     authorized = await discordTbMemberHasConfiguredOfficerRole(interaction, stateStore);
   }
 
   if (!authorized) {
-    const content = subcommand === "setup"
-      ? "Bootstrap permission required. `/tb setup` requires Manage Server (Manage Guild) or Administrator permission even when an officer role is configured."
-      : "Officer permission required. `/tb` requires Manage Server (Manage Guild), Administrator, or a durably configured officer role.";
+    let content;
+    if (subcommand === "setup") {
+      content = "Bootstrap permission required. `/tb setup` requires Manage Server (Manage Guild) or Administrator permission even when an officer role is configured.";
+    } else if (administrativeMutation) {
+      content = `Administrative permission required. \`/tb ${subcommand}\` requires Manage Server (Manage Guild) or Administrator permission; configured officer roles remain read-only.`;
+    } else {
+      content = "Officer permission required. `/tb` requires Manage Server (Manage Guild), Administrator, or a durably configured officer role.";
+    }
     jsonResponse(response, 200, ephemeral(content));
     return true;
   }
@@ -626,7 +707,7 @@ export async function handleDiscordInteractionRequest(request, response, env = p
   const commandResponse = handleDiscordTbCommand(interaction, config);
   jsonResponse(response, 200, commandResponse);
   if (commandResponse.type === DISCORD_RESPONSE_TYPES.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE) {
-    if (subcommand === "setup") {
+    if (administrativeMutation) {
       scheduleDeferredDiscordCommand(interaction, config, { ...services, stateStore });
       return true;
     }
