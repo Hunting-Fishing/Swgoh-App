@@ -24,12 +24,14 @@ test("full Guild Page exposes overview members TB TW and raid sections", () => {
   assert.match(page, /guildTab\.textContent = "Guild"/);
 });
 
-test("forced guild refresh bypasses browser cache and invalidates server guild cache", () => {
+test("forced guild refresh bypasses browser cache and uses the shared web Discord guild service", () => {
   assert.match(page, /\?refresh=1/);
   assert.match(cache, /const force = url\.searchParams\.get\("refresh"\) === "1"/);
   assert.match(cache, /if \(info\.force\) cache\.delete\(info\.key\)/);
   assert.match(server, /const forceRefresh = url\.searchParams\.get\("refresh"\) === "1"/);
-  assert.match(server, /if \(forceRefresh\) guildCache\.delete\(allyCode\)/);
+  assert.match(server, /guildRosterService\.getGuildRoster\(allyCode/);
+  assert.match(server, /forceRefresh,/);
+  assert.match(server, /staleWhileRevalidate: !forceRefresh/);
   assert.match(server, /"X-Guild-Refresh": forceRefresh \? "requested" : "normal"/);
 });
 
