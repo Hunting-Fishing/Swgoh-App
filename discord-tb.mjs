@@ -1,4 +1,5 @@
 import { createPublicKey, verify as cryptoVerify } from "node:crypto";
+import { discordStateStore } from "./discord-state-store.mjs";
 import { createDiscordTbLiveServices } from "./discord-tb-live.mjs";
 
 const ED25519_SPKI_PREFIX = Buffer.from("302a300506032b6570032100", "hex");
@@ -7,7 +8,7 @@ const EPHEMERAL_FLAG = 1 << 6;
 const MAX_DISCORD_CONTENT = 1900;
 const ADMINISTRATOR_PERMISSION = 1n << 3n;
 const MANAGE_GUILD_PERMISSION = 1n << 5n;
-const DEFERRED_SUBCOMMANDS = new Set(["sync", "phase", "assignments", "farms"]);
+const DEFERRED_SUBCOMMANDS = new Set(["setup", "sync", "phase", "assignments", "farms"]);
 
 export const DISCORD_INTERACTION_TYPES = Object.freeze({
   PING: 1,
@@ -61,6 +62,28 @@ export function discordTbMemberHasOfficerPermission(interaction = {}) {
   return Boolean((permissions & MANAGE_GUILD_PERMISSION) !== 0n || (permissions & ADMINISTRATOR_PERMISSION) !== 0n);
 }
 
+function memberRoleIds(interaction = {}) {
+  return (Array.isArray(interaction?.member?.roles) ? interaction.member.roles : [])
+    .map((value) => snowflake(value))
+    .filter(Boolean);
+}
+
+export async function discordTbMemberHasConfiguredOfficerRole(interaction = {}, stateStore = discordStateStore) {
+  const guildId = snowflake(interaction?.guild_id);
+  const roles = memberRoleIds(interaction);
+  if (!guildId || !roles.length || typeof stateStore?.status !== "function" || typeof stateStore?.readGuild !== "function") return false;
+
+  try {
+    if (!stateStore.status()?.enabled) return false;
+    const guild = await stateStore.readGuild(guildId);
+    const configured = new Set((Array.isArray(guild?.officerRoleIds) ? guild.officerRoleIds : []).map((value) => snowflake(value)).filter(Boolean));
+    return roles.some((roleId) => configured.has(roleId));
+  } catch (error) {
+    console.error("Discord configured officer-role authorization failed:", error?.message || error);
+    return false;
+  }
+}
+
 export function discordTbConfig(env = process.env) {
   const applicationId = snowflake(env.DISCORD_APPLICATION_ID);
   const publicKey = clean(env.DISCORD_PUBLIC_KEY).toLowerCase();
@@ -100,7 +123,8 @@ export function discordTbPublicStatus(env = process.env) {
     commandRegistrationConfigured: config.commandRegistrationConfigured,
     deliveryEnabled: config.deliveryEnabled,
     redundancyTarget: config.redundancyTarget,
-    officerAuthorization: "manage-guild-or-administrator",
+    officerAuthorization: "manage-guild-administrator-or-configured-role",
+    setupAuthorization: "manage-guild-or-administrator",
     interactionsPath: "/api/discord/interactions",
     mode: "http-interactions",
   });
@@ -250,9 +274,10 @@ function statusMessage(interaction, config) {
     `Pilot Discord server: ${config.pilotGuildId || "not configured"}`,
     `Pilot SWGOH guild seed: ${config.pilotAllyCode ? "configured" : "not configured"}`,
     `Mission redundancy target: ${config.redundancyTarget}`,
-    "Officer authorization: Manage Guild or Administrator (server-enforced)",
+    "Officer authorization: Manage Guild / Administrator, or a durably configured officer role",
+    "Setup authorization: Manage Guild or Administrator only",
     `Proactive outbound delivery: ${config.deliveryEnabled ? "enabled" : "disabled"}`,
-    "Live slash-command reads are isolated from publishing, DMs, and officer mutations.",
+    "Publishing and DMs remain disabled.",
   ];
   return lines.join("\n");
 }
@@ -291,6 +316,23 @@ function assignmentLabel(row = {}) {
   const member = safeText(row.member?.name, "unassigned");
   const status = safeText(row.safety?.status || "SAFE", "SAFE");
   return `• ${safeText(row.phase, "?")} · ${unit} → **${member}**${status === "SAFE" ? "" : ` · ${status}`}`;
+}
+
+function formatSetupResult(guild = {}, roleWasProvided = false) {
+  const roleIds = Array.isArray(guild?.officerRoleIds) ? guild.officerRoleIds : [];
+  const lines = [
+    "**SWGOH Command Center · Durable Setup Saved**",
+    `Discord server: **${safeText(guild.discordGuildId)}**`,
+    `SWGOH guild seed: **configured**`,
+    `Command channel: ${guild.commandChannelId ? `<#${guild.commandChannelId}>` : "not configured"}`,
+  ];
+  if (roleWasProvided) {
+    lines.push(`Officer role: ${roleIds.length ? roleIds.map((id) => `<@&${id}>`).join(", ") : "cleared"}`);
+  } else {
+    lines.push(`Officer roles: **${roleIds.length} configured** (existing role configuration preserved)`);
+  }
+  lines.push("Setup was written atomically with an audit event. Publishing and DMs are still disabled.");
+  return truncateContent(lines.join("\n"));
 }
 
 function formatSyncResult(result = {}) {
@@ -403,14 +445,43 @@ function formatPhaseCommandResult(result = {}) {
 }
 
 function deferredErrorMessage(error) {
-  const message = safeText(error?.name === "AbortError" ? "The live SWGOH request timed out." : error?.message, "The live TB command failed.");
-  return truncateContent(`**SWGOH Command Center · TB command failed**\n${message}\nNo guild settings or assignments were changed.`);
+  const message = safeText(error?.name === "AbortError" ? "The live SWGOH request timed out." : error?.message, "The TB command failed.");
+  return truncateContent(`**SWGOH Command Center · TB command failed**\n${message}\nNo TB plan, publishing, or DM state was changed.`);
 }
 
 export async function executeDiscordTbDeferredCommand(interaction, config = discordTbConfig(), services = {}) {
   const subcommand = discordTbSubcommand(interaction);
   const phase = discordTbPhase(interaction);
   if (!config.pilotAllyCode) throw new Error("DISCORD_DEFAULT_ALLY_CODE is not configured.");
+
+  if (subcommand === "setup") {
+    const stateStore = services?.stateStore;
+    if (typeof stateStore?.status !== "function" || typeof stateStore?.bootstrapGuild !== "function") {
+      throw new Error("Durable Discord state service is unavailable.");
+    }
+    const stateStatus = stateStore.status();
+    if (!stateStatus?.enabled || !stateStatus?.durable) {
+      throw new Error(`Durable Discord state is not ready (${safeText(stateStatus?.reason, "storage unavailable")}). Attach a persistent Railway Volume before running /tb setup.`);
+    }
+
+    const discordGuildId = snowflake(interaction?.guild_id);
+    const actorDiscordUserId = snowflake(interaction?.member?.user?.id);
+    const requestedChannelId = snowflake(discordTbOption(interaction, "channel"));
+    const commandChannelId = requestedChannelId || snowflake(interaction?.channel_id);
+    const officerRoleId = snowflake(discordTbOption(interaction, "officer_role"));
+    if (!discordGuildId) throw new Error("A valid Discord guild is required for /tb setup.");
+    if (!actorDiscordUserId) throw new Error("A valid Discord administrator identity is required for /tb setup.");
+    if (!commandChannelId) throw new Error("Choose a command channel or run /tb setup inside a guild channel.");
+
+    const guild = await stateStore.bootstrapGuild({
+      discordGuildId,
+      swgohAllyCode: config.pilotAllyCode,
+      commandChannelId,
+      ...(officerRoleId ? { officerRoleIds: [officerRoleId] } : {}),
+      actorDiscordUserId,
+    });
+    return formatSetupResult(guild, Boolean(officerRoleId));
+  }
 
   if (subcommand === "sync") {
     if (typeof services.syncGuild !== "function") throw new Error("Discord guild sync service is unavailable.");
@@ -534,20 +605,37 @@ export async function handleDiscordInteractionRequest(request, response, env = p
     return true;
   }
 
-  if (!discordTbMemberHasOfficerPermission(interaction)) {
-    jsonResponse(response, 200, ephemeral("Officer permission required. `/tb` currently requires Manage Server (Manage Guild) or Administrator permission."));
+  const subcommand = discordTbSubcommand(interaction);
+  const bootstrapAuthorized = discordTbMemberHasOfficerPermission(interaction);
+  const stateStore = services?.stateStore || discordStateStore;
+  let authorized = bootstrapAuthorized;
+  if (!authorized && subcommand !== "setup") {
+    authorized = await discordTbMemberHasConfiguredOfficerRole(interaction, stateStore);
+  }
+
+  if (!authorized) {
+    const content = subcommand === "setup"
+      ? "Bootstrap permission required. `/tb setup` requires Manage Server (Manage Guild) or Administrator permission even when an officer role is configured."
+      : "Officer permission required. `/tb` requires Manage Server (Manage Guild), Administrator, or a durably configured officer role.";
+    jsonResponse(response, 200, ephemeral(content));
     return true;
   }
 
   const commandResponse = handleDiscordTbCommand(interaction, config);
   jsonResponse(response, 200, commandResponse);
   if (commandResponse.type === DISCORD_RESPONSE_TYPES.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE) {
-    const liveServices = typeof services?.syncGuild === "function"
+    if (subcommand === "setup") {
+      scheduleDeferredDiscordCommand(interaction, config, { ...services, stateStore });
+      return true;
+    }
+
+    const hasInjectedLiveServices = typeof services?.syncGuild === "function"
       || typeof services?.buildPlan === "function"
-      || typeof services?.buildPhaseCommand === "function"
+      || typeof services?.buildPhaseCommand === "function";
+    const liveServices = hasInjectedLiveServices
       ? services
-      : createDiscordTbLiveServices(env);
-    scheduleDeferredDiscordCommand(interaction, config, liveServices);
+      : createDiscordTbLiveServices(env, typeof services?.fetch === "function" ? { fetch: services.fetch } : {});
+    scheduleDeferredDiscordCommand(interaction, config, { ...liveServices, stateStore });
   }
   return true;
 }

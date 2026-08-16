@@ -44,17 +44,28 @@ test("durable state auto-detects a Railway volume but does not claim arbitrary l
   assert.match(discordState, /state-directory-not-confirmed-durable/);
   assert.match(discordState, /atomic-json-volume/);
   assert.match(discordState, /discord-state-v1\.json/);
+  assert.match(discordState, /async bootstrapGuild/);
+  assert.match(discordState, /action: "guild-bootstrap-updated"/);
 });
 
-test("current Discord interaction transport remains read-only and does not mutate durable state", () => {
-  assert.doesNotMatch(discordTransport, /discordStateStore|createDiscordStateStore/);
-  assert.doesNotMatch(discordTransport, /upsertGuildConnection|setOfficerRoleIds|linkPlayer|savePlanVersion/);
+test("Discord transport exposes only the controlled bootstrap mutation; publishing and other state mutations stay disconnected", () => {
+  assert.match(discordTransport, /import \{ discordStateStore \} from "\.\/discord-state-store\.mjs"/);
+  assert.match(discordTransport, /stateStore\.bootstrapGuild\(/);
+  assert.doesNotMatch(discordTransport, /stateStore\.upsertGuildConnection\(/);
+  assert.doesNotMatch(discordTransport, /stateStore\.setOfficerRoleIds\(/);
+  assert.doesNotMatch(discordTransport, /stateStore\.linkPlayer\(/);
+  assert.doesNotMatch(discordTransport, /stateStore\.savePlanVersion\(/);
+  assert.doesNotMatch(discordTransport, /sendDirectMessage|sendDm/);
 });
 
-test("guild command registration is explicit, officer-first, and phase-aware", () => {
+test("guild command registration exposes setup selectors while server-side authorization remains authoritative", () => {
   assert.equal(packageJson.scripts["discord:register-tb"], "node scripts/register-discord-tb-commands.mjs");
-  assert.match(registerScript, /default_member_permissions: "32"/);
+  assert.doesNotMatch(registerScript, /default_member_permissions/);
+  assert.match(registerScript, /Picker visibility stays broad in the pilot/);
   assert.match(registerScript, /name: "status"/);
+  assert.match(registerScript, /name: "setup"/);
+  assert.match(registerScript, /type: 7,[\s\S]*name: "channel"/);
+  assert.match(registerScript, /type: 8,[\s\S]*name: "officer_role"/);
   assert.match(registerScript, /name: "sync"/);
   assert.match(registerScript, /name: "phase"/);
   assert.match(registerScript, /description: "ROTE phase to inspect"/);
@@ -64,30 +75,50 @@ test("guild command registration is explicit, officer-first, and phase-aware", (
   assert.match(registerScript, /Authorization: `Bot \$\{config\.botToken\}`/);
 });
 
-test("signed Discord application commands are server-authorized before command execution or deferred work", () => {
+test("signed Discord application commands authorize bootstrap before configured-role fallback and command execution", () => {
   const typeGuard = discordTransport.indexOf('Number(interaction?.type) !== DISCORD_INTERACTION_TYPES.APPLICATION_COMMAND');
   const appGuard = discordTransport.indexOf('String(interaction?.application_id || "") !== config.applicationId');
-  const permissionGuard = discordTransport.indexOf('!discordTbMemberHasOfficerPermission(interaction)');
+  const subcommand = discordTransport.indexOf('const subcommand = discordTbSubcommand(interaction)');
+  const bootstrapPermission = discordTransport.indexOf('const bootstrapAuthorized = discordTbMemberHasOfficerPermission(interaction)');
+  const configuredRole = discordTransport.indexOf('authorized = await discordTbMemberHasConfiguredOfficerRole(interaction, stateStore)');
+  const authorizationFailure = discordTransport.indexOf('if (!authorized)');
   const commandExecution = discordTransport.indexOf('const commandResponse = handleDiscordTbCommand(interaction, config)');
-  const deferredScheduling = discordTransport.indexOf('scheduleDeferredDiscordCommand(interaction, config, liveServices)');
 
   assert.ok(typeGuard >= 0);
   assert.ok(appGuard > typeGuard);
-  assert.ok(permissionGuard > appGuard);
-  assert.ok(commandExecution > permissionGuard);
-  assert.ok(deferredScheduling > commandExecution);
+  assert.ok(subcommand > appGuard);
+  assert.ok(bootstrapPermission > subcommand);
+  assert.ok(configuredRole > bootstrapPermission);
+  assert.ok(authorizationFailure > configuredRole);
+  assert.ok(commandExecution > authorizationFailure);
+  assert.match(discordTransport, /subcommand !== "setup"/);
+  assert.match(discordTransport, /setupAuthorization: "manage-guild-or-administrator"/);
+  assert.match(discordTransport, /officerAuthorization: "manage-guild-administrator-or-configured-role"/);
   assert.match(discordTransport, /MANAGE_GUILD_PERMISSION = 1n << 5n/);
   assert.match(discordTransport, /ADMINISTRATOR_PERMISSION = 1n << 3n/);
-  assert.match(discordTransport, /officerAuthorization: "manage-guild-or-administrator"/);
+});
+
+test("/tb setup verifies durable storage before the single bootstrap mutation", () => {
+  const setupBranch = discordTransport.indexOf('if (subcommand === "setup")');
+  const statusCheck = discordTransport.indexOf('const stateStatus = stateStore.status()', setupBranch);
+  const durabilityGuard = discordTransport.indexOf('if (!stateStatus?.enabled || !stateStatus?.durable)', setupBranch);
+  const bootstrapMutation = discordTransport.indexOf('const guild = await stateStore.bootstrapGuild({', setupBranch);
+  const publishDisabled = discordTransport.indexOf('Publishing and DMs are still disabled', setupBranch);
+
+  assert.ok(setupBranch >= 0);
+  assert.ok(statusCheck > setupBranch);
+  assert.ok(durabilityGuard > statusCheck);
+  assert.ok(bootstrapMutation > durabilityGuard);
+  assert.ok(publishDisabled > bootstrapMutation);
 });
 
 test("Discord PING response remains before application/member authorization for endpoint verification", () => {
   const ping = discordTransport.indexOf('Number(interaction?.type) === DISCORD_INTERACTION_TYPES.PING');
   const appGuard = discordTransport.indexOf('String(interaction?.application_id || "") !== config.applicationId');
-  const permissionGuard = discordTransport.indexOf('!discordTbMemberHasOfficerPermission(interaction)');
+  const bootstrapPermission = discordTransport.indexOf('const bootstrapAuthorized = discordTbMemberHasOfficerPermission(interaction)');
   assert.ok(ping >= 0);
   assert.ok(appGuard > ping);
-  assert.ok(permissionGuard > ping);
+  assert.ok(bootstrapPermission > ping);
 });
 
 test("web API and Discord production path import the same process-wide guild roster service", () => {

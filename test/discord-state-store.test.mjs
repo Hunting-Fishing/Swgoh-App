@@ -83,6 +83,58 @@ test("explicit state directories under the Railway volume are recognized as dura
   assert.equal(store.status().source, "SWGOH_STATE_DIR");
 });
 
+test("bootstrap writes guild binding, channel, and officer role as one audited mutation", async (t) => {
+  const directory = await tempDirectory(t);
+  const store = createDiscordStateStore({
+    SWGOH_STATE_DIR: directory,
+    SWGOH_STATE_STORAGE_CONFIRMED_DURABLE: "true",
+  }, deterministicOptions());
+
+  const guild = await store.bootstrapGuild({
+    discordGuildId: "987654321098765432",
+    swgohAllyCode: "123-456-789",
+    commandChannelId: "222222222222222222",
+    officerRoleIds: ["333333333333333333", "333333333333333333"],
+    actorDiscordUserId: "111111111111111111",
+  });
+
+  assert.equal(guild.swgohAllyCode, "123456789");
+  assert.equal(guild.commandChannelId, "222222222222222222");
+  assert.deepEqual(guild.officerRoleIds, ["333333333333333333"]);
+
+  const state = await store.readState();
+  assert.equal(state.audit.length, 1);
+  assert.equal(state.audit[0].action, "guild-bootstrap-updated");
+  assert.deepEqual(state.audit[0].details.officerRoleIds, ["333333333333333333"]);
+});
+
+test("bootstrap without an officer role preserves the existing configured roles", async (t) => {
+  const directory = await tempDirectory(t);
+  const store = createDiscordStateStore({
+    SWGOH_STATE_DIR: directory,
+    SWGOH_STATE_STORAGE_CONFIRMED_DURABLE: "true",
+  }, deterministicOptions());
+  const guildId = "987654321098765432";
+
+  await store.bootstrapGuild({
+    discordGuildId: guildId,
+    swgohAllyCode: "123456789",
+    commandChannelId: "222222222222222222",
+    officerRoleIds: ["333333333333333333"],
+    actorDiscordUserId: "111111111111111111",
+  });
+  const updated = await store.bootstrapGuild({
+    discordGuildId: guildId,
+    swgohAllyCode: "123456789",
+    commandChannelId: "444444444444444444",
+    actorDiscordUserId: "111111111111111111",
+  });
+
+  assert.equal(updated.commandChannelId, "444444444444444444");
+  assert.deepEqual(updated.officerRoleIds, ["333333333333333333"]);
+  assert.equal((await store.readState()).audit.length, 2);
+});
+
 test("guild connection, officer roles, player links, plan versions, and audit survive subsequent reads", async (t) => {
   const directory = await tempDirectory(t);
   const store = createDiscordStateStore({
@@ -136,6 +188,7 @@ test("state helpers reject malformed identifiers before a durable mutation", asy
     SWGOH_STATE_STORAGE_CONFIRMED_DURABLE: "true",
   }, deterministicOptions());
 
+  await assert.rejects(() => store.bootstrapGuild({ discordGuildId: "bad", swgohAllyCode: "123456789" }), /Discord guild ID/);
   await assert.rejects(() => store.upsertGuildConnection({ discordGuildId: "bad", swgohAllyCode: "123456789" }), /Discord guild ID/);
   await assert.rejects(() => store.upsertGuildConnection({ discordGuildId: "987654321098765432", swgohAllyCode: "123" }), /exactly 9 digits/);
   await assert.rejects(() => store.setOfficerRoleIds({ discordGuildId: "987654321098765432", roleIds: ["bad-role"] }), /officer role ID/);
