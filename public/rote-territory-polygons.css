@@ -1,0 +1,152 @@
+.rote-territory-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.rote-territory-hit {
+  pointer-events: all;
+  cursor: pointer;
+  fill: rgba(76, 117, 155, .035);
+  stroke: rgba(142, 174, 211, .32);
+  stroke-width: 1.2;
+  vector-effect: non-scaling-stroke;
+  transition: fill .14s ease, stroke .14s ease, opacity .14s ease;
+}
+
+.rote-territory-hit:hover,
+.rote-territory-hit:focus-visible {
+  fill: rgba(99, 219, 255, .16);
+  stroke: rgba(143, 235, 255, .92);
+  stroke-width: 2.2;
+  outline: none;
+}
+
+.rote-territory-hit.selected {
+  fill: rgba(112, 222, 240, .19);
+  stroke: #8feaff;
+  stroke-width: 2.6;
+  filter: drop-shadow(0 0 7px rgba(112, 222, 240, .62));
+}
+
+.rote-territory-hit.status-deep { stroke: rgba(101, 239, 182, .56); }
+.rote-territory-hit.status-ready { stroke: rgba(105, 223, 242, .56); }
+.rote-territory-hit.status-thin { stroke: rgba(243, 196, 91, .56); }
+.rote-territory-hit.status-blocked { stroke: rgba(223, 102, 112, .5); }
+.rote-territory-hit.status-unloaded { stroke: rgba(142, 174, 211, .3); }
+
+.rote-territory-hit.lane-dark-side:hover,
+.rote-territory-hit.lane-dark-side.selected { fill: rgba(230, 90, 115, .18); stroke: #ef8194; }
+.rote-territory-hit.lane-mixed:hover,
+.rote-territory-hit.lane-mixed.selected { fill: rgba(227, 189, 90, .17); stroke: #f0d37b; }
+.rote-territory-hit.lane-light-side:hover,
+.rote-territory-hit.lane-light-side.selected { fill: rgba(98, 216, 239, .18); stroke: #98edff; }
+.rote-territory-hit.lane-bonus:hover,
+.rote-territory-hit.lane-bonus.selected { fill: rgba(166, 126, 241, .18); stroke: #c6a9ff; }
+
+.rote-territory-hit.source-hotspot {
+  fill: rgba(166, 126, 241, .06);
+  stroke: rgba(198, 169, 255, .72);
+  stroke-dasharray: 5 4;
+}
+
+/* Keep the sourced planet art above the sector hit areas. */
+.tb-rote-fan-map .rote-planet-node.tb-rote-map-pin {
+  z-index: 4;
+}
+
+.tb-territory-threshold-panel {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid #223852;
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(10, 23, 39, .96), rgba(7, 16, 29, .96));
+}
+
+.tb-territory-threshold-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.tb-territory-threshold-head > div {
+  display: grid;
+  gap: 2px;
+}
+
+.tb-territory-threshold-head span {
+  color: #6edfee;
+  font-size: .56rem;
+  font-weight: 900;
+  letter-spacing: .08em;
+}
+
+.tb-territory-threshold-head strong {
+  font-size: .82rem;
+}
+
+.tb-territory-threshold-head > small {
+  flex: 0 0 auto;
+  padding: 3px 6px;
+  border: 1px solid #2d4261;
+  border-radius: 999px;
+  color: #7f94b3;
+  font-size: .52rem;
+}
+
+.tb-territory-threshold-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.tb-territory-threshold {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+  padding: 7px 8px;
+  border: 1px solid #1f324d;
+  border-radius: 9px;
+  background: #091522;
+}
+
+.tb-territory-threshold span {
+  color: #7b91b1;
+  font-size: .55rem;
+  font-weight: 900;
+}
+
+.tb-territory-threshold strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #e6f4ff;
+  font-size: .74rem;
+}
+
+.tb-territory-threshold small {
+  color: #607793;
+  font-size: .5rem;
+}
+
+.tb-territory-threshold-panel > p {
+  margin: 0;
+  color: #7186a5;
+  font-size: .58rem;
+  line-height: 1.4;
+}
+
+@media (max-width: 760px) {
+  .rote-territory-hit {
+    stroke-width: 1.8;
+  }
+
+  .tb-territory-threshold-grid {
+    grid-template-columns: 1fr;
+  }
+}
