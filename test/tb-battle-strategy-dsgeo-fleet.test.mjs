@@ -45,8 +45,9 @@ test("Phase 4 Hound's Tooth route is recommendation evidence, not a hard mission
   const ht = strategy.keyUnits.find((row) => row.baseId === "HOUNDSTOOTH");
   assert.equal(ht.importance, "high");
   assert.match(ht.reason, /not a hard entry requirement/i);
-  assert.doesNotMatch(JSON.stringify(strategy), /guaranteed win/i);
   assert.equal("winPercent" in strategy, false);
+  assert.equal("guaranteedWin" in strategy, false);
+  assert.doesNotMatch(JSON.stringify(strategy), /\b(?:9\d|100)%\s*(?:win|clear)/i);
 });
 
 test("DS Geo fleet ids cannot leak into another Territory Battle", () => {
