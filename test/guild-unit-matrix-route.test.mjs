@@ -34,8 +34,17 @@ test("dedicated Unit Matrix page supports generic and ROTE Operation contexts", 
   assert.match(page, /P1 Operations/);
   assert.match(page, /Operation Quick Pick/);
   assert.match(page, /Safe\/GIVE donors/);
-  assert.match(page, /Mission-protected\/KEEP status is planning intelligence|Mission-protected\/KEEP status/);
+  assert.match(page, /Mission-protected\/KEEP status is planning intelligence|Mission-protected\/KEEP and unavailable status are planning intelligence/);
   assert.match(page, /Open Player Roster|Open Roster →/);
+});
+
+test("Unit Matrix merges the sanitized durable planning overlay", () => {
+  assert.match(page, /\/api\/guild\/by-player\/\$\{digits\(state\.allyCode\)\}\/planning-overlay/);
+  assert.match(page, /state\.planningOverlay\?\.preferences/);
+  assert.match(page, /state\.planningOverlay\?\.ignoredMembers/);
+  assert.match(page, /ignoredMembers: controls\.ignoredMembers/);
+  assert.match(page, /UNAVAILABLE/);
+  assert.match(page, /Durable guild controls synced/);
 });
 
 test("Unit Matrix page is lazy-loaded only when its route is opened", () => {

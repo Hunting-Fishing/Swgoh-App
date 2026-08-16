@@ -77,6 +77,31 @@ test("Operation context separates qualifying safe protected KEEP and missing own
   assert.equal(matrix.members.find((row) => row.id === "b")?.band, "keep");
 });
 
+test("unavailable qualifying owners stay visible but are never counted safe", () => {
+  const matrix = buildGuildUnitOwnershipMatrix({
+    guildSnapshot: guild,
+    catalog,
+    operations,
+    phase: "P1",
+    baseId: "X",
+    ignoredMembers: ["a"],
+  });
+  const alpha = matrix.members.find((row) => row.id === "a");
+  assert.equal(alpha?.owned, true);
+  assert.equal(alpha?.qualifyingSlots, 2);
+  assert.equal(alpha?.unavailable, true);
+  assert.equal(alpha?.band, "unavailable");
+  assert.equal(matrix.summary.qualifyingOwners, 2);
+  assert.equal(matrix.summary.safeOwners, 1);
+  assert.equal(matrix.summary.unavailableOwners, 1);
+  assert.deepEqual(filterGuildUnitOwnershipRows(matrix.members, { ownership: "Unavailable" }).map((row) => row.id), ["a"]);
+});
+
+test("availability does not rewrite generic ownership outside an Operation context", () => {
+  const matrix = buildGuildUnitOwnershipMatrix({ guildSnapshot: guild, catalog, operations, phase: "", baseId: "Z", ignoredMembers: ["a"] });
+  assert.equal(matrix.members.find((row) => row.id === "a")?.band, "owned");
+});
+
 test("a unit not required in the selected phase remains generic ownership", () => {
   const matrix = buildGuildUnitOwnershipMatrix({ guildSnapshot: guild, catalog, operations, phase: "P1", baseId: "Y" });
   assert.equal(matrix.requirement, null);
