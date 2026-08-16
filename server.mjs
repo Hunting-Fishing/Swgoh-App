@@ -3,6 +3,7 @@ import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { withCapabilityContract } from "./capability-contract.mjs";
+import { discordStateStore } from "./discord-state-store.mjs";
 import { discordTbPublicStatus, handleDiscordInteractionRequest } from "./discord-tb.mjs";
 import { guildRosterService } from "./guild-roster-service.mjs";
 import { LiveRosterCache } from "./live-roster-cache.mjs";
@@ -54,6 +55,13 @@ function positiveNumber(value, fallback) {
 
 function trimUrl(value) {
   return String(value || "").trim().replace(/\/+$/, "");
+}
+
+function discordPublicStatus() {
+  return Object.freeze({
+    ...discordTbPublicStatus(),
+    durableState: discordStateStore.status(),
+  });
 }
 
 function writeJson(response, status, body, headers = {}) {
@@ -180,7 +188,7 @@ async function loadEquippedMods(allyCode) {
 
 async function handleApi(request, response, url) {
   if (url.pathname === "/api/discord/status") {
-    writeJson(response, 200, discordTbPublicStatus());
+    writeJson(response, 200, discordPublicStatus());
     return true;
   }
 
@@ -191,7 +199,7 @@ async function handleApi(request, response, url) {
         status: gateway?.status === "configured" ? "ready" : "needs-configuration",
         liveOnly: true,
         gateway,
-        discordTb: discordTbPublicStatus(),
+        discordTb: discordPublicStatus(),
         rosterCache: {
           mode: "process-local-coalesced-swr-lru",
           freshSeconds: Math.round(rosterCacheFreshMs / 1000),
@@ -218,7 +226,7 @@ async function handleApi(request, response, url) {
       writeJson(response, error?.status || 502, {
         status: "unavailable",
         liveOnly: true,
-        discordTb: discordTbPublicStatus(),
+        discordTb: discordPublicStatus(),
         error: error?.name === "AbortError" ? "The live gateway timed out." : error?.message || "The live gateway is unavailable.",
       });
     }
