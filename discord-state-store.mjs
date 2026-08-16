@@ -32,6 +32,18 @@ function allyCode(value) {
   return digits;
 }
 
+function baseId(value) {
+  const text = clean(value).toUpperCase();
+  if (!/^[A-Z0-9_:-]{2,80}$/.test(text)) throw new Error("SWGOH unit Base ID is invalid.");
+  return text;
+}
+
+function donationPreference(value) {
+  const text = clean(value).toLowerCase();
+  if (!new Set(["give", "default", "keep"]).has(text)) throw new Error("Donation preference must be GIVE, DEFAULT, or KEEP.");
+  return text;
+}
+
 function phase(value) {
   const text = clean(value).toUpperCase();
   if (!/^P[1-6]$/.test(text)) throw new Error("ROTE phase must be P1 through P6.");
@@ -114,10 +126,23 @@ function defaultGuild(discordGuildId, now) {
     commandChannelId: "",
     officerRoleIds: [],
     userLinks: {},
+    memberPreferences: {},
     planVersions: [],
     createdAt: now,
     updatedAt: now,
   };
+}
+
+function ensureMemberPreferences(guild) {
+  if (!guild.memberPreferences || typeof guild.memberPreferences !== "object" || Array.isArray(guild.memberPreferences)) guild.memberPreferences = {};
+  return guild.memberPreferences;
+}
+
+function clearPreferencesForDiscordUser(guild, discordUserId) {
+  const preferences = ensureMemberPreferences(guild);
+  for (const [key, row] of Object.entries(preferences)) {
+    if (row?.discordUserId === discordUserId) delete preferences[key];
+  }
 }
 
 export function createDiscordStateStore(env = process.env, options = {}) {
@@ -284,6 +309,7 @@ export function createDiscordStateStore(env = process.env, options = {}) {
           }
         }
         const previous = guild.userLinks[userId];
+        if (previous?.swgohAllyCode && previous.swgohAllyCode !== normalizedAllyCode) clearPreferencesForDiscordUser(guild, userId);
         guild.userLinks[userId] = {
           discordUserId: userId,
           swgohAllyCode: normalizedAllyCode,
@@ -308,8 +334,54 @@ export function createDiscordStateStore(env = process.env, options = {}) {
           error.code = "PLAYER_LINK_NOT_FOUND";
           throw error;
         }
+        clearPreferencesForDiscordUser(guild, userId);
         delete guild.userLinks[userId];
         return previous;
+      });
+    },
+    async setDonationPreference({ discordGuildId, discordUserId, unitBaseId, preference, actorDiscordUserId = "" }) {
+      const userId = snowflake(discordUserId, "Discord user ID");
+      const normalizedBaseId = baseId(unitBaseId);
+      const normalizedPreference = donationPreference(preference);
+      return mutate({
+        discordGuildId,
+        actorDiscordUserId,
+        action: normalizedPreference === "default" ? "donation-preference-cleared" : "donation-preference-updated",
+        details: { discordUserId: userId, baseId: normalizedBaseId, preference: normalizedPreference },
+      }, (guild, _state, timestamp) => {
+        const link = guild.userLinks?.[userId];
+        if (!link) {
+          const error = new Error("That Discord user must have a durable SWGOH player link before donation preferences can be changed.");
+          error.code = "PLAYER_LINK_NOT_FOUND";
+          throw error;
+        }
+        const preferences = ensureMemberPreferences(guild);
+        const key = `${userId}|${normalizedBaseId}`;
+        if (normalizedPreference === "default") {
+          const previous = preferences[key] || null;
+          delete preferences[key];
+          return {
+            discordUserId: userId,
+            memberId: clean(link.playerId) || link.swgohAllyCode,
+            playerId: clean(link.playerId),
+            swgohAllyCode: link.swgohAllyCode,
+            baseId: normalizedBaseId,
+            preference: "default",
+            cleared: true,
+            previous,
+          };
+        }
+        const row = {
+          discordUserId: userId,
+          memberId: clean(link.playerId) || link.swgohAllyCode,
+          playerId: clean(link.playerId),
+          swgohAllyCode: link.swgohAllyCode,
+          baseId: normalizedBaseId,
+          preference: normalizedPreference,
+          updatedAt: timestamp,
+        };
+        preferences[key] = row;
+        return row;
       });
     },
     async savePlanVersion({ discordGuildId, rotePhase, versionId = "", summary = {}, actorDiscordUserId = "" }) {
