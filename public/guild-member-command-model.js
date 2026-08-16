@@ -14,7 +14,8 @@ function sameMember(member, target) {
   const targetDigits = digits(target);
   if (targetDigits.length === 9 && digits(member?.allyCode) === targetDigits) return true;
   const targetText = text(target);
-  return Boolean(targetText) && [member?.id, member?.playerId, member?.name].some((value) => String(value || "") === targetText);
+  return Boolean(targetText) && [member?.id, member?.playerId, member?.memberId, member?.name, member?.memberName]
+    .some((value) => String(value || "") === targetText);
 }
 
 function rankBy(rows, predicate, comparator) {
@@ -48,6 +49,18 @@ function phaseLoads(assignments = []) {
   return Object.freeze([...map.entries()].map(([phase, count]) => Object.freeze({ phase, count })).sort((a, b) => a.phase.localeCompare(b.phase)));
 }
 
+function ignoredMember(ignoredMembers, member = {}) {
+  const ids = new Set(asArray(ignoredMembers).map(String));
+  return [member?.playerId, member?.id, member?.allyCode, member?.name].some((value) => ids.has(String(value || "")));
+}
+
+function durableUnavailableRow(planningOverlay, member = {}) {
+  return asArray(planningOverlay?.unavailableMembers).find((row) => {
+    if (row?.memberId && [member?.playerId, member?.id, member?.allyCode, member?.name].some((value) => String(value || "") === String(row.memberId))) return true;
+    return digits(row?.allyCode).length === 9 && digits(row?.allyCode) === digits(member?.allyCode);
+  }) || null;
+}
+
 export function buildGuildMemberCommandProfile({
   guildSnapshot,
   catalog = [],
@@ -58,6 +71,7 @@ export function buildGuildMemberCommandProfile({
   reservations = [],
   preferences = [],
   ignoredMembers = [],
+  planningOverlay = {},
 } = {}) {
   const normalized = buildGuildRosterSnapshot(guildSnapshot, catalog);
   const rosterMember = normalized.members.find((member) => sameMember(member, targetMember));
@@ -65,6 +79,8 @@ export function buildGuildMemberCommandProfile({
   const rawMember = asArray(guildSnapshot?.members).find((member) => sameMember(member, targetMember)) || null;
   if (!rawMember) return null;
   const id = profileMemberId(rawMember);
+  const unavailable = ignoredMember(ignoredMembers, rawMember);
+  const durableUnavailable = durableUnavailableRow(planningOverlay, rawMember);
 
   const coverage = buildGuildRoteMissionCoverage(guildSnapshot, catalog, { redundancyTarget });
   const tbMember = coverage.memberCoverage.find((row) => sameMember(row.member, targetMember)) || null;
@@ -101,6 +117,14 @@ export function buildGuildMemberCommandProfile({
     hydration: normalized.hydration,
     member: rosterMember,
     rawMember,
+    availability: Object.freeze({
+      unavailable,
+      source: durableUnavailable ? "durable-discord" : unavailable ? "local-web" : planningOverlay?.bound ? "durable-discord" : "none",
+      durableBound: Boolean(planningOverlay?.bound),
+      overlayReason: text(planningOverlay?.reason),
+      updatedAt: text(durableUnavailable?.updatedAt),
+      operationEligible: !unavailable,
+    }),
     ranks: Object.freeze({ gp: gpRank, tb: tbRank, tw: twRank, raid: raidRank }),
     tb: Object.freeze({
       exactReady: finite(tbMember?.exactReady, 0),
