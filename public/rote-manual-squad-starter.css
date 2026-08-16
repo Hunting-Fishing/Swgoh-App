@@ -1,0 +1,54 @@
+.rote-manual-core-action {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  margin-top: 6px;
+  padding: 8px;
+  border: 1px solid rgba(104, 217, 233, .24);
+  border-radius: 9px;
+  background: rgba(7, 22, 38, .72);
+}
+
+.rote-manual-core-action button {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #35617d;
+  border-radius: 8px;
+  background: #092238;
+  color: #d9f6fb;
+  font-size: .54rem;
+  font-weight: 900;
+  letter-spacing: .02em;
+}
+
+.rote-manual-core-action button:hover:not(:disabled) {
+  border-color: #67d9e8;
+  background: #0b2b45;
+}
+
+.rote-manual-core-action button:disabled {
+  cursor: not-allowed;
+  opacity: .48;
+}
+
+.rote-manual-core-action span {
+  color: #9db0c8;
+  font-size: .49rem;
+  line-height: 1.4;
+}
+
+.rote-manual-core-action small {
+  color: #d0b876;
+  font-size: .46rem;
+  line-height: 1.4;
+}
+
+@media (max-width: 620px) {
+  .rote-manual-core-action {
+    padding: 7px;
+  }
+
+  .rote-manual-core-action button {
+    min-height: 38px;
+  }
+}
