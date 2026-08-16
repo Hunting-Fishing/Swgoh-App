@@ -11,6 +11,7 @@ import {
 import { DS_GEO_TERRITORIES } from "../public/ds-geo-mission-overrides.js";
 import { GEO_LS_TERRITORIES } from "../public/geo-ls-data.js";
 import { HOTH_DS_TERRITORIES } from "../public/hoth-ds-data.js";
+import { HOTH_LS_TERRITORIES } from "../public/hoth-ls-data.js";
 
 const findMission = (territories, id) => territories.flatMap((territory) => territory.missions || []).find((mission) => mission.id === id);
 
@@ -79,6 +80,14 @@ test("Hoth DS audit separates exact high-value missions from partial fleet packs
   }
 });
 
+test("Hoth LS high-value and fleet packs resolve but remain evidence-safe partial", () => {
+  for (const id of ["p1-phoenix", "p2-overlook-rogue", "p3-rolo-sm", "p4-rolo-sm", "p5-cls-sm", "p6-flank-rogue", "p6-rolo-sm", "p3-fleet", "p4-fleet", "p5-fleet", "p6-fleet"]) {
+    const row = territoryBattleStrategyCoverage(findMission(HOTH_LS_TERRITORIES, id));
+    assert.equal(row.coverage, "partial", `${id} should remain partial`);
+    assert.equal(row.strategyAvailable, true, `${id} should resolve to a sourced partial pack`);
+  }
+});
+
 test("coverage gaps can be filtered by Territory Battle and state", () => {
   const geoLsPartial = territoryBattleCoverageGaps({ tbId: TB_COVERAGE_IDS.GEO_LS, coverage: "partial" });
   assert.ok(geoLsPartial.length > 0);
@@ -87,6 +96,10 @@ test("coverage gaps can be filtered by Territory Battle and state", () => {
 
   const hothDsPartial = territoryBattleCoverageGaps({ tbId: TB_COVERAGE_IDS.HOTH_DS, coverage: "partial" });
   assert.ok(hothDsPartial.some((row) => row.missionId === "p4-fleet-sm"));
+
+  const hothLsPartial = territoryBattleCoverageGaps({ tbId: TB_COVERAGE_IDS.HOTH_LS, coverage: "partial" });
+  assert.ok(hothLsPartial.some((row) => row.missionId === "p3-rolo-sm"));
+  assert.ok(hothLsPartial.some((row) => row.missionId === "p6-fleet"));
 });
 
 test("all-TB coverage modules parse", () => {
@@ -97,6 +110,8 @@ test("all-TB coverage modules parse", () => {
     new URL("../public/tb-battle-strategy-lsgeo-fleet-data.js", import.meta.url),
     new URL("../public/tb-battle-strategy-hoth-ds-data.js", import.meta.url),
     new URL("../public/tb-battle-strategy-hoth-ds-fleet-data.js", import.meta.url),
+    new URL("../public/tb-battle-strategy-hoth-ls-data.js", import.meta.url),
+    new URL("../public/tb-battle-strategy-hoth-ls-fleet-data.js", import.meta.url),
     new URL("../scripts/report-all-tb-strategy-coverage.mjs", import.meta.url),
   ]) execFileSync(process.execPath, ["--check", path.pathname]);
 });
