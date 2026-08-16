@@ -2,6 +2,7 @@ import { buildTeamCapabilityIndex } from "./mission-mechanic-intelligence.js";
 import { battleStrategyForMission, battleStrategySources } from "./tb-battle-strategy-data.js";
 import { watBattleStrategyForMission } from "./tb-battle-strategy-wat-data.js";
 import { dsGeoBattleStrategyForMission } from "./tb-battle-strategy-dsgeo-data.js";
+import { dsGeoFleetBattleStrategyForMission } from "./tb-battle-strategy-dsgeo-fleet-data.js";
 import { rotePhaseOneBattleStrategyForMission } from "./tb-battle-strategy-rote-p1-data.js";
 import { mandaloreBattleStrategyForMission } from "./tb-battle-strategy-mandalore-data.js";
 import { rotePriorityBattleStrategyForMission } from "./tb-battle-strategy-rote-priority-data.js";
@@ -89,6 +90,7 @@ function resolvedStrategy(missionId, mission = null, analysis = null) {
     || rotePhaseOneBattleStrategyForMission(missionId)
     || roteFleetBattleStrategyForMission(missionId)
     || roteGenericBattleStrategyForMission(missionId)
+    || (allowDsGeoLegacyIds ? dsGeoFleetBattleStrategyForMission(missionId) : null)
     || (allowDsGeoLegacyIds ? dsGeoBattleStrategyForMission(missionId) : null)
     || (allowDsGeoLegacyIds ? watBattleStrategyForMission(missionId) : null)
     || battleStrategyForMission(missionId);
