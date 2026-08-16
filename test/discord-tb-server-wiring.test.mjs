@@ -6,6 +6,7 @@ const server = await readFile(new URL("../server.mjs", import.meta.url), "utf8")
 const envExample = await readFile(new URL("../.env.example", import.meta.url), "utf8");
 const packageJson = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
 const registerScript = await readFile(new URL("../scripts/register-discord-tb-commands.mjs", import.meta.url), "utf8");
+const discordTransport = await readFile(new URL("../discord-tb.mjs", import.meta.url), "utf8");
 const liveService = await readFile(new URL("../discord-tb-live.mjs", import.meta.url), "utf8");
 const guildService = await readFile(new URL("../guild-roster-service.mjs", import.meta.url), "utf8");
 
@@ -42,6 +43,32 @@ test("guild command registration is explicit, officer-first, and phase-aware", (
   assert.match(registerScript, /name: "assignments"/);
   assert.match(registerScript, /name: "farms"/);
   assert.match(registerScript, /Authorization: `Bot \$\{config\.botToken\}`/);
+});
+
+test("signed Discord application commands are server-authorized before command execution or deferred work", () => {
+  const typeGuard = discordTransport.indexOf('Number(interaction?.type) !== DISCORD_INTERACTION_TYPES.APPLICATION_COMMAND');
+  const appGuard = discordTransport.indexOf('String(interaction?.application_id || "") !== config.applicationId');
+  const permissionGuard = discordTransport.indexOf('!discordTbMemberHasOfficerPermission(interaction)');
+  const commandExecution = discordTransport.indexOf('const commandResponse = handleDiscordTbCommand(interaction, config)');
+  const deferredScheduling = discordTransport.indexOf('scheduleDeferredDiscordCommand(interaction, config, liveServices)');
+
+  assert.ok(typeGuard >= 0);
+  assert.ok(appGuard > typeGuard);
+  assert.ok(permissionGuard > appGuard);
+  assert.ok(commandExecution > permissionGuard);
+  assert.ok(deferredScheduling > commandExecution);
+  assert.match(discordTransport, /MANAGE_GUILD_PERMISSION = 1n << 5n/);
+  assert.match(discordTransport, /ADMINISTRATOR_PERMISSION = 1n << 3n/);
+  assert.match(discordTransport, /officerAuthorization: "manage-guild-or-administrator"/);
+});
+
+test("Discord PING response remains before application/member authorization for endpoint verification", () => {
+  const ping = discordTransport.indexOf('Number(interaction?.type) === DISCORD_INTERACTION_TYPES.PING');
+  const appGuard = discordTransport.indexOf('String(interaction?.application_id || "") !== config.applicationId');
+  const permissionGuard = discordTransport.indexOf('!discordTbMemberHasOfficerPermission(interaction)');
+  assert.ok(ping >= 0);
+  assert.ok(appGuard > ping);
+  assert.ok(permissionGuard > ping);
 });
 
 test("web API and Discord production path import the same process-wide guild roster service", () => {
