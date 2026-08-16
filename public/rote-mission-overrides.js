@@ -6,11 +6,23 @@ const CANONICAL_BASE_IDS = Object.freeze({
   "000": "TRIPLEZERO",
 });
 
+const CANONICAL_MEMBER_NAME_IDS = Object.freeze({
+  "Lando's Millennium Falcon": "MILLENNIUMFALCONPRISTINE",
+  Outrider: "OUTRIDER",
+  Executor: "CAPITALEXECUTOR",
+  Profundity: "CAPITALPROFUNDITY",
+  Negotiator: "CAPITALNEGOTIATOR",
+  Ghost: "GHOST",
+  "Gauntlet Starfighter": "GAUNTLETSTARFIGHTER",
+  "Imperial TIE Fighter": "TIEFIGHTERIMPERIAL",
+});
+
 const canonicalId = (value) => CANONICAL_BASE_IDS[String(value || "")] || String(value || "");
 
 function normalizeMember(member = {}) {
   if (typeof member === "string") return member;
-  return { ...member, baseId: canonicalId(member.baseId) };
+  const inferred = member.baseId || CANONICAL_MEMBER_NAME_IDS[String(member.name || "")] || "";
+  return { ...member, baseId: canonicalId(inferred) };
 }
 
 function normalizeRecommendation(recommendation = {}) {
