@@ -4,6 +4,7 @@ import { TB_MISSION_VISUAL_ASSETS } from "./tb-visual-assets-data.js";
 import { hydrateCombatPreparation } from "./tb-combat-prep-ui.js";
 import { ROTE_P1_MISSION_MAP_SOURCE, roteP1MissionMap } from "./rote-mission-map-p1-data.js";
 import { roteP2MissionMap } from "./rote-mission-map-p2-data.js";
+import { roteP3MissionMap } from "./rote-mission-map-p3-data.js";
 
 const selectedNodeByPlanet = new Map();
 let scheduled = false;
@@ -25,7 +26,7 @@ function liveBody() {
 }
 
 function sourceMissionMap(planetId) {
-  return roteP1MissionMap(planetId) || roteP2MissionMap(planetId);
+  return roteP1MissionMap(planetId) || roteP2MissionMap(planetId) || roteP3MissionMap(planetId);
 }
 
 function phaseLabel(planetId) {
@@ -40,6 +41,7 @@ function missionIcon(type) {
 function typeLabel(type) {
   if (type === "fleet") return "FLEET";
   if (type === "special") return "SPECIAL";
+  if (type === "reva") return "REVA";
   if (type === "deployment") return "DEPLOY";
   if (type === "operations") return "OPERATIONS";
   return "COMBAT";
