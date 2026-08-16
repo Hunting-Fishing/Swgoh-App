@@ -63,6 +63,16 @@
   line-height: 1.45;
 }
 
+.rote-plan-evidence-note {
+  padding: 7px 8px;
+  border: 1px solid rgba(233, 191, 89, .32);
+  border-radius: 8px;
+  background: rgba(110, 82, 21, .14);
+  color: #e7c97c;
+  font-size: .53rem;
+  line-height: 1.4;
+}
+
 .rote-plan-kpis {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
