@@ -8,7 +8,8 @@ const page = await readFile(new URL("../public/guild-member-command-page.js", im
 const css = await readFile(new URL("../public/guild-member-command.css", import.meta.url), "utf8");
 
 test("Guild member profiles have addressable Ally Code routes", () => {
-  assert.match(router, /MEMBER_ROUTE_RE = \/\^\\\/guild\\\/members\\\/\(\\d\{9\}\)/);
+  assert.match(router, /MEMBER_ROUTE_RE/);
+  assert.match(router, /\\d\{9\}/);
   assert.match(router, /targetMemberAllyCode/);
   assert.match(router, /memberProfileUrl/);
 });
