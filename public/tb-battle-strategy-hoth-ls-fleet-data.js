@@ -3,6 +3,8 @@ const stage = (id, label, steps, extra = {}) => ({ id, label, steps, ...extra })
 
 export const HOTH_LS_FLEET_STRATEGY_SOURCES = Object.freeze([
   { id: "swgohgg-hoth-ls", label: "SWGOH.GG · Hoth: Rebel Assault current Territory Battle data", kind: "current-reference", url: "https://swgoh.gg/territory-battles/t01D/" },
+  { id: "swgohgg-home-one", label: "SWGOH.GG · Home One current ship data", kind: "current-reference", url: "https://swgoh.gg/units/home-one/" },
+  { id: "swgohgg-profundity", label: "SWGOH.GG · Profundity current ship data", kind: "current-reference", url: "https://swgoh.gg/units/profundity/" },
 ]);
 
 const source = (id) => HOTH_LS_FLEET_STRATEGY_SOURCES.find((row) => row.id === id);
@@ -22,10 +24,10 @@ function build(missionId, config) {
     status: "current-entry-partial-strategy",
     confidence: "current-entry-current-modifier-partial",
     lastVerified: "2026-08-16",
-    sources: [source("swgohgg-hoth-ls")].filter(Boolean),
+    sources: [source("swgohgg-hoth-ls"), source("swgohgg-home-one"), source("swgohgg-profundity")].filter(Boolean),
     summary: `Hoth Rebel Assault Phase ${config.phase} fleet coverage. The current Territory Battle supplies the platoon-unlocked Ion Cannon Blast strategic ability: it Stuns the selected enemy, higher levels add Turn Meter removal, and Level 3 no longer starts on cooldown. Because guild platoon completion can change the available level, the app treats Ion Cannon as a conditional control resource rather than assuming one fixed opening.`,
     keyUnits: [
-      { baseId: "CAPITALHOMEONE", name: "Home One", importance: "helpful", reason: "Canonical Hoth planning route from the app's mission recommendations; not a hard mission-entry requirement." },
+      { baseId: "CAPITALMONCALAMARICRUISER", name: "Home One", importance: "helpful", reason: "Canonical Hoth planning route from the app's mission recommendations; current base ID is verified and it is not a hard mission-entry requirement." },
       { baseId: "CAPITALPROFUNDITY", name: "Profundity", importance: "helpful", reason: "Modern Light Side Rebel fleet option when owned; not a historical Hoth mission requirement." },
     ],
     keyAbilities: [],
@@ -51,7 +53,7 @@ function build(missionId, config) {
       "Treating Home One or Profundity as mandatory would incorrectly block other legal Light Side fleets.",
       "Exact current enemy fleet spawns and reinforcement order are not sufficiently re-verified, so this pack remains partial.",
     ],
-    evidenceBoundary: "The Hoth Rebel Assault fleet entry baseline and Ion Cannon Blast strategic-ability behavior are current SWGOH.GG Territory Battle facts. Capital-ship selection, enemy spawn and exact reinforcement order remain roster/board dependent; no guaranteed clear percentage or universal fleet script is claimed.",
+    evidenceBoundary: "The Hoth Rebel Assault fleet entry baseline and Ion Cannon Blast strategic-ability behavior are current SWGOH.GG Territory Battle facts. Home One and Profundity base IDs/current ship records are verified. Capital-ship selection, enemy spawn and exact reinforcement order remain roster/board dependent; no guaranteed clear percentage or universal fleet script is claimed.",
   });
 }
 
