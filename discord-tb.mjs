@@ -2,6 +2,7 @@ import { createPublicKey, verify as cryptoVerify } from "node:crypto";
 import { discordStateStore } from "./discord-state-store.mjs";
 import { createDiscordTbLiveServices } from "./discord-tb-live.mjs";
 import { linkDiscordGuildPlayer, unlinkDiscordGuildPlayer } from "./discord-player-link-service.mjs";
+import { setDiscordDonationPreference } from "./discord-donation-preference-service.mjs";
 
 const ED25519_SPKI_PREFIX = Buffer.from("302a300506032b6570032100", "hex");
 const MAX_INTERACTION_BYTES = 1024 * 1024;
@@ -9,8 +10,8 @@ const EPHEMERAL_FLAG = 1 << 6;
 const MAX_DISCORD_CONTENT = 1900;
 const ADMINISTRATOR_PERMISSION = 1n << 3n;
 const MANAGE_GUILD_PERMISSION = 1n << 5n;
-const DEFERRED_SUBCOMMANDS = new Set(["setup", "sync", "phase", "assignments", "farms", "link", "unlink", "links"]);
-const IDENTITY_SUBCOMMANDS = new Set(["link", "unlink", "links"]);
+const DEFERRED_SUBCOMMANDS = new Set(["setup", "sync", "phase", "assignments", "farms", "link", "unlink", "links", "preference", "preferences"]);
+const STATE_SUBCOMMANDS = new Set(["link", "unlink", "links", "preference", "preferences"]);
 
 export const DISCORD_INTERACTION_TYPES = Object.freeze({
   PING: 1,
@@ -40,6 +41,16 @@ function snowflake(value) {
 function allyCode(value) {
   const digits = clean(value).replace(/\D/g, "");
   return /^\d{9}$/.test(digits) ? digits : "";
+}
+
+function unitBaseId(value) {
+  const text = clean(value).toUpperCase();
+  return /^[A-Z0-9_:-]{2,80}$/.test(text) ? text : "";
+}
+
+function donationPreference(value) {
+  const text = clean(value).toLowerCase();
+  return new Set(["give", "default", "keep"]).has(text) ? text : "";
 }
 
 function displayAllyCode(value) {
@@ -133,6 +144,7 @@ export function discordTbPublicStatus(env = process.env) {
     officerAuthorization: "manage-guild-administrator-or-configured-role",
     setupAuthorization: "manage-guild-or-administrator",
     playerLinkAuthorization: "officer-only-live-guild-membership-verified",
+    donationPreferenceAuthorization: "officer-only-linked-player-live-unit-verified",
     interactionsPath: "/api/discord/interactions",
     mode: "http-interactions",
   });
@@ -285,6 +297,7 @@ function statusMessage(interaction, config) {
     "Officer authorization: Manage Guild / Administrator, or a durably configured officer role",
     "Setup authorization: Manage Guild or Administrator only",
     "Player identity: officer-managed, live guild-membership verified, durably audited",
+    "Donation preferences: durable GIVE/KEEP overrides feed the live mission-safe planner",
     `Proactive outbound delivery: ${config.deliveryEnabled ? "enabled" : "disabled"}`,
     "Publishing and DMs remain disabled.",
   ];
@@ -352,7 +365,7 @@ function formatPlayerLinkResult(result = {}, discordUserId = "") {
     `Discord member: <@${safeText(discordUserId)}>`,
     `SWGOH player: **${safeText(verification.playerName, "verified guild member")}** · **${displayAllyCode(link.swgohAllyCode || verification.claimedAllyCode)}**`,
     `Guild: **${safeText(verification.guildName, "bound guild")}**`,
-    `Guild membership check: **verified live** · binding: **${safeText(verification.guildBindingSource)}**`,
+    `Guild membership check: **verified against bound guild roster** · binding: **${safeText(verification.guildBindingSource)}**`,
     "The link is durable and audited. This does not enable DMs or assignment publishing yet.",
   ];
   return truncateContent(lines.join("\n"));
@@ -364,7 +377,7 @@ function formatPlayerUnlinkResult(result = {}) {
     "**SWGOH Command Center · Player Link Removed**",
     `Discord member: <@${safeText(result.discordUserId)}>`,
     `Removed Ally Code: **${displayAllyCode(removed.swgohAllyCode)}**`,
-    "The unlink is durable and audited. No TB plan or delivery state was changed.",
+    "The unlink is durable and audited. Any stored unit preferences for this Discord member were cleared. No TB plan or delivery state was changed.",
   ];
   return truncateContent(lines.join("\n"));
 }
@@ -388,6 +401,50 @@ function formatPlayerLinksResult(guild = {}) {
     if (links.length > 24) lines.push(`• +${links.length - 24} more durable links`);
   }
   lines.push("", "_Mentions are suppressed; this command does not ping linked members._");
+  return truncateContent(lines.join("\n"));
+}
+
+function formatDonationPreferenceResult(result = {}) {
+  const pref = safeText(result.preference, "default").toUpperCase();
+  const verification = result.verification || {};
+  const lines = [
+    `**SWGOH Command Center · Donation Preference ${pref === "DEFAULT" ? "Cleared" : "Saved"}**`,
+    `Discord member: <@${safeText(result.discordUserId)}>`,
+    `Unit: **${safeText(verification.unitName || result.baseId)}** · Base ID: **${safeText(result.baseId)}**`,
+    `Preference: **${pref}**`,
+  ];
+  if (pref === "GIVE" || pref === "KEEP") {
+    lines.push(`Live ownership check: **verified**${verification.playerName ? ` for **${safeText(verification.playerName)}**` : ""}`);
+    lines.push(pref === "GIVE"
+      ? "Planner effect: this member is favored as a donor for this unit when legal."
+      : "Planner effect: this member is pushed to the end of the donor order and used only when safer owners are exhausted.");
+  } else {
+    lines.push("Planner effect: the explicit override was removed; normal mission-safety ranking applies.");
+  }
+  lines.push("The change is durable and audited. No assignments were published and no DMs were sent.");
+  return truncateContent(lines.join("\n"));
+}
+
+function formatDonationPreferencesResult(guild = {}, discordUserId = "") {
+  const all = Object.values(guild?.memberPreferences && typeof guild.memberPreferences === "object" ? guild.memberPreferences : {})
+    .filter((row) => snowflake(row?.discordUserId) && unitBaseId(row?.baseId) && donationPreference(row?.preference))
+    .filter((row) => !discordUserId || row.discordUserId === discordUserId)
+    .sort((a, b) => String(a.discordUserId).localeCompare(String(b.discordUserId)) || String(a.baseId).localeCompare(String(b.baseId)));
+  const lines = [
+    "**SWGOH Command Center · Donation Preferences**",
+    `Scope: ${discordUserId ? `<@${discordUserId}>` : "all linked members"}`,
+    `Active GIVE/KEEP overrides: **${all.length}**`,
+  ];
+  if (!all.length) {
+    lines.push("", "No active GIVE/KEEP overrides are stored for this scope.");
+  } else {
+    lines.push("");
+    for (const row of all.slice(0, 30)) {
+      lines.push(`• <@${row.discordUserId}> · **${safeText(row.baseId)}** → **${safeText(row.preference).toUpperCase()}**`);
+    }
+    if (all.length > 30) lines.push(`• +${all.length - 30} more overrides`);
+  }
+  lines.push("", "_These controls feed the Discord mission-safe ROTE planner. Mentions are suppressed._");
   return truncateContent(lines.join("\n"));
 }
 
@@ -415,11 +472,12 @@ function formatAssignmentsResult(result = {}, phase = "") {
   const coverage = total ? Math.round((assignments.length / total) * 1000) / 10 : 0;
   const help = assignments.filter((row) => row?.safety?.help).length;
   const criticalProtections = Number(safety?.summary?.criticalProtections || 0);
+  const preferenceCount = Number(result?.planningControls?.preferenceCount || 0);
   const lines = [
     `**ROTE Mission-Safe Assignments · ${phaseScope(phase)}**`,
     `Guild: **${guildName(result.guild)}**`,
     `Assigned: **${assignments.length}/${total} (${coverage}%)** · Unfilled: **${unfilled.length}**`,
-    `Mission protections: **${Number(safety?.summary?.protectedUnits || 0)}** · Critical: **${criticalProtections}** · HELP/risk assignments: **${help}**`,
+    `Mission protections: **${Number(safety?.summary?.protectedUnits || 0)}** · Critical: **${criticalProtections}** · GIVE/KEEP overrides: **${preferenceCount}** · HELP/risk assignments: **${help}**`,
   ];
 
   if (assignments.length) {
@@ -436,7 +494,7 @@ function formatAssignmentsResult(result = {}, phase = "") {
     if (unfilled.length > 5) lines.push(`• +${unfilled.length - 5} more unfilled slots`);
   }
 
-  lines.push("", "_Read-only draft: publishing, locks, ignores, preferences, and DMs are not changed by this command._");
+  lines.push("", "_Read-only draft: this command consumes stored preferences but does not publish assignments, change locks/ignores, or send DMs._");
   return truncateContent(lines.join("\n"));
 }
 
@@ -469,13 +527,14 @@ function formatFarmsResult(result = {}, phase = "") {
 function formatPhaseCommandResult(result = {}) {
   const command = result.phaseCommand || {};
   const summary = command.summary || {};
+  const preferenceCount = Number(result?.planningControls?.preferenceCount || 0);
   const lines = [
     `**ROTE Phase Command · ${safeText(command.phase, "P1")}**`,
     `Guild: **${guildName(result.guild)}** · Hydrated: **${Number(summary.hydratedMembers || 0)}/${Number(summary.totalMembers || 0)}**`,
     `Mission entry: **${Number(summary.exactCoveragePercent || 0)}% exact coverage** · Zero: **${Number(summary.zeroCoverageMissions || 0)}** · Single-owner: **${Number(summary.singleOwnerMissions || 0)}**`,
     `Redundancy (${Number(command.redundancyTarget || 2)} owners): **${Number(summary.redundancyCoveragePercent || 0)}%** · Partial-evidence missions: **${Number(summary.partialEvidenceMissions || 0)}**`,
     `Operations: **${Number(summary.assignedOperationSlots || 0)}/${Number(summary.operationSlots || 0)} (${Number(summary.operationCoveragePercent || 0)}%)** · Unfilled: **${Number(summary.unfilledOperationSlots || 0)}** · Risky donors: **${Number(summary.riskyAssignments || 0)}**`,
-    `Protected units: **${Number(summary.protectedUnits || 0)}** · Farm priorities: **${Number(summary.farmPriorities || 0)}**`,
+    `Protected units: **${Number(summary.protectedUnits || 0)}** · GIVE/KEEP overrides: **${preferenceCount}** · Farm priorities: **${Number(summary.farmPriorities || 0)}**`,
   ];
 
   const alerts = Array.isArray(command.alerts) ? command.alerts : [];
@@ -496,20 +555,20 @@ function formatPhaseCommandResult(result = {}) {
     }
   }
 
-  lines.push("", "_Same phase model as the web Command Board. Read-only; no locks, preferences, assignments, publishing, or DMs are mutated._");
+  lines.push("", "_Same phase model as the web Command Board. Read-only output; stored preferences are consumed but publishing and DMs remain disabled._");
   return truncateContent(lines.join("\n"));
 }
 
 function deferredErrorMessage(error) {
   const message = safeText(error?.name === "AbortError" ? "The live SWGOH request timed out." : error?.message, "The TB command failed.");
-  return truncateContent(`**SWGOH Command Center · TB command failed**\n${message}\nNo TB plan, publishing, or DM state was changed.`);
+  return truncateContent(`**SWGOH Command Center · TB command failed**\n${message}\nNo assignment publishing or DM delivery was performed.`);
 }
 
 function requireDurableIdentityState(stateStore) {
   if (typeof stateStore?.status !== "function") throw new Error("Durable Discord state service is unavailable.");
   const status = stateStore.status();
   if (!status?.enabled || !status?.durable) {
-    throw new Error(`Durable Discord state is not ready (${safeText(status?.reason, "storage unavailable")}). Attach a persistent Railway Volume before managing player links.`);
+    throw new Error(`Durable Discord state is not ready (${safeText(status?.reason, "storage unavailable")}). Attach a persistent Railway Volume before managing shared Discord state.`);
   }
   return status;
 }
@@ -602,6 +661,45 @@ export async function executeDiscordTbDeferredCommand(interaction, config = disc
     const guild = await stateStore.readGuild(discordGuildId);
     if (!guild) throw new Error("This Discord server has not completed durable /tb setup yet.");
     return formatPlayerLinksResult(guild);
+  }
+
+  if (subcommand === "preference") {
+    const stateStore = services?.stateStore || discordStateStore;
+    requireDurableIdentityState(stateStore);
+    const discordGuildId = snowflake(interaction?.guild_id);
+    const actorDiscordUserId = snowflake(interaction?.member?.user?.id);
+    const discordUserId = snowflake(discordTbOption(interaction, "member"));
+    const baseId = unitBaseId(discordTbOption(interaction, "unit"));
+    const preference = donationPreference(discordTbOption(interaction, "preference"));
+    if (!discordGuildId) throw new Error("A valid Discord guild is required for /tb preference.");
+    if (!actorDiscordUserId) throw new Error("A valid Discord officer identity is required for /tb preference.");
+    if (!discordUserId) throw new Error("Choose a linked Discord member for /tb preference.");
+    if (!baseId) throw new Error("Enter a valid SWGOH unit Base ID for /tb preference.");
+    if (!preference) throw new Error("Choose GIVE, DEFAULT, or KEEP for /tb preference.");
+    const transaction = typeof services?.setDiscordDonationPreference === "function" ? services.setDiscordDonationPreference : setDiscordDonationPreference;
+    const result = await transaction({
+      discordGuildId,
+      discordUserId,
+      unitBaseId: baseId,
+      donationPreference: preference,
+      actorDiscordUserId,
+      fallbackGuildAllyCode: config.pilotAllyCode,
+      stateStore,
+      ...(services?.rosterService ? { rosterService: services.rosterService } : {}),
+    });
+    return formatDonationPreferenceResult(result);
+  }
+
+  if (subcommand === "preferences") {
+    const stateStore = services?.stateStore || discordStateStore;
+    requireDurableIdentityState(stateStore);
+    if (typeof stateStore?.readGuild !== "function") throw new Error("Durable Discord guild reader is unavailable.");
+    const discordGuildId = snowflake(interaction?.guild_id);
+    const requestedUserId = snowflake(discordTbOption(interaction, "member"));
+    if (!discordGuildId) throw new Error("A valid Discord guild is required for /tb preferences.");
+    const guild = await stateStore.readGuild(discordGuildId);
+    if (!guild) throw new Error("This Discord server has not completed durable /tb setup yet.");
+    return formatDonationPreferencesResult(guild, requestedUserId);
   }
 
   if (subcommand === "sync") {
@@ -750,7 +848,7 @@ export async function handleDiscordInteractionRequest(request, response, env = p
       return true;
     }
 
-    if (IDENTITY_SUBCOMMANDS.has(subcommand)) {
+    if (STATE_SUBCOMMANDS.has(subcommand)) {
       scheduleDeferredDiscordCommand(interaction, config, { ...services, stateStore });
       return true;
     }
