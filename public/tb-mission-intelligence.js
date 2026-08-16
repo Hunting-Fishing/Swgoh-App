@@ -160,9 +160,23 @@ function unitMeetsBaseThresholds(unit, entry) {
   return true;
 }
 
+export function effectiveAllowedBaseIds(entry = {}) {
+  const explicit = Array.isArray(entry.allowedBaseIds) ? entry.allowedBaseIds.map(String).filter(Boolean) : [];
+  if (explicit.length) return explicit;
+
+  const squadSize = Number(entry.squadSize || 0);
+  const mandatory = Array.isArray(entry.mandatoryMembers) ? entry.mandatoryMembers : [];
+  if (!Number.isFinite(squadSize) || squadSize <= 0 || mandatory.length !== squadSize) return [];
+  const inferred = mandatory.map((member) => String(member?.baseId || "")).filter(Boolean);
+  if (inferred.length !== squadSize || new Set(inferred).size !== squadSize) return [];
+  return inferred;
+}
+
 function unitMeetsPoolRestrictions(unit, entry) {
-  if (entry.requiredBaseIds?.length && !entry.requiredBaseIds.includes(String(unit.baseId || ""))) return false;
-  if (entry.allowedBaseIds?.length && !entry.allowedBaseIds.includes(String(unit.baseId || ""))) return false;
+  const baseId = String(unit.baseId || "");
+  if (entry.requiredBaseIds?.length && !entry.requiredBaseIds.includes(baseId)) return false;
+  const allowedBaseIds = effectiveAllowedBaseIds(entry);
+  if (allowedBaseIds.length && !allowedBaseIds.includes(baseId)) return false;
   if (entry.requiredCategories?.length) {
     const factions = unitFactionSet(unit);
     const checks = entry.requiredCategories.map((category) => factions.has(String(category).toLowerCase()));

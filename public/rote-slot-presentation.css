@@ -1,0 +1,58 @@
+.rote-slot-flex-note,
+.rote-slot-fixed {
+  display: grid;
+  gap: 3px;
+  margin: 7px 0;
+  padding: 8px 10px;
+  border: 1px solid rgba(89, 207, 224, .28);
+  border-radius: 8px;
+  background: rgba(7, 30, 47, .68);
+  color: #bcd0df;
+  font-size: .55rem;
+  line-height: 1.4;
+}
+
+.rote-slot-flex-note strong,
+.rote-slot-fixed strong {
+  color: #e7f8fb;
+  font-size: .64rem;
+}
+
+.rote-slot-flex-note span,
+.rote-slot-fixed small { color: #91a8ba; }
+
+.rote-slot-fixed {
+  border-color: rgba(231, 190, 88, .34);
+  background: rgba(90, 63, 13, .14);
+}
+
+.rote-slot-fixed > span {
+  color: #e9c96d;
+  font-size: .49rem;
+  font-weight: 900;
+  letter-spacing: .08em;
+}
+
+.rote-slot-pool-toggle {
+  width: 100%;
+  min-height: 34px;
+  margin: 7px 0 2px;
+  padding: 6px 10px;
+  border: 1px solid #315470;
+  border-radius: 7px;
+  background: #091c30;
+  color: #d8f5fa;
+  font-size: .54rem;
+  font-weight: 900;
+  letter-spacing: .025em;
+  cursor: pointer;
+}
+
+.rote-slot-pool-toggle:hover,
+.rote-slot-pool-toggle[aria-expanded="true"] {
+  border-color: #60d5e4;
+  background: #0b283d;
+}
+
+.rote-zoom-pool-scroll[hidden] { display: none !important; }
+.rote-zoom-unit[hidden] { display: none !important; }
