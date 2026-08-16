@@ -1,0 +1,108 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { ROTE_MISSIONS_BY_PLANET } from "../public/rote-mission-data.js";
+import { evaluateBattleStrategy } from "../public/tb-battle-strategy.js";
+import { ROTE_FLEET_BATTLE_STRATEGIES } from "../public/tb-battle-strategy-rote-fleet-data.js";
+import { roteFleetBattleStrategyForMission } from "../public/tb-battle-strategy-rote-fleet-resolver.js";
+import { missionStrategyCoverage, STRATEGY_COVERAGE } from "../public/tb-strategy-coverage.js";
+
+const fleetMissions = Object.values(ROTE_MISSIONS_BY_PLANET).flat().filter((mission) => mission.missionType === "fleet");
+const fleetIds = fleetMissions.map((mission) => mission.id).sort();
+
+const expectedFleetIds = [
+  "bracca-fleet",
+  "corellia-fleet",
+  "coruscant-fleet",
+  "death-star-fleet",
+  "felucia-fleet",
+  "geonosis-fleet",
+  "hoth-fleet",
+  "kafrene-fleet",
+  "kashyyyk-fleet",
+  "kessel-fleet",
+  "lothal-fleet",
+  "mandalore-fleet",
+  "mustafar-fleet",
+  "scarif-fleet",
+  "tatooine-fleet",
+  "vandor-fleet",
+  "zeffo-fleet",
+].sort();
+
+function ship(baseId, name = baseId) {
+  return { baseId, name, unit: { baseId, name }, abilities: [], staticUnit: { baseId, name, abilities: [] } };
+}
+
+test("canonical ROTE data exposes exactly 17 fleet missions", () => {
+  assert.equal(fleetMissions.length, 17);
+  assert.deepEqual(fleetIds, expectedFleetIds);
+  assert.deepEqual(Object.keys(ROTE_FLEET_BATTLE_STRATEGIES).sort(), expectedFleetIds);
+});
+
+test("every canonical ROTE fleet mission resolves to sourced execution stages", () => {
+  for (const mission of fleetMissions) {
+    const strategy = roteFleetBattleStrategyForMission(mission.id);
+    assert.ok(strategy, `${mission.id} should resolve`);
+    assert.equal(strategy.missionId, mission.id);
+    assert.ok(strategy.sources.some((source) => source.kind === "official" || source.kind === "current-reference"));
+    assert.ok(strategy.stages.length >= 3);
+    assert.ok(strategy.evidenceBoundary);
+
+    const analysis = evaluateBattleStrategy({ missionId: mission.id, members: [] }, mission);
+    assert.equal(analysis.available, true, `${mission.id} should be available through the global resolver`);
+    assert.equal(analysis.strategyId, strategy.id);
+    assert.ok(analysis.stages.length >= 3);
+    assert.equal("winPercent" in analysis, false);
+    assert.equal("guaranteedWin" in analysis, false);
+  }
+});
+
+test("all 17 fleet missions count as covered in the strategy coverage layer", () => {
+  for (const mission of fleetMissions) {
+    const coverage = missionStrategyCoverage(mission);
+    assert.equal(coverage.coverage, STRATEGY_COVERAGE.COVERED, `${mission.id}: ${coverage.reason}`);
+    assert.equal(coverage.strategyAvailable, true);
+  }
+});
+
+test("canonical required ship identifiers match live roster member ids", () => {
+  const cases = [
+    ["corellia-fleet", "MILLENNIUMFALCONPRISTINE"],
+    ["coruscant-fleet", "OUTRIDER"],
+    ["tatooine-fleet", "CAPITALEXECUTOR"],
+    ["kashyyyk-fleet", "CAPITALPROFUNDITY"],
+    ["zeffo-fleet", "CAPITALNEGOTIATOR"],
+    ["kessel-fleet", "GHOST"],
+    ["mandalore-fleet", "GAUNTLETSTARFIGHTER"],
+    ["death-star-fleet", "TIEFIGHTERIMPERIAL"],
+    ["scarif-fleet", "CAPITALPROFUNDITY"],
+  ];
+  for (const [missionId, baseId] of cases) {
+    const strategy = roteFleetBattleStrategyForMission(missionId);
+    assert.ok(strategy.keyUnits.some((row) => row.baseId === baseId && row.importance === "critical"), `${missionId} should use ${baseId}`);
+    const analysis = evaluateBattleStrategy({ missionId, members: [ship(baseId)] });
+    assert.ok(!analysis.blockers.some((row) => row.type === "unit" && row.id === baseId), `${missionId} should recognize ${baseId}`);
+  }
+});
+
+test("fleet packs preserve official modifier semantics and avoid fabricated odds", () => {
+  assert.match(roteFleetBattleStrategyForMission("mustafar-fleet").summary, /Burning/i);
+  assert.match(roteFleetBattleStrategyForMission("bracca-fleet").summary, /Decommissioned/i);
+  assert.match(roteFleetBattleStrategyForMission("geonosis-fleet").summary, /Target Lock/i);
+  assert.match(roteFleetBattleStrategyForMission("tatooine-fleet").summary, /bonus turn/i);
+  assert.match(roteFleetBattleStrategyForMission("kessel-fleet").summary, /Confuse/i);
+  assert.match(roteFleetBattleStrategyForMission("hoth-fleet").summary, /Damage Over Time/i);
+  assert.match(roteFleetBattleStrategyForMission("scarif-fleet").summary, /Reinforcement/i);
+  for (const strategy of Object.values(ROTE_FLEET_BATTLE_STRATEGIES)) {
+    assert.doesNotMatch(JSON.stringify(strategy), /\b(?:9\d|100)%\s*(?:win|clear)/i);
+  }
+});
+
+test("fleet strategy modules parse", () => {
+  for (const path of [
+    new URL("../public/tb-battle-strategy-rote-fleet-data.js", import.meta.url),
+    new URL("../public/tb-battle-strategy-rote-fleet-resolver.js", import.meta.url),
+    new URL("../public/tb-battle-strategy.js", import.meta.url),
+  ]) execFileSync(process.execPath, ["--check", path.pathname]);
+});
