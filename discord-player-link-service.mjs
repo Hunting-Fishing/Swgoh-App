@@ -27,12 +27,27 @@ function requireDurableState(stateStore) {
   return status;
 }
 
+async function requireDurableGuildBinding(stateStore, discordGuildId) {
+  if (typeof stateStore?.readGuild !== "function") {
+    const error = new Error("Durable Discord guild binding reader is unavailable.");
+    error.code = "DISCORD_GUILD_BINDING_UNAVAILABLE";
+    throw error;
+  }
+  const guild = await stateStore.readGuild(discordGuildId);
+  const digits = String(guild?.swgohAllyCode || "").replace(/\D/g, "");
+  if (!/^\d{9}$/.test(digits)) {
+    const error = new Error("This Discord server must complete /tb setup before player links can be created.");
+    error.code = "DISCORD_GUILD_NOT_BOUND";
+    throw error;
+  }
+  return digits;
+}
+
 export async function linkDiscordGuildPlayer({
   discordGuildId,
   discordUserId,
   claimedAllyCode,
   actorDiscordUserId,
-  fallbackGuildAllyCode = "",
   stateStore = discordStateStore,
   rosterService = guildRosterService,
 } = {}) {
@@ -40,6 +55,7 @@ export async function linkDiscordGuildPlayer({
   const guildId = snowflake(discordGuildId, "Discord guild ID");
   const userId = snowflake(discordUserId, "Discord user ID");
   const actorId = snowflake(actorDiscordUserId, "Discord actor user ID");
+  await requireDurableGuildBinding(stateStore, guildId);
   if (typeof stateStore?.linkPlayer !== "function") {
     const error = new Error("Durable Discord player-link writer is unavailable.");
     error.code = "PLAYER_LINK_WRITER_UNAVAILABLE";
@@ -49,10 +65,15 @@ export async function linkDiscordGuildPlayer({
   const verification = await verifyDiscordGuildPlayerClaim({
     discordGuildId: guildId,
     claimedAllyCode,
-    fallbackGuildAllyCode,
     stateStore,
     rosterService,
   });
+
+  if (verification.guildBindingSource !== "durable-guild-binding") {
+    const error = new Error("Player links require the Discord server's durable SWGOH guild binding.");
+    error.code = "DISCORD_GUILD_NOT_BOUND";
+    throw error;
+  }
 
   const link = await stateStore.linkPlayer({
     discordGuildId: guildId,
