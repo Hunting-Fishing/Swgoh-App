@@ -9,6 +9,7 @@
     "test": "node --test",
     "verify": "node --test",
     "report:tb-coverage": "node scripts/report-tb-strategy-coverage.mjs",
+    "report:tb-research": "node scripts/report-tb-strategy-research-queue.mjs",
     "build:interactions": "node scripts/build-interaction-index.mjs",
     "sync:combat-data": "node scripts/sync-raw-combat-data.mjs --allow-stale && node scripts/build-interaction-index.mjs",
     "sync:gamedata": "node scripts/sync-gamedata.mjs --allow-stale && node scripts/repair-catalog.mjs --allow-stale && node scripts/enrich-kit-intelligence.mjs && node scripts/sync-raw-combat-data.mjs --allow-stale && node scripts/build-interaction-index.mjs"
