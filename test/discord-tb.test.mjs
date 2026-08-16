@@ -101,6 +101,19 @@ test("live read commands defer only after a valid pilot Ally Code is configured"
   };
   assert.equal(handleDiscordTbCommand(interaction, configured).type, 5);
 
+  const phaseInteraction = {
+    guild_id: "987654321098765432",
+    data: { name: "tb", options: [{ type: 1, name: "phase", options: [{ type: 3, name: "phase", value: "P2" }] }] },
+  };
+  assert.equal(handleDiscordTbCommand(phaseInteraction, configured).type, 5);
+
+  const missingPhase = handleDiscordTbCommand({
+    guild_id: "987654321098765432",
+    data: { name: "tb", options: [{ type: 1, name: "phase" }] },
+  }, configured);
+  assert.equal(missingPhase.type, 4);
+  assert.match(missingPhase.data.content, /Choose a ROTE phase/);
+
   const missing = discordTbConfig({
     DISCORD_TB_INTERACTIONS_ENABLED: "true",
     DISCORD_APPLICATION_ID: "123456789012345678",
@@ -141,6 +154,58 @@ test("deferred sync returns a live read-only guild summary", async () => {
   );
   assert.match(content, /Pilot Guild/);
   assert.match(content, /No TB assignments or officer state were changed/);
+});
+
+test("deferred phase command returns the shared officer phase summary", async () => {
+  const config = discordTbConfig({
+    DISCORD_APPLICATION_ID: "123456789012345678",
+    DISCORD_PUBLIC_KEY: "ab".repeat(32),
+    DISCORD_DEFAULT_GUILD_ID: "987654321098765432",
+    DISCORD_DEFAULT_ALLY_CODE: "123456789",
+    DISCORD_TB_REDUNDANCY_TARGET: "2",
+  });
+  const content = await executeDiscordTbDeferredCommand(
+    {
+      data: {
+        name: "tb",
+        options: [{ type: 1, name: "phase", options: [{ type: 3, name: "phase", value: "P2" }] }],
+      },
+    },
+    config,
+    {
+      buildPhaseCommand: async ({ phase, redundancyTarget }) => ({
+        guild: { guild: { name: "Pilot Guild" }, members: [{ rosterAvailable: true }, { rosterAvailable: true }] },
+        phaseCommand: {
+          phase,
+          redundancyTarget,
+          summary: {
+            hydratedMembers: 2,
+            totalMembers: 2,
+            exactCoveragePercent: 75,
+            zeroCoverageMissions: 1,
+            singleOwnerMissions: 2,
+            redundancyCoveragePercent: 50,
+            partialEvidenceMissions: 1,
+            assignedOperationSlots: 9,
+            operationSlots: 10,
+            operationCoveragePercent: 90,
+            unfilledOperationSlots: 1,
+            riskyAssignments: 2,
+            protectedUnits: 4,
+            farmPriorities: 3,
+          },
+          alerts: [{ severity: "critical", title: "No exact-ready member", detail: "Mission needs officer attention." }],
+          members: [{ name: "High Burden Officer", burden: 125, soleOwnerMissions: 1, operationAssignments: 3, riskyAssignments: 1 }],
+        },
+      }),
+    },
+  );
+  assert.match(content, /ROTE Phase Command · P2/);
+  assert.match(content, /Pilot Guild/);
+  assert.match(content, /75% exact coverage/);
+  assert.match(content, /No exact-ready member/);
+  assert.match(content, /High Burden Officer/);
+  assert.match(content, /Same phase model as the web Command Board/);
 });
 
 test("Discord deferred response edits the original interaction and suppresses mentions", async () => {
