@@ -59,6 +59,45 @@ if (!config.commandRegistrationConfigured) {
         },
         {
           type: 1,
+          name: "link",
+          description: "Officer-link a Discord member to a verified guild Ally Code",
+          options: [
+            {
+              type: 6,
+              name: "member",
+              description: "Discord member to link",
+              required: true,
+            },
+            {
+              type: 3,
+              name: "ally_code",
+              description: "9-digit SWGOH Ally Code; guild membership is checked live",
+              required: true,
+              min_length: 9,
+              max_length: 11,
+            },
+          ],
+        },
+        {
+          type: 1,
+          name: "unlink",
+          description: "Remove a durable Discord-to-SWGOH player link",
+          options: [
+            {
+              type: 6,
+              name: "member",
+              description: "Discord member whose player link should be removed",
+              required: true,
+            },
+          ],
+        },
+        {
+          type: 1,
+          name: "links",
+          description: "Show durable Discord-to-SWGOH player links for this server",
+        },
+        {
+          type: 1,
           name: "sync",
           description: "Force-refresh the pilot guild roster from the live SWGOH gateway",
         },
