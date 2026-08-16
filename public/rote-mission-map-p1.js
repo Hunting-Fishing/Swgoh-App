@@ -8,6 +8,7 @@ import { roteP3MissionMap } from "./rote-mission-map-p3-data.js";
 import { roteZeffoMissionMap } from "./rote-mission-map-zeffo-data.js";
 import { roteP4MissionMap } from "./rote-mission-map-p4-data.js";
 import { roteMandaloreMissionMap } from "./rote-mission-map-mandalore-data.js";
+import { roteP5MissionMap } from "./rote-mission-map-p5-data.js";
 
 const selectedNodeByPlanet = new Map();
 let scheduled = false;
@@ -34,7 +35,8 @@ function sourceMissionMap(planetId) {
     || roteP3MissionMap(planetId)
     || roteZeffoMissionMap(planetId)
     || roteP4MissionMap(planetId)
-    || roteMandaloreMissionMap(planetId);
+    || roteMandaloreMissionMap(planetId)
+    || roteP5MissionMap(planetId);
 }
 
 function phaseLabel(planetId) {
