@@ -2,7 +2,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 
-import { guildFarmKey, guildFarmPlanTarget } from "../public/guild-rote-member-plan-handoff.js";
+import {
+  guildFarmKey,
+  guildFarmPlanTarget,
+  snapshotMatchesAllyCode,
+} from "../public/guild-rote-member-plan-handoff.js";
 
 test("guild farm key is stable across display punctuation and case", () => {
   assert.equal(guildFarmKey("Player One", "Jedi Knight Revan"), "player one|jedi knight revan");
@@ -50,6 +54,13 @@ test("ships and acquisition-only blockers do not pretend to be Gear Planner targ
   }), null);
 });
 
+test("target roster confirmation accepts only the requested Ally Code", () => {
+  assert.equal(snapshotMatchesAllyCode({ allyCode: "123456789" }, "123-456-789"), true);
+  assert.equal(snapshotMatchesAllyCode({ body: { player: { allyCode: "123456789" } } }, "123456789"), true);
+  assert.equal(snapshotMatchesAllyCode({ allyCode: "987654321" }, "123456789"), false);
+  assert.equal(snapshotMatchesAllyCode(null, "123456789"), false);
+});
+
 test("guild member handoff is wired after guild mission coverage and Gear Planner bridge", () => {
   const index = fs.readFileSync(new URL("../public/index.html", import.meta.url), "utf8");
   const source = fs.readFileSync(new URL("../public/guild-rote-member-plan-handoff.js", import.meta.url), "utf8");
@@ -63,5 +74,6 @@ test("guild member handoff is wired after guild mission coverage and Gear Planne
   assert.match(source, /Plan Member Upgrade/);
   assert.match(source, /Load Member Roster/);
   assert.match(source, /swgoh:gear-plan-unit/);
+  assert.match(source, /waitForLiveAllyCode/);
   assert.match(source, /stopImmediatePropagation/);
 });
