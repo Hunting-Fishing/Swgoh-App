@@ -3,6 +3,11 @@ import { discordTbConfig } from "../discord-tb.mjs";
 const API_VERSION = "v10";
 const config = discordTbConfig(process.env);
 const phaseChoices = ["P1", "P2", "P3", "P4", "P5", "P6"].map((phase) => ({ name: phase, value: phase }));
+const preferenceChoices = [
+  { name: "GIVE — favor this member as a donor", value: "give" },
+  { name: "DEFAULT — clear the explicit override", value: "default" },
+  { name: "KEEP — avoid this donor until necessary", value: "keep" },
+];
 
 const optionalPhaseOption = {
   type: 3,
@@ -95,6 +100,47 @@ if (!config.commandRegistrationConfigured) {
           type: 1,
           name: "links",
           description: "Show durable Discord-to-SWGOH player links for this server",
+        },
+        {
+          type: 1,
+          name: "preference",
+          description: "Set a verified GIVE/DEFAULT/KEEP unit preference for a linked member",
+          options: [
+            {
+              type: 6,
+              name: "member",
+              description: "Linked Discord member whose unit preference should change",
+              required: true,
+            },
+            {
+              type: 3,
+              name: "unit",
+              description: "SWGOH unit Base ID, for example JEDIKNIGHTCAL",
+              required: true,
+              min_length: 2,
+              max_length: 80,
+            },
+            {
+              type: 3,
+              name: "preference",
+              description: "Donation preference used by the mission-safe ROTE planner",
+              required: true,
+              choices: preferenceChoices,
+            },
+          ],
+        },
+        {
+          type: 1,
+          name: "preferences",
+          description: "Show durable GIVE/KEEP overrides used by the ROTE planner",
+          options: [
+            {
+              type: 6,
+              name: "member",
+              description: "Optional linked member scope",
+              required: false,
+            },
+          ],
         },
         {
           type: 1,
