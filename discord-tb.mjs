@@ -5,7 +5,7 @@ const ED25519_SPKI_PREFIX = Buffer.from("302a300506032b6570032100", "hex");
 const MAX_INTERACTION_BYTES = 1024 * 1024;
 const EPHEMERAL_FLAG = 1 << 6;
 const MAX_DISCORD_CONTENT = 1900;
-const DEFERRED_SUBCOMMANDS = new Set(["sync", "assignments", "farms"]);
+const DEFERRED_SUBCOMMANDS = new Set(["sync", "phase", "assignments", "farms"]);
 
 export const DISCORD_INTERACTION_TYPES = Object.freeze({
   PING: 1,
@@ -198,6 +198,12 @@ function safeText(value, fallback = "unknown") {
   return text || fallback;
 }
 
+function previewText(value, maxLength = 140) {
+  const text = safeText(value, "");
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, Math.max(1, maxLength - 1)).trimEnd()}…`;
+}
+
 function number(value) {
   return new Intl.NumberFormat("en-US").format(Number(value || 0));
 }
@@ -242,6 +248,9 @@ export function handleDiscordTbCommand(interaction, config = discordTbConfig()) 
 
   const subcommand = discordTbSubcommand(interaction);
   if (subcommand === "status") return ephemeral(statusMessage(interaction, config));
+  if (subcommand === "phase" && !discordTbPhase(interaction)) {
+    return ephemeral("Choose a ROTE phase from P1 through P6 for `/tb phase`.");
+  }
 
   if (DEFERRED_SUBCOMMANDS.has(subcommand)) {
     if (!config.pilotAllyCode) {
@@ -268,9 +277,9 @@ function formatSyncResult(result = {}) {
   const guild = result.guild || result;
   const members = Array.isArray(guild?.members) ? guild.members : [];
   const lines = [
-    `**SWGOH Command Center · Guild Sync**`,
+    "**SWGOH Command Center · Guild Sync**",
     `Guild: **${guildName(guild)}**`,
-    `Live roster refresh: **complete**`,
+    "Live roster refresh: **complete**",
     `Hydrated rosters: **${hydratedMembers(guild)}/${members.length}**`,
     `Guild GP: **${number(guildGp(guild))}**`,
     `Cache state: **${safeText(result.cache || "refreshed")}**`,
@@ -339,6 +348,40 @@ function formatFarmsResult(result = {}, phase = "") {
   return truncateContent(lines.join("\n"));
 }
 
+function formatPhaseCommandResult(result = {}) {
+  const command = result.phaseCommand || {};
+  const summary = command.summary || {};
+  const lines = [
+    `**ROTE Phase Command · ${safeText(command.phase, "P1")}**`,
+    `Guild: **${guildName(result.guild)}** · Hydrated: **${Number(summary.hydratedMembers || 0)}/${Number(summary.totalMembers || 0)}**`,
+    `Mission entry: **${Number(summary.exactCoveragePercent || 0)}% exact coverage** · Zero: **${Number(summary.zeroCoverageMissions || 0)}** · Single-owner: **${Number(summary.singleOwnerMissions || 0)}**`,
+    `Redundancy (${Number(command.redundancyTarget || 2)} owners): **${Number(summary.redundancyCoveragePercent || 0)}%** · Partial-evidence missions: **${Number(summary.partialEvidenceMissions || 0)}**`,
+    `Operations: **${Number(summary.assignedOperationSlots || 0)}/${Number(summary.operationSlots || 0)} (${Number(summary.operationCoveragePercent || 0)}%)** · Unfilled: **${Number(summary.unfilledOperationSlots || 0)}** · Risky donors: **${Number(summary.riskyAssignments || 0)}**`,
+    `Protected units: **${Number(summary.protectedUnits || 0)}** · Farm priorities: **${Number(summary.farmPriorities || 0)}**`,
+  ];
+
+  const alerts = Array.isArray(command.alerts) ? command.alerts : [];
+  if (alerts.length) {
+    lines.push("", "**Officer priority queue**");
+    for (const alert of alerts.slice(0, 6)) {
+      const severity = safeText(alert.severity, "info").toUpperCase();
+      lines.push(`• **${severity}** · ${previewText(alert.title, 95)} — ${previewText(alert.detail, 145)}`);
+    }
+    if (alerts.length > 6) lines.push(`• +${alerts.length - 6} more alerts on the web Phase Command Board`);
+  }
+
+  const members = Array.isArray(command.members) ? command.members : [];
+  if (members.length) {
+    lines.push("", "**Highest officer burden**");
+    for (const member of members.slice(0, 4)) {
+      lines.push(`• **${safeText(member.name, "member")}** · burden ${Number(member.burden || 0)} · sole missions ${Number(member.soleOwnerMissions || 0)} · Ops ${Number(member.operationAssignments || 0)} · risky ${Number(member.riskyAssignments || 0)}`);
+    }
+  }
+
+  lines.push("", "_Same phase model as the web Command Board. Read-only; no locks, preferences, assignments, publishing, or DMs are mutated._");
+  return truncateContent(lines.join("\n"));
+}
+
 function deferredErrorMessage(error) {
   const message = safeText(error?.name === "AbortError" ? "The live SWGOH request timed out." : error?.message, "The live TB command failed.");
   return truncateContent(`**SWGOH Command Center · TB command failed**\n${message}\nNo guild settings or assignments were changed.`);
@@ -353,6 +396,18 @@ export async function executeDiscordTbDeferredCommand(interaction, config = disc
     if (typeof services.syncGuild !== "function") throw new Error("Discord guild sync service is unavailable.");
     const result = await services.syncGuild({ allyCode: config.pilotAllyCode, interaction });
     return formatSyncResult(result);
+  }
+
+  if (subcommand === "phase") {
+    if (!phase) throw new Error("A valid ROTE phase is required.");
+    if (typeof services.buildPhaseCommand !== "function") throw new Error("Discord TB phase command service is unavailable.");
+    const result = await services.buildPhaseCommand({
+      allyCode: config.pilotAllyCode,
+      redundancyTarget: config.redundancyTarget,
+      phase,
+      interaction,
+    });
+    return formatPhaseCommandResult(result);
   }
 
   if (subcommand === "assignments" || subcommand === "farms") {
@@ -457,7 +512,9 @@ export async function handleDiscordInteractionRequest(request, response, env = p
   const commandResponse = handleDiscordTbCommand(interaction, config);
   jsonResponse(response, 200, commandResponse);
   if (commandResponse.type === DISCORD_RESPONSE_TYPES.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE) {
-    const liveServices = typeof services?.syncGuild === "function" || typeof services?.buildPlan === "function"
+    const liveServices = typeof services?.syncGuild === "function"
+      || typeof services?.buildPlan === "function"
+      || typeof services?.buildPhaseCommand === "function"
       ? services
       : createDiscordTbLiveServices(env);
     scheduleDeferredDiscordCommand(interaction, config, liveServices);
