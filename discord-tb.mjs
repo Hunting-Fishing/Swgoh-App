@@ -5,6 +5,8 @@ const ED25519_SPKI_PREFIX = Buffer.from("302a300506032b6570032100", "hex");
 const MAX_INTERACTION_BYTES = 1024 * 1024;
 const EPHEMERAL_FLAG = 1 << 6;
 const MAX_DISCORD_CONTENT = 1900;
+const ADMINISTRATOR_PERMISSION = 1n << 3n;
+const MANAGE_GUILD_PERMISSION = 1n << 5n;
 const DEFERRED_SUBCOMMANDS = new Set(["sync", "phase", "assignments", "farms"]);
 
 export const DISCORD_INTERACTION_TYPES = Object.freeze({
@@ -41,6 +43,22 @@ function boundedInteger(value, fallback, min, max) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return fallback;
   return Math.max(min, Math.min(max, Math.trunc(parsed)));
+}
+
+function permissionBitset(value) {
+  const text = clean(value);
+  if (!/^\d+$/.test(text)) return null;
+  try {
+    return BigInt(text);
+  } catch {
+    return null;
+  }
+}
+
+export function discordTbMemberHasOfficerPermission(interaction = {}) {
+  const permissions = permissionBitset(interaction?.member?.permissions);
+  if (permissions == null) return false;
+  return Boolean((permissions & MANAGE_GUILD_PERMISSION) !== 0n || (permissions & ADMINISTRATOR_PERMISSION) !== 0n);
 }
 
 export function discordTbConfig(env = process.env) {
@@ -82,6 +100,7 @@ export function discordTbPublicStatus(env = process.env) {
     commandRegistrationConfigured: config.commandRegistrationConfigured,
     deliveryEnabled: config.deliveryEnabled,
     redundancyTarget: config.redundancyTarget,
+    officerAuthorization: "manage-guild-or-administrator",
     interactionsPath: "/api/discord/interactions",
     mode: "http-interactions",
   });
@@ -231,6 +250,7 @@ function statusMessage(interaction, config) {
     `Pilot Discord server: ${config.pilotGuildId || "not configured"}`,
     `Pilot SWGOH guild seed: ${config.pilotAllyCode ? "configured" : "not configured"}`,
     `Mission redundancy target: ${config.redundancyTarget}`,
+    "Officer authorization: Manage Guild or Administrator (server-enforced)",
     `Proactive outbound delivery: ${config.deliveryEnabled ? "enabled" : "disabled"}`,
     "Live slash-command reads are isolated from publishing, DMs, and officer mutations.",
   ];
@@ -506,6 +526,16 @@ export async function handleDiscordInteractionRequest(request, response, env = p
 
   if (Number(interaction?.type) !== DISCORD_INTERACTION_TYPES.APPLICATION_COMMAND) {
     jsonResponse(response, 200, ephemeral("Unsupported Discord interaction type."));
+    return true;
+  }
+
+  if (String(interaction?.application_id || "") !== config.applicationId) {
+    jsonResponse(response, 401, { error: "Discord interaction application does not match this deployment." });
+    return true;
+  }
+
+  if (!discordTbMemberHasOfficerPermission(interaction)) {
+    jsonResponse(response, 200, ephemeral("Officer permission required. `/tb` currently requires Manage Server (Manage Guild) or Administrator permission."));
     return true;
   }
 
