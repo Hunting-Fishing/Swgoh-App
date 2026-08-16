@@ -1,7 +1,6 @@
 import { ROTE_PLANETS } from "./rote-map-data.js";
 import { roteMissionMap } from "./rote-mission-map-registry.js";
 import {
-  isRoteInfrastructureNode,
   missionEntryRule,
   missionRosterEligibility,
   resolveRoteMissionNodes,
@@ -165,11 +164,10 @@ function missionRef(planet, mission, kind, gap, shortfall = 0) {
   });
 }
 
-function resolveMemberIdentity(row, catalog = []) {
+function resolveMemberIdentity(row, catalogMapsForRun) {
   const unit = row?.unit || null;
   const member = row?.member || {};
-  const maps = catalogMaps(catalog);
-  const staticUnit = catalogMatch(member.baseId || unit?.baseId, member.name || unit?.name, maps) || {};
+  const staticUnit = catalogMatch(member.baseId || unit?.baseId, member.name || unit?.name, catalogMapsForRun) || {};
   return {
     baseId: String(unit?.baseId || member.baseId || staticUnit.baseId || ""),
     name: String(unit?.name || member.name || staticUnit.name || member.baseId || "Required unit"),
@@ -210,7 +208,6 @@ export function nearestPoolUpgradeCandidates(body, catalog, mission, eligibility
     if (!key || seen.has(key) || legalIds.has(baseId)) continue;
     seen.add(key);
     const owned = liveMatch(staticUnit, liveMaps);
-    const evaluated = owned || staticUnit;
     const gap = owned ? entryGap(owned, mission) : { ...entryGap(null, mission), score: 1_000_000 };
     if (!gap.missing && Number(gap.score || 0) <= 0) continue;
     rows.push({
@@ -293,6 +290,7 @@ export function aggregateRoteUpgradeEntries(entries = []) {
 export function buildRoteUpgradePriorityQueue(body, catalog = []) {
   if (!body) return Object.freeze({ entries: Object.freeze([]), missionsScanned: 0, missionsReady: 0, poolGapMissions: 0, partialFleetMissions: 0, exactMandatoryBlockers: 0 });
   const enriched = enrichRoteRosterBody(body, catalog);
+  const catalogMapsForRun = catalogMaps(catalog);
   const entries = [];
   let missionsScanned = 0;
   let missionsReady = 0;
@@ -306,20 +304,22 @@ export function buildRoteUpgradePriorityQueue(body, catalog = []) {
     if (!map) continue;
     const resolved = resolveRoteMissionNodes(planet.id, map);
     for (const mission of resolved.missions || []) {
-      if (!mission?.entry?.verified || seenMissions.has(mission.id)) continue;
-      seenMissions.add(mission.id);
+      const missionKey = `${planet.id}:${mission?.id || ""}`;
+      if (!mission?.entry?.verified || seenMissions.has(missionKey)) continue;
+      seenMissions.add(missionKey);
       missionsScanned += 1;
       const eligibility = missionRosterEligibility(enriched, mission);
       if (!eligibility.loaded) continue;
-      if (eligibility.ready && rotePoolEvidence(mission) === "exact") missionsReady += 1;
+      const evidence = rotePoolEvidence(mission);
+      if (eligibility.ready && evidence === "exact") missionsReady += 1;
       const poolShortfall = Math.max(0, Number(eligibility.poolTarget || 0) - Number(eligibility.candidates?.length || 0));
       if (poolShortfall > 0) poolGapMissions += 1;
-      if (rotePoolEvidence(mission) === "gate-only") partialFleetMissions += 1;
+      if (evidence === "gate-only") partialFleetMissions += 1;
 
       for (const row of eligibility.mandatory || []) {
         if (row.legal) continue;
         exactMandatoryBlockers += 1;
-        const identity = resolveMemberIdentity(row, catalog);
+        const identity = resolveMemberIdentity(row, catalogMapsForRun);
         const gap = row.gap || entryGap(identity.unit, mission, row.member || null);
         entries.push({
           ...identity,
@@ -329,7 +329,7 @@ export function buildRoteUpgradePriorityQueue(body, catalog = []) {
         });
       }
 
-      if (poolShortfall > 0 && rotePoolEvidence(mission) === "exact") {
+      if (poolShortfall > 0 && evidence === "exact") {
         const near = nearestPoolUpgradeCandidates(enriched, catalog, mission, eligibility, Math.min(3, Math.max(1, poolShortfall)));
         for (const candidate of near) {
           entries.push({
@@ -419,11 +419,27 @@ function ensurePanel() {
   return panel;
 }
 
+function renderFilteredRows() {
+  const panel = document.getElementById("roteUpgradePriorityQueue");
+  if (!panel || !state.queue) return;
+  const rows = filteredEntries(state.queue);
+  const list = panel.querySelector(".rote-priority-list");
+  const count = panel.querySelector("[data-rote-priority-count]");
+  if (count) count.textContent = `${number(rows.length)} priority units`;
+  if (list) list.innerHTML = rows.length
+    ? rows.slice(0, 20).map(rowMarkup).join("")
+    : '<div class="rote-priority-empty">No upgrade candidates match the current filters.</div>';
+}
+
 function renderQueue() {
   state.scheduled = false;
   const panel = ensurePanel();
   if (!panel) return;
   const snapshot = liveSnapshot();
+  const renderKey = `${snapshot?.allyCode || "none"}:${snapshot?.fetchedAt || 0}:${state.catalogStatus}:${state.catalog.length}:${state.catalogError}`;
+  if (panel.dataset.renderKey === renderKey) return;
+  panel.dataset.renderKey = renderKey;
+
   if (!snapshot?.body) {
     panel.innerHTML = `<div class="rote-priority-head"><div><span>ROTE UPGRADE PRIORITY</span><h3>Mission Impact Queue</h3><p>Load an Ally Code to rank verified ROTE blockers by mission impact and upgrade distance.</p></div><b>NO ROSTER</b></div>`;
     return;
@@ -462,7 +478,7 @@ function renderQueue() {
       <label>Phase<select data-rote-priority-phase>${["All", "P1", "P2", "P3", "P4", "P5", "P6", "Zeffo", "Mandalore"].map((value) => `<option${state.phase === value ? " selected" : ""}>${value}</option>`).join("")}</select></label>
       <label>Impact<select data-rote-priority-kind>${["All", "Mandatory", "Pool"].map((value) => `<option${state.kind === value ? " selected" : ""}>${value}</option>`).join("")}</select></label>
       <label>Ownership<select data-rote-priority-ownership>${["All", "Owned", "Missing"].map((value) => `<option${state.ownership === value ? " selected" : ""}>${value}</option>`).join("")}</select></label>
-      <span>${number(rows.length)} priority units</span>
+      <span data-rote-priority-count>${number(rows.length)} priority units</span>
     </div>
     <div class="rote-priority-list">${rows.length ? rows.slice(0, 20).map(rowMarkup).join("") : '<div class="rote-priority-empty">No upgrade candidates match the current filters.</div>'}</div>`;
 }
@@ -481,14 +497,14 @@ function install() {
   document.addEventListener("input", (event) => {
     if (!event.target.matches?.("[data-rote-priority-search]")) return;
     state.search = event.target.value || "";
-    scheduleRender();
+    renderFilteredRows();
   });
   document.addEventListener("change", (event) => {
     if (event.target.matches?.("[data-rote-priority-phase]")) state.phase = event.target.value || "All";
     else if (event.target.matches?.("[data-rote-priority-kind]")) state.kind = event.target.value || "All";
     else if (event.target.matches?.("[data-rote-priority-ownership]")) state.ownership = event.target.value || "All";
     else return;
-    scheduleRender();
+    renderFilteredRows();
   });
   document.addEventListener("click", (event) => {
     const planet = event.target.closest?.("[data-rote-priority-planet]");
@@ -505,6 +521,8 @@ function install() {
   document.getElementById("allyForm")?.addEventListener("submit", () => {
     state.queue = null;
     state.queueKey = "";
+    const panel = document.getElementById("roteUpgradePriorityQueue");
+    if (panel) panel.dataset.renderKey = "";
     setTimeout(scheduleRender, 550);
   });
   window.addEventListener("hashchange", () => {
