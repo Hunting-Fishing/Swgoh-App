@@ -7,6 +7,7 @@ const envExample = await readFile(new URL("../.env.example", import.meta.url), "
 const packageJson = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
 const registerScript = await readFile(new URL("../scripts/register-discord-tb-commands.mjs", import.meta.url), "utf8");
 const liveService = await readFile(new URL("../discord-tb-live.mjs", import.meta.url), "utf8");
+const guildService = await readFile(new URL("../guild-roster-service.mjs", import.meta.url), "utf8");
 
 test("server accepts POST only for the signed Discord interactions endpoint before the GET-only API router", () => {
   const route = server.indexOf('request.method === "POST" && url.pathname === "/api/discord/interactions"');
@@ -43,10 +44,29 @@ test("guild command registration is explicit, officer-first, and phase-aware", (
   assert.match(registerScript, /Authorization: `Bot \$\{config\.botToken\}`/);
 });
 
+test("web API and Discord production path import the same process-wide guild roster service", () => {
+  assert.match(server, /import \{ guildRosterService \} from "\.\/guild-roster-service\.mjs"/);
+  assert.match(server, /guildRosterService\.getGuildRoster\(allyCode, \{ staleWhileRevalidate: true \}\)/);
+  assert.match(server, /guildRosterCache: guildRosterService\.status\(\)/);
+  assert.doesNotMatch(server, /const guildCache = new LiveRosterCache/);
+
+  assert.match(liveService, /import \{ createGuildRosterService, guildRosterService \} from "\.\/guild-roster-service\.mjs"/);
+  assert.match(liveService, /if \(env === process\.env && !options\.fetch\) return guildRosterService/);
+  assert.match(liveService, /staleWhileRevalidate: false/);
+  assert.match(liveService, /refreshGuildRoster\(allyCode\)/);
+  assert.doesNotMatch(liveService, /const guildCache = new Map/);
+});
+
+test("shared guild service owns the one live guild gateway route and reports scope accurately", () => {
+  assert.match(guildService, /\/v1\/guild\/by-player\/\$\{encodeURIComponent\(allyCode\)\}\/roster/);
+  assert.match(guildService, /sharedBetweenWebAndDiscord: true/);
+  assert.match(guildService, /sharedAcrossInstances: false/);
+  assert.match(guildService, /shared: false/);
+});
+
 test("live Discord TB reads use the shared mission-safe and Phase Command models and never require browser state", () => {
   assert.match(liveService, /buildGuildRoteOperationSafety/);
   assert.match(liveService, /planGuildRoteSafeAssignments/);
   assert.match(liveService, /buildGuildTbPhaseCommand/);
-  assert.match(liveService, /\/v1\/guild\/by-player\//);
   assert.doesNotMatch(liveService, /localStorage|document\.|window\./);
 });

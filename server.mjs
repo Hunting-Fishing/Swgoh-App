@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { withCapabilityContract } from "./capability-contract.mjs";
 import { discordTbPublicStatus, handleDiscordInteractionRequest } from "./discord-tb.mjs";
+import { guildRosterService } from "./guild-roster-service.mjs";
 import { LiveRosterCache } from "./live-roster-cache.mjs";
 import { aggregateRoteOperations } from "./rote-operations.mjs";
 
@@ -12,16 +13,12 @@ const gatewayUrl = trimUrl(process.env.SWGOH_GATEWAY_URL);
 const gatewayApiKey = String(process.env.SWGOH_GATEWAY_API_KEY || "").trim();
 const requestTimeoutMs = positiveNumber(process.env.SWGOH_REQUEST_TIMEOUT_MS, 35000);
 const modRequestTimeoutMs = positiveNumber(process.env.SWGOH_MOD_REQUEST_TIMEOUT_MS, 45000);
-const guildRequestTimeoutMs = positiveNumber(process.env.SWGOH_GUILD_REQUEST_TIMEOUT_MS, 120000);
 const rosterCacheFreshMs = positiveNumber(process.env.SWGOH_CACHE_FRESH_SECONDS, 90) * 1000;
 const rosterCacheStaleMs = positiveNumber(process.env.SWGOH_CACHE_STALE_SECONDS, 600) * 1000;
 const rosterCacheMaxEntries = Math.max(1, Math.floor(positiveNumber(process.env.SWGOH_CACHE_MAX_ENTRIES, 500)));
 const modCacheFreshMs = positiveNumber(process.env.SWGOH_MOD_CACHE_FRESH_SECONDS, 300) * 1000;
 const modCacheStaleMs = positiveNumber(process.env.SWGOH_MOD_CACHE_STALE_SECONDS, 900) * 1000;
 const modCacheMaxEntries = Math.max(1, Math.floor(positiveNumber(process.env.SWGOH_MOD_CACHE_MAX_ENTRIES, 500)));
-const guildCacheFreshMs = positiveNumber(process.env.SWGOH_GUILD_CACHE_FRESH_SECONDS, 600) * 1000;
-const guildCacheStaleMs = positiveNumber(process.env.SWGOH_GUILD_CACHE_STALE_SECONDS, 1800) * 1000;
-const guildCacheMaxEntries = Math.max(1, Math.floor(positiveNumber(process.env.SWGOH_GUILD_CACHE_MAX_ENTRIES, 100)));
 const roteOperationsUrl = String(process.env.SWGOH_ROTE_OPERATIONS_URL || "https://raw.githubusercontent.com/swgoh-utils/gamedata/main/swgoh_rote_operations.json").trim();
 const roteCacheMs = positiveNumber(process.env.SWGOH_ROTE_CACHE_SECONDS, 21600) * 1000;
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "public");
@@ -34,11 +31,6 @@ const modCache = new LiveRosterCache({
   freshMs: modCacheFreshMs,
   staleMs: modCacheStaleMs,
   maxEntries: modCacheMaxEntries,
-});
-const guildCache = new LiveRosterCache({
-  freshMs: guildCacheFreshMs,
-  staleMs: guildCacheStaleMs,
-  maxEntries: guildCacheMaxEntries,
 });
 const roteCache = { value: null, expiresAt: 0, promise: null };
 
@@ -166,10 +158,6 @@ function validEquippedMods(body) {
   return body?.source === "live" && body?.player && Array.isArray(body?.units) && body?.summary;
 }
 
-function validGuildRoster(body) {
-  return body?.source === "live" && body?.guild && Array.isArray(body?.members);
-}
-
 async function loadLiveRoster(allyCode) {
   const body = await requestGateway(`/v1/player/${allyCode}`, true);
   if (!validLiveRoster(body)) {
@@ -184,16 +172,6 @@ async function loadEquippedMods(allyCode) {
   const body = await requestGateway(`/v1/mods/by-player/${allyCode}`, true, modRequestTimeoutMs);
   if (!validEquippedMods(body)) {
     const error = new Error("The live gateway returned an unexpected equipped-mod response.");
-    error.status = 502;
-    throw error;
-  }
-  return body;
-}
-
-async function loadGuildRoster(allyCode) {
-  const body = await requestGateway(`/v1/guild/by-player/${allyCode}/roster`, true, guildRequestTimeoutMs);
-  if (!validGuildRoster(body)) {
-    const error = new Error("The live gateway returned an unexpected guild roster response.");
     error.status = 502;
     throw error;
   }
@@ -229,14 +207,7 @@ async function handleApi(request, response, url) {
           shared: false,
           coldRequestTimeoutSeconds: Math.round(modRequestTimeoutMs / 1000),
         },
-        guildRosterCache: {
-          mode: "process-local-coalesced-swr-lru",
-          freshSeconds: Math.round(guildCacheFreshMs / 1000),
-          staleSeconds: Math.round(guildCacheStaleMs / 1000),
-          maxEntries: guildCacheMaxEntries,
-          shared: false,
-          coldRequestTimeoutSeconds: Math.round(guildRequestTimeoutMs / 1000),
-        },
+        guildRosterCache: guildRosterService.status(),
         roteOperations: {
           source: "swgoh-utils/gamedata",
           cached: Boolean(roteCache.value),
@@ -292,7 +263,7 @@ async function handleApi(request, response, url) {
   if (guildMatch) {
     try {
       const allyCode = guildMatch[1];
-      const cached = await guildCache.getOrLoad(allyCode, () => loadGuildRoster(allyCode));
+      const cached = await guildRosterService.getGuildRoster(allyCode, { staleWhileRevalidate: true });
       writeJson(response, 200, cached.value, {
         "X-Guild-Source": "comlink-live",
         "X-Guild-Cache": cached.cache,
