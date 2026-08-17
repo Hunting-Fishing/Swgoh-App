@@ -11,6 +11,11 @@ function clean(value) {
   return String(value ?? "").trim();
 }
 
+function boolEnv(value, fallback = false) {
+  if (value == null || value === "") return fallback;
+  return ["1", "true", "yes", "on"].includes(String(value).trim().toLowerCase());
+}
+
 function isInside(basePath, targetPath) {
   const relative = path.relative(path.resolve(basePath), path.resolve(targetPath));
   return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
@@ -22,7 +27,9 @@ function receiptConfig(env = process.env) {
   const railwayMountValid = Boolean(railwayMount && path.isAbsolute(railwayMount));
   const candidate = explicitDir || (railwayMountValid ? path.join(railwayMount, "swgoh-command-center") : "");
   const directory = candidate && path.isAbsolute(candidate) ? path.normalize(candidate) : "";
-  const durable = Boolean(directory && (railwayMountValid ? isInside(railwayMount, directory) : explicitDir));
+  const insideRailwayVolume = Boolean(directory && railwayMountValid && isInside(railwayMount, directory));
+  const explicitlyConfirmedDurable = Boolean(explicitDir && boolEnv(env.SWGOH_STATE_STORAGE_CONFIRMED_DURABLE, false));
+  const durable = Boolean(directory && (insideRailwayVolume || explicitlyConfirmedDurable));
   return Object.freeze({
     enabled: Boolean(directory),
     durable,
