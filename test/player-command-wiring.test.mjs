@@ -11,7 +11,7 @@ async function text(path) {
 test("app shell loads Player Command after workspace tabs with cache-busted canonical fetch layer", async () => {
   const html = await text("public/index.html");
   const workspace = html.indexOf('/workspace-tabs.js?v=20260815-pro10');
-  const playerCommand = html.indexOf('/player-command-dashboard.js?v=20260818-playercmd2');
+  const playerCommand = html.indexOf('/player-command-dashboard.js?v=20260818-playercmd3');
   assert.ok(workspace >= 0, "workspace tabs loader missing");
   assert.ok(playerCommand > workspace, "Player Command must load after workspace creation");
   assert.match(html, /live-fetch-cache\.js\?v=20260818-cache4/);
