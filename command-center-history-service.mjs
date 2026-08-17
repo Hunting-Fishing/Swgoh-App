@@ -28,6 +28,10 @@ function asObject(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : {};
 }
 
+function hasOwn(object, key) {
+  return Object.prototype.hasOwnProperty.call(object, key);
+}
+
 function normalizeAllyCode(value) {
   const allyCode = clean(value).replace(/\D/g, "");
   if (!/^\d{9}$/.test(allyCode)) {
@@ -85,6 +89,13 @@ function delta(previous, next, key) {
   return before === null || after === null ? null : after - before;
 }
 
+function booleanDelta(previous, next, key) {
+  if (!hasOwn(previous, key) || !hasOwn(next, key)) return null;
+  const before = previous[key] === true;
+  const after = next[key] === true;
+  return before === after ? 0 : after ? 1 : -1;
+}
+
 function progressionEvent(row = {}, catalog = {}, player = {}) {
   const previous = asObject(row.previous_state);
   const next = asObject(row.new_state);
@@ -111,7 +122,7 @@ function progressionEvent(row = {}, catalog = {}, player = {}) {
       galacticPower: nullableFinite(previous.galacticPower),
       zetaCount: nullableFinite(previous.zetaCount),
       omicronCount: nullableFinite(previous.omicronCount),
-      ultimateUnlocked: previous.ultimateUnlocked === true,
+      ultimateUnlocked: hasOwn(previous, "ultimateUnlocked") ? previous.ultimateUnlocked === true : null,
     }),
     current: Object.freeze({
       rarity: nullableFinite(next.rarity),
@@ -121,7 +132,7 @@ function progressionEvent(row = {}, catalog = {}, player = {}) {
       galacticPower: nullableFinite(next.galacticPower),
       zetaCount: nullableFinite(next.zetaCount),
       omicronCount: nullableFinite(next.omicronCount),
-      ultimateUnlocked: next.ultimateUnlocked === true,
+      ultimateUnlocked: hasOwn(next, "ultimateUnlocked") ? next.ultimateUnlocked === true : null,
     }),
     delta: Object.freeze({
       rarity: delta(previous, next, "rarity"),
@@ -131,7 +142,7 @@ function progressionEvent(row = {}, catalog = {}, player = {}) {
       galacticPower: delta(previous, next, "galacticPower"),
       zetaCount: delta(previous, next, "zetaCount"),
       omicronCount: delta(previous, next, "omicronCount"),
-      ultimateUnlocked: previous.ultimateUnlocked === next.ultimateUnlocked ? 0 : next.ultimateUnlocked === true ? 1 : -1,
+      ultimateUnlocked: booleanDelta(previous, next, "ultimateUnlocked"),
     }),
     source: clean(row.source),
   });
@@ -309,11 +320,12 @@ export function createCommandCenterHistoryService(options = {}) {
     const snapshots = asArray(snapshotRows).map(guildSnapshotRow);
     const membership = asArray(membershipRows).map((row) => {
       const member = playersById.get(clean(row.player_id)) || {};
+      const metadata = asObject(row.metadata);
       return Object.freeze({
         id: finite(row.id),
         playerId: clean(row.player_id),
-        playerName: clean(member.name || asObject(row.metadata).playerName),
-        allyCode: clean(member.ally_code || asObject(row.metadata).allyCode),
+        playerName: clean(member.name || metadata.playerName || row.new_value || row.previous_value),
+        allyCode: clean(member.ally_code || metadata.allyCode),
         eventType: clean(row.event_type),
         occurredAt: clean(row.occurred_at),
         previousValue: clean(row.previous_value),
