@@ -9,6 +9,7 @@ const signoutButton = document.querySelector('[data-signout]');
 
 let accountState = null;
 let challengeState = null;
+let discordAutoLinkAttempted = false;
 
 function showView(name) {
   for (const [key, node] of views) node.classList.toggle('hidden', key !== name);
@@ -129,8 +130,25 @@ async function refreshState({ quiet = false } = {}) {
     }
 
     accountState = await requestJson('/api/account/status');
-    const link = currentLink();
-    const membership = currentMembership();
+    let link = currentLink();
+    let membership = currentMembership();
+
+    if (!link && accountState?.discordPlayerLink?.allyCode && !discordAutoLinkAttempted) {
+      discordAutoLinkAttempted = true;
+      setMessage(`Discord link found for Ally ${formatAlly(accountState.discordPlayerLink.allyCode)}. Connecting your SWGOH player automatically…`, 'info');
+      try {
+        await requestJson('/api/account/link-player/discord', {
+          method: 'POST',
+          body: '{}',
+        });
+        accountState = await requestJson('/api/account/status');
+        link = currentLink();
+        membership = currentMembership();
+        setMessage('Your existing Discord ↔ SWGOH player link was found automatically. SWGOH ownership verification is still required before Guild access is activated.', 'success');
+      } catch (error) {
+        setMessage(error?.message || 'The Discord player link could not be imported automatically. You can still enter your Ally Code manually.', 'error');
+      }
+    }
 
     if (link?.verification_status === 'verified' && membership?.status === 'active') {
       showView('verified');
