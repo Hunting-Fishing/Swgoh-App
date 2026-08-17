@@ -1,4 +1,5 @@
 const number = (value) => Number.isFinite(Number(value)) ? new Intl.NumberFormat().format(Number(value)) : "0";
+const nullableNumber = (value) => value === null || value === undefined || value === "" || !Number.isFinite(Number(value)) ? "—" : new Intl.NumberFormat().format(Number(value));
 const digits = (value) => String(value || "").replace(/\D/g, "").slice(0, 9);
 const escapeHtml = (value) => String(value ?? "")
   .replaceAll("&", "&amp;")
@@ -44,6 +45,13 @@ function missionRef(row) {
 
 function assignmentRequirement(row) {
   return row?.unitType === "Ship" ? `${number(row?.requiredRarity)}★` : `R${number(row?.requiredRelic)}`;
+}
+
+function rosterSourceLabel(profile) {
+  const source = String(profile?.source || "").toLowerCase();
+  if (source === "canonical" || source === "persisted") return "Persisted canonical roster";
+  if (source === "live") return "Live Comlink roster";
+  return profile?.member?.rosterAvailable ? "Hydrated roster" : "Roster unavailable";
 }
 
 function availabilityBadge(profile) {
@@ -106,9 +114,9 @@ export function renderGuildMemberCommandPage({ target, profile } = {}) {
   const hydrated = profile.hydration?.hydrated || profile.hydration?.requested || 0;
   const ally = member.allyCode;
   target.innerHTML = `
-    <section class="guild-member-command-header"><div><div class="kicker">GUILD MEMBER COMMAND PROFILE</div><h1>${escapeHtml(member.name)}</h1><p>${escapeHtml(formatAllyCode(ally))} · ${number(member.galacticPower)} GP · ${member.rosterAvailable ? "Hydrated live roster" : "Roster unavailable"}</p><div class="guild-member-availability-row">${availabilityBadge(profile)}</div><div class="guild-member-header-links"><a href="${escapeAttr(route("/guild/members", ally))}">← Guild Members</a><a href="${escapeAttr(playerLink(ally))}">Open Player Roster →</a></div></div><div class="guild-member-rank-grid">${stat("Guild GP Rank", rankLabel(profile.ranks.gp, hydrated))}${stat("TB Coverage Rank", rankLabel(profile.ranks.tb, hydrated))}${stat("TW R7 Depth Rank", rankLabel(profile.ranks.tw, hydrated))}${stat("Raid R7 Depth Rank", rankLabel(profile.ranks.raid, hydrated))}</div></section>
+    <section class="guild-member-command-header"><div><div class="kicker">GUILD MEMBER COMMAND PROFILE</div><h1>${escapeHtml(member.name)}</h1><p>${escapeHtml(formatAllyCode(ally))} · ${number(member.galacticPower)} GP · ${escapeHtml(rosterSourceLabel(profile))}</p><div class="guild-member-availability-row">${availabilityBadge(profile)}</div><div class="guild-member-header-links"><a href="${escapeAttr(route("/guild/members", ally))}">← Guild Members</a><a href="${escapeAttr(playerLink(ally))}">Open Player Roster →</a></div></div><div class="guild-member-rank-grid">${stat("Guild GP Rank", rankLabel(profile.ranks.gp, hydrated))}${stat("TB Coverage Rank", rankLabel(profile.ranks.tb, hydrated))}${stat("TW R7 Depth Rank", rankLabel(profile.ranks.tw, hydrated))}${stat("Raid R7 Depth Rank", rankLabel(profile.ranks.raid, hydrated))}</div></section>
     <nav class="guild-member-subnav" aria-label="Guild member profile"><a href="#guildMemberOverview">Overview</a><a href="#guildMemberTb">TB</a><a href="#guildMemberTw">TW</a><a href="#guildMemberRaid">Raids</a></nav>
-    <section class="guild-member-section" id="guildMemberOverview"><div class="guild-member-section-head"><div><div class="kicker">ROSTER FOUNDATION</div><h2>Member overview</h2></div><a href="${escapeAttr(route("/guild/units", ally))}">Open Unit Matrix →</a></div><div class="guild-member-overview-stats">${stat("Total GP", number(member.galacticPower))}${stat("Character GP", number(member.characterGp))}${stat("Ship GP", number(member.shipGp))}${stat("Characters", number(member.characterCount))}${stat("Ships", number(member.shipCount))}${stat("Galactic Legends", number(member.galacticLegendCount), "good")}${stat("R7+ Characters", number(member.relic7))}${stat("R9 Characters", number(member.relic9))}</div><div class="guild-member-mode-grid">${modeCard("TB", "Territory Battles", `${tbSentence(profile)}`, route("/guild/tb", ally), `<strong>${number(profile.tb.exactReady)}</strong><span>exact-ready missions</span>`)}${modeCard("TW", "Territory Wars", `${twSentence(profile)}`, route("/guild/tw", ally), `<strong>${number(profile.tw.r7Factions)}</strong><span>R7 faction cores</span>`)}${modeCard("RAID", "Order 66 Raid", `${raidSentence(profile)}`, route("/guild/raids", ally), `<strong>${number(profile.raid.bands.r7 || 0)}</strong><span>R7+ eligible units</span>`)}</div></section>
+    <section class="guild-member-section" id="guildMemberOverview"><div class="guild-member-section-head"><div><div class="kicker">ROSTER FOUNDATION</div><h2>Member overview</h2></div><a href="${escapeAttr(route("/guild/units", ally))}">Open Unit Matrix →</a></div><div class="guild-member-overview-stats">${stat("Total GP", number(member.galacticPower))}${stat("Character GP", number(member.characterGp))}${stat("Ship GP", number(member.shipGp))}${stat("Characters", number(member.characterCount))}${stat("Ships", number(member.shipCount))}${stat("Galactic Legends", number(member.galacticLegendCount), "good")}${stat("R7+ Characters", number(member.relic7))}${stat("R9 Characters", number(member.relic9))}${stat("Zetas", nullableNumber(member.zetaCount))}${stat("Omicrons", nullableNumber(member.omicronCount), member.omicronCount ? "good" : "")}${stat("GL Ultimates", nullableNumber(member.ultimateCount))}${stat("Omega / Eta", nullableNumber(member.omegaUpgradeCount), "", member.omegaUpgradeCount == null ? "unclassified" : "classified")}</div><div class="guild-member-mode-grid">${modeCard("TB", "Territory Battles", `${tbSentence(profile)}`, route("/guild/tb", ally), `<strong>${number(profile.tb.exactReady)}</strong><span>exact-ready missions</span>`)}${modeCard("TW", "Territory Wars", `${twSentence(profile)}`, route("/guild/tw", ally), `<strong>${number(profile.tw.r7Factions)}</strong><span>R7 faction cores</span>`)}${modeCard("RAID", "Order 66 Raid", `${raidSentence(profile)}`, route("/guild/raids", ally), `<strong>${number(profile.raid.bands.r7 || 0)}</strong><span>R7+ eligible units</span>`)}</div></section>
     ${renderTb(profile)}
     ${renderTw(profile)}
     ${renderRaid(profile)}
