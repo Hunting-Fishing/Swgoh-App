@@ -2,7 +2,7 @@
 
 **Purpose:** authoritative checklist for bringing the SWGOH Command Center Discord bot from pilot to production. Update this file as each checkpoint is actually verified. Do not skip ahead just because later architecture has been discussed.
 
-**Current checkpoint:** **Stage 6 — player linking is verified; re-verify `/tb me` after the Galactic Power normalization fix deploys.**
+**Current checkpoint:** **Stage 6 — player linking is verified; re-verify `/tb me` after the Galactic Power normalization fix deploys, then re-test web ownership verification after the Live Gateway packaging fix deploys.**
 
 **Current operating mode:** signed HTTP Discord interactions, guild-scoped `/tb` pilot, live SWGOH gateway reads, durable Railway Volume state, outbound publishing/DM delivery disabled.
 
@@ -17,6 +17,7 @@
 - The durably configured Discord officer role authorizes supported officer commands after setup.
 - Discord-to-player linking is officer-managed and verifies that the Ally Code exists in the currently bound SWGOH guild.
 - Member self-service is limited to the signed caller's own linked profile/preferences/availability unless officer-authorized.
+- Website onboarding may reuse a signed user's existing durable Discord↔SWGOH link for Ally Code discovery, but that does not count as proof of SWGOH account ownership.
 - When new work is discovered, record it in this runbook before moving past the current stage.
 
 ---
@@ -196,7 +197,7 @@ Later resilience test:
 
 ---
 
-## Stage 6 — CURRENT CHECKPOINT: verified player link + GP recheck 🔴
+## Stage 6 — CURRENT CHECKPOINT: verified player link + GP/web verification recheck 🔴
 
 The pilot operator link has now been created successfully against the bound live guild.
 
@@ -247,7 +248,38 @@ Fixes committed:
 - [ ] Railway deployment containing the GP fixes is ACTIVE.
 - [ ] Re-run `/tb me` after deployment and verify Galactic Power is non-zero and credible.
 
-Do **not** advance to Stage 7 until this GP recheck is green.
+### Website onboarding Discord identity bridge
+
+The pilot website originally required the user to type an Ally Code even when the same Discord account had already been linked with `/tb link`. That duplicated identity work.
+
+- [x] Discord OAuth persists the Discord provider user ID in `user_social_identities`.
+- [x] Production Supabase has both Discord and Google social identities for the pilot Command Center account.
+- [x] Production Supabase confirms those Discord and Google identities belong to the same Command Center user.
+- [x] Account onboarding can resolve the signed Command Center user to their connected Discord identity.
+- [x] Account onboarding can then read that Discord user's durable `/tb link` and recover the existing Ally Code/player ID.
+- [x] Added `POST /api/account/link-player/discord` so the browser never has to trust a client-supplied Ally Code for the automatic path.
+- [x] `/onboarding` automatically uses the Discord-linked Ally Code when no active web player claim exists.
+- [x] Discord-discovered web links remain `pending`; the Discord link does **not** bypass SWGOH player ownership verification.
+- [x] Google-only accounts without a connected Discord identity are not falsely matched to a Discord player.
+- [x] Regression coverage added for Discord auto-discovery and Google-only isolation.
+- [ ] Swgoh-App deployment containing the Discord onboarding bridge is ACTIVE.
+- [ ] Verify a clean future-user flow skips manual Ally Code entry when `/tb link` already exists.
+- [ ] Add explicit Account Settings → Connect Discord flow for users whose Google and Discord identities are not already attached to the same Command Center account.
+
+### Web ownership verification `Not found` defect
+
+The pilot onboarding reached `Player found — verification required`, but `START OWNERSHIP VERIFICATION` returned `Not found.`
+
+- [x] Narrow `/v1/player/:allyCode/verification-profile` endpoint exists in the Live Gateway source.
+- [x] Railway status shows the **SWGOH-Live-Gateway** deployment failed beginning with the verification-endpoint commit.
+- [x] Root cause identified: `gateway/recovery.js` imports `verification-service.js`, but the gateway Dockerfile did not copy `verification-service.js` into the image.
+- [x] Gateway Docker packaging fixed in commit `f73f3eba9a818da5c09f4b89138a799bbc520e95`.
+- [ ] SWGOH-Live-Gateway deployment for the packaging fix is successful/ACTIVE.
+- [ ] Retry `START OWNERSHIP VERIFICATION` after the Live Gateway deploys.
+- [ ] Confirm a portrait/title challenge is returned instead of `Not found.`
+- [ ] Complete the cosmetic ownership challenge and verify the Guild membership transitions from pending to active.
+
+Do **not** advance to Stage 7 until the GP recheck and ownership-verification path are green.
 
 ---
 
@@ -382,6 +414,19 @@ Current atomic JSON-on-Railway-Volume state is suitable for pilot validation, no
 - [ ] Migrate pilot JSON state safely.
 - [ ] Remove the single-file state-size bottleneck.
 
+## Production hosting + OAuth branding
+
+Railway is the current deployment host, not the intended public-facing brand domain.
+
+- [ ] Attach the final SWGOH Command Center custom domain to the production app.
+- [ ] Set Supabase Auth Site URL to the production Command Center URL.
+- [ ] Add exact production OAuth redirect URLs, including the Command Center callback path.
+- [ ] Keep Railway preview/deployment URLs only where operationally required; do not present them as the normal production login destination.
+- [ ] Update Google/Discord provider console callback configuration where required during the domain cutover.
+- [ ] Decide whether to purchase/configure a Supabase Auth custom domain so the Supabase project domain is also removed from user-visible OAuth callback branding.
+- [ ] Re-test Google and Discord sign-in after custom-domain cutover.
+- [ ] Re-test sign-out, refresh-session, email confirmation, and password-reset redirects on the production domain.
+
 ## Monetization / entitlements
 
 - [ ] Define Free / Officer / Guild Pro / higher-tier feature matrix.
@@ -484,24 +529,30 @@ The bot should refuse/degrade safely when:
 - a non-officer targets another Discord member;
 - verified mission evidence is incomplete.
 
+Website auto-discovery must also fail safely: a missing/mismatched Discord identity must fall back to manual Ally Code entry rather than guessing by Discord display name, SWGOH name, or guild membership.
+
 Safe clears such as `DEFAULT` preference or `AVAILABLE` may remove stale controls during an upstream outage where implemented.
 
 ---
 
 # Immediate next action — do not skip
 
-1. Wait for the latest **Swgoh-App** Railway deployment containing the GP fix to show **ACTIVE / Deployment successful**.
-2. In Discord run `/tb me` again.
-3. Confirm the same linked player and guild are returned.
-4. Confirm `Hydrated roster units` remains credible.
-5. Confirm `Galactic Power` is now a credible non-zero value.
-6. Capture the exact Discord response.
-7. Only after the GP recheck is green do we proceed to Stage 7 availability/preferences.
+1. Wait for the latest **Swgoh-App** Railway deployment containing the GP fix + Discord onboarding bridge to show **ACTIVE / Deployment successful**.
+2. Wait for **SWGOH-Live-Gateway** to deploy commit `f73f3eba9a818da5c09f4b89138a799bbc520e95` successfully.
+3. In Discord run `/tb me` again and verify Galactic Power is credible/non-zero.
+4. Return to the existing pending website player identity and press `START OWNERSHIP VERIFICATION` again.
+5. Confirm the previous `Not found.` error is gone and a portrait/title challenge is returned.
+6. Complete and check the challenge.
+7. Capture the exact results before advancing to Stage 7.
 
 ---
 
 # Change log
 
+- 2026-08-17: Added website Discord identity bridge so a signed Command Center account can reuse an existing durable `/tb link` Ally Code instead of retyping it; Discord discovery remains pending until SWGOH ownership verification succeeds.
+- 2026-08-17: Verified production Supabase contains Discord + Google social identities attached to the same pilot Command Center account; added regression coverage preventing Google-only false Discord matches.
+- 2026-08-17: Traced onboarding `START OWNERSHIP VERIFICATION → Not found.` to failed SWGOH-Live-Gateway deployments; Dockerfile omitted `verification-service.js`. Fixed gateway packaging in `f73f3eba9a818da5c09f4b89138a799bbc520e95`.
+- 2026-08-17: Added production custom-domain/OAuth branding cutover checklist; Railway hostnames are temporary deployment origins.
 - 2026-08-17: `/tb link`, `/tb links`, and `/tb me` verified the pilot operator's durable live player identity against **Ludus Venatus**; `/tb me` exposed a `Galactic Power: 0` defect while correctly hydrating 394 roster units.
 - 2026-08-17: Added linked-player rich-roster GP normalization, rich-read regression coverage, and a Stage 6 deployment/recheck gate before member-control testing.
 - 2026-08-17: `/tb setup` succeeded with `#bot-for-raid` and `@Commands Officer`; durable atomic write and audit event verified.
