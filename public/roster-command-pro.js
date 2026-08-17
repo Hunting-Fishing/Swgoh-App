@@ -1,3 +1,12 @@
+import {
+  isCanonicalRosterBody,
+  isLiveRosterBody,
+  nullableMetric,
+  rosterEndpoint,
+  rosterNeedsLiveDetail,
+  rosterSourceStatus,
+} from "./roster-source-policy.js";
+
 const CACHE_MS = 25_000;
 const VIEW_KEY = "swgoh:pro-roster-views:v1";
 
@@ -8,6 +17,7 @@ const state = {
   rote: null,
   requirementMap: new Map(),
   initialized: false,
+  loadPromise: null,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -21,7 +31,7 @@ const escapeHtml = (value) => String(value ?? "")
 const escapeAttr = escapeHtml;
 const number = (value) => new Intl.NumberFormat().format(Number(value || 0));
 
-function liveUnits(body) {
+function ownedUnits(body) {
   return [...(body?.units || []), ...(body?.ships || [])];
 }
 
@@ -29,25 +39,62 @@ function currentAllyCode() {
   return digits($("allyCode")?.value);
 }
 
-async function loadLive(force = false) {
+function acceptRosterBody(body) {
+  return Boolean(body?.player && Array.isArray(body?.units) && Array.isArray(body?.ships));
+}
+
+function rememberRoster(allyCode, body) {
+  state.body = body;
+  state.allyCode = allyCode;
+  state.fetchedAt = Date.now();
+  if (isLiveRosterBody(body)) {
+    window.__swgohLiveSnapshot = { allyCode, body, fetchedAt: state.fetchedAt };
+  }
+  return body;
+}
+
+async function fetchRoster(allyCode, forceLive = false) {
+  const response = await fetch(rosterEndpoint(allyCode, { forceLive }), { cache: "no-store" });
+  const body = await response.json();
+  if (!response.ok) {
+    const source = forceLive ? "Live" : "Persisted";
+    const error = new Error(body?.error || `${source} roster returned HTTP ${response.status}`);
+    error.status = response.status;
+    throw error;
+  }
+  if (!acceptRosterBody(body)) throw new Error("Roster source returned an invalid full-roster response.");
+  return body;
+}
+
+async function loadRoster(forceLive = false) {
   const allyCode = currentAllyCode();
   if (allyCode.length !== 9) return null;
+
   const shared = window.__swgohLiveSnapshot;
-  if (!force && shared?.allyCode === allyCode && shared?.body && Date.now() - Number(shared.fetchedAt || 0) < CACHE_MS) {
+  if (!forceLive && shared?.allyCode === allyCode && acceptRosterBody(shared?.body) && Date.now() - Number(shared.fetchedAt || 0) < CACHE_MS) {
     state.body = shared.body;
     state.allyCode = allyCode;
     state.fetchedAt = Number(shared.fetchedAt || Date.now());
     return shared.body;
   }
-  if (!force && state.body && state.allyCode === allyCode && Date.now() - state.fetchedAt < CACHE_MS) return state.body;
-  const response = await fetch(`/api/player/${allyCode}`, { cache: "no-store" });
-  const body = await response.json();
-  if (!response.ok) throw new Error(body?.error || `Live roster returned HTTP ${response.status}`);
-  state.body = body;
-  state.allyCode = allyCode;
-  state.fetchedAt = Date.now();
-  window.__swgohLiveSnapshot = { allyCode, body, fetchedAt: state.fetchedAt };
-  return body;
+  if (!forceLive && state.body && state.allyCode === allyCode && Date.now() - state.fetchedAt < CACHE_MS) return state.body;
+  if (state.loadPromise) return state.loadPromise;
+
+  state.loadPromise = (async () => {
+    if (forceLive) return rememberRoster(allyCode, await fetchRoster(allyCode, true));
+    try {
+      return rememberRoster(allyCode, await fetchRoster(allyCode, false));
+    } catch (error) {
+      if (![404, 503].includes(Number(error?.status))) throw error;
+      return rememberRoster(allyCode, await fetchRoster(allyCode, true));
+    }
+  })();
+
+  try {
+    return await state.loadPromise;
+  } finally {
+    state.loadPromise = null;
+  }
 }
 
 async function loadRote(force = false) {
@@ -119,15 +166,23 @@ function matches(unit, f) {
   if (f.minRelic > 0 && (unit.unitType === "Ship" || Number(unit.relic || 0) < f.minRelic)) return false;
   if (Number(unit.power || 0) < f.minGp) return false;
   if (Number(unit.speed || 0) < f.minSpeed) return false;
-  if (f.mods === "full" && Number(unit.equippedMods || 0) < 6) return false;
-  if (f.mods === "open" && Number(unit.equippedMods || 0) >= 6) return false;
+
+  const equippedMods = nullableMetric(unit.equippedMods, null);
+  if (f.mods !== "Any" && equippedMods === null) return false;
+  if (f.mods === "full" && equippedMods < 6) return false;
+  if (f.mods === "open" && equippedMods >= 6) return false;
+
   if (f.upgrade === "zeta" && Number(unit.zetas || 0) < 1) return false;
   if (f.upgrade === "omicron" && Number(unit.omicrons || 0) < 1) return false;
-  if (f.upgrade === "omega" && Number(unit.omegas || 0) < 1) return false;
-  const readiness = Number(unit.readiness || 0);
+  const omegaCount = nullableMetric(unit.omegas, null);
+  if (f.upgrade === "omega" && (omegaCount === null || omegaCount < 1)) return false;
+
+  const readiness = nullableMetric(unit.readiness, null);
+  if (f.readiness !== "All" && readiness === null) return false;
   if (f.readiness === "90" && readiness < 90) return false;
   if (f.readiness === "75" && readiness < 75) return false;
   if (f.readiness === "under75" && readiness >= 75) return false;
+
   const rote = roteInfo(unit);
   if (f.rote === "required" && !rote.requirement) return false;
   if (f.rote === "ready" && rote.status !== "ready") return false;
@@ -140,7 +195,7 @@ function sortValue(unit, key) {
   if (key === "name") return String(unit.name || "").toLowerCase();
   if (key === "relic") return Number(unit.relic || 0);
   if (key === "speed") return Number(unit.speed || 0);
-  if (key === "readiness") return Number(unit.readiness || 0);
+  if (key === "readiness") return nullableMetric(unit.readiness, -1);
   if (key === "rote") return Number(roteInfo(unit).requirement?.requiredCount || 0);
   if (key === "omicrons") return Number(unit.omicrons || 0);
   return Number(unit.power || 0);
@@ -149,7 +204,7 @@ function sortValue(unit, key) {
 function sortedFilteredUnits() {
   const f = filters();
   const direction = f.direction === "asc" ? 1 : -1;
-  return liveUnits(state.body).filter((unit) => matches(unit, f)).sort((a, b) => {
+  return ownedUnits(state.body).filter((unit) => matches(unit, f)).sort((a, b) => {
     const av = sortValue(a, f.sort);
     const bv = sortValue(b, f.sort);
     if (typeof av === "string") return direction * av.localeCompare(bv);
@@ -171,7 +226,8 @@ function roteLabel(unit) {
 
 function summary(units) {
   const gp = units.reduce((sum, unit) => sum + Number(unit.power || 0), 0);
-  const avgSpeed = units.length ? Math.round(units.reduce((sum, unit) => sum + Number(unit.speed || 0), 0) / units.length) : 0;
+  const speedRows = units.map((unit) => nullableMetric(unit.speed, null)).filter((value) => value !== null);
+  const avgSpeed = speedRows.length ? Math.round(speedRows.reduce((sum, value) => sum + value, 0) / speedRows.length) : null;
   const r5 = units.filter((unit) => unit.unitType !== "Ship" && Number(unit.relic || 0) >= 5).length;
   const r7 = units.filter((unit) => unit.unitType !== "Ship" && Number(unit.relic || 0) >= 7).length;
   const r9 = units.filter((unit) => unit.unitType !== "Ship" && Number(unit.relic || 0) >= 9).length;
@@ -179,7 +235,7 @@ function summary(units) {
   return `
     <div class="pro-summary-stat"><span>Matching</span><strong>${number(units.length)}</strong></div>
     <div class="pro-summary-stat"><span>Combined GP</span><strong>${number(gp)}</strong></div>
-    <div class="pro-summary-stat"><span>Avg Speed</span><strong>${number(avgSpeed)}</strong></div>
+    <div class="pro-summary-stat"><span>Avg Speed</span><strong>${avgSpeed === null ? "—" : number(avgSpeed)}</strong></div>
     <div class="pro-summary-stat"><span>R5+</span><strong>${number(r5)}</strong></div>
     <div class="pro-summary-stat"><span>R7+</span><strong>${number(r7)}</strong></div>
     <div class="pro-summary-stat"><span>R9</span><strong>${number(r9)}</strong></div>
@@ -191,6 +247,12 @@ function tableRows(units) {
   return units.map((unit) => {
     const factions = (unit.factions || []).slice(0, 3).join(" · ");
     const info = roteInfo(unit);
+    const equippedMods = nullableMetric(unit.equippedMods, null);
+    const omegaCount = nullableMetric(unit.omegas, null);
+    const readiness = nullableMetric(unit.readiness, null);
+    const modLabel = unit.unitType === "Ship" ? "—" : equippedMods === null ? "—" : `${number(equippedMods)}/6`;
+    const abilityLabel = `Z${number(unit.zetas)} · Ω${omegaCount === null ? "—" : number(omegaCount)} · O${number(unit.omicrons)}`;
+    const readinessLabel = readiness === null ? "—" : `${number(readiness)}%`;
     return `
       <tr data-unit-row="${escapeAttr(unit.baseId)}">
         <td class="pro-unit-cell"><button type="button" class="pro-unit-link" data-inspect-base-id="${escapeAttr(unit.baseId)}">${escapeHtml(unit.name || unit.baseId)}</button><small>${escapeHtml(factions || unit.role || "")}</small></td>
@@ -199,10 +261,10 @@ function tableRows(units) {
         <td>${Number(unit.stars || 0)}★</td>
         <td>${escapeHtml(progressionLabel(unit))}</td>
         <td>${number(unit.speed)}</td>
-        <td>${unit.unitType === "Ship" ? "—" : `${number(unit.equippedMods)}/6`}</td>
-        <td>Z${number(unit.zetas)} · Ω${number(unit.omegas)} · O${number(unit.omicrons)}</td>
+        <td>${escapeHtml(modLabel)}</td>
+        <td>${escapeHtml(abilityLabel)}</td>
         <td><span class="pro-rote-status ${escapeAttr(info.status)}">${escapeHtml(roteLabel(unit))}</span></td>
-        <td>${number(unit.readiness)}%</td>
+        <td>${escapeHtml(readinessLabel)}</td>
         <td class="pro-actions"><button type="button" data-add-squad="${escapeAttr(unit.baseId)}">Squad +</button><button type="button" data-inspect-base-id="${escapeAttr(unit.baseId)}">Inspect</button></td>
       </tr>
     `;
@@ -217,12 +279,13 @@ function render() {
   if (!state.body) {
     output.innerHTML = '<div class="workspace-note">Load an Ally Code to activate advanced roster command.</div>';
     summaryEl.innerHTML = "";
-    countEl.textContent = "No live roster";
+    countEl.textContent = "No roster loaded";
     return;
   }
   const units = sortedFilteredUnits();
+  const allOwned = ownedUnits(state.body);
   summaryEl.innerHTML = summary(units);
-  countEl.textContent = `${number(units.length)} matching / ${number(liveUnits(state.body).length)} owned`;
+  countEl.textContent = `${number(units.length)} matching / ${number(allOwned.length)} owned`;
   output.innerHTML = units.length ? `
     <div class="pro-table-wrap">
       <table class="workspace-table pro-roster-table">
@@ -245,7 +308,7 @@ function wireResultActions(container) {
 }
 
 function dynamicOptions(body) {
-  const units = liveUnits(body);
+  const units = ownedUnits(body);
   const factions = [...new Set(units.flatMap((unit) => unit.factions || []).filter(Boolean))].sort();
   const roles = [...new Set(units.map((unit) => unit.role).filter(Boolean))].sort();
   replaceOptions($("proRosterFaction"), factions, "All factions");
@@ -285,7 +348,8 @@ function applyPreset(name) {
   if (name === "omicron") $("proRosterUpgrade").value = "omicron";
   if (name === "fast") $("proRosterSort").value = "speed";
   if (name === "ships") $("proRosterType").value = "Ship";
-  render();
+  if (state.body && !isLiveRosterBody(state.body) && rosterNeedsLiveDetail(filters())) void refresh(true);
+  else render();
 }
 
 function readViews() {
@@ -319,17 +383,22 @@ function saveCurrentView() {
   refreshSavedViews();
 }
 
-function loadSavedView() {
-  const name = $("proSavedViews")?.value;
-  const view = readViews()[name];
-  if (!view) return;
+function applyFilterView(view) {
   const mapping = {
     query: "proRosterSearch", type: "proRosterType", faction: "proRosterFaction", role: "proRosterRole", alignment: "proRosterAlignment",
     minStars: "proRosterMinStars", minGear: "proRosterMinGear", minRelic: "proRosterMinRelic", minGp: "proRosterMinGp", minSpeed: "proRosterMinSpeed",
     mods: "proRosterMods", upgrade: "proRosterUpgrade", rote: "proRosterRote", readiness: "proRosterReadiness", sort: "proRosterSort", direction: "proRosterDirection",
   };
   for (const [key, id] of Object.entries(mapping)) if ($(id) && view[key] !== undefined) $(id).value = String(view[key]);
-  render();
+  if (state.body && !isLiveRosterBody(state.body) && rosterNeedsLiveDetail(filters())) void refresh(true);
+  else render();
+}
+
+function loadSavedView() {
+  const name = $("proSavedViews")?.value;
+  const view = readViews()[name];
+  if (!view) return;
+  applyFilterView(view);
 }
 
 function deleteSavedView() {
@@ -341,21 +410,31 @@ function deleteSavedView() {
   refreshSavedViews();
 }
 
-async function refresh(force = false) {
+async function refresh(forceLive = false) {
   const status = $("proRosterStatus");
+  if (state.loadPromise) return state.loadPromise;
   try {
-    await Promise.all([loadRote(force), loadLive(force)]);
+    if (status) status.textContent = forceLive ? "Loading live roster detail…" : "Loading full persisted roster…";
+    await Promise.all([loadRote(false), loadRoster(forceLive)]);
     if (!state.body) {
       if (status) status.textContent = "Load an Ally Code to activate advanced roster command.";
       render();
       return;
     }
     dynamicOptions(state.body);
-    if (status) status.textContent = `${state.body.player?.name || state.body.player?.allyCode || "Player"} · live roster + ROTE operations demand loaded`;
+    if (status) status.textContent = rosterSourceStatus(state.body, ownedUnits(state.body).length);
     render();
   } catch (error) {
     if (status) status.textContent = error?.message || "Advanced roster data is unavailable.";
   }
+}
+
+function handleFilterChange() {
+  if (state.body && !isLiveRosterBody(state.body) && rosterNeedsLiveDetail(filters())) {
+    void refresh(true);
+    return;
+  }
+  render();
 }
 
 function build() {
@@ -366,8 +445,8 @@ function build() {
   section.className = "pro-command-shell";
   section.innerHTML = `
     <section class="card workspace-intro pro-command-header">
-      <div><div class="kicker">POWER USER ROSTER COMMAND</div><h2>Roster Commander</h2><p>Filter the live roster by progression, mods, abilities, role, faction and ROTE Operations demand. Saved views let players jump directly to the roster slice they manage every day.</p></div>
-      <div id="proRosterStatus" class="status">Load an Ally Code</div>
+      <div><div class="kicker">POWER USER ROSTER COMMAND</div><h2>Roster Commander</h2><p>Filter the complete owned roster by progression, ability investment, role, faction and ROTE Operations demand. The persisted full roster loads first; live refresh enriches mods, readiness and other live-only fields without truncating the roster.</p></div>
+      <div><div id="proRosterStatus" class="status">Load an Ally Code</div><button id="proRosterLiveRefresh" type="button">Refresh Live Detail</button></div>
     </section>
     <section class="card pro-filter-card">
       <div class="pro-preset-row">
@@ -384,11 +463,11 @@ function build() {
         <label>Min Relic<input id="proRosterMinRelic" type="number" min="0" max="15" value="0"></label>
         <label>Min GP<input id="proRosterMinGp" type="number" min="0" step="1000" value="0"></label>
         <label>Min Speed<input id="proRosterMinSpeed" type="number" min="0" value="0"></label>
-        <label>Mods<select id="proRosterMods"><option value="Any">Any</option><option value="full">6 / 6 equipped</option><option value="open">Open slots</option></select></label>
-        <label>Ability Investment<select id="proRosterUpgrade"><option value="Any">Any</option><option value="zeta">Has Zeta</option><option value="omicron">Has Omicron</option><option value="omega">Has Omega</option></select></label>
+        <label>Mods<select id="proRosterMods"><option value="Any">Any</option><option value="full">6 / 6 equipped</option><option value="open">Open slots · live</option></select></label>
+        <label>Ability Investment<select id="proRosterUpgrade"><option value="Any">Any</option><option value="zeta">Has Zeta</option><option value="omicron">Has Omicron</option><option value="omega">Has Omega / Eta · live</option></select></label>
         <label>ROTE Operations<select id="proRosterRote"><option value="All">All</option><option value="required">Required anywhere</option><option value="ready">Fully ready</option><option value="partial">Partially ready</option><option value="blocked">Required / blocked</option></select></label>
-        <label>Development<select id="proRosterReadiness"><option value="All">Any readiness</option><option value="90">90%+</option><option value="75">75%+</option><option value="under75">Under 75%</option></select></label>
-        <label>Sort<select id="proRosterSort"><option value="power">GP</option><option value="speed">Speed</option><option value="relic">Relic</option><option value="readiness">Readiness</option><option value="rote">ROTE demand</option><option value="omicrons">Omicrons</option><option value="name">Name</option></select></label>
+        <label>Development<select id="proRosterReadiness"><option value="All">Any readiness</option><option value="90">90%+ · live</option><option value="75">75%+ · live</option><option value="under75">Under 75% · live</option></select></label>
+        <label>Sort<select id="proRosterSort"><option value="power">GP</option><option value="speed">Speed</option><option value="relic">Relic</option><option value="readiness">Readiness · live</option><option value="rote">ROTE demand</option><option value="omicrons">Omicrons</option><option value="name">Name</option></select></label>
         <label>Direction<select id="proRosterDirection"><option value="desc">High → Low</option><option value="asc">Low → High</option></select></label>
       </div>
       <div class="pro-view-row"><input id="proViewName" placeholder="Saved view name"><button id="proSaveView" type="button">Save View</button><select id="proSavedViews"><option value="">Saved views</option></select><button id="proLoadView" type="button">Load</button><button id="proDeleteView" type="button">Delete</button><button id="proResetFilters" type="button">Reset Filters</button><span id="proRosterCount"></span></div>
@@ -400,18 +479,20 @@ function build() {
   $("controls")?.classList.add("pro-legacy-roster");
   $("roster")?.classList.add("pro-legacy-roster");
 
-  for (const control of allFilterControls()) control.addEventListener(control.tagName === "INPUT" ? "input" : "change", render);
+  for (const control of allFilterControls()) control.addEventListener(control.tagName === "INPUT" ? "input" : "change", handleFilterChange);
   for (const button of section.querySelectorAll("button[data-pro-preset]")) button.addEventListener("click", () => applyPreset(button.dataset.proPreset));
   $("proResetFilters")?.addEventListener("click", resetFilters);
   $("proSaveView")?.addEventListener("click", saveCurrentView);
   $("proLoadView")?.addEventListener("click", loadSavedView);
   $("proDeleteView")?.addEventListener("click", deleteSavedView);
+  $("proRosterLiveRefresh")?.addEventListener("click", () => refresh(true));
   refreshSavedViews();
 
   $("allyForm")?.addEventListener("submit", () => {
     state.body = null;
+    state.allyCode = "";
     state.fetchedAt = 0;
-    setTimeout(() => refresh(true), 350);
+    setTimeout(() => refresh(false), 400);
   });
   document.querySelector('button[data-workspace-tab="roster"]')?.addEventListener("click", () => refresh(false));
   state.initialized = true;
