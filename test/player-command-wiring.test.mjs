@@ -37,3 +37,19 @@ test("Player Command exposes persisted refresh, live promotion, full roster and 
   assert.match(source, /\/api\/player\/\$\{allyCode\}\/baseline/);
   assert.match(source, /\/api\/guild\/by-player\/\$\{allyCode\}\/baseline/);
 });
+
+test("Player Command renders evidence-separated development intelligence without a composite score", async () => {
+  const source = await text("public/player-command-dashboard.js");
+  assert.match(source, /DEVELOPMENT COMMAND/);
+  assert.match(source, /Evidence-backed next moves/);
+  assert.match(source, /ROTE next upgrades/);
+  assert.match(source, /Guild-relative pressure/);
+  assert.match(source, /What you are already advancing/);
+  assert.match(source, /ROTE evidence/);
+  assert.match(source, /Guild-relative evidence/);
+  assert.match(source, /Verified progression evidence/);
+  assert.match(source, /not a universal score/);
+  assert.match(source, /development\.roteGaps/);
+  assert.match(source, /development\.guildRankSignals/);
+  assert.match(source, /development\.recentMomentum/);
+});
