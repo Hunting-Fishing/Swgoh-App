@@ -1,3 +1,5 @@
+import "./guild-intelligence-router.js";
+
 const ALLY_STORAGE_KEY = "swgoh:guild-route-ally-code";
 const MEMBER_ROUTE_RE = /^\/guild\/members\/(\d{9})\/?$/;
 const state = { catalog: null, operations: null, rendering: false, renderedKey: "" };

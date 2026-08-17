@@ -49,6 +49,28 @@ test("Guild history route is read-only and delegates to Guild history service", 
   assert.equal(JSON.parse(response.text).guild.name, "Ludus Venatus");
 });
 
+test("Guild Intelligence route delegates to the daily intelligence service", async () => {
+  let call = null;
+  const api = createCommandCenterHistoryApi({
+    service: {},
+    intelligence: {
+      async getByPlayer(allyCode) {
+        call = allyCode;
+        return { guild: { name: "Ludus Venatus" }, summary: { totalPages: 29, returnedTotal: 2 } };
+      },
+    },
+  });
+  const response = responseCapture();
+  const url = new URL("http://localhost/api/guild/by-player/732764286/intelligence");
+  assert.equal(await api.handle({ method: "POST" }, response, url), false);
+  assert.equal(await api.handle({ method: "GET" }, response, url), true);
+  assert.equal(call, "732764286");
+  assert.equal(response.status, 200);
+  const body = JSON.parse(response.text);
+  assert.equal(body.summary.totalPages, 29);
+  assert.equal(body.summary.returnedTotal, 2);
+});
+
 test("history routes preserve safe status codes", async () => {
   const api = createCommandCenterHistoryApi({
     service: {
