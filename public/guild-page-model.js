@@ -31,6 +31,10 @@ function median(values) {
   return sorted.length % 2 ? sorted[mid] : Math.round((sorted[mid - 1] + sorted[mid]) / 2);
 }
 
+function suppliedNumber(value, fallback = 0) {
+  return value !== null && value !== undefined && value !== "" && Number.isFinite(Number(value)) ? Number(value) : fallback;
+}
+
 export function buildGuildCatalogIndex(catalog = []) {
   return new Map(asArray(catalog).filter((row) => row?.baseId).map((row) => [String(row.baseId), row]));
 }
@@ -48,17 +52,21 @@ export function enrichGuildMember(member = {}, catalogIndex = new Map(), index =
     };
   });
 
+  const hasDetailedUnits = units.length > 0;
   const characters = units.filter((row) => row.unitType !== "Ship");
   const ships = units.filter((row) => row.unitType === "Ship");
-  const characterGp = characters.reduce((sum, row) => sum + finite(row.power, 0), 0);
-  const shipGp = ships.reduce((sum, row) => sum + finite(row.power, 0), 0);
-  const galacticLegends = characters.filter(isGalacticLegend);
-  const relic5 = characters.filter((row) => finite(row.relic, 0) >= 5).length;
-  const relic7 = characters.filter((row) => finite(row.relic, 0) >= 7).length;
-  const relic9 = characters.filter((row) => finite(row.relic, 0) >= 9).length;
-  const gear13 = characters.filter((row) => finite(row.gear, 0) >= 13).length;
-  const sevenStarShips = ships.filter((row) => finite(row.stars, 0) >= 7).length;
-  const topUnits = units.slice().sort((a, b) => finite(b.power, 0) - finite(a.power, 0) || a.name.localeCompare(b.name)).slice(0, 8);
+  const derivedCharacterGp = characters.reduce((sum, row) => sum + finite(row.power, 0), 0);
+  const derivedShipGp = ships.reduce((sum, row) => sum + finite(row.power, 0), 0);
+  const characterGp = hasDetailedUnits
+    ? derivedCharacterGp
+    : suppliedNumber(member.characterGalacticPower ?? member.characterGp ?? member.memberCharacterPower, 0);
+  const shipGp = hasDetailedUnits
+    ? derivedShipGp
+    : suppliedNumber(member.shipGalacticPower ?? member.shipGp ?? member.memberShipPower, 0);
+  const derivedGalacticLegends = characters.filter(isGalacticLegend);
+  const galacticLegends = hasDetailedUnits ? derivedGalacticLegends : asArray(member.galacticLegends);
+  const derivedTopUnits = units.slice().sort((a, b) => finite(b.power, 0) - finite(a.power, 0) || a.name.localeCompare(b.name)).slice(0, 8);
+  const topUnits = hasDetailedUnits ? derivedTopUnits : asArray(member.topUnits);
 
   return Object.freeze({
     id: memberId(member, index),
@@ -66,19 +74,36 @@ export function enrichGuildMember(member = {}, catalogIndex = new Map(), index =
     allyCode: text(member.allyCode),
     name: text(member.name || member.playerName || memberId(member, index)),
     galacticPower: finite(member.galacticPower, characterGp + shipGp),
-    rosterAvailable: Boolean(member.rosterAvailable),
+    rosterAvailable: member.rosterAvailable === true || hasDetailedUnits,
+    persistenceSummary: member.persistenceSummary === true,
     characterGp,
     shipGp,
-    characterCount: characters.length,
-    shipCount: ships.length,
-    gear13,
-    relic5,
-    relic7,
-    relic9,
-    sevenStarShips,
-    galacticLegendCount: galacticLegends.length,
-    galacticLegends: Object.freeze(galacticLegends.map((row) => Object.freeze({ baseId: row.baseId, name: row.name, power: finite(row.power, 0), relic: finite(row.relic, 0) }))),
-    topUnits: Object.freeze(topUnits.map((row) => Object.freeze({ baseId: row.baseId, name: row.name, unitType: row.unitType, power: finite(row.power, 0), relic: finite(row.relic, 0), stars: finite(row.stars, 0) }))),
+    characterCount: hasDetailedUnits ? characters.length : suppliedNumber(member.characterCount, 0),
+    shipCount: hasDetailedUnits ? ships.length : suppliedNumber(member.shipCount, 0),
+    gear13: hasDetailedUnits ? characters.filter((row) => finite(row.gear, 0) >= 13).length : suppliedNumber(member.gear13, 0),
+    relic5: hasDetailedUnits ? characters.filter((row) => finite(row.relic, 0) >= 5).length : suppliedNumber(member.relic5, 0),
+    relic7: hasDetailedUnits ? characters.filter((row) => finite(row.relic, 0) >= 7).length : suppliedNumber(member.relic7, 0),
+    relic9: hasDetailedUnits ? characters.filter((row) => finite(row.relic, 0) >= 9).length : suppliedNumber(member.relic9, 0),
+    sevenStarShips: hasDetailedUnits ? ships.filter((row) => finite(row.stars, 0) >= 7).length : suppliedNumber(member.sevenStarShips, 0),
+    galacticLegendCount: hasDetailedUnits ? galacticLegends.length : suppliedNumber(member.galacticLegendCount, galacticLegends.length),
+    zetaCount: member.zetaCount == null ? null : suppliedNumber(member.zetaCount, 0),
+    omicronCount: member.omicronCount == null ? null : suppliedNumber(member.omicronCount, 0),
+    ultimateCount: member.ultimateCount == null ? null : suppliedNumber(member.ultimateCount, 0),
+    omegaUpgradeCount: member.omegaUpgradeCount == null ? null : suppliedNumber(member.omegaUpgradeCount, 0),
+    galacticLegends: Object.freeze(galacticLegends.map((row) => Object.freeze({
+      baseId: row.baseId,
+      name: row.name,
+      power: finite(row.power, 0),
+      relic: finite(row.relic, 0),
+    }))),
+    topUnits: Object.freeze(topUnits.map((row) => Object.freeze({
+      baseId: row.baseId,
+      name: row.name,
+      unitType: row.unitType,
+      power: finite(row.power, 0),
+      relic: finite(row.relic, 0),
+      stars: finite(row.stars, 0),
+    }))),
   });
 }
 
@@ -90,15 +115,22 @@ export function buildGuildRosterSnapshot(guildBody = {}, catalog = []) {
   const guildGpFromMembers = gpValues.reduce((sum, value) => sum + value, 0);
   const guild = guildBody.guild || {};
   const hydration = guildBody.hydration || {};
+  const suppliedSummary = guildBody.summary || {};
   const totalCharacterGp = hydrated.reduce((sum, row) => sum + row.characterGp, 0);
   const totalShipGp = hydrated.reduce((sum, row) => sum + row.shipGp, 0);
   const totalGl = hydrated.reduce((sum, row) => sum + row.galacticLegendCount, 0);
   const totalR7 = hydrated.reduce((sum, row) => sum + row.relic7, 0);
   const totalR9 = hydrated.reduce((sum, row) => sum + row.relic9, 0);
+  const totalSevenStarShips = hydrated.reduce((sum, row) => sum + row.sevenStarShips, 0);
+  const totalZetas = hydrated.reduce((sum, row) => sum + finite(row.zetaCount, 0), 0);
+  const totalOmicrons = hydrated.reduce((sum, row) => sum + finite(row.omicronCount, 0), 0);
+  const totalUltimates = hydrated.reduce((sum, row) => sum + finite(row.ultimateCount, 0), 0);
 
   return Object.freeze({
     source: text(guildBody.source || "live"),
+    sourceDetail: text(guildBody.sourceDetail),
     fetchedAt: text(guildBody.fetchedAt),
+    persistence: guildBody.persistence || null,
     guild: Object.freeze({
       id: text(guild.id),
       name: text(guild.name || "Unknown Guild"),
@@ -115,17 +147,21 @@ export function buildGuildRosterSnapshot(guildBody = {}, catalog = []) {
     summary: Object.freeze({
       totalMembers: members.length,
       hydratedMembers: hydrated.length,
-      guildGp: finite(guild.galacticPower, guildGpFromMembers),
+      guildGp: suppliedNumber(suppliedSummary.guildGp, finite(guild.galacticPower, guildGpFromMembers)),
       averageGp: gpValues.length ? Math.round(guildGpFromMembers / gpValues.length) : 0,
       medianGp: median(gpValues),
       highestGp: gpValues.length ? Math.max(...gpValues) : 0,
       lowestGp: gpValues.length ? Math.min(...gpValues) : 0,
-      characterGp: totalCharacterGp,
-      shipGp: totalShipGp,
-      galacticLegends: totalGl,
-      relic7Characters: totalR7,
-      relic9Characters: totalR9,
-      sevenStarShips: hydrated.reduce((sum, row) => sum + row.sevenStarShips, 0),
+      characterGp: suppliedNumber(suppliedSummary.characterGp, totalCharacterGp),
+      shipGp: suppliedNumber(suppliedSummary.shipGp, totalShipGp),
+      galacticLegends: suppliedNumber(suppliedSummary.galacticLegends, totalGl),
+      relic7Characters: suppliedNumber(suppliedSummary.relic7Characters, totalR7),
+      relic9Characters: suppliedNumber(suppliedSummary.relic9Characters, totalR9),
+      sevenStarShips: suppliedNumber(suppliedSummary.sevenStarShips, totalSevenStarShips),
+      zetas: suppliedSummary.zetas == null ? totalZetas : suppliedNumber(suppliedSummary.zetas, totalZetas),
+      omicrons: suppliedSummary.omicrons == null ? totalOmicrons : suppliedNumber(suppliedSummary.omicrons, totalOmicrons),
+      ultimates: suppliedSummary.ultimates == null ? totalUltimates : suppliedNumber(suppliedSummary.ultimates, totalUltimates),
+      omegaUpgrades: suppliedSummary.omegaUpgrades == null ? null : suppliedNumber(suppliedSummary.omegaUpgrades, 0),
     }),
   });
 }
