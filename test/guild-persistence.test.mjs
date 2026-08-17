@@ -4,6 +4,7 @@ import {
   activityFingerprint,
   assertIntegrity,
   calculationFailureMessage,
+  calculationQuality,
   createGuildPersistence,
   normalizedMember,
   timestampFromGameValue,
@@ -143,6 +144,17 @@ test('normalized member retains rich progression and does not label unclassified
   assert.equal(member.raidTicketsCurrent, null, 'unverified contribution types must not be mislabeled as Raid Tickets');
 });
 
+test('normalized member derives total GP when direct member GP is zero but split/raw power exists', () => {
+  const source = richMember({ playerId: 'swgoh-player-a', allyCode: '123456789', name: 'Alpha', baseId: 'UNIT_A', power: 30000 });
+  source.galacticPower = 0;
+  source.characterGalacticPower = 30000;
+  source.shipGalacticPower = 12000;
+  const member = normalizedMember(source);
+  assert.equal(member.galacticPower, 42000);
+  assert.equal(member.characterPower, 30000);
+  assert.equal(member.shipPower, 12000);
+});
+
 test('successful sync resolves tenant from verified user and sends one transactional RPC payload', async () => {
   const store = memoryStore();
   const service = persistence(store, richGuild());
@@ -151,6 +163,7 @@ test('successful sync resolves tenant from verified user and sends one transacti
   assert.equal(result.ok, true);
   assert.equal(result.membersStored, 2);
   assert.equal(result.unitsStored, 2);
+  assert.equal(result.integrity.dataQuality, 'hydrated-and-stats-complete');
   const rpc = store.calls.find((call) => call.op === 'rpc');
   assert.ok(rpc);
   assert.equal(rpc.name, 'ingest_verified_user_guild_sync');
@@ -159,6 +172,7 @@ test('successful sync resolves tenant from verified user and sends one transacti
   assert.equal(rpc.args.p_payload.guild.swgohGuildId, 'swgoh-guild-a');
   assert.equal(rpc.args.p_payload.hydration.complete, true);
   assert.equal(rpc.args.p_payload.calculation.complete, true);
+  assert.equal(rpc.args.p_payload.calculation.dataQuality, 'hydrated-and-stats-complete');
   assert.equal(rpc.args.p_payload.members.length, 2);
   assert.equal(rpc.args.p_payload.activity.recentRaidResult.length, 1);
   assert.match(rpc.args.p_payload.activityFingerprint, /^[a-f0-9]{64}$/);
@@ -187,25 +201,37 @@ test('incomplete hydration is rejected before permanent persistence', async () =
   assert.equal(store.calls.some((call) => call.op === 'rpc'), false);
 });
 
-test('incomplete GP/stat calculation is rejected before permanent persistence with safe actionable diagnostics', async () => {
+test('incomplete Stats enrichment persists a fully hydrated raw Guild with explicit partial quality', async () => {
   const store = memoryStore();
   const body = richGuild({ calculationComplete: false });
   body.calculation.error = 'SWGOH Stats /api returned HTTP 500 at https://stats.internal.example/api\ncalculation failed';
   const service = persistence(store, body);
-  await assert.rejects(
-    () => service.sync({ id: USER }),
-    (error) => error?.code === 'GUILD_SYNC_CALCULATION_INCOMPLETE'
-      && /requested 2, calculated 1, failed 1/.test(error.message)
-      && /\[upstream-url\]/.test(error.message)
-      && !/stats\.internal\.example/.test(error.message),
-  );
-  assert.equal(store.calls.some((call) => call.op === 'rpc'), false);
+  const result = await service.sync({ id: USER });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.integrity.calculationComplete, false);
+  assert.equal(result.integrity.calculatedMembers, 1);
+  assert.equal(result.integrity.calculationFailedMembers, 1);
+  assert.equal(result.integrity.dataQuality, 'hydrated-raw-stats-partial');
+
+  const rpc = store.calls.find((call) => call.op === 'rpc');
+  assert.ok(rpc, 'fully hydrated raw roster must reach durable persistence');
+  assert.equal(rpc.args.p_payload.hydration.complete, true);
+  assert.equal(rpc.args.p_payload.calculation.complete, false);
+  assert.equal(rpc.args.p_payload.calculation.dataQuality, 'hydrated-raw-stats-partial');
+  assert.match(rpc.args.p_payload.calculation.error, /\[upstream-url\]/);
+  assert.doesNotMatch(rpc.args.p_payload.calculation.error, /stats\.internal\.example/);
 });
 
-test('calculation diagnostic distinguishes missing configuration from partial calculation', () => {
+test('calculation diagnostics distinguish missing configuration and classify partial data without claiming completeness', () => {
   const message = calculationFailureMessage({ configured: false, requested: 50, calculated: 0, failed: 50 });
   assert.match(message, /configured no/);
   assert.match(message, /requested 50, calculated 0, failed 50/);
+  assert.match(message, /remains eligible for persistence/);
+
+  const quality = calculationQuality({ configured: true, requested: 50, calculated: 44, failed: 6, complete: false }, 50);
+  assert.equal(quality.complete, false);
+  assert.equal(quality.dataQuality, 'hydrated-raw-stats-partial');
 });
 
 test('activity fingerprint changes when member contribution history changes', () => {
