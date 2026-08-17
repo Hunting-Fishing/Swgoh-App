@@ -3,6 +3,7 @@ import test from 'node:test';
 import {
   activityFingerprint,
   assertIntegrity,
+  calculationFailureMessage,
   createGuildPersistence,
   normalizedMember,
   timestampFromGameValue,
@@ -126,11 +127,14 @@ test('game timestamps normalize seconds, milliseconds and ISO strings', () => {
   assert.equal(timestampFromGameValue(''), null);
 });
 
-test('normalized member retains rich progression in unit metadata', () => {
+test('normalized member retains rich progression and does not label unclassified abilities as zero', () => {
   const member = normalizedMember(richGuild().members[0]);
   assert.equal(member.allyCode, '123456789');
   assert.equal(member.swgohPlayerId, 'swgoh-player-a');
   assert.equal(member.units[0].galacticPower, 30000);
+  assert.equal(member.units[0].zetaCount, null);
+  assert.equal(member.units[0].omicronCount, null);
+  assert.equal(member.units[0].metadata.abilityClassificationPendingCatalog, true);
   assert.equal(member.units[0].metadata.speed, 300);
   assert.deepEqual(member.units[0].metadata.skills, [{ id: 'UNIT_A_BASIC', tier: 7 }]);
   assert.deepEqual(member.units[0].metadata.equippedStatMods, [{ id: 'mod-1', level: 15 }]);
@@ -183,14 +187,25 @@ test('incomplete hydration is rejected before permanent persistence', async () =
   assert.equal(store.calls.some((call) => call.op === 'rpc'), false);
 });
 
-test('incomplete GP/stat calculation is rejected before permanent persistence', async () => {
+test('incomplete GP/stat calculation is rejected before permanent persistence with safe actionable diagnostics', async () => {
   const store = memoryStore();
-  const service = persistence(store, richGuild({ calculationComplete: false }));
+  const body = richGuild({ calculationComplete: false });
+  body.calculation.error = 'SWGOH Stats /api returned HTTP 500 at https://stats.internal.example/api\ncalculation failed';
+  const service = persistence(store, body);
   await assert.rejects(
     () => service.sync({ id: USER }),
-    (error) => error?.code === 'GUILD_SYNC_CALCULATION_INCOMPLETE',
+    (error) => error?.code === 'GUILD_SYNC_CALCULATION_INCOMPLETE'
+      && /requested 2, calculated 1, failed 1/.test(error.message)
+      && /\[upstream-url\]/.test(error.message)
+      && !/stats\.internal\.example/.test(error.message),
   );
   assert.equal(store.calls.some((call) => call.op === 'rpc'), false);
+});
+
+test('calculation diagnostic distinguishes missing configuration from partial calculation', () => {
+  const message = calculationFailureMessage({ configured: false, requested: 50, calculated: 0, failed: 50 });
+  assert.match(message, /configured no/);
+  assert.match(message, /requested 50, calculated 0, failed 50/);
 });
 
 test('activity fingerprint changes when member contribution history changes', () => {
