@@ -1,3 +1,5 @@
+import "./guild-ability-investment-panel.js";
+
 const state = {
   allyCode: "",
   body: null,
