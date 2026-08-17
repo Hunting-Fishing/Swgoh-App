@@ -6,7 +6,8 @@
   <meta name="color-scheme" content="dark">
   <meta name="theme-color" content="#050914">
   <title>Sign In · SWGOH Command Center</title>
-  <link rel="stylesheet" href="/auth.css?v=20260817a">
+  <link rel="stylesheet" href="/auth.css?v=20260817b">
+  <link rel="stylesheet" href="/auth-social.css?v=20260817a">
 </head>
 <body class="auth-body" data-auth-mode="login">
   <main class="auth-shell">
@@ -34,13 +35,28 @@
         <strong>Command session already active</strong>
         <p>You are signed in as <span data-session-email></span>.</p>
         <div class="auth-session-actions">
-          <a href="/">Continue to Command Center</a>
+          <a href="/onboarding">Continue to onboarding</a>
           <button type="button" data-signout>Sign out</button>
         </div>
       </div>
 
+      <div class="auth-message" data-auth-message role="status" aria-live="polite"></div>
+
+      <div class="auth-social" data-social-auth>
+        <a class="auth-social-button auth-social-discord" data-social-provider="discord" href="/api/auth/oauth/discord?next=/onboarding">
+          <span class="auth-social-mark" aria-hidden="true">D</span>
+          <span>Continue with Discord</span>
+        </a>
+        <a class="auth-social-button auth-social-google" data-social-provider="google" href="/api/auth/oauth/google?next=/onboarding">
+          <span class="auth-social-mark" aria-hidden="true">G</span>
+          <span>Continue with Google</span>
+        </a>
+        <p class="auth-social-note">Use the same verified email across providers and Supabase can automatically link those sign-in identities to one Command Center user.</p>
+      </div>
+
+      <div class="auth-divider"><span>or use email</span></div>
+
       <form class="auth-form" data-auth-form autocomplete="on">
-        <div class="auth-message" data-auth-message role="status" aria-live="polite"></div>
         <div class="auth-field">
           <label for="email">Email</label>
           <input id="email" name="email" type="email" autocomplete="email" inputmode="email" maxlength="320" placeholder="commander@example.com" required>
@@ -62,6 +78,6 @@
       </div>
     </section>
   </main>
-  <script type="module" src="/auth-page.js?v=20260817a"></script>
+  <script type="module" src="/auth-page.js?v=20260817b"></script>
 </body>
 </html>
