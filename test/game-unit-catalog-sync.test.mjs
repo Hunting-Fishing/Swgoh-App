@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { normalizeGameUnitCatalogRow, syncGameUnitCatalog } from "../game-unit-catalog-sync.mjs";
+import { normalizeGameUnitAbilityRows, normalizeGameUnitCatalogRow, syncGameUnitCatalog } from "../game-unit-catalog-sync.mjs";
 
 function mockStore(calls) {
   return {
@@ -54,7 +54,25 @@ test("catalog row preserves stable unit identity and rich static intelligence", 
   assert.equal(row.metadata.abilities[0].id, "basic_a");
 });
 
-test("catalog sync validates count and upserts all units in bounded batches", async () => {
+test("ability rows preserve classification evidence for indexed zeta and omicron lookup", () => {
+  const rows = normalizeGameUnitAbilityRows({
+    baseId: "UNIT_A",
+    abilities: [
+      { id: "unique_a", name: "Unique A", type: "Unique", maxTier: 8, zeta: true, omega: true, omicron: true, omicronMode: 5, upgradeTiers: [{ tier: 8, omicron: true }] },
+    ],
+  }, { catalogVersion: "v1", updatedAt: "2026-08-17T01:00:00.000Z" });
+
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].base_id, "UNIT_A");
+  assert.equal(rows[0].ability_id, "unique_a");
+  assert.equal(rows[0].has_zeta, true);
+  assert.equal(rows[0].has_omicron, true);
+  assert.equal(rows[0].has_omega, true);
+  assert.equal(rows[0].omicron_mode, 5);
+  assert.deepEqual(rows[0].metadata.upgradeTiers, [{ tier: 8, omicron: true }]);
+});
+
+test("catalog sync validates count and upserts units plus abilities in bounded batches", async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "swgoh-catalog-"));
   const catalogPath = path.join(directory, "catalog.json");
   const manifestPath = path.join(directory, "manifest.json");
@@ -65,8 +83,8 @@ test("catalog sync validates count and upserts all units in bounded batches", as
     assetVersion: "100",
     generatedAt: "2026-08-17T00:00:00.000Z",
     units: [
-      { baseId: "CHAR_A", name: "Char A", unitType: "Character", combatType: 1, obtainable: true },
-      { baseId: "SHIP_A", name: "Ship A", unitType: "Ship", combatType: 2, obtainable: true },
+      { baseId: "CHAR_A", name: "Char A", unitType: "Character", combatType: 1, obtainable: true, abilities: [{ id: "char_a_unique", name: "Unique", zeta: true }] },
+      { baseId: "SHIP_A", name: "Ship A", unitType: "Ship", combatType: 2, obtainable: true, abilities: [{ id: "ship_a_unique", name: "Unique", omicron: true }] },
     ],
   }));
   await writeFile(manifestPath, JSON.stringify({
@@ -89,14 +107,22 @@ test("catalog sync validates count and upserts all units in bounded batches", as
   });
 
   assert.equal(result.rowsStored, 2);
+  assert.equal(result.abilitiesStored, 2);
+  assert.equal(result.zetaAbilityCount, 1);
+  assert.equal(result.omicronAbilityCount, 1);
   assert.equal(result.characterCount, 1);
   assert.equal(result.shipCount, 1);
   assert.equal(result.catalogVersion, "4|game-v1|loc-v1|100");
-  assert.equal(calls.length, 2);
+  assert.equal(calls.length, 4);
   assert.equal(calls[0].table, "game_units");
   assert.deepEqual(calls[0].options, { onConflict: "base_id", returning: false });
   assert.equal(calls[0].rows[0].base_id, "CHAR_A");
+  assert.equal(calls[1].table, "game_units");
   assert.equal(calls[1].rows[0].base_id, "SHIP_A");
+  assert.equal(calls[2].table, "game_unit_abilities");
+  assert.deepEqual(calls[2].options, { onConflict: "base_id,ability_id", returning: false });
+  assert.equal(calls[2].rows[0].ability_id, "char_a_unique");
+  assert.equal(calls[3].rows[0].ability_id, "ship_a_unique");
 });
 
 test("catalog sync refuses duplicate Base IDs instead of silently overwriting static identity", async () => {
