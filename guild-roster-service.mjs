@@ -1,4 +1,5 @@
 import { LiveRosterCache } from "./live-roster-cache.mjs";
+import { persistedGuildRosterService } from "./persisted-guild-roster-service.mjs";
 
 function positiveNumber(value, fallback) {
   const parsed = Number(value);
@@ -133,6 +134,7 @@ async function fetchGuildRoster(allyCode, config, fetchImpl, options = {}) {
 export function createGuildRosterService(env = process.env, options = {}) {
   const config = configFromEnv(env);
   const fetchImpl = options.fetch || fetch;
+  const persistedService = options.persistedService || persistedGuildRosterService;
   const cache = options.cache || new LiveRosterCache({
     freshMs: config.freshMs,
     staleMs: config.staleMs,
@@ -142,18 +144,41 @@ export function createGuildRosterService(env = process.env, options = {}) {
 
   const load = (allyCode, includeActivity) => fetchGuildRoster(allyCode, config, fetchImpl, { includeActivity });
 
+  async function getLiveGuildRoster(allyCode, options = {}) {
+    const includeActivity = options.includeActivity === true;
+    const key = cacheKey(allyCode, includeActivity);
+    if (options.forceRefresh) {
+      const value = await cache.refresh(key, () => load(allyCode, includeActivity));
+      return Object.freeze({ value, cache: "refreshed", ageMs: 0, includeActivity, transport: "comlink-live" });
+    }
+    const result = await cache.getOrLoad(key, () => load(allyCode, includeActivity), {
+      staleWhileRevalidate: options.staleWhileRevalidate !== false,
+    });
+    return Object.freeze({ ...result, includeActivity, transport: "comlink-live" });
+  }
+
   async function getGuildRoster(allyCode, options = {}) {
     const normalized = normalizeAllyCode(allyCode);
     const includeActivity = options.includeActivity === true;
-    const key = cacheKey(normalized, includeActivity);
-    if (options.forceRefresh) {
-      const value = await cache.refresh(key, () => load(normalized, includeActivity));
-      return Object.freeze({ value, cache: "refreshed", ageMs: 0, includeActivity });
+    const forceRefresh = options.forceRefresh === true;
+    const persistedStatus = typeof persistedService?.status === "function" ? persistedService.status() : { configured: false };
+
+    // Ordinary browser/planning reads use the canonical persisted roster first.
+    // Rich activity reads and explicit refreshes stay live because activity fields
+    // are intentionally not duplicated into the compact persisted compatibility payload.
+    if (!includeActivity && !forceRefresh && persistedStatus?.configured && typeof persistedService?.getGuildRoster === "function") {
+      try {
+        const result = await persistedService.getGuildRoster(normalized, {
+          staleWhileRevalidate: options.staleWhileRevalidate !== false,
+        });
+        return Object.freeze({ ...result, includeActivity: false, transport: "supabase-persisted" });
+      } catch {
+        // Availability is fail-open: a not-yet-onboarded Guild or temporary persistence
+        // problem falls back to the live gateway rather than breaking public Guild tools.
+      }
     }
-    const result = await cache.getOrLoad(key, () => load(normalized, includeActivity), {
-      staleWhileRevalidate: options.staleWhileRevalidate !== false,
-    });
-    return Object.freeze({ ...result, includeActivity });
+
+    return getLiveGuildRoster(normalized, options);
   }
 
   return Object.freeze({
@@ -161,7 +186,8 @@ export function createGuildRosterService(env = process.env, options = {}) {
       return getGuildRoster(allyCode, options);
     },
     async refreshGuildRoster(allyCode, options = {}) {
-      return getGuildRoster(allyCode, {
+      const normalized = normalizeAllyCode(allyCode);
+      return getLiveGuildRoster(normalized, {
         ...options,
         forceRefresh: true,
         staleWhileRevalidate: false,
@@ -172,22 +198,26 @@ export function createGuildRosterService(env = process.env, options = {}) {
       return cache.inspect(cacheKey(normalized, options.includeActivity === true));
     },
     status() {
+      const persisted = typeof persistedService?.status === "function" ? persistedService.status() : { configured: false };
       return Object.freeze({
-        mode: "process-local-coalesced-swr-lru",
+        mode: persisted?.configured ? "supabase-persisted-first-with-comlink-live-fallback" : "process-local-coalesced-swr-lru",
         freshSeconds: Math.round(config.freshMs / 1000),
         staleSeconds: Math.round(config.staleMs / 1000),
         maxEntries: config.maxEntries,
-        shared: false,
-        sharedAcrossInstances: false,
+        shared: Boolean(persisted?.configured),
+        sharedAcrossInstances: Boolean(persisted?.configured),
         sharedBetweenWebAndDiscord: true,
-        activityMode: "opt-in-separate-cache-key",
+        persisted,
+        activityMode: "live-opt-in-separate-cache-key",
+        explicitRefreshMode: "comlink-live",
         coldRequestTimeoutSeconds: Math.round(config.requestTimeoutMs / 1000),
       });
     },
   });
 }
 
-// One process-wide instance is imported by both the HTTP API and Discord command path.
-// Rich Guild activity is opt-in and kept on a cache key distinct from ordinary roster reads.
-// This intentionally does not claim cross-instance/distributed cache sharing.
+// One process-wide instance is imported by the HTTP API, account onboarding and Discord.
+// Normal non-activity reads prefer canonical Supabase persistence. Explicit refreshes and
+// activity-rich Discord reads stay live, with public reads failing open to Comlink when a
+// Guild has not yet been persisted.
 export const guildRosterService = createGuildRosterService(process.env);
