@@ -16,6 +16,15 @@ function allyCode(value) {
   return /^\d{9}$/.test(digits) ? digits : "";
 }
 
+function cacheDisplay(value) {
+  const state = String(value || "").trim().toLowerCase();
+  if (state === "miss") return "live refresh (fresh fetch)";
+  if (state === "fresh") return "fresh live cache";
+  if (state === "refreshed") return "live refresh (cache renewed)";
+  if (state === "stale") return "cached live snapshot (refreshing)";
+  return "live roster data";
+}
+
 function requireDurableState(stateStore) {
   if (typeof stateStore?.status !== "function" || typeof stateStore?.readGuild !== "function") {
     const error = new Error("Durable Discord state reader is unavailable.");
@@ -81,6 +90,7 @@ export async function getDiscordLinkedPlayerSnapshot({
     throw error;
   }
 
+  const rosterCacheState = String(rosterResult?.cache || "unknown");
   return Object.freeze({
     discordGuildId: guildId,
     discordUserId: userId,
@@ -89,7 +99,10 @@ export async function getDiscordLinkedPlayerSnapshot({
     guildName: String(snapshot?.guild?.name || snapshot?.name || "").trim(),
     link: structuredClone(link),
     member: structuredClone(member),
-    rosterCache: String(rosterResult?.cache || "unknown"),
+    rosterCache: cacheDisplay(rosterCacheState),
+    rosterCacheState,
     rosterAgeMs: Number(rosterResult?.ageMs || 0),
   });
 }
+
+export { cacheDisplay };
