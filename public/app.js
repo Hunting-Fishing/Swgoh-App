@@ -57,7 +57,9 @@ const catalogGrid = $("catalogGrid");
 const catalogMore = $("catalogMore");
 
 function number(value) {
-  return new Intl.NumberFormat().format(Number(value || 0));
+  if (value === null || value === undefined || value === "") return "—";
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? new Intl.NumberFormat().format(parsed) : "—";
 }
 
 function knownNumber(value, fallback = "N/A") {
@@ -335,12 +337,17 @@ function renderIntelligence(body) {
   if (squads.length) {
     squadGrid.innerHTML = squads.map((squad) => {
       const readiness = squadReadiness(squad);
-      const members = squad.members.map((member) => `
+      const members = squad.members.map((member) => {
+        const memberReadiness = knownNumber(member.readiness, "—");
+        return `
         <button class="squad-member" data-squad-base-id="${escapeAttr(member.baseId)}" type="button">
           <span>${escapeHtml(member.name)}</span>
-          <strong>${number(member.power)} GP · ${number(member.readiness)}%</strong>
-        </button>
-      `).join("");
+          <strong>${number(member.power)} GP · ${memberReadiness}${member.readiness == null ? "" : "%"}</strong>
+        </button>`;
+      }).join("");
+      const readinessMeta = readiness.known
+        ? `<span>${knownNumber(squad.averageReadiness, "—")}% avg readiness</span><span>${readiness.ready} ready · ${readiness.developing} developing · ${readiness.needsWork} needs work</span>`
+        : `<span>Live readiness detail required</span><span>Persisted power and roster membership remain authoritative</span>`;
       return `
         <article class="squad-card">
           <div class="squad-heading">
@@ -348,8 +355,7 @@ function renderIntelligence(body) {
             <strong>${number(squad.totalPower)} GP</strong>
           </div>
           <div class="squad-meta">
-            <span>${number(squad.averageReadiness)}% avg readiness</span>
-            <span>${readiness.ready} ready · ${readiness.developing} developing · ${readiness.needsWork} needs work</span>
+            ${readinessMeta}
             ${squad.benchCount ? `<span>${number(squad.benchCount)} additional owned</span>` : ""}
           </div>
           <div class="squad-members">${members}</div>
