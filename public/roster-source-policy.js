@@ -34,6 +34,34 @@ export function rosterEndpoint(allyCode, { forceLive = false } = {}) {
   return forceLive ? `/api/player/${code}` : `/api/player/${code}/baseline`;
 }
 
+export async function loadPreferredPlayerRoster(allyCode, fetchImpl = fetch) {
+  const code = clean(allyCode).replace(/\D/g, "").slice(0, 9);
+  if (!/^\d{9}$/.test(code)) throw new Error("A valid 9-digit Ally Code is required.");
+
+  let baselineDiagnostic = "";
+  try {
+    const response = await fetchImpl(rosterEndpoint(code), { cache: "no-store" });
+    const body = await response.json();
+    if (response.ok && validPlayerRosterBody(body) && isCanonicalRosterBody(body)) {
+      return Object.freeze({ body, source: "canonical", liveFallback: false, baselineDiagnostic: "" });
+    }
+    baselineDiagnostic = body?.error || `Persisted roster returned HTTP ${response.status}.`;
+  } catch (error) {
+    baselineDiagnostic = error?.message || "Persisted roster request failed.";
+  }
+
+  const response = await fetchImpl(rosterEndpoint(code, { forceLive: true }), { cache: "no-store" });
+  const body = await response.json();
+  if (!response.ok) {
+    const liveDiagnostic = body?.error || `Live roster returned HTTP ${response.status}.`;
+    throw new Error(baselineDiagnostic ? `${liveDiagnostic} Persisted baseline: ${baselineDiagnostic}` : liveDiagnostic);
+  }
+  if (!validPlayerRosterBody(body) || !isLiveRosterBody(body)) {
+    throw new Error("The live gateway returned an invalid full-roster response.");
+  }
+  return Object.freeze({ body, source: "live", liveFallback: true, baselineDiagnostic });
+}
+
 export function rosterNeedsLiveDetail(filters = {}) {
   return clean(filters.mods || "Any") !== "Any"
     || clean(filters.upgrade || "Any") === "omega"
