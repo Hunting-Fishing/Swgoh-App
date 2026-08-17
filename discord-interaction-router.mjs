@@ -16,6 +16,10 @@ import {
   formatDiscordGuildActivityCommand,
   getDiscordGuildActivityCommand,
 } from "./discord-guild-activity-service.mjs";
+import {
+  buildDiscordMemberControlsSummary,
+  formatDiscordMemberControlsSummary,
+} from "./discord-member-controls-summary.mjs";
 import { autocompleteSwgohUnits } from "./discord-unit-autocomplete.mjs";
 
 const EPHEMERAL_FLAG = 1 << 6;
@@ -64,19 +68,29 @@ function replayRequest(request, rawBody) {
   return replay;
 }
 
-function safeError(error) {
-  const message = String(error?.message || "Guild Activity Command failed.")
+function safeError(title, error) {
+  const message = String(error?.message || `${title} failed.`)
     .replace(/[\r\n]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
-  return `**SWGOH Command Center · Guild Activity failed**\n${message}\nNo guild state was changed and no DMs were sent.`;
+  return `**SWGOH Command Center · ${title} failed**\n${message}\nNo guild state was changed and no DMs were sent.`;
+}
+
+function activeSubcommand(interaction = {}) {
+  const options = Array.isArray(interaction?.data?.options) ? interaction.data.options : [];
+  return options.find((row) => Number(row?.type) === 1 || Number(row?.type) === 2) || null;
+}
+
+function subcommandOption(interaction = {}, name = "") {
+  const optionName = String(name || "").toLowerCase();
+  const options = Array.isArray(activeSubcommand(interaction)?.options) ? activeSubcommand(interaction).options : [];
+  return options.find((row) => String(row?.name || "").toLowerCase() === optionName)?.value ?? null;
 }
 
 function autocompleteContext(interaction = {}) {
   if (Number(interaction?.type) !== APPLICATION_COMMAND_AUTOCOMPLETE_TYPE) return null;
   if (String(interaction?.data?.name || "").toLowerCase() !== "tb") return null;
-  const options = Array.isArray(interaction?.data?.options) ? interaction.data.options : [];
-  const subcommand = options.find((row) => Number(row?.type) === 1 || Number(row?.type) === 2);
+  const subcommand = activeSubcommand(interaction);
   if (String(subcommand?.name || "").toLowerCase() !== "preference") return null;
   const parameters = Array.isArray(subcommand?.options) ? subcommand.options : [];
   const focused = parameters.find((row) => row?.focused === true);
@@ -98,10 +112,32 @@ function scheduleActivityResponse(interaction, config, services) {
       ...(services?.historyService ? { historyService: services.historyService } : {}),
     }))
     .then((result) => formatDiscordGuildActivityCommand(result))
-    .catch((error) => safeError(error))
+    .catch((error) => safeError("Guild Activity", error))
     .then((content) => editDiscordOriginalResponse(interaction, config, content, services?.fetch || fetch))
     .catch((error) => {
       console.error("Discord Guild Activity response failed:", error?.message || error);
+    });
+}
+
+function scheduleControlsResponse(interaction, config, services) {
+  const stateStore = services?.stateStore || discordStateStore;
+  Promise.resolve()
+    .then(async () => {
+      const status = typeof stateStore?.status === "function" ? stateStore.status() : null;
+      if (!status?.enabled || !status?.durable || typeof stateStore?.readGuild !== "function") {
+        throw new Error("Durable Discord member-control state is unavailable.");
+      }
+      const guild = await stateStore.readGuild(String(interaction?.guild_id || ""));
+      if (!guild) throw new Error("This Discord server has not completed durable /tb setup yet.");
+      return buildDiscordMemberControlsSummary(guild, {
+        discordUserId: subcommandOption(interaction, "member"),
+      });
+    })
+    .then((summary) => formatDiscordMemberControlsSummary(summary))
+    .catch((error) => safeError("Member TB Controls", error))
+    .then((content) => editDiscordOriginalResponse(interaction, config, content, services?.fetch || fetch))
+    .catch((error) => {
+      console.error("Discord Member TB Controls response failed:", error?.message || error);
     });
 }
 
@@ -122,10 +158,14 @@ export async function handleDiscordInteractionRequest(request, response, env = p
   }
 
   const autocomplete = autocompleteContext(interaction);
+  const subcommand = discordTbSubcommand(interaction);
   const isActivity = Number(interaction?.type) === DISCORD_INTERACTION_TYPES.APPLICATION_COMMAND
     && String(interaction?.data?.name || "").toLowerCase() === "tb"
-    && discordTbSubcommand(interaction) === "activity";
-  if (!autocomplete && !isActivity) {
+    && subcommand === "activity";
+  const isControls = Number(interaction?.type) === DISCORD_INTERACTION_TYPES.APPLICATION_COMMAND
+    && String(interaction?.data?.name || "").toLowerCase() === "tb"
+    && subcommand === "controls";
+  if (!autocomplete && !isActivity && !isControls) {
     return handleCoreDiscordInteractionRequest(replayRequest(request, rawBody), response, env, services);
   }
 
@@ -179,11 +219,12 @@ export async function handleDiscordInteractionRequest(request, response, env = p
     officerAuthorized = await discordTbMemberHasConfiguredOfficerRole(interaction, stateStore);
   }
   if (!officerAuthorized) {
-    jsonResponse(response, 200, ephemeral("Officer permission required. `/tb activity` requires Manage Server (Manage Guild), Administrator, or a durably configured officer role."));
+    jsonResponse(response, 200, ephemeral(`Officer permission required. \`/tb ${subcommand}\` requires Manage Server (Manage Guild), Administrator, or a durably configured officer role.`));
     return true;
   }
 
   jsonResponse(response, 200, deferredEphemeral());
-  scheduleActivityResponse(interaction, config, { ...services, stateStore });
+  if (isControls) scheduleControlsResponse(interaction, config, { ...services, stateStore });
+  else scheduleActivityResponse(interaction, config, { ...services, stateStore });
   return true;
 }
