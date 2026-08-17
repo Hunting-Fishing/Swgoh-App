@@ -2,6 +2,7 @@ import { discordTbConfig } from "../discord-tb.mjs";
 
 const API_VERSION = "v10";
 const SCHEMA_VERSION = "2026-08-18-stage7-controls-v1";
+const REGISTRATION_TIMEOUT_MS = 15_000;
 const config = discordTbConfig(process.env);
 const ifConfigured = process.argv.includes("--if-configured");
 const phaseChoices = ["P1", "P2", "P3", "P4", "P5", "P6"].map((phase) => ({ name: phase, value: phase }));
@@ -76,6 +77,7 @@ async function registerCommands(commands) {
           "User-Agent": `SWGOH-Command-Center (guild-tb-command-registration; ${SCHEMA_VERSION})`,
         },
         body: JSON.stringify(commands),
+        signal: AbortSignal.timeout(REGISTRATION_TIMEOUT_MS),
       });
 
       const text = await response.text();
@@ -98,7 +100,9 @@ async function registerCommands(commands) {
       lastFailure = {
         status: 0,
         body: null,
-        message: error?.message || "Discord command registration request failed.",
+        message: error?.name === "TimeoutError"
+          ? `Discord command registration timed out after ${REGISTRATION_TIMEOUT_MS}ms.`
+          : error?.message || "Discord command registration request failed.",
       };
       if (attempt === 3) break;
     }
