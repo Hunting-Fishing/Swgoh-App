@@ -57,10 +57,6 @@ function memberSnapshotMap(rows = []) {
   return new Map(asArray(rows).map((row) => [clean(row?.player_id), row]).filter(([id]) => id));
 }
 
-function latestMemberMap(rows = []) {
-  return new Map(asArray(rows).map((row) => [clean(row?.player_id), row]).filter(([id]) => id));
-}
-
 export function createCanonicalRosterService(options = {}) {
   const store = options.store || supabaseCoreStore;
   const pageSize = Math.max(50, Math.min(1000, Math.floor(finite(options.pageSize, DEFAULT_PAGE_SIZE))));
@@ -191,6 +187,12 @@ export function createCanonicalRosterService(options = {}) {
     const units = unitRows.map((row) => normalizeOwnedUnit(row, catalog.index.get(clean(row.base_id)) || {}));
     const characters = units.filter((unit) => unit.unitType !== "Ship");
     const ships = units.filter((unit) => unit.unitType === "Ship");
+    const expectedOwnedUnits = snapshot
+      ? finite(snapshot.character_count) + finite(snapshot.ship_count)
+      : units.length;
+    if (expectedOwnedUnits > 0 && units.length !== expectedOwnedUnits) {
+      throw unavailable(`Canonical player roster expected ${expectedOwnedUnits} owned units but loaded ${units.length}; refusing to display a truncated roster.`);
+    }
     const lastSyncedAt = clean(player.last_synced_at || snapshot?.captured_at);
     const zetaCount = nullableFinite(snapshot?.zeta_count);
     const omicronCount = nullableFinite(snapshot?.omicron_count);
@@ -251,6 +253,7 @@ export function createCanonicalRosterService(options = {}) {
         guildId: clean(player.current_guild_id),
         snapshotRunId: clean(snapshot?.source_sync_run_id),
         lastSyncedAt,
+        expectedOwnedUnits,
         logicalRosterComplete: true,
         returnedOwnedUnits: units.length,
       }),
@@ -298,7 +301,6 @@ export function createCanonicalRosterService(options = {}) {
         }, { maxRows: 100 })
       : [];
 
-    const membersByPlayer = latestMemberMap(memberRows);
     const snapshotsByPlayer = memberSnapshotMap(snapshotRows);
     const playersById = new Map(playerRows.map((row) => [clean(row.id), row]));
     const memberIds = new Set(memberRows.map((row) => clean(row.player_id)).filter(Boolean));
