@@ -114,6 +114,16 @@ async function userStatus(store, userId) {
     user_id: `eq.${userId}`,
     order: 'created_at.desc',
   }));
+  const socialIdentities = asArray(await store.select('user_social_identities', {
+    select: 'provider,display_name,avatar_url,last_seen_at',
+    user_id: `eq.${userId}`,
+    order: 'last_seen_at.desc',
+  })).map((identity) => Object.freeze({
+    provider: clean(identity?.provider),
+    displayName: clean(identity?.display_name),
+    avatarUrl: clean(identity?.avatar_url),
+    lastSeenAt: clean(identity?.last_seen_at),
+  }));
 
   const players = [];
   for (const link of links) {
@@ -133,7 +143,11 @@ async function userStatus(store, userId) {
     guilds.push(Object.freeze({ ...membership, guild }));
   }
 
-  return Object.freeze({ playerLinks: Object.freeze(players), guildMemberships: Object.freeze(guilds) });
+  return Object.freeze({
+    playerLinks: Object.freeze(players),
+    guildMemberships: Object.freeze(guilds),
+    socialIdentities: Object.freeze(socialIdentities),
+  });
 }
 
 export function createAccountOnboarding(options = {}) {
