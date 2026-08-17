@@ -3,6 +3,8 @@
   const TTL = Object.freeze({
     player: 25_000,
     guild: 25_000,
+    baseline: 30_000,
+    history: 30_000,
     catalog: 300_000,
     operations: 60_000,
     error: 1_000,
@@ -11,6 +13,13 @@
   const inflight = new Map();
 
   const digits = (value) => String(value || "").replace(/\D/g, "").slice(0, 9);
+
+  function stableQueryKey(url) {
+    const params = new URLSearchParams(url.searchParams);
+    params.delete("refresh");
+    const query = params.toString();
+    return `${url.pathname}${query ? `?${query}` : ""}`;
+  }
 
   function requestInfo(input, init = {}) {
     const method = String(init?.method || (input instanceof Request ? input.method : "GET") || "GET").toUpperCase();
@@ -24,6 +33,28 @@
     if (url.origin !== window.location.origin) return null;
     const force = url.searchParams.get("refresh") === "1";
 
+    const playerBaseline = url.pathname.match(/^\/api\/player\/(\d{9})\/baseline$/);
+    if (playerBaseline) {
+      return {
+        kind: "player-baseline",
+        key: url.pathname,
+        allyCode: playerBaseline[1],
+        ttlMs: TTL.baseline,
+        force,
+      };
+    }
+
+    const playerHistory = url.pathname.match(/^\/api\/player\/(\d{9})\/history$/);
+    if (playerHistory) {
+      return {
+        kind: "player-history",
+        key: stableQueryKey(url),
+        allyCode: playerHistory[1],
+        ttlMs: TTL.history,
+        force,
+      };
+    }
+
     const player = url.pathname.match(/^\/api\/player\/(\d{9})$/);
     if (player) {
       return {
@@ -31,6 +62,28 @@
         key: url.pathname,
         allyCode: player[1],
         ttlMs: TTL.player,
+        force,
+      };
+    }
+
+    const guildBaseline = url.pathname.match(/^\/api\/guild\/by-player\/(\d{9})\/baseline$/);
+    if (guildBaseline) {
+      return {
+        kind: "guild-baseline",
+        key: url.pathname,
+        allyCode: guildBaseline[1],
+        ttlMs: TTL.baseline,
+        force,
+      };
+    }
+
+    const guildHistory = url.pathname.match(/^\/api\/guild\/by-player\/(\d{9})\/history$/);
+    if (guildHistory) {
+      return {
+        kind: "guild-history",
+        key: stableQueryKey(url),
+        allyCode: guildHistory[1],
+        ttlMs: TTL.history,
         force,
       };
     }
@@ -94,28 +147,36 @@
       const fetchedAt = Date.now();
       if (info.kind === "player") {
         if (body?.source !== "live" || !body?.player || !Array.isArray(body?.units)) return;
-        window.__swgohLiveSnapshot = {
-          allyCode: info.allyCode,
-          body,
-          fetchedAt,
-        };
+        window.__swgohLiveSnapshot = { allyCode: info.allyCode, body, fetchedAt };
+        return;
+      }
+      if (info.kind === "player-baseline") {
+        if (!body?.player || !Array.isArray(body?.units) || !Array.isArray(body?.ships)) return;
+        window.__swgohCanonicalPlayerSnapshot = { allyCode: info.allyCode, body, fetchedAt };
+        return;
+      }
+      if (info.kind === "player-history") {
+        if (!body?.player) return;
+        window.__swgohPlayerHistorySnapshot = { allyCode: info.allyCode, body, fetchedAt };
         return;
       }
       if (info.kind === "guild-roster") {
         if (!Array.isArray(body?.members)) return;
-        window.__swgohGuildRosterSnapshot = {
-          allyCode: info.allyCode,
-          body,
-          fetchedAt,
-        };
+        window.__swgohGuildRosterSnapshot = { allyCode: info.allyCode, body, fetchedAt };
+        return;
+      }
+      if (info.kind === "guild-baseline") {
+        if (!Array.isArray(body?.members)) return;
+        window.__swgohCanonicalGuildSnapshot = { allyCode: info.allyCode, body, fetchedAt };
+        return;
+      }
+      if (info.kind === "guild-history") {
+        if (!body?.guild) return;
+        window.__swgohGuildHistorySnapshot = { allyCode: info.allyCode, body, fetchedAt };
         return;
       }
       if (info.kind === "guild") {
-        window.__swgohGuildSnapshot = {
-          allyCode: info.allyCode,
-          body,
-          fetchedAt,
-        };
+        window.__swgohGuildSnapshot = { allyCode: info.allyCode, body, fetchedAt };
         return;
       }
       if (info.kind === "catalog") {
@@ -185,7 +246,7 @@
   window.__swgohRosterFetchCache = {
     clear(allyCode = "") {
       const code = digits(allyCode);
-      if (code.length === 9) cache.delete(`/api/player/${code}`);
+      if (code.length === 9) deleteMatching((key) => key.startsWith(`/api/player/${code}`));
       else deleteMatching((key) => key.startsWith("/api/player/"));
     },
     ttlMs: TTL.player,
@@ -199,17 +260,13 @@
         return;
       }
       if (kind === "player") {
-        if (code.length === 9) cache.delete(`/api/player/${code}`);
+        if (code.length === 9) deleteMatching((key) => key.startsWith(`/api/player/${code}`));
         else deleteMatching((key) => key.startsWith("/api/player/"));
         return;
       }
       if (kind === "guild") {
-        if (code.length === 9) {
-          cache.delete(`/api/guild/by-player/${code}`);
-          cache.delete(`/api/guild/by-player/${code}/roster`);
-        } else {
-          deleteMatching((key) => key.startsWith("/api/guild/by-player/"));
-        }
+        if (code.length === 9) deleteMatching((key) => key.startsWith(`/api/guild/by-player/${code}`));
+        else deleteMatching((key) => key.startsWith("/api/guild/by-player/"));
         return;
       }
       if (kind === "catalog") {
