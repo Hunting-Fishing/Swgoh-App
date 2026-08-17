@@ -12,6 +12,12 @@ function finite(value, fallback = 0) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function nullableFinite(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 function asArray(value) {
   return Array.isArray(value) ? value : [];
 }
@@ -112,9 +118,7 @@ export function createCanonicalRosterService(options = {}) {
     const metadata = asObject(row.metadata);
     const catalogMetadata = asObject(catalog.metadata);
     const unitType = normalizeUnitType(row.combat_type, catalog);
-    const omegaCount = Number.isFinite(Number(metadata.verifiedOmegaUpgradeCount))
-      ? Number(metadata.verifiedOmegaUpgradeCount)
-      : null;
+    const omegaCount = nullableFinite(metadata.verifiedOmegaUpgradeCount);
     return Object.freeze({
       id: clean(metadata.unitId),
       baseId: clean(row.base_id),
@@ -188,6 +192,10 @@ export function createCanonicalRosterService(options = {}) {
     const characters = units.filter((unit) => unit.unitType !== "Ship");
     const ships = units.filter((unit) => unit.unitType === "Ship");
     const lastSyncedAt = clean(player.last_synced_at || snapshot?.captured_at);
+    const zetaCount = nullableFinite(snapshot?.zeta_count);
+    const omicronCount = nullableFinite(snapshot?.omicron_count);
+    const ultimateCount = nullableFinite(snapshot?.ultimate_count);
+    const omegaCount = nullableFinite(snapshot?.omega_upgrade_count);
 
     return Object.freeze({
       source: "canonical",
@@ -218,10 +226,10 @@ export function createCanonicalRosterService(options = {}) {
         relic7Plus: finite(snapshot?.relic_7_plus_count),
         relic9: finite(snapshot?.relic_9_count),
         sevenStarShips: finite(snapshot?.seven_star_ship_count),
-        zetas: Number.isFinite(Number(snapshot?.zeta_count)) ? Number(snapshot.zeta_count) : null,
-        omicrons: Number.isFinite(Number(snapshot?.omicron_count)) ? Number(snapshot.omicron_count) : null,
-        ultimates: Number.isFinite(Number(snapshot?.ultimate_count)) ? Number(snapshot.ultimate_count) : null,
-        omegaUpgrades: Number.isFinite(Number(snapshot?.omega_upgrade_count)) ? Number(snapshot.omega_upgrade_count) : null,
+        zetas: zetaCount,
+        omicrons: omicronCount,
+        ultimates: ultimateCount,
+        omegaUpgrades: omegaCount,
         equippedMods: null,
         sixDotMods: null,
         datacrons: null,
@@ -230,9 +238,9 @@ export function createCanonicalRosterService(options = {}) {
         liveRoster: false,
         persistedFullRoster: true,
         unitGp: true,
-        zetas: Number.isFinite(Number(snapshot?.zeta_count)),
-        omicrons: Number.isFinite(Number(snapshot?.omicron_count)),
-        omegas: Number.isFinite(Number(snapshot?.omega_upgrade_count)),
+        zetas: zetaCount !== null,
+        omicrons: omicronCount !== null,
+        omegas: omegaCount !== null,
         equippedMods: false,
         sixDotMods: false,
         datacrons: false,
@@ -323,10 +331,10 @@ export function createCanonicalRosterService(options = {}) {
         relic9: finite(snapshot.relic_9_count),
         sevenStarShips: finite(snapshot.seven_star_ship_count),
         galacticLegendCount: finite(snapshot.gl_count),
-        zetaCount: Number.isFinite(Number(snapshot.zeta_count)) ? Number(snapshot.zeta_count) : null,
-        omicronCount: Number.isFinite(Number(snapshot.omicron_count)) ? Number(snapshot.omicron_count) : null,
-        ultimateCount: Number.isFinite(Number(snapshot.ultimate_count)) ? Number(snapshot.ultimate_count) : null,
-        omegaUpgradeCount: Number.isFinite(Number(snapshot.omega_upgrade_count)) ? Number(snapshot.omega_upgrade_count) : null,
+        zetaCount: nullableFinite(snapshot.zeta_count),
+        omicronCount: nullableFinite(snapshot.omicron_count),
+        ultimateCount: nullableFinite(snapshot.ultimate_count),
+        omegaUpgradeCount: nullableFinite(snapshot.omega_upgrade_count),
         galacticLegends: Object.freeze([]),
         topUnits: Object.freeze([]),
         units: Object.freeze([]),
@@ -375,10 +383,10 @@ export function createCanonicalRosterService(options = {}) {
         relic7Characters: finite(guildSnapshot?.relic_7_plus_count),
         relic9Characters: finite(guildSnapshot?.relic_9_count),
         sevenStarShips: finite(guildSnapshot?.seven_star_ship_count),
-        zetas: Number.isFinite(Number(guildSnapshot?.zeta_count)) ? Number(guildSnapshot.zeta_count) : null,
-        omicrons: Number.isFinite(Number(guildSnapshot?.omicron_count)) ? Number(guildSnapshot.omicron_count) : null,
-        ultimates: Number.isFinite(Number(guildSnapshot?.ultimate_count)) ? Number(guildSnapshot.ultimate_count) : null,
-        omegaUpgrades: Number.isFinite(Number(guildSnapshot?.omega_upgrade_count)) ? Number(guildSnapshot.omega_upgrade_count) : null,
+        zetas: nullableFinite(guildSnapshot?.zeta_count),
+        omicrons: nullableFinite(guildSnapshot?.omicron_count),
+        ultimates: nullableFinite(guildSnapshot?.ultimate_count),
+        omegaUpgrades: nullableFinite(guildSnapshot?.omega_upgrade_count),
       }),
       persistence: Object.freeze({
         guildId,
