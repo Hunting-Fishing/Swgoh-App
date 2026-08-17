@@ -186,3 +186,135 @@ test("Discord live TB services hydrate the guild and run the real mission-safe O
   assert.equal(calls.filter((url) => url.includes("/v1/guild/by-player/")).length, 1);
   assert.equal(calls.filter((url) => url === "https://example.test/rote.json").length, 1);
 });
+
+test("Discord live ROTE planner consumes durable officer hard reservations as absolute donor exclusions", async () => {
+  const discordGuildId = "987654321098765432";
+  const reservedDiscordUserId = "222222222222222222";
+  const stateStore = {
+    status: () => ({ enabled: true, durable: true }),
+    readGuild: async (requestedGuildId) => {
+      assert.equal(requestedGuildId, discordGuildId);
+      return {
+        discordGuildId,
+        swgohAllyCode: "999888777",
+        userLinks: {
+          [reservedDiscordUserId]: {
+            discordUserId: reservedDiscordUserId,
+            swgohAllyCode: "999888777",
+            playerId: "player-1",
+          },
+        },
+        memberPreferences: {},
+        memberAvailability: {},
+      };
+    },
+  };
+  const reservationStore = {
+    status: () => ({ enabled: true, durable: true }),
+    readGuild: async (requestedGuildId) => {
+      assert.equal(requestedGuildId, discordGuildId);
+      return {
+        discordGuildId,
+        reservations: {
+          reserve: {
+            discordUserId: reservedDiscordUserId,
+            memberId: "player-1",
+            playerId: "player-1",
+            swgohAllyCode: "999888777",
+            phase: "P1",
+            baseId: "DISCORD_TEST_UNIT",
+            unitName: "Discord Test Unit",
+            reserved: true,
+          },
+        },
+      };
+    },
+  };
+  const guildRosterService = {
+    getGuildRoster: async (allyCode) => {
+      assert.equal(allyCode, "999888777");
+      return {
+        cache: "fresh",
+        ageMs: 100,
+        value: {
+          source: "live",
+          guild: { id: "guild-test", name: "Discord Test Guild", galacticPower: 20_000_000 },
+          members: [
+            {
+              playerId: "player-1",
+              allyCode: "999888777",
+              name: "Reserved Owner",
+              galacticPower: 10_000_000,
+              rosterAvailable: true,
+              units: [{ baseId: "DISCORD_TEST_UNIT", name: "Discord Test Unit", unitType: "Character", stars: 7, gear: 13, relic: 9, power: 35_000 }],
+            },
+            {
+              playerId: "player-2",
+              allyCode: "111222333",
+              name: "Safe Alternate",
+              galacticPower: 9_000_000,
+              rosterAvailable: true,
+              units: [{ baseId: "DISCORD_TEST_UNIT", name: "Discord Test Unit", unitType: "Character", stars: 7, gear: 13, relic: 7, power: 32_000 }],
+            },
+          ],
+        },
+      };
+    },
+  };
+  const fetchImpl = async (url) => {
+    if (String(url) === "https://example.test/rote.json") {
+      return jsonResponse([{
+        id: "phase-1-test",
+        phase: "P1",
+        squads: [{
+          id: "operation-1",
+          units: [{ baseId: "DISCORD_TEST_UNIT", nameKey: "Discord Test Unit", combatType: 1, unitRelicTier: 5, rarity: 7 }],
+        }],
+      }]);
+    }
+    throw new Error(`Unexpected test fetch: ${url}`);
+  };
+
+  const services = createDiscordTbLiveServices({
+    SWGOH_ROTE_OPERATIONS_URL: "https://example.test/rote.json",
+    SWGOH_ROTE_CACHE_SECONDS: "600",
+  }, { fetch: fetchImpl, stateStore, reservationStore, guildRosterService });
+
+  const result = await services.buildPlan({
+    allyCode: "000000000",
+    interaction: { guild_id: discordGuildId },
+    redundancyTarget: 2,
+  });
+
+  assert.equal(result.guildBindingSource, "durable-guild-binding");
+  assert.equal(result.planningControls.hardReservationCount, 1);
+  assert.equal(result.plan.controls.reservations, 1);
+  assert.equal(result.plan.assignedSlots, 1);
+  assert.equal(result.plan.assignments[0].member.playerId, "player-2");
+  assert.equal(result.plan.assignments[0].member.name, "Safe Alternate");
+  assert.equal(result.plan.assignments[0].baseId, "DISCORD_TEST_UNIT");
+});
+
+test("Discord live ROTE planner fails closed when configured hard-reservation storage becomes unreadable", async () => {
+  const discordGuildId = "987654321098765432";
+  const services = createDiscordTbLiveServices({
+    SWGOH_ROTE_OPERATIONS_URL: "https://example.test/rote.json",
+  }, {
+    stateStore: {
+      status: () => ({ enabled: true, durable: true }),
+      readGuild: async () => ({ discordGuildId, swgohAllyCode: "999888777", userLinks: {}, memberPreferences: {}, memberAvailability: {} }),
+    },
+    reservationStore: {
+      status: () => ({ enabled: true, durable: true }),
+      readGuild: async () => { throw new Error("volume read failed"); },
+    },
+    guildRosterService: {
+      getGuildRoster: async () => { throw new Error("planner must fail before roster fetch"); },
+    },
+  });
+
+  await assert.rejects(
+    () => services.buildPlan({ allyCode: "999888777", interaction: { guild_id: discordGuildId } }),
+    (error) => error?.code === "DISCORD_HARD_RESERVATIONS_READ_FAILED" && /refusing to build a plan/.test(error.message),
+  );
+});
