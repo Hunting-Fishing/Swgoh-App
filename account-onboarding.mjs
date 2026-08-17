@@ -1,3 +1,4 @@
+import { discordStateStore } from './discord-state-store.mjs';
 import { guildRosterService } from './guild-roster-service.mjs';
 import { playerVerification } from './player-verification.mjs';
 import { supabaseAuthSession } from './supabase-auth-session.mjs';
@@ -17,6 +18,11 @@ function finite(value, fallback = 0) {
 function allyCode(value) {
   const digits = clean(value).replace(/\D/g, '');
   return /^\d{9}$/.test(digits) ? digits : '';
+}
+
+function discordSnowflake(value) {
+  const text = clean(value);
+  return /^\d{16,22}$/.test(text) ? text : '';
 }
 
 function asArray(value) {
@@ -134,6 +140,8 @@ export function createAccountOnboarding(options = {}) {
   const session = options.session || supabaseAuthSession;
   const store = options.store || supabaseCoreStore;
   const guildService = options.guildService || guildRosterService;
+  const stateStore = options.discordStateStore || discordStateStore;
+  const pilotDiscordGuildId = discordSnowflake(options.discordGuildId || process.env.DISCORD_DEFAULT_GUILD_ID);
   const now = typeof options.now === 'function' ? options.now : () => new Date();
 
   async function requireUser(request) {
@@ -142,8 +150,46 @@ export function createAccountOnboarding(options = {}) {
     return user;
   }
 
-  async function requestPlayerLink(user, lookupAllyCode) {
+  async function resolveDiscordPlayerLink(user) {
+    if (!user?.id || !store.status().configured || !pilotDiscordGuildId) return null;
+    if (typeof stateStore?.status !== 'function' || typeof stateStore?.readGuild !== 'function') return null;
+    const stateStatus = stateStore.status();
+    if (!stateStatus?.enabled || !stateStatus?.durable) return null;
+
+    const identity = await selectOne(store, 'user_social_identities', {
+      select: 'provider,provider_user_id,display_name,last_seen_at',
+      user_id: `eq.${user.id}`,
+      provider: 'eq.discord',
+      order: 'last_seen_at.desc',
+    });
+    const discordUserId = discordSnowflake(identity?.provider_user_id);
+    if (!discordUserId) return null;
+
+    let guildState;
+    try {
+      guildState = await stateStore.readGuild(pilotDiscordGuildId);
+    } catch {
+      return null;
+    }
+    const link = guildState?.userLinks?.[discordUserId];
+    const linkedAllyCode = allyCode(link?.swgohAllyCode);
+    if (!linkedAllyCode) return null;
+
+    return Object.freeze({
+      source: 'discord-bot-link',
+      discordGuildId: pilotDiscordGuildId,
+      discordUserId,
+      discordDisplayName: clean(identity?.display_name),
+      allyCode: linkedAllyCode,
+      playerId: clean(link?.playerId),
+      linkedAt: clean(link?.linkedAt),
+      updatedAt: clean(link?.updatedAt),
+    });
+  }
+
+  async function requestPlayerLink(user, lookupAllyCode, requestOptions = {}) {
     if (!store.status().configured) throw httpError('Command Center persistence is not configured.', 503, 'PERSISTENCE_NOT_CONFIGURED');
+    const verificationMethod = clean(requestOptions.verificationMethod) === 'discord' ? 'discord' : 'manual';
 
     const existingForUser = asArray(await store.select('user_player_links', {
       select: 'player_id,verification_status',
@@ -218,7 +264,7 @@ export function createAccountOnboarding(options = {}) {
       player_id: playerRow.id,
       is_primary: true,
       verification_status: 'pending',
-      verification_method: 'manual',
+      verification_method: verificationMethod,
       verified_at: null,
       updated_at: timestamp,
     }], { onConflict: 'user_id,player_id', returning: false });
@@ -245,9 +291,18 @@ export function createAccountOnboarding(options = {}) {
       status: 'pending',
       player: playerRow,
       guild: guildRow,
-      verificationMethod: 'manual',
+      verificationMethod,
       rosterAvailable: Boolean(member.rosterAvailable),
     });
+  }
+
+  async function requestDiscordPlayerLink(user) {
+    const discovered = await resolveDiscordPlayerLink(user);
+    if (!discovered) {
+      throw httpError('No SWGOH player link was found for this signed-in Discord account. Use /tb link in the configured Discord server or enter the Ally Code manually.', 404, 'DISCORD_PLAYER_LINK_NOT_FOUND');
+    }
+    const result = await requestPlayerLink(user, discovered.allyCode, { verificationMethod: 'discord' });
+    return Object.freeze({ ...result, discovery: discovered });
   }
 
   async function handle(request, response, url) {
@@ -259,7 +314,14 @@ export function createAccountOnboarding(options = {}) {
       const user = await requireUser(request);
 
       if (request.method === 'GET' && url.pathname === '/api/account/status') {
-        writeJson(response, 200, { user: { id: user.id, email: user.email || '' }, ...(await userStatus(store, user.id)) });
+        const status = await userStatus(store, user.id);
+        const hasActiveClaim = status.playerLinks.some((row) => row?.verification_status !== 'rejected');
+        const discordPlayerLink = hasActiveClaim ? null : await resolveDiscordPlayerLink(user);
+        writeJson(response, 200, {
+          user: { id: user.id, email: user.email || '' },
+          ...status,
+          discordPlayerLink,
+        });
         return true;
       }
 
@@ -268,7 +330,14 @@ export function createAccountOnboarding(options = {}) {
         const body = await readJsonBody(request);
         const lookupAllyCode = allyCode(body?.allyCode);
         if (!lookupAllyCode) throw httpError('A valid 9-digit Ally Code is required.', 400, 'INVALID_ALLY_CODE');
-        const result = await requestPlayerLink(user, lookupAllyCode);
+        const result = await requestPlayerLink(user, lookupAllyCode, { verificationMethod: 'manual' });
+        writeJson(response, result.status === 'verified' ? 200 : 202, result);
+        return true;
+      }
+
+      if (request.method === 'POST' && url.pathname === '/api/account/link-player/discord') {
+        assertSameOrigin(request);
+        const result = await requestDiscordPlayerLink(user);
         writeJson(response, result.status === 'verified' ? 200 : 202, result);
         return true;
       }
@@ -281,7 +350,7 @@ export function createAccountOnboarding(options = {}) {
     }
   }
 
-  return Object.freeze({ handle, requestPlayerLink, userStatus });
+  return Object.freeze({ handle, requestPlayerLink, requestDiscordPlayerLink, resolveDiscordPlayerLink, userStatus });
 }
 
 export const accountOnboarding = createAccountOnboarding();
