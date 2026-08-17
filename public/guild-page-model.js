@@ -35,6 +35,10 @@ function suppliedNumber(value, fallback = 0) {
   return value !== null && value !== undefined && value !== "" && Number.isFinite(Number(value)) ? Number(value) : fallback;
 }
 
+function nullableNumber(value) {
+  return value !== null && value !== undefined && value !== "" && Number.isFinite(Number(value)) ? Number(value) : null;
+}
+
 export function buildGuildCatalogIndex(catalog = []) {
   return new Map(asArray(catalog).filter((row) => row?.baseId).map((row) => [String(row.baseId), row]));
 }
@@ -67,6 +71,11 @@ export function enrichGuildMember(member = {}, catalogIndex = new Map(), index =
   const galacticLegends = hasDetailedUnits ? derivedGalacticLegends : asArray(member.galacticLegends);
   const derivedTopUnits = units.slice().sort((a, b) => finite(b.power, 0) - finite(a.power, 0) || a.name.localeCompare(b.name)).slice(0, 8);
   const topUnits = hasDetailedUnits ? derivedTopUnits : asArray(member.topUnits);
+  const derivedZetaCount = hasDetailedUnits ? units.reduce((sum, row) => sum + finite(row.zetas, 0), 0) : null;
+  const derivedOmicronCount = hasDetailedUnits ? units.reduce((sum, row) => sum + finite(row.omicrons, 0), 0) : null;
+  const derivedUltimateCount = hasDetailedUnits ? units.filter((row) => row.ultimateUnlocked === true).length : null;
+  const omegaEvidenceComplete = hasDetailedUnits && units.every((row) => nullableNumber(row.omegas) !== null);
+  const derivedOmegaCount = omegaEvidenceComplete ? units.reduce((sum, row) => sum + finite(row.omegas, 0), 0) : null;
 
   return Object.freeze({
     id: memberId(member, index),
@@ -86,10 +95,10 @@ export function enrichGuildMember(member = {}, catalogIndex = new Map(), index =
     relic9: hasDetailedUnits ? characters.filter((row) => finite(row.relic, 0) >= 9).length : suppliedNumber(member.relic9, 0),
     sevenStarShips: hasDetailedUnits ? ships.filter((row) => finite(row.stars, 0) >= 7).length : suppliedNumber(member.sevenStarShips, 0),
     galacticLegendCount: hasDetailedUnits ? galacticLegends.length : suppliedNumber(member.galacticLegendCount, galacticLegends.length),
-    zetaCount: member.zetaCount == null ? null : suppliedNumber(member.zetaCount, 0),
-    omicronCount: member.omicronCount == null ? null : suppliedNumber(member.omicronCount, 0),
-    ultimateCount: member.ultimateCount == null ? null : suppliedNumber(member.ultimateCount, 0),
-    omegaUpgradeCount: member.omegaUpgradeCount == null ? null : suppliedNumber(member.omegaUpgradeCount, 0),
+    zetaCount: member.zetaCount == null ? derivedZetaCount : suppliedNumber(member.zetaCount, 0),
+    omicronCount: member.omicronCount == null ? derivedOmicronCount : suppliedNumber(member.omicronCount, 0),
+    ultimateCount: member.ultimateCount == null ? derivedUltimateCount : suppliedNumber(member.ultimateCount, 0),
+    omegaUpgradeCount: member.omegaUpgradeCount == null ? derivedOmegaCount : suppliedNumber(member.omegaUpgradeCount, 0),
     galacticLegends: Object.freeze(galacticLegends.map((row) => Object.freeze({
       baseId: row.baseId,
       name: row.name,
@@ -125,6 +134,8 @@ export function buildGuildRosterSnapshot(guildBody = {}, catalog = []) {
   const totalZetas = hydrated.reduce((sum, row) => sum + finite(row.zetaCount, 0), 0);
   const totalOmicrons = hydrated.reduce((sum, row) => sum + finite(row.omicronCount, 0), 0);
   const totalUltimates = hydrated.reduce((sum, row) => sum + finite(row.ultimateCount, 0), 0);
+  const omegaComplete = hydrated.length > 0 && hydrated.every((row) => row.omegaUpgradeCount !== null);
+  const totalOmegaUpgrades = omegaComplete ? hydrated.reduce((sum, row) => sum + finite(row.omegaUpgradeCount, 0), 0) : null;
 
   return Object.freeze({
     source: text(guildBody.source || "live"),
@@ -161,7 +172,7 @@ export function buildGuildRosterSnapshot(guildBody = {}, catalog = []) {
       zetas: suppliedSummary.zetas == null ? totalZetas : suppliedNumber(suppliedSummary.zetas, totalZetas),
       omicrons: suppliedSummary.omicrons == null ? totalOmicrons : suppliedNumber(suppliedSummary.omicrons, totalOmicrons),
       ultimates: suppliedSummary.ultimates == null ? totalUltimates : suppliedNumber(suppliedSummary.ultimates, totalUltimates),
-      omegaUpgrades: suppliedSummary.omegaUpgrades == null ? null : suppliedNumber(suppliedSummary.omegaUpgrades, 0),
+      omegaUpgrades: suppliedSummary.omegaUpgrades == null ? totalOmegaUpgrades : suppliedNumber(suppliedSummary.omegaUpgrades, totalOmegaUpgrades),
     }),
   });
 }
