@@ -154,6 +154,65 @@ function historyHtml(model) {
     <div class="guild-change-list">${rows}</div>`;
 }
 
+function developmentRankDetail(row = {}) {
+  const band = row.band === "lower-quartile" ? "Lower quartile" : "Lower half";
+  return `${rankLabel(row)} · ${band}`;
+}
+
+function developmentHtml(model) {
+  const development = model.development || {};
+  const roteGaps = Array.isArray(development.roteGaps) ? development.roteGaps : [];
+  const rankSignals = Array.isArray(development.guildRankSignals) ? development.guildRankSignals : [];
+  const momentum = Array.isArray(development.recentMomentum) ? development.recentMomentum : [];
+  if (!development.hasEvidence) {
+    return '<div class="workspace-note">No evidence-backed development signals are available yet. Refresh the persisted baseline after more roster history is captured.</div>';
+  }
+
+  const roteRows = roteGaps.length ? roteGaps.slice(0, 5).map((row) => `
+    <div class="guild-change ${row.owned ? "gp" : "left"}">
+      <strong><button type="button" class="pro-unit-link" data-inspect-base-id="${escapeAttr(row.baseId)}">${escapeHtml(row.name || row.baseId)}</button></strong>
+      <span>${escapeHtml(gapLabel(row))}</span>
+      <small>ROTE evidence · ${number(row.requiredCount)} Operation slot${Number(row.requiredCount) === 1 ? "" : "s"} demand</small>
+    </div>`).join("") : '<div class="workspace-note">No current ROTE requirement gaps.</div>';
+
+  const rankRows = rankSignals.length ? rankSignals.slice(0, 5).map((row) => `
+    <div class="guild-change warning">
+      <strong>${escapeHtml(row.label)}</strong>
+      <span>${escapeHtml(developmentRankDetail(row))}</span>
+      <small>Guild-relative evidence · current value ${nullableNumber(row.value)} · not a universal score</small>
+    </div>`).join("") : '<div class="workspace-note">No lower-half Guild-relative development signals.</div>';
+
+  const momentumRows = momentum.length ? momentum.slice(0, 5).map((row) => `
+    <div class="guild-change gp">
+      <strong>${escapeHtml((row.evidence || []).join(" · ") || "Progression")}</strong>
+      <span>${row.baseId ? `<button type="button" class="pro-unit-link" data-inspect-base-id="${escapeAttr(row.baseId)}">${escapeHtml(row.unitName || row.baseId)}</button>` : escapeHtml(row.unitName || "Roster")}</span>
+      <small>Verified progression evidence · ${escapeHtml(formatTime(row.changedAt))}</small>
+    </div>`).join("") : '<div class="workspace-note">No recent verified progression events in the current history window.</div>';
+
+  return `
+    <div class="pro-summary-grid">
+      ${stat("ROTE Priorities", number(roteGaps.length), "Direct requirement gaps")}
+      ${stat("Guild Rank Signals", number(rankSignals.length), "Lower-half evidence only")}
+      ${stat("Recent Momentum", number(momentum.length), "Verified progression events")}
+    </div>
+    <div class="guild-page-two-col">
+      <div>
+        <div class="kicker">MISSION VALUE</div>
+        <h3>ROTE next upgrades</h3>
+        <p class="workspace-note">Direct progression gaps tied to current Operation demand.</p>
+        <div class="guild-change-list">${roteRows}</div>
+      </div>
+      <div>
+        <div class="kicker">ROSTER BALANCE</div>
+        <h3>Guild-relative pressure</h3>
+        <p class="workspace-note">Only known lower-half dimensions are shown. These are comparison signals, not prescriptions.</p>
+        <div class="guild-change-list">${rankRows}</div>
+      </div>
+    </div>
+    <div class="section-heading"><div><div class="kicker">MOMENTUM</div><h3>What you are already advancing</h3><p class="workspace-note">Recent verified progression stays separate from future priorities so activity is not mistaken for strategic value.</p></div></div>
+    <div class="guild-change-list">${momentumRows}</div>`;
+}
+
 function render() {
   const panel = $("playerCommandDashboard");
   if (!panel) return;
@@ -183,6 +242,7 @@ function render() {
       </div>
     </div>
     ${rosterHtml(model)}
+    <section class="guild-page-card"><div class="kicker">DEVELOPMENT COMMAND</div><h3>Evidence-backed next moves</h3><p class="workspace-note">Three independent signals: mission value, Guild-relative roster pressure, and verified recent momentum.</p>${developmentHtml(model)}</section>
     <div class="guild-page-two-col">
       <section class="guild-page-card"><div class="kicker">GUILD RELATIVE</div><h3>Rank inside current 50-member baseline</h3>${ranksHtml(model)}</section>
       <section class="guild-page-card"><div class="kicker">ROTE PRESSURE</div><h3>Operations requirement coverage</h3>${roteHtml(model)}</section>
