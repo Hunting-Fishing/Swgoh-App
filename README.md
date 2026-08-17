@@ -1,51 +1,98 @@
-# SWGOH Roster Command
+# SWGOH Command Center
 
-Live-only Star Wars: Galaxy of Heroes roster and guild operations management app.
+Production Star Wars: Galaxy of Heroes roster, Guild intelligence and Territory Battle operations platform.
 
-Production roster data comes from the SWGOH Live Gateway backed by Comlink + SWGOH Stats, with AE2 used for live character and ship artwork when available. No mock roster or fallback player data is permitted in production.
+The application uses a **canonical-first, live-enrichment** data model. Complete current Guild/player baselines and history are persisted in Supabase, while the SWGOH Live Gateway backed by Comlink supplies explicit refreshes and fields that are only trustworthy from live data. Versioned game data supplies the shared unit/ability/ROTE catalog. No mock roster or silent fake-zero fallback is permitted in production.
 
-## Live architecture
+## Production architecture
 
 ```text
-Browser / ChatGPT Site
+Browser / Command Center
         |
+        | canonical reads
+        | GET /api/player/:allyCode/baseline
+        | GET /api/guild/by-player/:allyCode/baseline
+        | GET /api/player/:allyCode/history
+        | GET /api/guild/by-player/:allyCode/history
+        v
+SWGOH Command Center server
+        |
+        +--> Supabase canonical players / Guilds / snapshots / history
+        |
+        | explicit live enrichment / refresh
         | GET /api/player/:allyCode
-        | GET /api/guild/by-player/:allyCode/roster
-        | GET /api/rote/operations
+        | GET /api/guild/by-player/:allyCode/roster?refresh=1
         v
-SWGOH Roster Command server
+SWGOH Live Gateway
         |
-        | HTTPS + X-API-Key
-        v
-https://swgoh-live-gateway-production.up.railway.app
-        |
-        +--> Comlink (Railway private network, port 3000)
-        +--> SWGOH Stats (Railway private network, port 3223)
-        +--> AE2 (Railway private network, port 8080)
+        +--> Comlink
+        +--> SWGOH Stats where applicable
+        +--> AE2 artwork where available
+
+Versioned SWGOH game data
+        +--> units / skills / recipes / ROTE Operations / static art metadata
 ```
 
-The browser never receives `SWGOH_GATEWAY_API_KEY`. The Node server injects the key when it calls the live gateway.
-
-Guild ROTE uses a separate cached path. The gateway resolves the initiating player's guild, retrieves the public `/guild` member list, then hydrates member rosters by `playerId` with bounded concurrency. Only public progression needed for ROTE eligibility is returned for guild members: Base ID, stars, gear and relic level. The initiating player's raw Comlink response is reused instead of being fetched twice.
+The browser never receives `SWGOH_GATEWAY_API_KEY`; the Node service injects the secret when it calls the live gateway.
 
 ## Data authority rules
 
-- Comlink `/player` is authoritative for live player/account fields, including reported total, character and ship GP when present.
-- Comlink `/guild` is authoritative for the current public guild profile and member list.
-- SWGOH Stats enriches calculated per-unit statistics for individual player views. Guild ROTE hydration intentionally does not run SWGOH Stats for every member because ROTE Operation eligibility only needs public progression fields.
-- Versioned SWGOH game data supplies shared unit, skill, recipe, ROTE Operation requirements and static portrait metadata.
-- AE2 supplies live extracted artwork when available; the versioned static portrait remains the image fallback.
-- Unavailable account-private inventory must never be represented as a fake zero balance.
+- Canonical Supabase current tables are the normal read path for full current player rosters and full current Guild membership.
+- Canonical player reads fail closed if the persisted owned-unit count does not match the latest snapshot expectation.
+- Canonical Guild reads fail closed if current membership cannot be returned completely.
+- Comlink `/player` is authoritative for explicit live player/account refreshes.
+- Comlink `/guild` is authoritative for explicit current public Guild refreshes.
+- SWGOH Stats may enrich calculated per-unit statistics where the workflow requires them.
+- Versioned SWGOH game data supplies shared unit, skill, recipe and ROTE Operation definitions.
+- AE2 supplies extracted artwork when available; versioned static art remains the fallback.
+- Persisted capability flags define whether optional progression evidence is actually known.
+- Unknown Zeta/Omicron/Omega-Eta/mod/datacron/account-private evidence remains `NULL`, `N/A` or `—`; it must never be converted into a fake `0`.
+- Materials, currency balances, unequipped gear and other account-private inventory are not claimed unless an authoritative source exposes them.
 
-`GET /api/player/:allyCode` therefore includes a `capabilities` object describing which optional data classes are actually available. Current public-player limitations include materials, currency balances, unequipped gear and unequipped mods.
+## Player and Guild semantics
+
+The application distinguishes transport pagination from logical product results:
+
+- Guild views mean **all current Guild members**, not one backend page.
+- Player roster views mean **all currently owned units**, not one backend page.
+- The pilot invariant for Warm Bacon is **394 owned units = 325 characters + 69 ships**.
+- The pilot Ludus Venatus Guild baseline contains **50 current members**.
+
+Live-only fields can promote a canonical view to the live Comlink path without changing those logical completeness guarantees.
+
+## Discord TB pilot
+
+The server also exposes signed Discord interactions for the Guild-scoped `/tb` pilot. Current code supports:
+
+```text
+/tb status
+/tb setup [channel] [officer_role]
+/tb sync
+/tb activity
+/tb controls [member]
+/tb phase phase:P1..P6
+/tb assignments [phase:P1..P6]
+/tb farms [phase:P1..P6]
+/tb link member:<Discord user> ally_code:<9-digit code>
+/tb unlink member:<Discord user>
+/tb links
+/tb me
+/tb preference unit:<search/autocomplete> preference:<GIVE|DEFAULT|KEEP> [member]
+/tb preferences [member]
+/tb availability [member] [state:<AVAILABLE|UNAVAILABLE>]
+```
+
+Member availability and GIVE/KEEP controls are durably persisted during the pilot and consumed by the mission-safe ROTE planner. Public assignment publishing and member DMs remain disabled until immutable-plan approval and delivery safeguards are implemented.
+
+See `docs/DISCORD_BOT_PILOT_RUNBOOK.md` for the authoritative deployment/acceptance checkpoint.
 
 ## App environment
 
-Copy `.env.example` into your deployment environment and set the shared gateway URL/key. Guild requests have a longer cold timeout and a separate cache policy from single-player roster requests.
+Core live-gateway variables:
 
 ```text
 SWGOH_GATEWAY_URL=https://swgoh-live-gateway-production.up.railway.app
-SWGOH_GATEWAY_API_KEY=<same secret as Railway SWGOH-Live-Gateway GATEWAY_API_KEY>
+SWGOH_GATEWAY_API_KEY=<shared secret>
 SWGOH_REQUEST_TIMEOUT_MS=35000
 SWGOH_GUILD_REQUEST_TIMEOUT_MS=120000
 SWGOH_CACHE_FRESH_SECONDS=90
@@ -54,6 +101,8 @@ SWGOH_GUILD_CACHE_FRESH_SECONDS=600
 SWGOH_GUILD_CACHE_STALE_SECONDS=1800
 SWGOH_ROTE_CACHE_SECONDS=21600
 ```
+
+Canonical persistence, authentication, Discord and history services require their corresponding Supabase/Discord/Railway variables documented in `.env.example` and the pilot runbook.
 
 ## Railway gateway environment
 
@@ -67,14 +116,19 @@ GATEWAY_API_KEY=<long random secret>
 PUBLIC_BASE_URL=https://swgoh-live-gateway-production.up.railway.app
 ```
 
-If Comlink access/secret keys are enabled, also set `COMLINK_ACCESS_KEY` and `COMLINK_SECRET_KEY` on the gateway to the matching values.
+If Comlink access/secret keys are enabled, also set `COMLINK_ACCESS_KEY` and `COMLINK_SECRET_KEY` on the gateway to matching values.
 
-## Routes
+## Key routes
 
-- `GET /api/health` checks the public live gateway health endpoint and reports roster/guild/ROTE cache policies.
-- `GET /api/player/:allyCode` securely proxies and normalizes a live individual roster request without exposing the gateway secret to the browser.
-- `GET /api/guild/by-player/:allyCode/roster` returns the cached compact public guild roster used by Guild ROTE Operations.
-- `GET /api/rote/operations` returns the cached, normalized current ROTE Operation requirements and exact slot definitions from versioned game data.
+- `GET /api/health` — Command Center health/capability status.
+- `GET /api/player/:allyCode/baseline` — canonical full owned-player roster.
+- `GET /api/player/:allyCode` — explicit live individual-roster enrichment.
+- `GET /api/player/:allyCode/history` — persisted player snapshots/progression history.
+- `GET /api/guild/by-player/:allyCode/baseline` — canonical current Guild baseline.
+- `GET /api/guild/by-player/:allyCode/roster` — Guild roster path with canonical/live fallback semantics; explicit refresh promotes to live.
+- `GET /api/guild/by-player/:allyCode/history` — persisted Guild history.
+- `GET /api/rote/operations` — normalized current ROTE Operation requirements and exact slot definitions.
+- `POST /api/discord/interactions` — signed Discord application interaction endpoint.
 - Static client files live in `public/`.
 
 ## Start
