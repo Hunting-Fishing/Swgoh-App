@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { ROTE_FLEET_ENTRY_AUDIT, ROTE_FLEET_ENTRY_AUDIT_COUNT } from "../public/rote-fleet-entry-audit-data.js";
 import { ROTE_MISSIONS_BY_PLANET } from "../public/rote-mission-data.js";
 import { normalizeRoteMissions } from "../public/rote-mission-overrides.js";
 import { rosterUnitMeetsEntry } from "../public/tb-mission-intelligence.js";
@@ -19,6 +20,53 @@ for (const staleId of staleAliases) {
 }
 for (const canonicalId of canonicalIds) {
   assert.ok(mandatoryIds(missions).includes(canonicalId), `Normalized ROTE mission catalog is missing canonical baseId ${canonicalId}`);
+}
+
+const fleetMissions = missions.filter((mission) => mission.missionType === "fleet");
+assert.equal(ROTE_FLEET_ENTRY_AUDIT_COUNT, 17, "ROTE fleet-entry audit must remain complete for all 17 fleet missions");
+assert.equal(fleetMissions.length, 17, "Normalized ROTE catalog must expose exactly 17 fleet missions");
+assert.deepEqual(
+  fleetMissions.map((mission) => mission.id).sort(),
+  Object.keys(ROTE_FLEET_ENTRY_AUDIT).sort(),
+  "Fleet-entry audit IDs must exactly match the canonical ROTE fleet mission IDs",
+);
+
+for (const mission of fleetMissions) {
+  const audit = ROTE_FLEET_ENTRY_AUDIT[mission.id];
+  assert.ok(audit, `${mission.id} is missing its audited entry contract`);
+  assert.equal(mission.entry?.verified, true, `${mission.id} must remain verified`);
+  assert.equal(mission.entry?.unitType, "Ship", `${mission.id} must remain a ship mission`);
+  assert.equal(mission.entry?.starsMin, 7, `${mission.id} must remain a 7-star fleet gate`);
+  assert.deepEqual(mission.entry?.allowedAlignments || [], [...audit.allowedAlignments], `${mission.id} alignment gate drifted`);
+  assert.deepEqual(
+    (mission.entry?.mandatoryMembers || []).map((member) => member.baseId),
+    audit.mandatoryMembers.map((member) => member.baseId),
+    `${mission.id} mandatory ship requirement drifted`,
+  );
+  assert.ok(mission.sources?.includes("swgoh-wiki-rote-zones"), `${mission.id} lost the ROTE zone-reference provenance`);
+  assert.ok(mission.sources?.includes("genskaar-rote"), `${mission.id} lost the GenSkaar provenance`);
+  assert.match(String(mission.entry?.notes || ""), /^Audited fleet entry:/, `${mission.id} must expose its audited source requirement`);
+
+  const sevenStar = (alignment) => ({
+    baseId: `VALIDATION_${alignment.toUpperCase()}`,
+    name: `${alignment} validation ship`,
+    unitType: "Ship",
+    stars: 7,
+    alignment,
+    factions: [],
+    categories: [],
+  });
+  const sixStar = { ...sevenStar(audit.allowedAlignments[0] || "Light"), stars: 6 };
+  assert.equal(rosterUnitMeetsEntry(sixStar, mission), false, `${mission.id} must reject ships below 7 stars`);
+
+  for (const alignment of ["Light", "Dark", "Neutral"]) {
+    const expected = audit.allowedAlignments.includes(alignment);
+    assert.equal(
+      rosterUnitMeetsEntry(sevenStar(alignment), mission),
+      expected,
+      `${mission.id} ${alignment} ship eligibility must match the audited side gate`,
+    );
+  }
 }
 
 const unlock = missionById("tatooine-mandalore-unlock");
@@ -78,4 +126,4 @@ const hothAphra = missionById("hoth-aphra");
 assert.ok(hothAphra, "Hoth Aphra mission missing");
 assert.deepEqual(hothAphra.entry.mandatoryMembers.map((row) => row.baseId), ["DOCTORAPHRA", "BT1", "TRIPLEZERO"]);
 
-console.log("[rote-entry-contract] validated official Krayt gate plus canonical BKM/BAM, DTMG, L3-37 and 0-0-0 IDs across raw and normalized ROTE mission data");
+console.log(`[rote-entry-contract] validated all ${ROTE_FLEET_ENTRY_AUDIT_COUNT} audited fleet gates plus official Krayt and canonical named-unit IDs across normalized ROTE mission data`);
