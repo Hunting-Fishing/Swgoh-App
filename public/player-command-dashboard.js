@@ -177,7 +177,8 @@ function render() {
         <div class="pro-preset-row">
           <button id="playerCommandOpenRoster" type="button">Open Full Roster</button>
           <button id="playerCommandOpenRote" type="button">ROTE Required Units</button>
-          <button id="playerCommandRefresh" type="button">Refresh Baseline</button>
+          <button id="playerCommandRefresh" type="button">Refresh Persisted</button>
+          <button id="playerCommandLive" type="button">Refresh Live Detail</button>
         </div>
       </div>
     </div>
@@ -190,8 +191,14 @@ function render() {
     <div class="guild-member-evidence"><strong>Metric boundary:</strong> GP rank, roster depth, ROTE requirement coverage and progression history remain separate evidence streams. The Command Center does not collapse them into a fabricated universal player score.</div>`;
 
   $("playerCommandRefresh")?.addEventListener("click", () => load(true));
+  $("playerCommandLive")?.addEventListener("click", refreshLiveDetail);
   $("playerCommandOpenRoster")?.addEventListener("click", () => openRoster(false));
   $("playerCommandOpenRote")?.addEventListener("click", () => openRoster(true));
+}
+
+function refreshLiveDetail() {
+  const form = $("allyForm");
+  if (form?.requestSubmit) form.requestSubmit();
 }
 
 function openRoster(roteOnly) {
