@@ -1,3 +1,5 @@
+import "./guild-history-router.js";
+
 let snapshot = null;
 
 const number = (value) => value === null || value === undefined || !Number.isFinite(Number(value))

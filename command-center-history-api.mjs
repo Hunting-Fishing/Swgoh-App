@@ -1,4 +1,5 @@
 import { commandCenterHistoryService } from "./command-center-history-service.mjs";
+import { guildHistoryArchiveService } from "./guild-history-archive-service.mjs";
 import { guildIntelligenceService } from "./guild-intelligence-service.mjs";
 
 function positiveLimit(value, fallback, max) {
@@ -15,9 +16,14 @@ function writeJson(response, status, body) {
   response.end(JSON.stringify(body));
 }
 
+function safeStatus(error) {
+  return [400, 404, 503].includes(error?.status) ? error.status : 502;
+}
+
 export function createCommandCenterHistoryApi(options = {}) {
   const service = options.service || commandCenterHistoryService;
   const intelligence = options.intelligence || guildIntelligenceService;
+  const archive = options.archive || guildHistoryArchiveService;
 
   async function handle(request, response, url) {
     if (request.method !== "GET") return false;
@@ -31,9 +37,7 @@ export function createCommandCenterHistoryApi(options = {}) {
         });
         writeJson(response, 200, body);
       } catch (error) {
-        writeJson(response, [400, 404, 503].includes(error?.status) ? error.status : 502, {
-          error: error?.message || "Player history is unavailable.",
-        });
+        writeJson(response, safeStatus(error), { error: error?.message || "Player history is unavailable." });
       }
       return true;
     }
@@ -44,9 +48,27 @@ export function createCommandCenterHistoryApi(options = {}) {
         const body = await intelligence.getByPlayer(intelligenceMatch[1]);
         writeJson(response, 200, body);
       } catch (error) {
-        writeJson(response, [400, 404, 503].includes(error?.status) ? error.status : 502, {
-          error: error?.message || "Guild Intelligence is unavailable.",
-        });
+        writeJson(response, safeStatus(error), { error: error?.message || "Guild Intelligence is unavailable." });
+      }
+      return true;
+    }
+
+    const coverageMatch = url.pathname.match(/^\/api\/guild\/by-player\/(\d{9})\/history\/coverage$/);
+    if (coverageMatch) {
+      try {
+        writeJson(response, 200, await archive.getCoverage(coverageMatch[1]));
+      } catch (error) {
+        writeJson(response, safeStatus(error), { error: error?.message || "Historical Guild coverage is unavailable." });
+      }
+      return true;
+    }
+
+    const archiveMatch = url.pathname.match(/^\/api\/guild\/by-player\/(\d{9})\/history\/archive$/);
+    if (archiveMatch) {
+      try {
+        writeJson(response, 200, await archive.getSection(archiveMatch[1], url.searchParams.get("section")));
+      } catch (error) {
+        writeJson(response, safeStatus(error), { error: error?.message || "Historical Guild archive is unavailable." });
       }
       return true;
     }
@@ -60,9 +82,7 @@ export function createCommandCenterHistoryApi(options = {}) {
         });
         writeJson(response, 200, body);
       } catch (error) {
-        writeJson(response, [400, 404, 503].includes(error?.status) ? error.status : 502, {
-          error: error?.message || "Guild history is unavailable.",
-        });
+        writeJson(response, safeStatus(error), { error: error?.message || "Guild history is unavailable." });
       }
       return true;
     }

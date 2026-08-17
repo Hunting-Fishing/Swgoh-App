@@ -56,7 +56,7 @@ test("Guild Intelligence route delegates to the daily intelligence service", asy
     intelligence: {
       async getByPlayer(allyCode) {
         call = allyCode;
-        return { guild: { name: "Ludus Venatus" }, summary: { totalPages: 29, returnedTotal: 2 } };
+        return { guild: { name: "Ludus Venatus" }, summary: { totalPages: 29, returnedTotal: 16 } };
       },
     },
   });
@@ -68,7 +68,45 @@ test("Guild Intelligence route delegates to the daily intelligence service", asy
   assert.equal(response.status, 200);
   const body = JSON.parse(response.text);
   assert.equal(body.summary.totalPages, 29);
-  assert.equal(body.summary.returnedTotal, 2);
+  assert.equal(body.summary.returnedTotal, 16);
+});
+
+test("Guild historical coverage route delegates to the archive service", async () => {
+  let call = null;
+  const api = createCommandCenterHistoryApi({
+    service: {}, intelligence: {},
+    archive: {
+      async getCoverage(allyCode) {
+        call = allyCode;
+        return { available: true, counts: { guildSnapshots: 666, returns: 16 } };
+      },
+    },
+  });
+  const response = responseCapture();
+  const url = new URL("http://localhost/api/guild/by-player/732764286/history/coverage");
+  assert.equal(await api.handle({ method: "GET" }, response, url), true);
+  assert.equal(call, "732764286");
+  assert.equal(response.status, 200);
+  assert.equal(JSON.parse(response.text).counts.guildSnapshots, 666);
+});
+
+test("Guild historical section route lazy-loads only the requested section", async () => {
+  let call = null;
+  const api = createCommandCenterHistoryApi({
+    service: {}, intelligence: {},
+    archive: {
+      async getSection(allyCode, section) {
+        call = { allyCode, section };
+        return { source: "historical-guild-archive", section, data: [["2026-08-14", 50, 29020, 44, 0, 6]] };
+      },
+    },
+  });
+  const response = responseCapture();
+  const url = new URL("http://localhost/api/guild/by-player/732764286/history/archive?section=tickets");
+  assert.equal(await api.handle({ method: "GET" }, response, url), true);
+  assert.deepEqual(call, { allyCode: "732764286", section: "tickets" });
+  assert.equal(response.status, 200);
+  assert.equal(JSON.parse(response.text).section, "tickets");
 });
 
 test("history routes preserve safe status codes", async () => {
