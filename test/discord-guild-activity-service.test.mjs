@@ -70,6 +70,57 @@ test("Discord Guild Activity resolves the durable Discord guild binding before r
   assert.equal(result.source, "canonical-history");
 });
 
+test("Discord Guild Activity includes durable linked-player availability and donation controls", async () => {
+  const result = await getDiscordGuildActivityCommand({
+    discordGuildId,
+    stateStore: {
+      readGuild: async () => ({
+        swgohAllyCode: "732764286",
+        userLinks: {
+          "111111111111111111": { discordUserId: "111111111111111111", swgohAllyCode: "732764286", playerId: "player-warm" },
+          "222222222222222222": { discordUserId: "222222222222222222", swgohAllyCode: "123456789", playerId: "player-alpha" },
+        },
+        memberAvailability: {
+          "222222222222222222": {
+            discordUserId: "222222222222222222",
+            swgohAllyCode: "123456789",
+            playerId: "player-alpha",
+            availability: "unavailable",
+            updatedAt: "2026-08-18T02:00:00Z",
+          },
+        },
+        memberPreferences: {
+          "111111111111111111|UNIT_A": { discordUserId: "111111111111111111", preference: "give" },
+          "111111111111111111|UNIT_B": { discordUserId: "111111111111111111", preference: "keep" },
+          "222222222222222222|UNIT_C": { discordUserId: "222222222222222222", preference: "give" },
+        },
+      }),
+    },
+    historyService: {
+      getGuildHistoryByPlayer: async () => ({
+        source: "canonical-history",
+        ...activityResult(),
+        currentMembers: [
+          { playerId: "player-warm", allyCode: "732764286", name: "Warm Bacon" },
+          { playerId: "player-alpha", allyCode: "123456789", name: "Alpha" },
+        ],
+      }),
+    },
+  });
+
+  assert.equal(result.memberControls.linkedPlayers, 2);
+  assert.equal(result.memberControls.unavailableMembers.length, 1);
+  assert.equal(result.memberControls.unavailableMembers[0].name, "Alpha");
+  assert.equal(result.memberControls.giveOverrides, 2);
+  assert.equal(result.memberControls.keepOverrides, 1);
+  assert.equal(result.memberControls.membersWithPreferences, 2);
+
+  const content = formatDiscordGuildActivityCommand(result);
+  assert.match(content, /TB controls: linked \*\*2\*\* · unavailable \*\*1\*\* · GIVE \*\*2\*\* · KEEP \*\*1\*\*/);
+  assert.match(content, /Unavailable: \*\*Alpha\*\*/);
+  assert.doesNotMatch(content, /<@/);
+});
+
 test("Discord Guild Activity falls back to configured Ally Code only when persisted binding has none", async () => {
   let capturedAllyCode = "";
   await getDiscordGuildActivityCommand({
@@ -92,6 +143,7 @@ test("Discord Guild Activity formatter is compact, non-pinging, and evidence-bou
   assert.match(content, /Ludus Venatus/);
   assert.match(content, /Progressing: \*\*34\/50\*\*/);
   assert.match(content, /Review queue: \*\*16\*\*/);
+  assert.match(content, /TB controls: linked \*\*0\*\*/);
   assert.match(content, /capped event window/);
   assert.match(content, /Alpha/);
   assert.match(content, /\+1 Omi/);
