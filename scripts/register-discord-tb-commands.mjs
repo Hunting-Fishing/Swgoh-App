@@ -2,6 +2,7 @@ import { discordTbConfig } from "../discord-tb.mjs";
 import {
   DISCORD_TB_COMMAND_SCHEMA_VERSION,
   writeDiscordCommandRegistrationReceipt,
+  writePublicDiscordCommandRegistrationReceipt,
 } from "../discord-command-registration-receipt.mjs";
 
 const API_VERSION = "v10";
@@ -44,18 +45,14 @@ function assertRequiredOptionsBeforeOptional(options = [], path = "command") {
     if (!isSubcommand) {
       if (option?.required === true) {
         if (sawOptionalParameter) {
-          throw new Error(
-            `Invalid Discord command schema at ${path}: required option '${option.name}' appears after an optional option.`,
-          );
+          throw new Error(`Invalid Discord command schema at ${path}: required option '${option.name}' appears after an optional option.`);
         }
       } else {
         sawOptionalParameter = true;
       }
     }
 
-    if (Array.isArray(option?.options)) {
-      assertRequiredOptionsBeforeOptional(option.options, `${path} ${option.name}`);
-    }
+    if (Array.isArray(option?.options)) assertRequiredOptionsBeforeOptional(option.options, `${path} ${option.name}`);
   }
 }
 
@@ -93,12 +90,7 @@ async function registerCommands(commands) {
       }
 
       if (response.ok) return { body, attempt };
-
-      lastFailure = {
-        status: response.status,
-        body,
-        message: `Discord command registration failed with HTTP ${response.status}.`,
-      };
+      lastFailure = { status: response.status, body, message: `Discord command registration failed with HTTP ${response.status}.` };
       if (!retryableStatus(response.status) || attempt === 3) break;
     } catch (error) {
       lastFailure = {
@@ -110,7 +102,6 @@ async function registerCommands(commands) {
       };
       if (attempt === 3) break;
     }
-
     await sleep(500 * attempt);
   }
 
@@ -193,9 +184,7 @@ const commands = [
   },
 ];
 
-for (const command of commands) {
-  assertRequiredOptionsBeforeOptional(command.options, `/${command.name}`);
-}
+for (const command of commands) assertRequiredOptionsBeforeOptional(command.options, `/${command.name}`);
 
 if (!config.commandRegistrationConfigured) {
   const message = "Discord command registration requires DISCORD_APPLICATION_ID, DISCORD_BOT_TOKEN, and DISCORD_DEFAULT_GUILD_ID.";
@@ -215,11 +204,15 @@ if (!config.commandRegistrationConfigured) {
       attempt: result.attempt,
       commands: registered,
     });
+    let publicReceipt = { written: false };
+    if (ifConfigured) publicReceipt = await writePublicDiscordCommandRegistrationReceipt(receipt.receipt);
+
     console.log(`Discord TB schema ${SCHEMA_VERSION} registered in ${config.pilotGuildId} on attempt ${result.attempt}.`);
     console.log(`Registered ${registered.length} guild-scoped Discord command${registered.length === 1 ? "" : "s"}.`);
     console.log(receipt.written
       ? `Registration receipt persisted (${receipt.durable ? "durable" : "configured"} state).`
       : `Registration receipt not persisted (${receipt.reason}).`);
+    if (publicReceipt.written) console.log(`Sanitized registration receipt exposed at ${publicReceipt.path}.`);
     for (const command of registered) console.log(`- /${command.name} (${command.id})`);
   } catch (error) {
     console.error(error?.message || "Discord command registration failed.");
