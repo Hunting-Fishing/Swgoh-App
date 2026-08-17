@@ -1,0 +1,1 @@
+Guild historical archive API wiring is implemented in command-center-history-api.mjs and covered by command-center-history-api.test.mjs.
