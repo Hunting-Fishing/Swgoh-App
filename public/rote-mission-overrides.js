@@ -1,3 +1,5 @@
+import { roteFleetEntryAudit } from "./rote-fleet-entry-audit-data.js";
+
 const CANONICAL_BASE_IDS = Object.freeze({
   BOKATANMANDALORE: "MANDALORBOKATAN",
   BESKARMANDO: "THEMANDALORIANBESKARARMOR",
@@ -7,6 +9,7 @@ const CANONICAL_BASE_IDS = Object.freeze({
 });
 
 const CANONICAL_MEMBER_NAME_IDS = Object.freeze({
+  Scythe: "SCYTHE",
   "Lando's Millennium Falcon": "MILLENNIUMFALCONPRISTINE",
   Outrider: "OUTRIDER",
   Executor: "CAPITALEXECUTOR",
@@ -63,6 +66,29 @@ export function normalizeRoteMission(mission = {}) {
     entry: normalizeEntry(mission.entry || {}),
     recommendations: Array.isArray(mission.recommendations) ? mission.recommendations.map(normalizeRecommendation) : [],
   };
+
+  const fleetAudit = roteFleetEntryAudit(next.id);
+  if (fleetAudit) {
+    next.entry = {
+      ...next.entry,
+      verified: true,
+      unitType: "Ship",
+      alignment: null,
+      allowedAlignments: [...fleetAudit.allowedAlignments],
+      starsMin: 7,
+      relicMin: null,
+      gearMin: null,
+      powerMin: null,
+      requiredBaseIds: [],
+      allowedBaseIds: [],
+      mandatoryMembers: fleetAudit.mandatoryMembers.map(normalizeMember),
+      requiredCategories: [],
+      categoryMode: "all",
+      notes: `Audited fleet entry: ${fleetAudit.sourceRequirement}.`,
+    };
+    next.sources = [...new Set([...(next.sources || []), ...fleetAudit.sourceIds])];
+    next.lastVerified = fleetAudit.lastVerified;
+  }
 
   if (next.id === "tatooine-mandalore-unlock") {
     next.name = "Krayt Dragon Special Mission — Unlock Mandalore";
