@@ -1,7 +1,12 @@
 import { discordTbConfig } from "../discord-tb.mjs";
+import {
+  DISCORD_TB_COMMAND_SCHEMA_VERSION,
+  writeDiscordCommandRegistrationReceipt,
+  writePublicDiscordCommandRegistrationReceipt,
+} from "../discord-command-registration-receipt.mjs";
 
 const API_VERSION = "v10";
-const SCHEMA_VERSION = "2026-08-18-stage7-controls-v1";
+const SCHEMA_VERSION = DISCORD_TB_COMMAND_SCHEMA_VERSION;
 const REGISTRATION_TIMEOUT_MS = 15_000;
 const config = discordTbConfig(process.env);
 const ifConfigured = process.argv.includes("--if-configured");
@@ -315,8 +320,21 @@ if (!config.commandRegistrationConfigured) {
   try {
     const result = await registerCommands(commands);
     const registered = Array.isArray(result.body) ? result.body : [];
+    const receipt = await writeDiscordCommandRegistrationReceipt({
+      guildId: config.pilotGuildId,
+      applicationId: config.applicationId,
+      attempt: result.attempt,
+      commands: registered,
+    });
+    let publicReceipt = { written: false };
+    if (ifConfigured) publicReceipt = await writePublicDiscordCommandRegistrationReceipt(receipt.receipt);
+
     console.log(`Discord TB schema ${SCHEMA_VERSION} registered in ${config.pilotGuildId} on attempt ${result.attempt}.`);
     console.log(`Registered ${registered.length} guild-scoped Discord command${registered.length === 1 ? "" : "s"}.`);
+    console.log(receipt.written
+      ? `Registration receipt persisted (${receipt.durable ? "durable" : "configured"} state).`
+      : `Registration receipt not persisted (${receipt.reason}).`);
+    if (publicReceipt.written) console.log(`Sanitized registration receipt exposed at ${publicReceipt.path}.`);
     for (const command of registered) console.log(`- /${command.name} (${command.id})`);
   } catch (error) {
     console.error(error?.message || "Discord command registration failed.");
