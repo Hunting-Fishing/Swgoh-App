@@ -59,6 +59,34 @@ function investmentLabel(row = {}) {
   return parts.join(" · ") || "ability investment";
 }
 
+function durableMemberControls(binding = {}, history = {}) {
+  const links = Object.values(binding?.userLinks || {}).filter((row) => row && typeof row === "object");
+  const preferences = Object.values(binding?.memberPreferences || {}).filter((row) => row && typeof row === "object");
+  const unavailable = Object.values(binding?.memberAvailability || {})
+    .filter((row) => clean(row?.availability).toLowerCase() === "unavailable");
+  const currentMembers = Array.isArray(history?.currentMembers) ? history.currentMembers : [];
+  const byAllyCode = new Map(currentMembers.map((row) => [allyCode(row?.allyCode), row]).filter(([code]) => code));
+  const byPlayerId = new Map(currentMembers.map((row) => [clean(row?.playerId), row]).filter(([id]) => id));
+
+  const unavailableMembers = unavailable.map((row) => {
+    const match = byAllyCode.get(allyCode(row?.swgohAllyCode)) || byPlayerId.get(clean(row?.playerId || row?.memberId)) || null;
+    return Object.freeze({
+      discordUserId: clean(row?.discordUserId),
+      allyCode: allyCode(row?.swgohAllyCode || match?.allyCode),
+      name: clean(match?.name || row?.swgohAllyCode || row?.playerId || row?.memberId || row?.discordUserId || "member"),
+      updatedAt: clean(row?.updatedAt),
+    });
+  });
+
+  return Object.freeze({
+    linkedPlayers: links.length,
+    unavailableMembers: Object.freeze(unavailableMembers),
+    giveOverrides: preferences.filter((row) => clean(row?.preference).toLowerCase() === "give").length,
+    keepOverrides: preferences.filter((row) => clean(row?.preference).toLowerCase() === "keep").length,
+    membersWithPreferences: new Set(preferences.map((row) => clean(row?.discordUserId)).filter(Boolean)).size,
+  });
+}
+
 export async function getDiscordGuildActivityCommand({
   discordGuildId,
   fallbackGuildAllyCode = "",
@@ -86,6 +114,7 @@ export async function getDiscordGuildActivityCommand({
   return Object.freeze({
     guild: history.guild || {},
     activityCommand: history.activityCommand,
+    memberControls: durableMemberControls(binding, history),
     source: history.source || "canonical-history",
     seedAllyCode,
   });
@@ -99,13 +128,21 @@ export function formatDiscordGuildActivityCommand(result = {}) {
   const leaders = Array.isArray(command.momentumLeaders) ? command.momentumLeaders : [];
   const review = Array.isArray(command.noCapturedProgression) ? command.noCapturedProgression : [];
   const investments = Array.isArray(command.recentAbilityInvestments) ? command.recentAbilityInvestments : [];
+  const controls = result.memberControls || {};
+  const unavailable = Array.isArray(controls.unavailableMembers) ? controls.unavailableMembers : [];
 
   const lines = [
     "**SWGOH Command Center · Guild Activity**",
     `Guild: **${clean(guild.name) || "bound guild"}**`,
     `Progressing: **${number(summary.membersWithCapturedProgression)}/${number(summary.currentMembers)}** · Review queue: **${number(summary.membersWithoutCapturedProgression)}** · Membership changes: **${number(summary.membershipChanges)}**`,
     `Investments: **${number(summary.abilityInvestments)}** · GP: **${signed(summary.gpGained)}** · Relics: **${signed(summary.relicLevelsGained)}** · Zetas: **${signed(summary.zetasAdded)}** · Omicrons: **${signed(summary.omicronsAdded)}**`,
+    `TB controls: linked **${number(controls.linkedPlayers)}** · unavailable **${number(unavailable.length)}** · GIVE **${number(controls.giveOverrides)}** · KEEP **${number(controls.keepOverrides)}**`,
   ];
+
+  if (unavailable.length) {
+    const names = unavailable.slice(0, 5).map((row) => clean(row.name) || row.allyCode || "member");
+    lines.push(`Unavailable: **${names.join("**, **")}**${unavailable.length > names.length ? ` · +${unavailable.length - names.length} more` : ""}`);
+  }
 
   if (window.from || window.to) {
     lines.push(`Evidence: **${compactTime(window.from)} → ${compactTime(window.to)}**${window.truncated ? " · capped event window" : ""}`);
