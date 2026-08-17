@@ -5,6 +5,11 @@ function positiveNumber(value, fallback) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+function positiveFinite(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+}
+
 function trimUrl(value) {
   return String(value || "").trim().replace(/\/+$/, "");
 }
@@ -21,6 +26,38 @@ function normalizeAllyCode(value) {
 
 function validGuildRoster(body) {
   return body?.source === "live" && body?.guild && Array.isArray(body?.members);
+}
+
+function normalizedMemberGalacticPower(member = {}) {
+  const direct = positiveFinite(member?.galacticPower) || positiveFinite(member?.gp);
+  if (direct) return Math.round(direct);
+
+  const character = positiveFinite(member?.characterGalacticPower) || positiveFinite(member?.characterGp);
+  const ship = positiveFinite(member?.shipGalacticPower) || positiveFinite(member?.shipGp);
+  const combined = character + ship;
+  return combined > 0 ? Math.round(combined) : 0;
+}
+
+function normalizeGuildRoster(body) {
+  const sourceMembers = Array.isArray(body?.members) ? body.members : [];
+  let membersChanged = false;
+  const members = sourceMembers.map((member) => {
+    const gp = normalizedMemberGalacticPower(member);
+    if (!gp || positiveFinite(member?.galacticPower) === gp) return member;
+    membersChanged = true;
+    return { ...member, galacticPower: gp };
+  });
+
+  const currentGuildGp = positiveFinite(body?.guild?.galacticPower);
+  const summedMemberGp = members.reduce((total, member) => total + normalizedMemberGalacticPower(member), 0);
+  const guildChanged = !currentGuildGp && summedMemberGp > 0;
+  if (!membersChanged && !guildChanged) return body;
+
+  return {
+    ...body,
+    guild: guildChanged ? { ...body.guild, galacticPower: Math.round(summedMemberGp) } : body.guild,
+    members,
+  };
 }
 
 function configFromEnv(env = process.env) {
@@ -87,7 +124,7 @@ async function fetchGuildRoster(allyCode, config, fetchImpl, options = {}) {
       error.status = 502;
       throw error;
     }
-    return body;
+    return normalizeGuildRoster(body);
   } finally {
     clearTimeout(timeout);
   }
