@@ -5,6 +5,8 @@ import { fileURLToPath } from "node:url";
 import { accountOnboarding } from "./account-onboarding.mjs";
 import { withCapabilityContract } from "./capability-contract.mjs";
 import { canonicalRosterService } from "./canonical-roster-service.mjs";
+import { commandCenterHistoryApi } from "./command-center-history-api.mjs";
+import { commandCenterHistoryService } from "./command-center-history-service.mjs";
 import { discordStateStore } from "./discord-state-store.mjs";
 import { discordTbPublicStatus, handleDiscordInteractionRequest } from "./discord-tb.mjs";
 import { resolveGuildPlanningOverlay } from "./guild-planning-overlay.mjs";
@@ -24,7 +26,7 @@ const rosterCacheStaleMs = positiveNumber(process.env.SWGOH_CACHE_STALE_SECONDS,
 const rosterCacheMaxEntries = Math.max(1, Math.floor(positiveNumber(process.env.SWGOH_CACHE_MAX_ENTRIES, 500)));
 const modCacheFreshMs = positiveNumber(process.env.SWGOH_MOD_CACHE_FRESH_SECONDS, 300) * 1000;
 const modCacheStaleMs = positiveNumber(process.env.SWGOH_MOD_CACHE_STALE_SECONDS, 900) * 1000;
-const modCacheMaxEntries = Math.max(1, Math.floor(positiveNumber(process.env.SWGOH_CACHE_MAX_ENTRIES, 500)));
+const modCacheMaxEntries = Math.max(1, Math.floor(positiveNumber(process.env.SWGOH_MOD_CACHE_MAX_ENTRIES, 500)));
 const roteOperationsUrl = String(process.env.SWGOH_ROTE_OPERATIONS_URL || "https://raw.githubusercontent.com/swgoh-utils/gamedata/main/swgoh_rote_operations.json").trim();
 const roteCacheMs = positiveNumber(process.env.SWGOH_ROTE_CACHE_SECONDS, 21600) * 1000;
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "public");
@@ -216,6 +218,8 @@ async function writeCanonicalGuildOrLiveFallback(response, allyCode) {
 }
 
 async function handleApi(request, response, url) {
+  if (await commandCenterHistoryApi.handle(request, response, url)) return true;
+
   if (url.pathname === "/api/discord/status") {
     writeJson(response, 200, discordPublicStatus());
     return true;
@@ -231,6 +235,7 @@ async function handleApi(request, response, url) {
         auth: supabaseAuthSession.status(),
         persistence: supabaseCoreStore.status(),
         canonicalRoster: canonicalRosterService.status(),
+        commandCenterHistory: commandCenterHistoryService.status(),
         discordTb: discordPublicStatus(),
         rosterCache: {
           mode: "process-local-coalesced-swr-lru",
@@ -261,6 +266,7 @@ async function handleApi(request, response, url) {
         auth: supabaseAuthSession.status(),
         persistence: supabaseCoreStore.status(),
         canonicalRoster: canonicalRosterService.status(),
+        commandCenterHistory: commandCenterHistoryService.status(),
         discordTb: discordPublicStatus(),
         error: error?.name === "AbortError" ? "The live gateway timed out." : error?.message || "The live gateway is unavailable.",
       });
