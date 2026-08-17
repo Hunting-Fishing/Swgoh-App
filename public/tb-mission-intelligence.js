@@ -217,6 +217,11 @@ function memberMatches(member, unit, fallbackName = "") {
   return Boolean(wanted && actual && wanted === actual);
 }
 
+export function isMandatoryMissionUnit(unit, mission) {
+  if (!unit || !mission?.entry) return false;
+  return (mission.entry.mandatoryMembers || []).some((mandatory) => memberMatches(mandatory, unit));
+}
+
 function matchingMandatoryMember(mission, member, unit) {
   return (mission?.entry?.mandatoryMembers || []).find((mandatory) => memberMatches(mandatory, unit, member?.name)) || null;
 }
@@ -281,21 +286,32 @@ export function legalRosterCandidates(body, mission, limit = 0) {
   if (!mission?.entry?.verified) return [];
   const rows = allRosterUnits(body)
     .filter((unit) => rosterUnitMeetsEntry(unit, mission))
+    .filter((unit) => !isMandatoryMissionUnit(unit, mission))
     .sort((a, b) => Number(b.power || 0) - Number(a.power || 0) || Number(b.speed || 0) - Number(a.speed || 0) || String(a.name || "").localeCompare(String(b.name || "")));
   return limit > 0 ? rows.slice(0, limit) : rows;
 }
 
 export function missionRosterEntrySummary(body, mission, squadSize = null) {
   if (!mission?.entry?.verified) return { verified: false, ready: false, percent: 0, candidates: [], mandatory: mandatoryRosterStatus(body, mission) };
-  const candidates = legalRosterCandidates(body, mission);
   const mandatory = mandatoryRosterStatus(body, mission);
-  const target = Math.max(1, Number(squadSize || mission.entry.squadSize || 5));
-  const bypassCount = (mission.entry.mandatoryMembers || []).filter((member) => member.bypassPool).length;
-  const poolTarget = Math.max(0, target - bypassCount);
+  const candidates = legalRosterCandidates(body, mission);
+  const configuredTarget = Number(squadSize || mission.entry.squadSize || 5);
+  const target = Math.max(1, mandatory.total, Number.isFinite(configuredTarget) ? configuredTarget : 5);
+  const poolTarget = Math.max(0, target - mandatory.total);
   const depthRatio = poolTarget === 0 ? 1 : Math.min(1, candidates.length / poolTarget);
   const mandatoryRatio = mandatory.total ? mandatory.ready / mandatory.total : 1;
   const percent = Math.round((depthRatio * (mandatory.total ? 0.7 : 1) + (mandatory.total ? mandatoryRatio * 0.3 : 0)) * 100);
-  return { verified: true, ready: candidates.length >= poolTarget && mandatory.complete, percent, candidates, mandatory, squadSize: target, poolTarget };
+  return {
+    verified: true,
+    ready: candidates.length >= poolTarget && mandatory.complete,
+    percent,
+    candidates,
+    mandatory,
+    squadSize: target,
+    lockedSlots: mandatory.total,
+    poolTarget,
+    selectableSlots: poolTarget,
+  };
 }
 
 export function recommendationUpgradeRows(body, mission, recommendation) {
