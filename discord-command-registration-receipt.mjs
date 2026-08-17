@@ -5,6 +5,7 @@ import path from "node:path";
 export const DISCORD_TB_COMMAND_SCHEMA_VERSION = "2026-08-18-stage7-controls-v1";
 const RECEIPT_VERSION = 1;
 const RECEIPT_FILE = "discord-command-registration-v1.json";
+const PUBLIC_RECEIPT_PATH = "/data/discord-command-registration.json";
 
 function clean(value) {
   return String(value ?? "").trim();
@@ -53,11 +54,8 @@ function validateReceipt(receipt = {}) {
   return receipt;
 }
 
-export async function writeDiscordCommandRegistrationReceipt(input = {}, env = process.env) {
-  const config = receiptConfig(env);
-  if (!config.enabled) return Object.freeze({ written: false, durable: false, reason: "state-directory-unavailable" });
-
-  const receipt = validateReceipt({
+function buildReceipt(input = {}) {
+  return validateReceipt({
     receiptVersion: RECEIPT_VERSION,
     schemaVersion: DISCORD_TB_COMMAND_SCHEMA_VERSION,
     registeredAt: new Date().toISOString(),
@@ -66,6 +64,13 @@ export async function writeDiscordCommandRegistrationReceipt(input = {}, env = p
     attempt: Math.max(1, Number(input.attempt || 1)),
     commands: normalizeCommands(input.commands),
   });
+}
+
+export async function writeDiscordCommandRegistrationReceipt(input = {}, env = process.env) {
+  const config = receiptConfig(env);
+  const receipt = buildReceipt(input);
+  if (!config.enabled) return Object.freeze({ written: false, durable: false, reason: "state-directory-unavailable", receipt });
+
   const payload = `${JSON.stringify(receipt, null, 2)}\n`;
   await mkdir(config.directory, { recursive: true, mode: 0o700 });
   const temporary = path.join(config.directory, `.discord-command-registration-${process.pid}-${Date.now()}.tmp`);
@@ -78,6 +83,24 @@ export async function writeDiscordCommandRegistrationReceipt(input = {}, env = p
     });
   }
   return Object.freeze({ written: true, durable: config.durable, file: RECEIPT_FILE, receipt });
+}
+
+export async function writePublicDiscordCommandRegistrationReceipt(receipt, options = {}) {
+  const validated = validateReceipt(receipt);
+  const publicRoot = path.resolve(options.publicRoot || path.join(process.cwd(), "public"));
+  const target = path.resolve(publicRoot, `.${PUBLIC_RECEIPT_PATH}`);
+  if (!isInside(publicRoot, target)) throw new Error("Discord registration public receipt path escaped the public root.");
+  await mkdir(path.dirname(target), { recursive: true, mode: 0o755 });
+  const publicReceipt = {
+    schemaVersion: validated.schemaVersion,
+    registeredAt: validated.registeredAt,
+    guildId: validated.guildId,
+    applicationId: validated.applicationId,
+    attempt: validated.attempt,
+    commands: validated.commands.map((command) => ({ id: command.id, name: command.name, version: command.version })),
+  };
+  await writeFile(target, `${JSON.stringify(publicReceipt, null, 2)}\n`, { encoding: "utf8", mode: 0o644 });
+  return Object.freeze({ written: true, path: PUBLIC_RECEIPT_PATH, receipt: publicReceipt });
 }
 
 export async function readDiscordCommandRegistrationReceipt(env = process.env) {
@@ -102,6 +125,7 @@ export function discordCommandRegistrationStatus(env = process.env) {
     registeredAt: "",
     guildId: "",
     commandNames: [],
+    publicReceiptPath: PUBLIC_RECEIPT_PATH,
   };
   if (!config.enabled) return Object.freeze(base);
   try {
