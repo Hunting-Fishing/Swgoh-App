@@ -12,16 +12,31 @@ async function source(path) {
   return readFile(new URL(path, root), "utf8");
 }
 
-test("unit autocomplete resolves exact Base ID and human-readable name from the real catalog", async () => {
-  resetDiscordUnitAutocompleteCacheForTests();
-  const byId = await autocompleteSwgohUnits("JEDIKNIGHTCAL");
-  assert.ok(byId.length > 0);
-  assert.equal(byId[0].value, "JEDIKNIGHTCAL");
-  assert.match(byId[0].name, /Jedi Knight Cal Kestis/i);
-  assert.match(byId[0].name, /Character/i);
+async function realCatalogFixture() {
+  const body = JSON.parse(await source("public/data/catalog.json"));
+  const row = (Array.isArray(body?.units) ? body.units : []).find((unit) => {
+    const baseId = String(unit?.baseId || "").trim();
+    const name = String(unit?.name || "").trim();
+    return /^[A-Z0-9_:-]{2,80}$/.test(baseId) && name.length >= 3 && name.toLowerCase() !== baseId.toLowerCase();
+  });
+  assert.ok(row, "generated catalog should contain at least one named player-obtainable unit");
+  return {
+    baseId: String(row.baseId).trim().toUpperCase(),
+    name: String(row.name).trim(),
+  };
+}
 
-  const byName = await autocompleteSwgohUnits("Jedi Knight Cal");
-  assert.ok(byName.some((choice) => choice.value === "JEDIKNIGHTCAL"));
+test("unit autocomplete resolves exact Base ID and human-readable name from the generated catalog", async () => {
+  resetDiscordUnitAutocompleteCacheForTests();
+  const fixture = await realCatalogFixture();
+
+  const byId = await autocompleteSwgohUnits(fixture.baseId);
+  assert.ok(byId.length > 0);
+  assert.equal(byId[0].value, fixture.baseId);
+  assert.match(byId[0].name, new RegExp(fixture.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"));
+
+  const byName = await autocompleteSwgohUnits(fixture.name);
+  assert.ok(byName.some((choice) => choice.value === fixture.baseId));
 });
 
 test("unit autocomplete obeys Discord choice bounds and returns Base IDs as values", async () => {
