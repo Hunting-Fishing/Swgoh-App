@@ -12,6 +12,11 @@ import {
   verifyDiscordInteraction,
 } from "./discord-tb.mjs";
 import { discordStateStore } from "./discord-state-store.mjs";
+import { discordHardReservationStore } from "./discord-hard-reservation-store.mjs";
+import {
+  listDiscordHardReservations,
+  setDiscordHardReservation,
+} from "./discord-hard-reservation-service.mjs";
 import {
   formatDiscordGuildActivityCommand,
   getDiscordGuildActivityCommand,
@@ -76,6 +81,11 @@ function safeError(title, error) {
   return `**SWGOH Command Center · ${title} failed**\n${message}\nNo guild state was changed and no DMs were sent.`;
 }
 
+function safeText(value, fallback = "—") {
+  const text = String(value ?? "").replace(/[\r\n]+/g, " ").replace(/\s+/g, " ").trim();
+  return text || fallback;
+}
+
 function activeSubcommand(interaction = {}) {
   const options = Array.isArray(interaction?.data?.options) ? interaction.data.options : [];
   return options.find((row) => Number(row?.type) === 1 || Number(row?.type) === 2) || null;
@@ -91,11 +101,54 @@ function autocompleteContext(interaction = {}) {
   if (Number(interaction?.type) !== APPLICATION_COMMAND_AUTOCOMPLETE_TYPE) return null;
   if (String(interaction?.data?.name || "").toLowerCase() !== "tb") return null;
   const subcommand = activeSubcommand(interaction);
-  if (String(subcommand?.name || "").toLowerCase() !== "preference") return null;
+  const name = String(subcommand?.name || "").toLowerCase();
+  if (!new Set(["preference", "reserve"]).has(name)) return null;
   const parameters = Array.isArray(subcommand?.options) ? subcommand.options : [];
   const focused = parameters.find((row) => row?.focused === true);
   if (String(focused?.name || "").toLowerCase() !== "unit") return null;
-  return Object.freeze({ value: String(focused?.value || "") });
+  return Object.freeze({ value: String(focused?.value || ""), subcommand: name });
+}
+
+function formatHardReservationResult(result = {}) {
+  const reserved = result?.reserved === true;
+  const verification = result?.verification || {};
+  const lines = [
+    "**SWGOH Command Center · ROTE Hard Reserve**",
+    `Member: <@${safeText(result.discordUserId)}>`,
+    `Phase: **${safeText(result.phase)}**`,
+    `Unit: **${safeText(result.unitName || result.baseId)}** (${safeText(result.baseId)})`,
+    `State: **${reserved ? "HARD RESERVED" : "CLEARED"}**`,
+  ];
+  if (reserved) {
+    lines.push(`Ownership: **verified against bound Guild roster**${verification.playerName ? ` for **${safeText(verification.playerName)}**` : ""}`);
+    lines.push("Planner effect: this member/unit is an absolute Operation donor exclusion for the selected phase until cleared.");
+  } else {
+    lines.push("Planner effect: the explicit hard reservation was removed; automatic mission protection still applies normally.");
+  }
+  lines.push("The change is durable and audited. No assignments were published and no DMs were sent.");
+  return lines.join("\n").slice(0, 1900);
+}
+
+function formatHardReservations(result = {}) {
+  const rows = Array.isArray(result?.rows) ? result.rows : [];
+  const scope = result?.discordUserId ? `<@${result.discordUserId}>` : "all linked members";
+  const phase = result?.phase ? ` · ${result.phase}` : "";
+  const lines = [
+    "**SWGOH Command Center · ROTE Hard Reserves**",
+    `Scope: ${scope}${phase}`,
+    `Active hard reserves: **${rows.length}**`,
+  ];
+  if (!rows.length) {
+    lines.push("", "No active hard reservations are stored for this scope.");
+  } else {
+    lines.push("");
+    for (const row of rows.slice(0, 30)) {
+      lines.push(`• **${safeText(row.phase)}** · <@${safeText(row.discordUserId)}> · **${safeText(row.unitName || row.baseId)}** (${safeText(row.baseId)})`);
+    }
+    if (rows.length > 30) lines.push(`• +${rows.length - 30} more hard reserves`);
+  }
+  lines.push("", "_Hard reserves are absolute donor exclusions. Mentions are suppressed; this read changes no state._");
+  return lines.join("\n").slice(0, 1900);
 }
 
 function scheduleActivityResponse(interaction, config, services) {
@@ -141,6 +194,56 @@ function scheduleControlsResponse(interaction, config, services) {
     });
 }
 
+function scheduleReserveResponse(interaction, config, services) {
+  const stateStore = services?.stateStore || discordStateStore;
+  const reservationStore = services?.reservationStore || discordHardReservationStore;
+  const setter = typeof services?.setDiscordHardReservation === "function" ? services.setDiscordHardReservation : setDiscordHardReservation;
+  const actorDiscordUserId = String(interaction?.member?.user?.id || interaction?.user?.id || "");
+  const targetDiscordUserId = String(subcommandOption(interaction, "member") || "");
+  const state = String(subcommandOption(interaction, "state") || "reserve").toLowerCase();
+
+  Promise.resolve()
+    .then(() => setter({
+      discordGuildId: interaction?.guild_id,
+      discordUserId: targetDiscordUserId,
+      unitBaseId: subcommandOption(interaction, "unit"),
+      rotePhase: subcommandOption(interaction, "phase"),
+      reserved: state !== "clear",
+      actorDiscordUserId,
+      fallbackGuildAllyCode: config.pilotAllyCode,
+      stateStore,
+      reservationStore,
+      ...(services?.guildRosterService ? { rosterService: services.guildRosterService } : {}),
+    }))
+    .then((result) => formatHardReservationResult(result))
+    .catch((error) => safeError("ROTE Hard Reserve", error))
+    .then((content) => editDiscordOriginalResponse(interaction, config, content, services?.fetch || fetch))
+    .catch((error) => {
+      console.error("Discord ROTE Hard Reserve response failed:", error?.message || error);
+    });
+}
+
+function scheduleReservesResponse(interaction, config, services) {
+  const stateStore = services?.stateStore || discordStateStore;
+  const reservationStore = services?.reservationStore || discordHardReservationStore;
+  const reader = typeof services?.listDiscordHardReservations === "function" ? services.listDiscordHardReservations : listDiscordHardReservations;
+
+  Promise.resolve()
+    .then(() => reader({
+      discordGuildId: interaction?.guild_id,
+      discordUserId: subcommandOption(interaction, "member") || "",
+      rotePhase: subcommandOption(interaction, "phase") || "",
+      stateStore,
+      reservationStore,
+    }))
+    .then((result) => formatHardReservations(result))
+    .catch((error) => safeError("ROTE Hard Reserves", error))
+    .then((content) => editDiscordOriginalResponse(interaction, config, content, services?.fetch || fetch))
+    .catch((error) => {
+      console.error("Discord ROTE Hard Reserves response failed:", error?.message || error);
+    });
+}
+
 export async function handleDiscordInteractionRequest(request, response, env = process.env, services = {}) {
   let rawBody;
   try {
@@ -165,7 +268,13 @@ export async function handleDiscordInteractionRequest(request, response, env = p
   const isControls = Number(interaction?.type) === DISCORD_INTERACTION_TYPES.APPLICATION_COMMAND
     && String(interaction?.data?.name || "").toLowerCase() === "tb"
     && subcommand === "controls";
-  if (!autocomplete && !isActivity && !isControls) {
+  const isReserve = Number(interaction?.type) === DISCORD_INTERACTION_TYPES.APPLICATION_COMMAND
+    && String(interaction?.data?.name || "").toLowerCase() === "tb"
+    && subcommand === "reserve";
+  const isReserves = Number(interaction?.type) === DISCORD_INTERACTION_TYPES.APPLICATION_COMMAND
+    && String(interaction?.data?.name || "").toLowerCase() === "tb"
+    && subcommand === "reserves";
+  if (!autocomplete && !isActivity && !isControls && !isReserve && !isReserves) {
     return handleCoreDiscordInteractionRequest(replayRequest(request, rawBody), response, env, services);
   }
 
@@ -225,6 +334,8 @@ export async function handleDiscordInteractionRequest(request, response, env = p
 
   jsonResponse(response, 200, deferredEphemeral());
   if (isControls) scheduleControlsResponse(interaction, config, { ...services, stateStore });
+  else if (isReserve) scheduleReserveResponse(interaction, config, { ...services, stateStore });
+  else if (isReserves) scheduleReservesResponse(interaction, config, { ...services, stateStore });
   else scheduleActivityResponse(interaction, config, { ...services, stateStore });
   return true;
 }
