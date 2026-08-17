@@ -2,7 +2,7 @@
 
 **Purpose:** authoritative checkpoint for Discord + web + canonical SWGOH data bring-up. Update this file only from verified implementation/deployment results. Do not treat discussed future architecture as completed work.
 
-**Current checkpoint:** **Canonical Guild/player persistence is accepted. Full 50-member / full-player roster semantics are enforced. Player Command Center is implemented and awaiting the current Railway deployment acceptance. After that, return to the remaining Stage 7 Discord member-control acceptance tests.**
+**Current checkpoint:** **Canonical Guild/player persistence is accepted. Full 50-member / full-player roster semantics are enforced. Player Command Center and the capability-aware canonical-first legacy loader are deployed successfully on Railway at `c34d775`. The remaining gate is visual web acceptance plus re-registration and live Stage 7 Discord member-control acceptance before Stage 8 ROTE command acceptance.**
 
 **Current operating mode:** signed HTTP Discord interactions, guild-scoped `/tb` pilot, live Comlink gateway, durable Railway Volume pilot state, Supabase authenticated web tenancy + canonical Guild/player history, outbound Discord publishing/DM delivery disabled.
 
@@ -47,26 +47,33 @@ Verified pilot Discord server:
 
 ---
 
-## Stage 2 — `/tb` command registration ✅
+## Stage 2 — `/tb` command registration 🔧 current schema re-registration pending
 
 - [x] Guild-scoped `/tb` registration script exists.
 - [x] Required/optional Discord option ordering bug fixed.
 - [x] Registration diagnostics print nested Discord schema errors.
-- [x] `/tb` successfully registered.
+- [x] Original `/tb` pilot schema successfully registered.
+- [x] Current code schema includes verified unit autocomplete for `/tb preference unit:`.
+- [x] Current code schema includes officer `/tb activity`.
+- [x] Current code schema includes officer `/tb controls [member]`.
+- [ ] Re-run registration for the **current** slash schema after the deployed build is accepted.
+- [ ] Confirm Discord exposes `/tb activity`, `/tb controls`, and the unit autocomplete picker.
 
-Verified registration:
+Previously verified registration:
 
 ```text
 Registered 1 guild-scoped Discord command in 1422643338586099745.
 - /tb (1538621439698272296)
 ```
 
-Registered pilot command surface:
+Current code command surface:
 
 ```text
 /tb status
 /tb setup [channel] [officer_role]
 /tb sync
+/tb activity
+/tb controls [member]
 /tb phase phase:P1..P6
 /tb assignments [phase:P1..P6]
 /tb farms [phase:P1..P6]
@@ -74,14 +81,12 @@ Registered pilot command surface:
 /tb unlink member:<Discord user>
 /tb links
 /tb me
-/tb preference unit:<Base ID> preference:<GIVE|DEFAULT|KEEP> [member]
+/tb preference unit:<search/autocomplete> preference:<GIVE|DEFAULT|KEEP> [member]
 /tb preferences [member]
 /tb availability [member] [state:<AVAILABLE|UNAVAILABLE>]
 ```
 
-> Re-run `npm run discord:register-tb` only when the slash-command schema actually changes.
-
-- [ ] If `/tb activity` remains in code, verify whether it changes the registered slash schema; do not claim it live until registration is re-run and Discord confirms it.
+> Re-run `npm run discord:register-tb` only when the slash-command schema changes. The current deployed code has schema additions beyond the previously verified registration, so a registration run is required before live acceptance of those additions.
 
 ---
 
@@ -191,6 +196,8 @@ Fixes/acceptance:
 - [x] Hydrated roster remained **394 units**.
 - [x] Raw cache `miss` confirmed to mean a successful cold live fetch.
 - [x] User-facing wording changed to `live refresh (fresh fetch)`.
+- [x] Code-level target-isolation regression proves normal member self-service rejects another Discord member.
+- [ ] Live Discord negative-permission acceptance: normal member attempts another-member target and receives denial.
 
 Verified Discord result at acceptance time:
 
@@ -200,8 +207,6 @@ Guild: Ludus Venatus
 Galactic Power: 12,654,861
 Hydrated roster units: 394
 ```
-
-- [ ] Remaining negative-permission test: normal member cannot inspect another member through self-service commands.
 
 ### Website identity bridge ✅
 
@@ -298,6 +303,7 @@ Ultimates: 323
 - [x] Immediate resync idempotence test demonstrated real changes are not replayed as duplicate history.
 - [x] Player/Guild history APIs expose persisted snapshots + genuine progression events.
 - [x] Initial 50-member import is treated as a **BASELINE**, not falsely shown as 50 live joins.
+- [x] Provenance-aware Ludus Venatus historical archive backfilled to 2022 and exposed to the Guild History workspace.
 
 ---
 
@@ -327,6 +333,7 @@ Ultimates: 323
 - [x] Guild Progression Ledger added.
 - [x] Daily-trend UI waits for at least two snapshots before presenting a comparison.
 - [x] Real unit progression events survive browser/device/session changes.
+- [x] Officer Guild History workspace exposes the versioned historical archive independently from canonical current-state history.
 
 ### Guild Ability / Activity Command ✅ implementation
 
@@ -335,8 +342,9 @@ Ultimates: 323
 - [x] Member profiles carry persisted/live source labels accurately.
 - [x] Member profile shows ability-investment totals.
 - [x] Officer activity model ranks current-member momentum from persisted history without including departed members in current rankings.
+- [x] Durable member availability/GIVE/KEEP totals are included in the officer activity summary.
 
-### Player Command Center 🔧 deployment acceptance pending
+### Player Command Center 🚀 deployed; visual acceptance pending
 
 Implemented:
 
@@ -346,6 +354,7 @@ Implemented:
 - [x] Guild-relative ranks surfaced independently by metric.
 - [x] ROTE Operations requirement pressure derived from maintained requirement histograms.
 - [x] Persistent `What Changed` history surfaced.
+- [x] Evidence-separated Player development queue surfaced.
 - [x] One-click full-roster handoff.
 - [x] One-click ROTE-required-unit handoff.
 - [x] Explicit persisted refresh.
@@ -353,8 +362,10 @@ Implemented:
 - [x] Shared baseline/history fetch cache extended with in-flight request coalescing.
 - [x] Cache-busted Player Command app-shell wiring committed.
 - [x] Source/cache wiring regression coverage committed.
-- [ ] Railway reports the current Player Command head **ACTIVE / successful**.
+- [x] Railway reports **Swgoh-App** and **Guild-Sync-Worker** successful for production merge `c34d775`.
 - [ ] Hard-refresh the app and visually accept the Player Command Overview.
+- [ ] Verify **Open Full Roster** exposes all **394** owned units in production.
+- [ ] Verify **Refresh Live Detail** promotes to Comlink while preserving canonical roster completeness.
 
 Current pilot Guild-relative Warm Bacon ranks from the canonical 50-member snapshot:
 
@@ -369,21 +380,25 @@ Zetas: #27 / 50
 Omicrons: #36 / 50
 ```
 
-### Legacy hero/main app loader — capability-aware refactor required
-
-The old `public/app.js` form still assumes every player lookup is a fully rich live response. A blind canonical-first swap would turn intentionally unknown persisted Omega/Eta evidence into visible zeroes and mislabel persisted data as live.
+### Legacy hero/main app loader ✅ capability-aware canonical-first deployment
 
 - [x] Risk identified before changing the legacy loader.
-- [ ] Refactor the legacy profile/roster renderer to honor source capabilities.
-- [ ] Persisted source must show canonical freshness wording, not `Live player fetched`.
-- [ ] Persisted unknown Omega/Eta, mods, datacrons, cosmetics, competitive fields must remain `N/A` / `—`.
-- [ ] Only after the renderer is capability-aware should the legacy hero Ally Code form become canonical-first with live fallback.
+- [x] Legacy profile/roster renderer honors persisted-vs-live source capabilities.
+- [x] Persisted source shows canonical freshness wording instead of `Live player fetched`.
+- [x] Persisted unknown Zeta, Omega/Eta and Omicron evidence remains `N/A` / `—` instead of fake zero.
+- [x] Persisted unknown mods, datacrons, cosmetics and competitive fields remain `N/A` / `—`.
+- [x] Legacy hero Ally Code form is canonical-first with live fallback when no usable persisted baseline exists.
+- [x] Readiness-sensitive intelligence is suppressed until live evidence is loaded.
+- [x] Browser app-shell asset revision bumped so deployed clients receive the capability-aware renderer.
+- [x] Railway deployment for merge `c34d775` reported successful.
 
 ---
 
-## Stage 7 — Discord member TB controls 🔴 after current Player Command deployment acceptance
+## Stage 7 — Discord member TB controls 🔴 live acceptance next
 
-### Availability
+**Implementation status:** the member-control model, durable writes, planner integration, authorization, autocomplete and officer drill-down are implemented with regression coverage. The remaining Stage 7 gate is live Discord acceptance against the pilot server after current slash-command schema registration.
+
+### Availability implementation ✅
 
 ```text
 /tb availability
@@ -391,32 +406,55 @@ The old `public/app.js` form still assumes every player lookup is a fully rich l
 /tb availability state:AVAILABLE
 ```
 
-- [ ] Read own status works.
-- [ ] `UNAVAILABLE` verifies live Guild membership before writing.
-- [ ] `AVAILABLE` clears exclusion.
-- [ ] Unavailable member is excluded from ROTE donor candidates.
-- [ ] Officer can manage a linked Guildmate.
-- [ ] Normal member cannot target another Discord member.
+- [x] Read-own-status path implemented.
+- [x] `UNAVAILABLE` verifies current bound-Guild membership before writing.
+- [x] `AVAILABLE` clears the durable exclusion without requiring the live gateway.
+- [x] Unavailable member is excluded from ROTE donor candidates in planner regression coverage.
+- [x] Officer-target path for a linked Guildmate is implemented.
+- [x] Normal-member cross-target rejection is covered by regression tests.
 
-### Donation preferences
+### Donation preferences implementation ✅
 
 ```text
-/tb preference unit:<Base ID> preference:GIVE
-/tb preference unit:<Base ID> preference:KEEP
-/tb preference unit:<Base ID> preference:DEFAULT
+/tb preference unit:<search/autocomplete> preference:GIVE
+/tb preference unit:<search/autocomplete> preference:KEEP
+/tb preference unit:<search/autocomplete> preference:DEFAULT
 /tb preferences
 ```
 
-- [ ] GIVE verifies unit ownership and persists.
-- [ ] KEEP verifies unit ownership and persists.
-- [ ] DEFAULT clears explicit override.
-- [ ] Planner consumes durable GIVE/KEEP controls.
-- [ ] Mission protections and hard reserves override unsafe donor choices.
+- [x] GIVE verifies current unit ownership before persistence.
+- [x] KEEP verifies current unit ownership before persistence.
+- [x] DEFAULT clears an explicit override without requiring a live-gateway read.
+- [x] Planner consumes durable GIVE/KEEP controls.
+- [x] Mission protections outrank ordinary donor preference.
+- [x] Hard mission reserves remain absolute.
+- [x] KEEP can be used only as an explicit last-resort override when no safer owner exists.
 
-### Member-control UX backlog
+### Member-control UX ✅ implementation
 
-- [ ] Replace raw Base ID entry with verified unit search/autocomplete.
-- [ ] Add officer-readable member-control summary.
+- [x] Raw Base ID-only entry replaced with verified SWGOH unit search/autocomplete in the current command schema.
+- [x] Officer-readable `/tb controls [member]` drill-down added.
+- [x] `/tb activity` includes compact member-control totals.
+- [x] Officer `/tb controls` response is ephemeral/read-only with mention parsing suppressed.
+
+### Stage 7 live Discord acceptance — REQUIRED
+
+After `npm run discord:register-tb` has successfully registered the current schema:
+
+1. As the linked pilot member, run `/tb availability` and record the current status.
+2. Run `/tb availability state:UNAVAILABLE`; confirm live Guild verification succeeds.
+3. Run `/tb assignments phase:P1`; confirm that member is absent from eligible donor selections where they would otherwise qualify.
+4. Run `/tb availability state:AVAILABLE`; confirm the exclusion clears.
+5. Use `/tb preference unit:<autocomplete>` to select a unit actually owned by Warm Bacon and set `GIVE`.
+6. Run `/tb preferences`; confirm the GIVE control is persisted.
+7. Run `/tb assignments phase:P1`; confirm the preference changes donor priority only where mission safety allows it.
+8. Change the same unit to `KEEP`; verify the planner avoids that donor when a safer alternate owner exists.
+9. Change the same unit to `DEFAULT`; verify the explicit override disappears.
+10. As an officer, run `/tb controls` and `/tb controls member:<pilot member>`; confirm the exact availability and GIVE/KEEP state is visible without sending pings.
+11. From a normal linked-member account, attempt `/tb availability member:<another member>` or `/tb preferences member:<another member>` and confirm authorization denial.
+12. Leave the pilot member `AVAILABLE` with no unintended test preference overrides after acceptance.
+
+Do **not** mark Stage 7 live-complete from regression tests alone; the signed Discord path and registered command UI must be exercised in the pilot server.
 
 ---
 
@@ -431,8 +469,8 @@ The old `public/app.js` form still assumes every player lookup is a fully rich l
 - [ ] `/tb phase` returns live phase command-board metrics.
 - [ ] `/tb assignments` returns a mission-safe Operation donor draft.
 - [ ] `/tb farms` returns verified mission-impact farm priorities.
-- [ ] Availability exclusions alter candidates correctly.
-- [ ] GIVE/KEEP preferences alter donor priority correctly.
+- [ ] Availability exclusions alter candidates correctly in live Discord acceptance.
+- [ ] GIVE/KEEP preferences alter donor priority correctly in live Discord acceptance.
 - [ ] Mission protections remain enforced.
 - [ ] Hard reserves remain enforced.
 - [ ] Forced/risky assignments are clearly marked HELP/risk.
@@ -608,21 +646,25 @@ Website Discord auto-discovery falls back to manual Ally Code entry rather than 
 
 # Immediate next action — do not skip
 
-1. Let the current Player Command / cache/test Railway head settle without stacking unrelated commits.
-2. Confirm **Swgoh-App** production deployment is successful.
-3. Hard-refresh the app.
-4. Verify Player Command loads Warm Bacon from the canonical full roster and shows the 50-member Guild-relative ranks.
-5. Verify **Open Full Roster** exposes all **394** owned units.
-6. Verify **Refresh Live Detail** promotes to the existing live Comlink path without changing canonical roster completeness.
-7. Then execute Stage 7 Discord availability/preference acceptance tests before moving to Stage 8 ROTE command acceptance.
+1. **Production deployment is already successful at `c34d775`.** Do not re-open that gate unless a later code merge supersedes it.
+2. Hard-refresh the production app and visually verify Player Command Overview for **Warm Bacon / 732-764-286**.
+3. Confirm Guild-relative ranks are based on the full **50-member** canonical baseline.
+4. Open Full Roster and verify **394 = 325 characters + 69 ships**.
+5. Trigger **Refresh Live Detail** and verify live enrichment does not change canonical completeness or relabel unknown evidence as zero.
+6. Run `npm run discord:register-tb` in the configured deployment environment to register the current `/tb` schema, including unit autocomplete, `/tb activity`, and `/tb controls`.
+7. Execute the **Stage 7 live Discord acceptance sequence** above and return the pilot member to AVAILABLE/default preference state.
+8. Only after Stage 7 passes, proceed to Stage 8 live ROTE command acceptance.
+9. Do not enable public publishing or DMs; Stage 9 immutable-plan safety and Stage 10 delivery controls remain prerequisites.
 
 ---
 
 # Change log
 
+- 2026-08-18: Railway reported **Swgoh-App** and **Guild-Sync-Worker** successful for production merge `c34d775`; canonical progression nullability is now deployed across Zeta/Omega/Omicron evidence boundaries.
+- 2026-08-18: Advanced master checkpoint to Stage 7 live Discord acceptance; recorded current `/tb activity`, `/tb controls` and unit-autocomplete schema additions as requiring guild-command re-registration before live acceptance.
+- 2026-08-18: Recorded Ludus Venatus historical archive backfill to 2022 and the officer Guild History workspace.
 - 2026-08-18: Rewrote stale Stage 6 checkpoint after canonical Supabase persistence acceptance; recorded full 50-member / 19,051-unit Guild baseline and Warm Bacon 394-unit baseline.
-- 2026-08-18: Recorded Player Command Center implementation, shared canonical/history fetch coalescing, Guild-relative ranks, ROTE pressure and live-detail promotion; deployment acceptance still pending.
-- 2026-08-18: Recorded that the legacy hero `app.js` remains live-assuming and must become capability-aware before a canonical-first switch to avoid fake Omega/Eta zeroes.
+- 2026-08-18: Recorded Player Command Center implementation, shared canonical/history fetch coalescing, Guild-relative ranks, ROTE pressure and live-detail promotion.
 - 2026-08-17: Web ownership verification passed for **Warm Bacon / 732-764-286 / Ludus Venatus**.
 - 2026-08-17: Personalized verified-user arrival screen visually accepted.
 - 2026-08-17: `/tb setup` succeeded with `#bot-for-raid` and `@Commands Officer`.
