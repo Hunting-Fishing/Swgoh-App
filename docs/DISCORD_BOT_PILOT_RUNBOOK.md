@@ -2,7 +2,7 @@
 
 **Purpose:** authoritative checklist for bringing the SWGOH Command Center Discord bot from pilot to production. Update this file as each checkpoint is actually verified. Do not skip ahead just because later architecture has been discussed.
 
-**Current checkpoint:** **Stage 6 — link the pilot Discord operator to the verified live SWGOH player.**
+**Current checkpoint:** **Stage 6 — player linking is verified; re-verify `/tb me` after the Galactic Power normalization fix deploys.**
 
 **Current operating mode:** signed HTTP Discord interactions, guild-scoped `/tb` pilot, live SWGOH gateway reads, durable Railway Volume state, outbound publishing/DM delivery disabled.
 
@@ -192,49 +192,62 @@ No TB assignments or officer state were changed.
 
 Later resilience test:
 
-- [ ] After player linking is verified, confirm normal live reads continue from the durable guild binding independently of the environment Ally Code fallback.
+- [ ] After Stage 6 is fully green, confirm normal live reads continue from the durable guild binding independently of the environment Ally Code fallback.
 
 ---
 
-## Stage 6 — CURRENT CHECKPOINT: link the pilot Discord member to SWGOH 🔴
+## Stage 6 — CURRENT CHECKPOINT: verified player link + GP recheck 🔴
 
-Run as an officer:
+The pilot operator link has now been created successfully against the bound live guild.
 
-```text
-/tb link member:@<Discord member> ally_code:<9-digit Ally Code>
-```
+Verified `/tb link` behavior:
 
-For the pilot operator, select the Discord account that is using the bot and provide that player's actual 9-digit Ally Code.
+- [x] Durable Discord→SWGOH guild binding resolved.
+- [x] Submitted Ally Code matched a current **Ludus Venatus** guild member.
+- [x] Correct SWGOH player name returned: **Warm Bacon**.
+- [x] Guild membership reported `verified against bound guild roster`.
+- [x] Binding source reported `durable-guild-binding`.
+- [x] Link persisted durably and was audited.
+- [x] No DM or assignment publishing was enabled.
 
-Expected behavior:
+Verified `/tb links` behavior:
 
-1. resolve the durable Discord→SWGOH guild binding;
-2. read the current live **Ludus Venatus** roster;
-3. normalize the submitted Ally Code;
-4. verify the Ally Code belongs to a current guild member;
-5. reject the link if the same Ally Code is already linked to another Discord user in this server;
-6. persist Discord user ID + Ally Code + SWGOH player ID;
-7. write an audit event;
-8. return an ephemeral success response.
+- [x] Linked member count returned as **1**.
+- [x] Officer view shows the Discord↔SWGOH link and stored player ID.
+- [x] Mention suppression is active; listing links did not ping the member.
 
-Rules already implemented:
+Verified `/tb me` behavior:
 
-- claimed Ally Code must exist in the currently bound guild roster;
-- one Ally Code cannot be linked to two Discord users within the same Discord server;
-- player link is stored durably and audited;
-- relinking to another Ally Code clears stale preferences/availability;
-- unlink clears stale preferences/availability.
-
-Acceptance:
-
-- [ ] Link the pilot operator account with `/tb link`.
-- [ ] Verify the returned SWGOH player name/Ally Code is correct.
-- [ ] `/tb links` shows the durable link to an officer.
-- [ ] `/tb me` returns the signed caller's live linked SWGOH profile.
-- [ ] Verify GP/player identity looks correct.
+- [x] Signed caller resolved to the correct linked Discord member.
+- [x] Correct SWGOH player name returned.
+- [x] Correct guild returned: **Ludus Venatus**.
+- [x] Hydrated roster returned **394 units**.
+- [x] Roster cache reported `fresh`.
+- [ ] Galactic Power must return a credible non-zero live value.
 - [ ] Normal member cannot inspect another member through self-service commands.
 
-**Stop and capture the exact Discord response if `/tb link` fails.**
+### GP defect found during Stage 6 acceptance
+
+The first live `/tb me` result showed:
+
+```text
+Galactic Power: 0
+Hydrated roster units: 394
+Roster cache: fresh
+```
+
+This is treated as a correctness defect, not a completed acceptance result. The identity and roster are correct; the linked-player read was using the compact guild roster path, while calculated character/ship GP is available on the gateway's rich guild snapshot.
+
+Fixes committed:
+
+- [x] Shared guild roster service normalizes `characterGalacticPower + shipGalacticPower` into total `member.galacticPower` when direct GP is absent.
+- [x] Linked-player reads request the rich live guild snapshot using the existing separate rich cache key.
+- [x] Regression coverage verifies linked-player reads request rich roster data.
+- [x] Regression coverage verifies split character/ship GP normalizes into total member GP.
+- [ ] Railway deployment containing the GP fixes is ACTIVE.
+- [ ] Re-run `/tb me` after deployment and verify Galactic Power is non-zero and credible.
+
+Do **not** advance to Stage 7 until this GP recheck is green.
 
 ---
 
@@ -297,6 +310,7 @@ Then repeat representative checks for later phases.
 - [ ] Mission protections remain enforced.
 - [ ] Hard reserves remain enforced.
 - [ ] Forced/risky assignments are clearly marked HELP/risk.
+- [ ] Verify planner GP tie-break inputs are non-zero/credible before accepting donor ranking behavior.
 - [ ] Generic fleet gates are not presented as exact-ready when selectable-ship evidence is incomplete.
 
 The bot currently does **not** infer the live in-game ROTE phase. Officers select P1-P6 explicitly until a verified live TB-state source exists.
@@ -476,19 +490,20 @@ Safe clears such as `DEFAULT` preference or `AVAILABLE` may remove stale control
 
 # Immediate next action — do not skip
 
-1. In Discord run `/tb link`.
-2. Set `member` to the pilot operator Discord account.
-3. Enter that player's actual 9-digit SWGOH Ally Code.
-4. Submit the command.
-5. Capture the exact Discord response.
-6. If successful, run `/tb links`.
-7. Then run `/tb me`.
-8. Only after player identity is verified do we proceed to availability/preferences.
+1. Wait for the latest **Swgoh-App** Railway deployment containing the GP fix to show **ACTIVE / Deployment successful**.
+2. In Discord run `/tb me` again.
+3. Confirm the same linked player and guild are returned.
+4. Confirm `Hydrated roster units` remains credible.
+5. Confirm `Galactic Power` is now a credible non-zero value.
+6. Capture the exact Discord response.
+7. Only after the GP recheck is green do we proceed to Stage 7 availability/preferences.
 
 ---
 
 # Change log
 
+- 2026-08-17: `/tb link`, `/tb links`, and `/tb me` verified the pilot operator's durable live player identity against **Ludus Venatus**; `/tb me` exposed a `Galactic Power: 0` defect while correctly hydrating 394 roster units.
+- 2026-08-17: Added linked-player rich-roster GP normalization, rich-read regression coverage, and a Stage 6 deployment/recheck gate before member-control testing.
 - 2026-08-17: `/tb setup` succeeded with `#bot-for-raid` and `@Commands Officer`; durable atomic write and audit event verified.
 - 2026-08-17: `/tb sync` succeeded against live guild **Ludus Venatus**, hydrating **50/50** rosters at **574,260,422 GP** with refreshed cache state. Active checkpoint advanced to Stage 6 player linking.
 - 2026-08-17: Added explicit Discord officer-role creation checkpoint before setup.
