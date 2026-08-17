@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { generateKeyPairSync, sign } from "node:crypto";
 import { Readable } from "node:stream";
-import { handleDiscordInteractionRequest } from "../discord-tb.mjs";
+import { handleDiscordInteractionRequest } from "../discord-interaction-router.mjs";
 
 const applicationId = "123456789012345678";
 const guildId = "987654321098765432";
