@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   isCanonicalRosterBody,
   isLiveRosterBody,
+  loadPreferredPlayerRoster,
   nullableMetric,
   rosterCapabilityKnown,
   rosterEndpoint,
@@ -24,6 +25,40 @@ test("source detection separates canonical baseline from live enrichment", () =>
   assert.equal(isLiveRosterBody({ source: "canonical" }), false);
   assert.equal(validPlayerRosterBody({ source: "canonical", player: {}, units: [], ships: [] }), true);
   assert.equal(validPlayerRosterBody({ source: "live", player: {}, units: [], ships: [] }), true);
+});
+
+test("canonical-first loader does not call the live endpoint when a persisted roster exists", async () => {
+  const calls = [];
+  const result = await loadPreferredPlayerRoster("732-764-286", async (url) => {
+    calls.push(url);
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ source: "canonical", player: {}, units: [], ships: [], capabilities: { persistedFullRoster: true } }),
+    };
+  });
+  assert.deepEqual(calls, ["/api/player/732764286/baseline"]);
+  assert.equal(result.source, "canonical");
+  assert.equal(result.liveFallback, false);
+});
+
+test("canonical-first loader falls back to live when the persisted baseline is unavailable", async () => {
+  const calls = [];
+  const result = await loadPreferredPlayerRoster("732764286", async (url) => {
+    calls.push(url);
+    if (url.endsWith("/baseline")) {
+      return { ok: false, status: 404, json: async () => ({ error: "No persisted player baseline exists" }) };
+    }
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ source: "live", player: {}, units: [], ships: [], capabilities: { liveRoster: true } }),
+    };
+  });
+  assert.deepEqual(calls, ["/api/player/732764286/baseline", "/api/player/732764286"]);
+  assert.equal(result.source, "live");
+  assert.equal(result.liveFallback, true);
+  assert.match(result.baselineDiagnostic, /No persisted player baseline/);
 });
 
 test("only filters requiring non-persisted evidence force live detail", () => {
