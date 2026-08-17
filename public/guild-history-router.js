@@ -1,269 +1,82 @@
 const HISTORY_PATH = '/guild/history';
 const ALLY_STORAGE_KEY = 'swgoh:guild-route-ally-code';
-const VIEWS = Object.freeze([
-  ['membership', 'Membership'],
-  ['growth', 'GP / Roster'],
-  ['tickets', 'Tickets'],
-  ['raids', 'Raids'],
-  ['rote', 'ROTE'],
-  ['reva', 'Reva'],
-  ['progression', 'GL / Inquisitor'],
-]);
+const VIEWS = Object.freeze([['membership','Membership'],['growth','GP / Roster'],['tickets','Tickets'],['raids','Raids'],['rote','ROTE'],['reva','Reva'],['progression','GL / Inquisitor']]);
 const GL_BASES = new Set(['GLAHSOKATANO','JABBATHEHUTT','JEDIMASTERKENOBI','GRANDMASTERLUKE','GLLEIA','LORDVADER','GLHONDO','GLREY','SITHPALPATINE','SUPREMELEADERKYLOREN']);
 const INQ_BASES = new Set(['EIGHTHBROTHER','FIFTHBROTHER','GRANDINQUISITOR','INQUISITORBARRISS','MARROK','NINTHSISTER','SECONDSISTER','SEVENTHSISTER','THIRDSISTER']);
+const state = { code:'', view:'membership', coverage:null, sections:new Map(), catalog:null, loading:false, rendering:false };
 
-const state = { loading: false, code: '', view: 'membership', coverage: null, sections: new Map(), catalog: null, renderedKey: '' };
-const digits = (value) => String(value || '').replace(/\D/g, '').slice(0, 9);
-const escapeHtml = (value) => String(value ?? '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#039;');
-const escapeAttr = escapeHtml;
-const number = (value) => Number.isFinite(Number(value)) ? new Intl.NumberFormat().format(Number(value)) : '—';
-const pct = (value) => Number.isFinite(Number(value)) ? `${Number(value).toFixed(1)}%` : '—';
+const digits = (v)=>String(v||'').replace(/\D/g,'').slice(0,9);
+const esc = (v)=>String(v??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#039;');
+const num = (v)=>Number.isFinite(Number(v))?new Intl.NumberFormat().format(Number(v)):'—';
+const percent = (a,b)=>Number(b)>0?`${(Number(a)/Number(b)*100).toFixed(1)}%`:'—';
+const isRoute = ()=>location.pathname.replace(/\/+$/,'')===HISTORY_PATH;
+const day = (v)=>{const d=new Date(v||0);return Number.isNaN(d.getTime())?'—':d.toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric'});};
+const time = (v)=>{const d=new Date(v||0);return Number.isNaN(d.getTime())?'—':d.toLocaleString();};
+const ally = (v)=>{const c=digits(v);return c.length===9?c.replace(/(\d{3})(?=\d)/g,'$1-'):c||'—';};
 
-function isHistoryRoute() { return location.pathname.replace(/\/+$/, '') === HISTORY_PATH; }
-function currentAllyCode() {
-  const query = digits(new URLSearchParams(location.search).get('allyCode'));
-  const input = digits(document.getElementById('allyCode')?.value);
-  let stored = '';
-  try { stored = digits(localStorage.getItem(ALLY_STORAGE_KEY)); } catch {}
-  return [query, input, stored].find((code) => code.length === 9) || '';
+function currentCode(){
+  const q=digits(new URLSearchParams(location.search).get('allyCode'));
+  const i=digits(document.getElementById('allyCode')?.value);
+  let s=''; try{s=digits(localStorage.getItem(ALLY_STORAGE_KEY));}catch{}
+  return [q,i,s].find((c)=>c.length===9)||'';
 }
-function requestedView() {
-  const view = String(new URLSearchParams(location.search).get('view') || 'membership');
-  return VIEWS.some(([id]) => id === view) ? view : 'membership';
+function currentView(){const v=String(new URLSearchParams(location.search).get('view')||'membership');return VIEWS.some(([id])=>id===v)?v:'membership';}
+function viewUrl(view){const p=new URLSearchParams(location.search);if(state.code)p.set('allyCode',state.code);p.set('view',view);return `${HISTORY_PATH}?${p}`;}
+function ensureStyle(){if(document.querySelector('link[data-guild-history-style]'))return;const l=document.createElement('link');l.rel='stylesheet';l.href='/guild-history.css?v=20260818-guildhistory1';l.dataset.guildHistoryStyle='true';document.head.appendChild(l);}
+function ensureNav(){
+  const nav=document.querySelector('.guild-route-nav'); if(!nav)return;
+  let link=nav.querySelector('[data-guild-history-nav]')||nav.querySelector('[data-guild-route-path="/guild/history"]');
+  if(!link){link=document.createElement('a');nav.appendChild(link);}
+  link.dataset.guildHistoryNav='true';link.dataset.guildRouteNav='true';link.dataset.guildRoutePath=HISTORY_PATH;link.textContent='History';link.href=state.code?`${HISTORY_PATH}?allyCode=${encodeURIComponent(state.code)}`:HISTORY_PATH;
+  if(isRoute())for(const a of nav.querySelectorAll('a'))a.classList.toggle('active',a===link);
 }
-function routeUrl(view = state.view) {
-  const params = new URLSearchParams(location.search);
-  if (state.code) params.set('allyCode', state.code);
-  params.set('view', view);
-  return `${HISTORY_PATH}?${params.toString()}`;
-}
-function formatDay(value) {
-  const date = new Date(value || 0);
-  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric' });
-}
-function formatTime(value) {
-  const date = new Date(value || 0);
-  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString();
-}
-function formatAlly(value) {
-  const code = digits(value);
-  return code.length === 9 ? code.replace(/(\d{3})(?=\d)/g, '$1-') : code || '—';
-}
-function ensureStyle() {
-  if (document.querySelector('link[data-guild-history-style]')) return;
-  const link = document.createElement('link');
-  link.rel = 'stylesheet';
-  link.href = '/guild-history.css?v=20260818-guildhistory1';
-  link.dataset.guildHistoryStyle = 'true';
-  document.head.appendChild(link);
-}
-function ensureNav() {
-  const nav = document.querySelector('.guild-route-nav');
-  if (!nav) return;
-  let link = nav.querySelector('[data-guild-history-nav]');
-  if (!link) {
-    link = document.createElement('a');
-    link.dataset.guildHistoryNav = 'true';
-    link.dataset.guildRouteNav = 'true';
-    link.dataset.guildRoutePath = HISTORY_PATH;
-    link.textContent = 'History';
-    nav.appendChild(link);
-  }
-  link.href = state.code ? `${HISTORY_PATH}?allyCode=${encodeURIComponent(state.code)}` : HISTORY_PATH;
-  if (isHistoryRoute()) for (const item of nav.querySelectorAll('a')) item.classList.toggle('active', item === link);
-}
-async function fetchJson(url) {
-  const response = await fetch(url, { cache: 'no-store' });
-  const body = await response.json();
-  if (!response.ok) throw new Error(body?.error || `${url} returned HTTP ${response.status}`);
-  return body;
-}
-async function section(name) {
-  if (state.sections.has(name)) return state.sections.get(name);
-  const body = await fetchJson(`/api/guild/by-player/${state.code}/history/archive?section=${encodeURIComponent(name)}`);
-  const data = body?.data;
-  state.sections.set(name, data);
-  return data;
-}
-async function dictionary() { return section('dict'); }
-async function catalogIndex() {
-  if (state.catalog) return state.catalog;
-  try {
-    const body = await fetchJson('/data/catalog.json?guild-history=1');
-    state.catalog = new Map((Array.isArray(body?.units) ? body.units : []).map((row) => [String(row.baseId || '').toUpperCase(), row]));
-  } catch { state.catalog = new Map(); }
-  return state.catalog;
-}
-function stat(label, value, detail = '') {
-  return `<div class="guild-history-stat"><span>${escapeHtml(label)}</span><strong>${escapeHtml(String(value))}</strong>${detail ? `<small>${escapeHtml(detail)}</small>` : ''}</div>`;
-}
-function sparkline(values, label = 'Historical trend') {
-  const nums = values.map(Number).filter(Number.isFinite);
-  if (nums.length < 2) return '';
-  const min = Math.min(...nums), max = Math.max(...nums), span = Math.max(1, max - min);
-  const points = nums.map((value, index) => `${(index / (nums.length - 1)) * 100},${30 - ((value - min) / span) * 28}`).join(' ');
-  return `<svg class="guild-history-spark" viewBox="0 0 100 32" preserveAspectRatio="none" role="img" aria-label="${escapeAttr(label)}"><polyline points="${points}" vector-effect="non-scaling-stroke" /></svg>`;
-}
-function empty(message) { return `<div class="workspace-note">${escapeHtml(message)}</div>`; }
-function viewTabs() {
-  return `<nav class="guild-history-tabs" aria-label="Historical Guild Intelligence">${VIEWS.map(([id,label]) => `<a href="${escapeAttr(routeUrl(id))}" data-history-view="${id}" class="${id === state.view ? 'active' : ''}">${escapeHtml(label)}</a>`).join('')}</nav>`;
-}
-function shell(content) {
-  const target = document.getElementById('guildRouteContent');
-  if (!target) return;
-  const c = state.coverage || {};
-  target.innerHTML = `<div class="guild-history-shell">
-    <section class="guild-history-hero">
-      <div><div class="kicker">GUILD INTELLIGENCE · HISTORICAL ARCHIVE</div><h2>Ludus Venatus Historical Command</h2><p>Provenance-backed Guild history from ${escapeHtml(formatDay(c.firstObservedAt))} through ${escapeHtml(formatDay(c.lastObservedAt))}, joined to the canonical live timeline. Exact events remain exact; observation gaps remain bounded windows.</p></div>
-      <div class="guild-history-source"><span>ARCHIVE V${number(c.payloadVersion)}</span><small>${escapeHtml(c.source || 'historical source')}</small><small>SHA ${escapeHtml(String(c.sourceSha256 || '').slice(0,12))}…</small></div>
-    </section>
-    ${viewTabs()}
-    <section id="guildHistoryView" class="guild-history-view">${content}</section>
-  </div>`;
-  bindTabs();
-}
-function bindTabs() {
-  for (const link of document.querySelectorAll('[data-history-view]')) {
-    link.addEventListener('click', (event) => {
-      event.preventDefault();
-      const view = link.dataset.historyView;
-      if (!VIEWS.some(([id]) => id === view)) return;
-      state.view = view;
-      history.replaceState(null, '', routeUrl(view));
-      renderView();
-    });
-  }
-}
-function loadingView() { shell('<div class="guild-history-loading">Decrypting historical holocron…</div>'); }
-
-async function renderMembership() {
-  const [dict, periods, returns] = await Promise.all([dictionary(), section('membershipPeriods'), section('returns')]);
-  const allies = Array.isArray(dict?.allies) ? dict.allies : [];
-  const names = Array.isArray(dict?.names) ? dict.names : [];
-  const decodedReturns = (Array.isArray(returns) ? returns : []).map((r) => ({
-    allyCode: allies[r[0]] || '', name: names[r[0]] || allies[r[0]] || 'Unknown', returnedAt: r[1], priorPresent: r[2], firstAbsent: r[3], reobserved: r[4],
-  })).sort((a,b) => String(b.returnedAt).localeCompare(String(a.returnedAt)));
-  const decodedPeriods = (Array.isArray(periods) ? periods : []).map((r) => ({
-    allyCode: allies[r[0]] || '', name: names[r[0]] || allies[r[0]] || 'Unknown', period: r[1], joinedAt: r[2], firstObserved: r[3], lastObserved: r[4], firstAbsent: r[5],
-  }));
-  const currentTenures = decodedPeriods.filter((row) => !row.firstAbsent).length;
-  const returnedPlayers = new Set(decodedReturns.map((row) => row.allyCode)).size;
-  const rows = decodedReturns.map((row) => `<tr><td><strong>${escapeHtml(row.name)}</strong><small>${escapeHtml(formatAlly(row.allyCode))}</small></td><td><strong>RETURNED</strong><small>Exact reported Guild join</small></td><td>${escapeHtml(formatTime(row.returnedAt))}</td><td><span class="bounded">${escapeHtml(formatDay(row.priorPresent))} → ${escapeHtml(formatDay(row.firstAbsent))}</span><small>prior presence → first observed absence</small></td><td>${escapeHtml(formatDay(row.reobserved))}</td></tr>`).join('');
-  const recentPeriods = decodedPeriods.slice().sort((a,b) => String(b.joinedAt || b.firstObserved).localeCompare(String(a.joinedAt || a.firstObserved))).slice(0,40).map((row) => `<tr><td><strong>${escapeHtml(row.name)}</strong><small>${escapeHtml(formatAlly(row.allyCode))}</small></td><td>#${number(row.period)}</td><td>${escapeHtml(formatDay(row.joinedAt || row.firstObserved))}</td><td>${row.firstAbsent ? `<span class="bounded">${escapeHtml(formatDay(row.lastObserved))} → ${escapeHtml(formatDay(row.firstAbsent))}</span><small>bounded leave window</small>` : '<span class="current">CURRENT / LAST OBSERVED</span>'}</td></tr>`).join('');
-  return `<div class="guild-history-stat-grid">${stat('Membership Periods',number(decodedPeriods.length))}${stat('Confirmed Returns',number(decodedReturns.length))}${stat('Players Who Returned',number(returnedPlayers))}${stat('Open / Current Periods',number(currentTenures))}</div>
-    <section class="guild-history-card"><div class="kicker">CONFIRMED RETURN EVENTS</div><h3>Exact return timestamps</h3><p>Same Ally Code, prior complete-roster presence, observed absence, then a fresh game-reported Guild join timestamp.</p><div class="guild-history-table-wrap"><table><thead><tr><th>Player</th><th>Event</th><th>Returned</th><th>Evidence Window</th><th>Re-observed</th></tr></thead><tbody>${rows || '<tr><td colspan="5">No confirmed returns.</td></tr>'}</tbody></table></div></section>
-    <section class="guild-history-card"><div class="kicker">TENURE LEDGER</div><h3>Continuous membership periods</h3><p>Leave dates are not fabricated. Where an exact leave timestamp does not exist, the UI shows the bounded window from last observed present to first observed absent.</p><div class="guild-history-table-wrap"><table><thead><tr><th>Player</th><th>Tenure</th><th>Reported Join / First Seen</th><th>End</th></tr></thead><tbody>${recentPeriods}</tbody></table></div></section>`;
+async function json(url){const r=await fetch(url,{cache:'no-store'});const b=await r.json();if(!r.ok)throw new Error(b?.error||`${url} returned HTTP ${r.status}`);return b;}
+async function section(name){if(state.sections.has(name))return state.sections.get(name);const body=await json(`/api/guild/by-player/${state.code}/history/archive?section=${encodeURIComponent(name)}`);state.sections.set(name,body?.data);return body?.data;}
+async function dict(){return section('dict');}
+async function catalog(){if(state.catalog)return state.catalog;try{const b=await json('/data/catalog.json?guild-history=1');state.catalog=new Map((Array.isArray(b?.units)?b.units:[]).map((u)=>[String(u.baseId||'').toUpperCase(),u]));}catch{state.catalog=new Map();}return state.catalog;}
+function stat(label,value,detail=''){return `<div class="guild-history-stat"><span>${esc(label)}</span><strong>${esc(value)}</strong>${detail?`<small>${esc(detail)}</small>`:''}</div>`;}
+function spark(values,label){const a=values.map(Number).filter(Number.isFinite);if(a.length<2)return'';const lo=Math.min(...a),hi=Math.max(...a),span=Math.max(1,hi-lo);const pts=a.map((v,i)=>`${i/(a.length-1)*100},${30-(v-lo)/span*28}`).join(' ');return `<svg class="guild-history-spark" viewBox="0 0 100 32" preserveAspectRatio="none" role="img" aria-label="${esc(label)}"><polyline points="${pts}" vector-effect="non-scaling-stroke"/></svg>`;}
+function table(headers,rows){return `<div class="guild-history-table-wrap"><table><thead><tr>${headers.map((h)=>`<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${rows||`<tr><td colspan="${headers.length}">No historical records.</td></tr>`}</tbody></table></div>`;}
+function tabs(){return `<nav class="guild-history-tabs" aria-label="Historical Guild Intelligence">${VIEWS.map(([id,label])=>`<a href="${esc(viewUrl(id))}" data-history-view="${id}" class="${id===state.view?'active':''}">${esc(label)}</a>`).join('')}</nav>`;}
+function renderHeader(){const h=document.getElementById('guildRouteHeader'),g=state.coverage?.guild;if(!h||!g)return;h.innerHTML=`<div class="guild-page-identity"><div class="kicker">HISTORICAL GUILD INTELLIGENCE</div><h1>${esc(g.name||'Guild')}</h1><p>Historical evidence is joined to the canonical live Guild timeline without fabricating missing event times.</p><div class="guild-page-meta"><span>${num(g.galacticPower)} current GP</span><span>${num(g.memberCount)} current members</span><span>Archive from ${esc(day(state.coverage.firstObservedAt))}</span></div></div><div class="guild-page-freshness"><span class="guild-page-live ready">ARCHIVE READY</span><small>Historical source: ${esc(state.coverage.source||'workbook')}</small><small>Live Guild sync: ${esc(time(g.lastSyncedAt))}</small></div>`;}
+function shell(content){
+  const target=document.getElementById('guildRouteContent');if(!target)return;
+  state.rendering=true;
+  try{const c=state.coverage||{};target.innerHTML=`<div class="guild-history-shell" data-history-code="${esc(state.code)}" data-history-view="${esc(state.view)}"><section class="guild-history-hero"><div><div class="kicker">GUILD INTELLIGENCE · HISTORICAL ARCHIVE</div><h2>Ludus Venatus Historical Command</h2><p>Provenance-backed history from ${esc(day(c.firstObservedAt))} through ${esc(day(c.lastObservedAt))}. Exact events remain exact; observation gaps remain bounded windows.</p></div><div class="guild-history-source"><span>ARCHIVE V${num(c.payloadVersion)}</span><small>${esc(c.source||'historical source')}</small><small>SHA ${esc(String(c.sourceSha256||'').slice(0,12))}…</small></div></section>${tabs()}<section class="guild-history-view">${content}</section></div>`;}finally{state.rendering=false;}
+  for(const a of target.querySelectorAll('[data-history-view]'))a.addEventListener('click',(e)=>{e.preventDefault();const v=a.dataset.historyView;if(!VIEWS.some(([id])=>id===v))return;state.view=v;history.replaceState(null,'',viewUrl(v));renderView();});
 }
 
-async function renderGrowth() {
-  const [snapshots, monthly] = await Promise.all([section('guildSnapshots'), section('playerMonthly')]);
-  const rows = Array.isArray(snapshots) ? snapshots : [];
-  const first = rows[0], last = rows.at(-1);
-  const gain = first && last ? Number(last[2]) - Number(first[2]) : 0;
-  const months = (Array.isArray(monthly) ? monthly : []).slice().sort((a,b) => String(a[0]).localeCompare(String(b[0])));
-  const monthRows = months.slice().reverse().map((r) => `<tr><td>${escapeHtml(r[0])}</td><td>${number(r[1])}</td><td>${number(r[2])}</td><td>${number(r[3])}</td><td>${number(r[4])}</td></tr>`).join('');
-  const recent = rows.slice(-40).reverse().map((r) => `<tr><td>${escapeHtml(formatTime(r[0]))}</td><td>${number(r[1])}</td><td>${number(r[2])}</td></tr>`).join('');
-  return `<div class="guild-history-stat-grid">${stat('Exact Guild Snapshots',number(rows.length))}${stat('First GP',number(first?.[2]),formatDay(first?.[0]))}${stat('Latest Archived GP',number(last?.[2]),formatDay(last?.[0]))}${stat('Archived GP Growth',`${gain >= 0 ? '+' : ''}${number(gain)}`)}</div>
-    <section class="guild-history-card"><div class="kicker">GUILD GP TRAJECTORY</div><h3>Exact archived Guild snapshots</h3>${sparkline(rows.map((r)=>r[2]),'Guild GP history')}<div class="guild-history-table-wrap"><table><thead><tr><th>Snapshot</th><th>Members</th><th>Guild GP</th></tr></thead><tbody>${recent}</tbody></table></div></section>
-    <section class="guild-history-card"><div class="kicker">MONTHLY ROSTER DEVELOPMENT</div><h3>Player-observation aggregates</h3><p>The monthly lane aggregates 1,723 raw player-month observations. Character + ship GP remain separate evidence streams.</p><div class="guild-history-table-wrap"><table><thead><tr><th>Month</th><th>Player observations</th><th>Total GP</th><th>Character GP</th><th>Ship GP</th></tr></thead><tbody>${monthRows}</tbody></table></div></section>`;
+async function membership(){
+  const [d,p,r]=await Promise.all([dict(),section('membershipPeriods'),section('returns')]);const allies=d?.allies||[],names=d?.names||[];
+  const returns=(r||[]).map((x)=>({code:allies[x[0]]||'',name:names[x[0]]||allies[x[0]]||'Unknown',at:x[1],prior:x[2],absent:x[3],seen:x[4]})).sort((a,b)=>String(b.at).localeCompare(String(a.at)));
+  const periods=(p||[]).map((x)=>({code:allies[x[0]]||'',name:names[x[0]]||allies[x[0]]||'Unknown',n:x[1],join:x[2],first:x[3],last:x[4],absent:x[5]}));
+  const returnRows=returns.map((x)=>`<tr><td><strong>${esc(x.name)}</strong><small>${esc(ally(x.code))}</small></td><td><strong>RETURNED</strong><small>exact reported Guild join</small></td><td>${esc(time(x.at))}</td><td><span class="bounded">${esc(day(x.prior))} → ${esc(day(x.absent))}</span><small>prior presence → first observed absence</small></td><td>${esc(day(x.seen))}</td></tr>`).join('');
+  const periodRows=periods.slice().sort((a,b)=>String(b.join||b.first).localeCompare(String(a.join||a.first))).map((x)=>`<tr><td><strong>${esc(x.name)}</strong><small>${esc(ally(x.code))}</small></td><td>#${num(x.n)}</td><td>${esc(day(x.join||x.first))}</td><td>${x.absent?`<span class="bounded">${esc(day(x.last))} → ${esc(day(x.absent))}</span><small>bounded leave window</small>`:'<span class="current">CURRENT / LAST OBSERVED</span>'}</td></tr>`).join('');
+  return `<div class="guild-history-stat-grid">${stat('Membership Periods',num(periods.length))}${stat('Confirmed Returns',num(returns.length))}${stat('Players Who Returned',num(new Set(returns.map((x)=>x.code)).size))}${stat('Open / Current Periods',num(periods.filter((x)=>!x.absent).length))}</div><section class="guild-history-card"><div class="kicker">CONFIRMED RETURNS</div><h3>Exact return timestamps</h3><p>Same Ally Code, prior complete-roster presence, observed absence, then a fresh game-reported Guild join timestamp.</p>${table(['Player','Event','Returned','Evidence Window','Re-observed'],returnRows)}</section><section class="guild-history-card"><div class="kicker">TENURE LEDGER</div><h3>Continuous membership periods</h3><p>When the source has no exact leave time, the bounded last-present → first-absent window is shown instead.</p>${table(['Player','Tenure','Reported Join / First Seen','End'],periodRows)}</section>`;
 }
+async function growth(){const [s,m]=await Promise.all([section('guildSnapshots'),section('playerMonthly')]);const rows=s||[],first=rows[0],last=rows.at(-1),gain=first&&last?Number(last[2])-Number(first[2]):0;const recent=rows.slice(-60).reverse().map((x)=>`<tr><td>${esc(time(x[0]))}</td><td>${num(x[1])}</td><td>${num(x[2])}</td></tr>`).join('');const monthly=(m||[]).slice().reverse().map((x)=>`<tr><td>${esc(x[0])}</td><td>${num(x[1])}</td><td>${num(x[2])}</td><td>${num(x[3])}</td><td>${num(x[4])}</td></tr>`).join('');return `<div class="guild-history-stat-grid">${stat('Exact Guild Snapshots',num(rows.length))}${stat('First GP',num(first?.[2]),day(first?.[0]))}${stat('Latest Archived GP',num(last?.[2]),day(last?.[0]))}${stat('Archived GP Growth',`${gain>=0?'+':''}${num(gain)}`)}</div><section class="guild-history-card"><div class="kicker">GUILD GP TRAJECTORY</div><h3>Exact archived snapshots</h3>${spark(rows.map((x)=>x[2]),'Guild GP history')}${table(['Snapshot','Members','Guild GP'],recent)}</section><section class="guild-history-card"><div class="kicker">MONTHLY ROSTER DEVELOPMENT</div><h3>Player-observation aggregates</h3><p>Character GP and ship GP remain separate evidence streams.</p>${table(['Month','Player Observations','Total GP','Character GP','Ship GP'],monthly)}</section>`;}
+async function tickets(){const a=(await section('tickets')||[]).slice().sort((x,y)=>String(x[0]).localeCompare(String(y[0]))),latest=a.at(-1)||[],best=a.reduce((x,y)=>Number(y[3]||0)>Number(x?.[3]||0)?y:x,a[0]||[]);const rows=a.slice().reverse().map((x)=>`<tr><td>${esc(x[0])}</td><td>${num(x[1])}</td><td>${num(x[2])}</td><td><strong>${num(x[3])}</strong></td><td class="bad">${num(x[4])}</td><td>${num(x[5])}</td></tr>`).join('');return `<div class="guild-history-stat-grid">${stat('Ticket Days',num(a.length))}${stat('Latest Tickets',num(latest[2]),latest[0]||'')}${stat('Latest 600s',num(latest[3]))}${stat('Latest Zeroes',num(latest[4]))}${stat('Best Full-600 Count',num(best[3]),best[0]||'')}</div><section class="guild-history-card"><div class="kicker">DAILY RAID TICKETS</div><h3>Guild participation discipline</h3>${spark(a.map((x)=>x[2]),'Daily Raid tickets')}<p><strong>Zero</strong> is a subset of <strong>Below 600</strong>; both are preserved.</p>${table(['Date','Members','Total Tickets','Exactly 600','Zero','Below 600'],rows)}</section>`;}
+async function raids(){const raw=await section('raids')||[],seen=new Set(),a=raw.filter((x)=>{const k=[x[0],x[1],x[3],x[4]].join('|');if(seen.has(k))return false;seen.add(k);return true;}).sort((x,y)=>String(x[0]).localeCompare(String(y[0]))),latest=a.at(-1)||[],best=a.reduce((x,y)=>Number(y[3]||0)>Number(x?.[3]||0)?y:x,a[0]||[]);const rows=a.slice().reverse().map((x)=>`<tr><td>${esc(x[0])}</td><td><strong>${esc(x[1])}</strong></td><td>${num(x[3])}</td><td>${num(x[4])} / ${num(x[2])}</td><td>${percent(x[4],x[2])}</td></tr>`).join('');return `<div class="guild-history-stat-grid">${stat('Raid Events',num(a.length),raw.length!==a.length?`${raw.length-a.length} exact duplicate(s) hidden`:'')}${stat('Latest Raid',latest[1]||'—',latest[0]||'')}${stat('Latest Score',num(latest[3]))}${stat('Best Archived Score',num(best[3]),best[1]||'')}</div><section class="guild-history-card"><div class="kicker">RAID HISTORY</div><h3>Speeder Bike → Naboo → Order 66</h3>${spark(a.map((x)=>x[3]),'Raid score history')}${table(['Date','Raid','Score','Participants','Participation'],rows)}</section>`;}
+async function rote(){const a=(await section('rote')||[]).slice().sort((x,y)=>String(x[0]).localeCompare(String(y[0]))),latest=a.at(-1)||[];const rows=a.slice().reverse().map((x)=>`<tr><td>${esc(x[0])}</td><td>${num(x[1])}</td><td>${num(x[2])}</td><td>${num(x[3])}</td><td>${num(x[4])}</td><td>${num(x[5])}</td><td class="bad">${num(x[6])}</td><td>${num(x[7])}</td><td>${num(x[8])}</td><td>${num(x[9])}</td></tr>`).join('');return `<div class="guild-history-stat-grid">${stat('ROTE Events',num(a.length))}${stat('Latest Deployed TP',num(latest[3]),latest[0]||'')}${stat('Latest Mission TP',num(latest[4]))}${stat('Mission Attempts',num(latest[5]))}${stat('Missed Phase Obs.',num(latest[6]))}</div><section class="guild-history-card"><div class="kicker">ROTE PERFORMANCE HISTORY</div><h3>Deployment, mission and participation evidence</h3>${spark(a.map((x)=>x[3]),'ROTE deployed TP')}<p><strong>Member/phase GP aggregate</strong> is a workbook member/phase aggregation and is deliberately not labeled simple Guild GP.</p>${table(['Date','Member Records','Member/Phase GP Aggregate','Deployed TP','Mission TP','Attempts','Missed Phases','Zeffo','Mandalore','Reva'],rows)}</section>`;}
+async function reva(){const a=(await section('reva')||[]).slice().sort((x,y)=>String(x[0]).localeCompare(String(y[0]))),latest=a.at(-1)||[],total=a.reduce((s,x)=>s+Number(x[1]||0),0);const rows=a.slice().reverse().map((x)=>`<tr><td>${esc(x[0])}</td><td><strong>${num(x[1])}</strong></td><td>${num(x[2])}</td><td>${x[3]==null?'—':num(x[3])}</td></tr>`).join('');return `<div class="guild-history-stat-grid">${stat('Reva Events',num(a.length))}${stat('Archived Shards Earned',num(total))}${stat('Latest Earned',num(latest[1]),latest[0]||'')}${stat('Latest In-Guild Earners',latest[3]==null?'—':num(latest[3]),latest[3]==null?'source unavailable':'')}</div><section class="guild-history-card"><div class="kicker">REVA SHARD HISTORY</div><h3>Earned shards and Guild-side earner evidence</h3>${spark(a.map((x)=>x[1]),'Reva shards per event')}<p>Missing source counts are displayed as <strong>—</strong>, never fake zeroes.</p>${table(['Date','Earned','Guild Members','In-Guild Earners'],rows)}</section>`;}
+function eventLabel(v){return String(v||'').replaceAll('_',' ').replaceAll('+',' + ').replace(/\b\w/g,(m)=>m.toUpperCase());}
+async function progression(){const [d,a,c]=await Promise.all([dict(),section('trackedUnitMilestones'),catalog()]);const bases=d?.bases||[],events=d?.eventTypes||[];const rows=(a||[]).map((x)=>({base:bases[x[0]]||'UNKNOWN',event:events[x[1]]||'event',count:x[2],first:x[3],last:x[4]}));const group=(title,set)=>{const map=new Map();for(const r of rows.filter((x)=>set.has(x.base))){if(!map.has(r.base))map.set(r.base,[]);map.get(r.base).push(r);}return `<section class="guild-history-card"><div class="kicker">${esc(title)}</div><h3>Historical progression milestones</h3><p>Counts are raw observed milestone events grouped by unit/event type—not current owner counts.</p><div class="guild-history-unit-grid">${[...map].map(([base,list])=>{const u=c.get(base)||{};return `<article><h4>${esc(u.name||base)}</h4><small>${esc(base)}</small>${list.map((r)=>`<div><strong>${num(r.count)}</strong><span>${esc(eventLabel(r.event))}</span><small>${esc(day(r.first))} → ${esc(day(r.last))}</small></div>`).join('')}</article>`;}).join('')}</div></section>`;};return `<div class="guild-history-stat-grid">${stat('Raw Milestone Events',num(state.coverage?.counts?.trackedUnitMilestones))}${stat('Grouped Series',num(rows.length))}${stat('Tracked GLs',num(GL_BASES.size))}${stat('Tracked Inquisitors',num(INQ_BASES.size))}</div>${group('GALACTIC LEGENDS',GL_BASES)}${group('INQUISITORIUS',INQ_BASES)}`;}
 
-async function renderTickets() {
-  const data = (Array.isArray(await section('tickets')) ? await section('tickets') : []).slice().sort((a,b)=>String(a[0]).localeCompare(String(b[0])));
-  const latest = data.at(-1) || [];
-  const best = data.reduce((a,b)=>Number(b[3]||0)>Number(a?.[3]||0)?b:a, data[0] || []);
-  const rows = data.slice(-120).reverse().map((r)=>`<tr><td>${escapeHtml(r[0])}</td><td>${number(r[1])}</td><td>${number(r[2])}</td><td><strong>${number(r[3])}</strong></td><td class="bad">${number(r[4])}</td><td>${number(r[5])}</td></tr>`).join('');
-  return `<div class="guild-history-stat-grid">${stat('Ticket Days',number(data.length))}${stat('Latest Tickets',number(latest[2]),latest[0] || '')}${stat('Latest 600s',number(latest[3]),`${number(latest[1])} members`)}${stat('Latest Zeroes',number(latest[4]))}${stat('Best Full-600 Count',number(best[3]),best[0] || '')}</div>
-    <section class="guild-history-card"><div class="kicker">DAILY RAID TICKETS</div><h3>Guild participation discipline</h3>${sparkline(data.map((r)=>r[2]),'Daily Raid ticket totals')}<p><strong>Zero</strong> is a subset of <strong>Below 600</strong>; they are intentionally shown separately.</p><div class="guild-history-table-wrap"><table><thead><tr><th>Date</th><th>Members</th><th>Total Tickets</th><th>Exactly 600</th><th>Zero</th><th>Below 600</th></tr></thead><tbody>${rows}</tbody></table></div></section>`;
+async function renderView(){
+  if(!isRoute()||state.rendering)return;
+  shell('<div class="guild-history-loading">Loading selected historical lane…</div>');
+  try{let html='';if(state.view==='membership')html=await membership();else if(state.view==='growth')html=await growth();else if(state.view==='tickets')html=await tickets();else if(state.view==='raids')html=await raids();else if(state.view==='rote')html=await rote();else if(state.view==='reva')html=await reva();else html=await progression();shell(html);}catch(e){shell(`<div class="workspace-error">${esc(e?.message||'Historical Guild Intelligence is unavailable.')}</div>`);}
 }
-
-async function renderRaids() {
-  const raw = Array.isArray(await section('raids')) ? await section('raids') : [];
-  const seen = new Set();
-  const data = raw.filter((r)=>{ const key=[r[0],r[1],r[3],r[4]].join('|'); if(seen.has(key)) return false; seen.add(key); return true; }).sort((a,b)=>String(a[0]).localeCompare(String(b[0])));
-  const latest = data.at(-1) || [];
-  const best = data.reduce((a,b)=>Number(b[3]||0)>Number(a?.[3]||0)?b:a,data[0]||[]);
-  const rows = data.slice().reverse().map((r)=>`<tr><td>${escapeHtml(r[0])}</td><td><strong>${escapeHtml(r[1])}</strong></td><td>${number(r[3])}</td><td>${number(r[4])} / ${number(r[2])}</td><td>${pct(Number(r[2]) ? Number(r[4])/Number(r[2])*100 : null)}</td></tr>`).join('');
-  return `<div class="guild-history-stat-grid">${stat('Raid Events',number(data.length),raw.length !== data.length ? `${raw.length-data.length} exact source duplicate(s) hidden` : '')}${stat('Latest Raid',latest[1] || '—',latest[0] || '')}${stat('Latest Score',number(latest[3]))}${stat('Best Archived Score',number(best[3]),best[1] || '')}</div>
-    <section class="guild-history-card"><div class="kicker">RAID HISTORY</div><h3>Speeder Bike → Naboo → Order 66</h3>${sparkline(data.map((r)=>r[3]),'Historical Raid score')}<div class="guild-history-table-wrap"><table><thead><tr><th>Date</th><th>Raid</th><th>Score</th><th>Participants</th><th>Participation</th></tr></thead><tbody>${rows}</tbody></table></div></section>`;
+async function load(force=false){
+  if(!isRoute()||state.loading||state.rendering)return;
+  const code=currentCode(),view=currentView(),target=document.getElementById('guildRouteContent');
+  if(code.length!==9){state.code='';shell('<div class="workspace-note">Load any current Guild member Ally Code to open historical Guild Intelligence.</div>');return;}
+  const existing=target?.querySelector(`.guild-history-shell[data-history-code="${CSS.escape(code)}"][data-history-view="${CSS.escape(view)}"]`);
+  if(!force&&existing)return;
+  if(code!==state.code){state.code=code;state.coverage=null;state.sections.clear();state.catalog=null;}
+  state.view=view;state.loading=true;ensureNav();
+  try{if(!state.coverage)state.coverage=await json(`/api/guild/by-player/${code}/history/coverage`);renderHeader();await renderView();}catch(e){shell(`<div class="workspace-error">${esc(e?.message||'Historical Guild archive is unavailable.')}</div>`);}finally{state.loading=false;}
 }
-
-async function renderRote() {
-  const data = (Array.isArray(await section('rote')) ? await section('rote') : []).slice().sort((a,b)=>String(a[0]).localeCompare(String(b[0])));
-  const latest = data.at(-1) || [];
-  const rows = data.slice().reverse().map((r)=>`<tr><td>${escapeHtml(r[0])}</td><td>${number(r[1])}</td><td>${number(r[2])}</td><td>${number(r[3])}</td><td>${number(r[4])}</td><td>${number(r[5])}</td><td class="bad">${number(r[6])}</td><td>${number(r[7])}</td><td>${number(r[8])}</td><td>${number(r[9])}</td></tr>`).join('');
-  return `<div class="guild-history-stat-grid">${stat('ROTE Events',number(data.length))}${stat('Latest Deployed TP',number(latest[3]),latest[0] || '')}${stat('Latest Mission TP',number(latest[4]))}${stat('Mission Attempts',number(latest[5]))}${stat('Missed Phase Obs.',number(latest[6]))}</div>
-    <section class="guild-history-card"><div class="kicker">ROTE PERFORMANCE HISTORY</div><h3>Deployment, mission and participation evidence</h3>${sparkline(data.map((r)=>r[3]),'ROTE deployed Territory Points')}<p><strong>Member/phase GP aggregate</strong> is a workbook aggregation across member/phase records. It is deliberately not labeled as simple Guild GP.</p><div class="guild-history-table-wrap"><table><thead><tr><th>Date</th><th>Member Records</th><th>Member/Phase GP Aggregate</th><th>Deployed TP</th><th>Mission TP</th><th>Attempts</th><th>Missed Phases</th><th>Zeffo</th><th>Mandalore</th><th>Reva</th></tr></thead><tbody>${rows}</tbody></table></div></section>`;
-}
-
-async function renderReva() {
-  const data = (Array.isArray(await section('reva')) ? await section('reva') : []).slice().sort((a,b)=>String(a[0]).localeCompare(String(b[0])));
-  const latest = data.at(-1) || [];
-  const total = data.reduce((sum,r)=>sum+Number(r[1]||0),0);
-  const rows = data.slice().reverse().map((r)=>`<tr><td>${escapeHtml(r[0])}</td><td><strong>${number(r[1])}</strong></td><td>${number(r[2])}</td><td>${r[3] === null || r[3] === undefined ? '—' : number(r[3])}</td></tr>`).join('');
-  return `<div class="guild-history-stat-grid">${stat('Reva Events',number(data.length))}${stat('Archived Shards Earned',number(total))}${stat('Latest Earned',number(latest[1]),latest[0] || '')}${stat('Latest In-Guild Earners',latest[3] == null ? '—' : number(latest[3]),latest[3] == null ? 'source unavailable' : '')}</div>
-    <section class="guild-history-card"><div class="kicker">REVA SHARD HISTORY</div><h3>Earned shards and Guild-side earner evidence</h3>${sparkline(data.map((r)=>r[1]),'Reva shards earned per event')}<p>Missing late-source <em>inGuild</em> counts are shown as <strong>—</strong>, never converted to zero.</p><div class="guild-history-table-wrap"><table><thead><tr><th>Date</th><th>Earned</th><th>Guild Members</th><th>In-Guild Earners</th></tr></thead><tbody>${rows}</tbody></table></div></section>`;
-}
-
-function milestoneLabel(value) { return String(value || '').replaceAll('_',' ').replaceAll('+',' + ').replace(/\b\w/g,(m)=>m.toUpperCase()); }
-async function renderProgression() {
-  const [dict, milestones, catalog] = await Promise.all([dictionary(), section('trackedUnitMilestones'), catalogIndex()]);
-  const bases = Array.isArray(dict?.bases) ? dict.bases : [];
-  const eventTypes = Array.isArray(dict?.eventTypes) ? dict.eventTypes : [];
-  const rows = (Array.isArray(milestones) ? milestones : []).map((r)=>({ baseId:bases[r[0]] || 'UNKNOWN', event:eventTypes[r[1]] || 'event', count:r[2], first:r[3], last:r[4] }));
-  const renderGroup = (title,set) => {
-    const list = rows.filter((r)=>set.has(r.baseId));
-    const byUnit = new Map();
-    for (const row of list) { if(!byUnit.has(row.baseId)) byUnit.set(row.baseId,[]); byUnit.get(row.baseId).push(row); }
-    return `<section class="guild-history-card"><div class="kicker">${escapeHtml(title)}</div><h3>Historical progression milestones</h3><p>Counts are raw observed milestone events grouped by unit/event type—not current owner counts.</p><div class="guild-history-unit-grid">${[...byUnit.entries()].map(([baseId,events])=>{ const unit=catalog.get(baseId)||{}; return `<article><h4>${escapeHtml(unit.name || baseId)}</h4><small>${escapeHtml(baseId)}</small>${events.sort((a,b)=>String(a.event).localeCompare(String(b.event))).map((e)=>`<div><strong>${number(e.count)}</strong><span>${escapeHtml(milestoneLabel(e.event))}</span><small>${escapeHtml(formatDay(e.first))} → ${escapeHtml(formatDay(e.last))}</small></div>`).join('')}</article>`; }).join('')}</div></section>`;
-  };
-  return `<div class="guild-history-stat-grid">${stat('Raw Milestone Events',number(state.coverage?.counts?.trackedUnitMilestones || 0))}${stat('Grouped Series',number(rows.length))}${stat('Tracked GLs',number(GL_BASES.size))}${stat('Tracked Inquisitors',number(INQ_BASES.size))}</div>${renderGroup('GALACTIC LEGENDS',GL_BASES)}${renderGroup('INQUISITORIUS',INQ_BASES)}`;
-}
-
-async function renderView() {
-  if (!isHistoryRoute()) return;
-  const target = document.getElementById('guildHistoryView');
-  if (target) target.innerHTML = '<div class="guild-history-loading">Loading selected historical lane…</div>';
-  else loadingView();
-  try {
-    let html = '';
-    if (state.view === 'membership') html = await renderMembership();
-    else if (state.view === 'growth') html = await renderGrowth();
-    else if (state.view === 'tickets') html = await renderTickets();
-    else if (state.view === 'raids') html = await renderRaids();
-    else if (state.view === 'rote') html = await renderRote();
-    else if (state.view === 'reva') html = await renderReva();
-    else if (state.view === 'progression') html = await renderProgression();
-    shell(html || empty('No historical data is available for this lane.'));
-  } catch (error) {
-    shell(`<div class="workspace-error">${escapeHtml(error?.message || 'Historical Guild Intelligence is unavailable.')}</div>`);
-  }
-}
-
-async function load(force = false) {
-  if (!isHistoryRoute() || state.loading) return;
-  const code = currentAllyCode();
-  if (code.length !== 9) { shell(empty('Load any current Guild member Ally Code to open historical Guild Intelligence.')); return; }
-  const key = `${code}|${requestedView()}`;
-  if (!force && state.renderedKey === key && state.coverage) { state.view=requestedView(); renderView(); return; }
-  state.loading = true; state.code = code; state.view = requestedView();
-  if (force || state.code !== code) state.sections.clear();
-  loadingView();
-  try {
-    state.coverage = await fetchJson(`/api/guild/by-player/${code}/history/coverage`);
-    state.renderedKey = key;
-    await renderView();
-  } catch (error) {
-    shell(`<div class="workspace-error">${escapeHtml(error?.message || 'Historical Guild archive is unavailable.')}</div>`);
-  } finally { state.loading = false; }
-}
-
-function postRender() { ensureStyle(); ensureNav(); if (isHistoryRoute()) load(false); }
-function install() {
-  if (!location.pathname.startsWith('/guild')) return;
-  postRender();
-  const observer = new MutationObserver(() => postRender());
-  observer.observe(document.body, { childList:true, subtree:true });
-  window.addEventListener('swgoh:guild-command-snapshot', () => { if (isHistoryRoute()) { state.renderedKey=''; load(true); } });
-}
-if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded',()=>setTimeout(install,0),{once:true}); else setTimeout(install,0);
+function postRender(){if(state.rendering)return;ensureStyle();ensureNav();if(isRoute())load(false);}
+function install(){if(!location.pathname.startsWith('/guild'))return;postRender();const observer=new MutationObserver(()=>postRender());observer.observe(document.body,{childList:true,subtree:true});window.addEventListener('swgoh:guild-command-snapshot',()=>{if(isRoute())load(false);});}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(install,0),{once:true});else setTimeout(install,0);
