@@ -4,6 +4,7 @@ import { createDiscordTbLiveServices } from "./discord-tb-live.mjs";
 import { linkDiscordGuildPlayer, unlinkDiscordGuildPlayer } from "./discord-player-link-service.mjs";
 import { setDiscordDonationPreference } from "./discord-donation-preference-service.mjs";
 import { getDiscordLinkedPlayerSnapshot } from "./discord-linked-player-service.mjs";
+import { buildDiscordMemberRoteSummary } from "./discord-member-rote-summary.mjs";
 import { setDiscordMemberAvailability } from "./discord-member-availability-service.mjs";
 
 const ED25519_SPKI_PREFIX = Buffer.from("302a300506032b6570032100", "hex");
@@ -429,16 +430,46 @@ function formatPlayerLinksResult(guild = {}) {
 function formatLinkedPlayerSnapshot(result = {}) {
   const member = result.member || {};
   const units = Array.isArray(member.units) ? member.units : [];
+  const rote = result.roteSummary;
   const lines = [
     "**SWGOH Command Center · My Linked Player**",
     `Discord member: <@${safeText(result.discordUserId)}>`,
     `SWGOH player: **${safeText(member.name, "linked guild member")}** · **${displayAllyCode(result?.link?.swgohAllyCode)}**`,
     `Guild: **${safeText(result.guildName, "bound guild")}**`,
-    `Galactic Power: **${number(member.galacticPower)}**`,
-    `Hydrated roster units: **${units.length}**`,
-    `Roster cache: **${safeText(result.rosterCache)}**`,
-    "This is your own durable Discord ↔ SWGOH link. No guild state was changed.",
+    `Galactic Power: **${number(member.galacticPower)}** · Units: **${units.length}** · Cache: **${safeText(result.rosterCache)}**`,
   ];
+
+  if (rote) {
+    lines.push(
+      "",
+      "**My ROTE Readiness**",
+      `Missions ready: **${Number(rote.missionReady || 0)}** · Sole-owner: **${Number(rote.soleOwnerMissions || 0)}** · Close: **${Number(rote.closeMissions || 0)}**`,
+      `Operations: **${Number(rote.operationAssignments || 0)} assigned** · Risk/check: **${Number(rote.riskyAssignments || 0)}** · Protected units: **${Number(rote.protectedUnits || 0)}**`,
+    );
+    const activePhases = (Array.isArray(rote.phases) ? rote.phases : []).filter((row) => Number(row.ready || 0) || Number(row.close || 0) || Number(row.operations || 0) || Number(row.farms || 0));
+    if (activePhases.length) {
+      lines.push(`Phases: ${activePhases.map((row) => `**${safeText(row.phase)}** ${Number(row.ready || 0)}R/${Number(row.operations || 0)}O${Number(row.close || 0) ? `/${Number(row.close)}C` : ""}`).join(" · ")}`);
+    }
+    const assignments = Array.isArray(rote.assignments) ? rote.assignments : [];
+    if (assignments.length) {
+      lines.push("", "**My Operation Slots**");
+      for (const row of assignments.slice(0, 4)) lines.push(`• ${safeText(row.phase, "?")} · ${safeText(row.name, "unit")} · **${row.risky ? "CHECK" : safeText(row.safetyStatus, "SAFE")}**`);
+      if (assignments.length > 4) lines.push(`• +${assignments.length - 4} more Operation slots`);
+    }
+    const farms = Array.isArray(rote.farms) ? rote.farms : [];
+    if (farms.length) {
+      lines.push("", "**Highest-Impact Farms**");
+      for (const row of farms.slice(0, 4)) {
+        const phases = Array.isArray(row.phases) && row.phases.length ? ` · ${row.phases.join("/")}` : "";
+        lines.push(`• ${safeText(row.unitName, "unit")} → ${safeText(row.gapLabel, "upgrade")} · ${Number(row.missionImpact || 0)} mission impact${phases}`);
+      }
+      if (farms.length > 4) lines.push(`• +${farms.length - 4} more personal farm targets`);
+    }
+  } else if (result.roteUnavailableReason) {
+    lines.push("", `ROTE dashboard: temporarily unavailable — ${previewText(result.roteUnavailableReason, 120)}`);
+  }
+
+  lines.push("", "_Read-only personal view. No guild state was changed._");
   return truncateContent(lines.join("\n"));
 }
 
@@ -750,7 +781,22 @@ export async function executeDiscordTbDeferredCommand(interaction, config = disc
       stateStore,
       ...(services?.rosterService ? { rosterService: services.rosterService } : {}),
     });
-    return formatLinkedPlayerSnapshot(result);
+
+    let roteSummary = null;
+    let roteUnavailableReason = "";
+    if (typeof services?.buildPlan === "function") {
+      try {
+        const planningSnapshot = await services.buildPlan({
+          allyCode: config.pilotAllyCode,
+          redundancyTarget: config.redundancyTarget,
+          interaction,
+        });
+        roteSummary = buildDiscordMemberRoteSummary({ linkedPlayer: result, planningSnapshot });
+      } catch (error) {
+        roteUnavailableReason = safeText(error?.message, "Personal ROTE planning data is temporarily unavailable.");
+      }
+    }
+    return formatLinkedPlayerSnapshot({ ...result, roteSummary, roteUnavailableReason });
   }
 
   if (subcommand === "preference") {
@@ -990,6 +1036,23 @@ export async function handleDiscordInteractionRequest(request, response, env = p
   if (commandResponse.type === DISCORD_RESPONSE_TYPES.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE) {
     if (subcommand === "setup") {
       scheduleDeferredDiscordCommand(interaction, config, { ...services, stateStore, authorizedAsOfficer: officerAuthorized });
+      return true;
+    }
+
+    if (subcommand === "me") {
+      const hasInjectedPlanService = typeof services?.buildPlan === "function";
+      const liveServices = hasInjectedPlanService
+        ? services
+        : createDiscordTbLiveServices(env, {
+          ...(typeof services?.fetch === "function" ? { fetch: services.fetch } : {}),
+          stateStore,
+        });
+      scheduleDeferredDiscordCommand(interaction, config, {
+        ...liveServices,
+        ...services,
+        stateStore,
+        authorizedAsOfficer: officerAuthorized,
+      });
       return true;
     }
 
