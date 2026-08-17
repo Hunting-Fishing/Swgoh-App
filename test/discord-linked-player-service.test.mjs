@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { getDiscordLinkedPlayerSnapshot } from "../discord-linked-player-service.mjs";
+import { cacheDisplay, getDiscordLinkedPlayerSnapshot } from "../discord-linked-player-service.mjs";
 
 const guildId = "987654321098765432";
 const userId = "222222222222222222";
@@ -25,7 +25,7 @@ function durableState({ linked = true, bound = true } = {}) {
   };
 }
 
-function rosterService(members, calls = []) {
+function rosterService(members, calls = [], cache = "fresh") {
   return {
     async getGuildRoster(allyCode, options) {
       calls.push({ allyCode, options });
@@ -35,7 +35,7 @@ function rosterService(members, calls = []) {
           guild: { id: "guild-live", name: "Command Guild" },
           members,
         },
-        cache: "fresh",
+        cache,
         ageMs: 321,
       };
     },
@@ -66,8 +66,28 @@ test("linked player read resolves the durable identity against the bound live ri
   assert.equal(result.link.swgohAllyCode, "444555666");
   assert.equal(result.member.name, "Linked Player");
   assert.equal(result.member.galacticPower, 9876543);
-  assert.equal(result.rosterCache, "fresh");
+  assert.equal(result.rosterCache, "fresh live cache");
+  assert.equal(result.rosterCacheState, "fresh");
   assert.equal(result.rosterAgeMs, 321);
+});
+
+test("cold cache miss is presented as a successful fresh live fetch", async () => {
+  const result = await getDiscordLinkedPlayerSnapshot({
+    discordGuildId: guildId,
+    discordUserId: userId,
+    stateStore: durableState(),
+    rosterService: rosterService([{
+      playerId: "player-444",
+      allyCode: "444555666",
+      name: "Linked Player",
+      galacticPower: 9876543,
+      rosterAvailable: true,
+      units: [],
+    }], [], "miss"),
+  });
+  assert.equal(result.rosterCache, "live refresh (fresh fetch)");
+  assert.equal(result.rosterCacheState, "miss");
+  assert.equal(cacheDisplay("refreshed"), "live refresh (cache renewed)");
 });
 
 test("unlinked Discord member fails before any guild roster request", async () => {
