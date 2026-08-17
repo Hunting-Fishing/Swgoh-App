@@ -6,6 +6,9 @@ const startButton = document.querySelector('[data-start-verification]');
 const checkButton = document.querySelector('[data-check-verification]');
 const refreshButton = document.querySelector('[data-refresh-state]');
 const signoutButton = document.querySelector('[data-signout]');
+const heroKicker = document.querySelector('[data-hero-kicker]');
+const heroTitle = document.querySelector('[data-hero-title]');
+const heroCopy = document.querySelector('[data-hero-copy]');
 
 let accountState = null;
 let challengeState = null;
@@ -65,6 +68,27 @@ function readableCosmetic(value) {
     .trim() || raw;
 }
 
+function readableVerificationMethod(value) {
+  const method = String(value || '').trim().toLowerCase();
+  if (method === 'cosmetic_challenge') return 'SWGOH Profile Challenge';
+  if (method === 'discord') return 'Discord-assisted Link';
+  if (method === 'profile_code') return 'SWGOH Profile Code';
+  if (method === 'admin') return 'Administrator Verification';
+  if (method === 'manual') return 'Manual Player Link';
+  return 'Verified SWGOH Identity';
+}
+
+function readableRole(value) {
+  const role = String(value || 'member').trim().toLowerCase();
+  return `${role.charAt(0).toUpperCase()}${role.slice(1)} Guild access`;
+}
+
+function formatVerifiedAt(value) {
+  const date = new Date(value || '');
+  if (Number.isNaN(date.getTime())) return 'Verification recorded';
+  return `Verified ${date.toLocaleString()}`;
+}
+
 function currentLink() {
   return accountState?.playerLinks?.find((row) => row?.verification_status !== 'rejected') || null;
 }
@@ -98,6 +122,36 @@ function renderPendingIdentity(link, membership) {
   if (name) name.textContent = player.name || 'SWGOH Player';
   if (ally) ally.textContent = `Ally ${formatAlly(player.ally_code)}`;
   if (guildName) guildName.textContent = guild.name || 'Guild detected';
+}
+
+function renderVerifiedIdentity(link, membership) {
+  const player = link?.player || {};
+  const guild = membership?.guild || {};
+  const playerName = player.name || 'Commander';
+  const ally = formatAlly(player.ally_code);
+  const guildName = guild.name || 'Verified Guild';
+
+  if (heroKicker) heroKicker.textContent = 'Command Clearance Granted';
+  if (heroTitle) heroTitle.textContent = `Welcome aboard, ${playerName}.`;
+  if (heroCopy) heroCopy.textContent = `${guildName} is linked to your verified SWGOH identity. Your Command Center workspace is cleared for authenticated player and Guild operations.`;
+
+  const welcome = document.querySelector('[data-verified-player-name]');
+  const playerNode = document.querySelector('[data-verified-player]');
+  const allyNode = document.querySelector('[data-verified-ally]');
+  const guildNode = document.querySelector('[data-verified-guild]');
+  const accessNode = document.querySelector('[data-verified-access]');
+  const roleNode = document.querySelector('[data-verified-role]');
+  const methodNode = document.querySelector('[data-verified-method]');
+  const timeNode = document.querySelector('[data-verified-time]');
+
+  if (welcome) welcome.textContent = playerName;
+  if (playerNode) playerNode.textContent = playerName;
+  if (allyNode) allyNode.textContent = ally ? `Ally Code ${ally}` : 'Ally Code verified';
+  if (guildNode) guildNode.textContent = guildName;
+  if (accessNode) accessNode.textContent = membership?.status === 'active' ? 'ACTIVE' : String(membership?.status || 'VERIFIED').toUpperCase();
+  if (roleNode) roleNode.textContent = readableRole(membership?.role);
+  if (methodNode) methodNode.textContent = readableVerificationMethod(link?.verification_method);
+  if (timeNode) timeNode.textContent = formatVerifiedAt(link?.verified_at);
 }
 
 function renderChallenge(challenge) {
@@ -151,6 +205,7 @@ async function refreshState({ quiet = false } = {}) {
     }
 
     if (link?.verification_status === 'verified' && membership?.status === 'active') {
+      renderVerifiedIdentity(link, membership);
       showView('verified');
       updateSteps('done');
       return;
