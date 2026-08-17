@@ -6,6 +6,7 @@ import {
   nullableMetric,
   rosterEndpoint,
   rosterNeedsLiveDetail,
+  rosterSourceStatus,
 } from "../public/roster-source-policy.js";
 
 test("normal Roster Commander loads the persisted full-roster endpoint", () => {
@@ -35,4 +36,24 @@ test("unknown persisted metrics remain unknown instead of becoming fake zero", (
   assert.equal(nullableMetric(null, null), null);
   assert.equal(nullableMetric(0), 0);
   assert.equal(nullableMetric("28"), 28);
+});
+
+test("user-facing roster source wording never labels canonical data as live", () => {
+  const canonical = rosterSourceStatus({
+    source: "canonical",
+    player: { name: "Warm Bacon" },
+    persistence: { lastSyncedAt: "2026-08-17T17:55:08.229Z" },
+  }, 394);
+  assert.match(canonical, /Warm Bacon/);
+  assert.match(canonical, /persisted full roster/);
+  assert.match(canonical, /394 owned/);
+  assert.match(canonical, /live detail available on refresh/);
+  assert.doesNotMatch(canonical, /live roster \+/);
+
+  const live = rosterSourceStatus({
+    source: "live",
+    player: { name: "Warm Bacon" },
+  }, 394);
+  assert.match(live, /live roster/);
+  assert.match(live, /394 owned/);
 });
