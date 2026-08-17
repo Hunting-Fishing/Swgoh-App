@@ -1,7 +1,9 @@
 import { discordTbConfig } from "../discord-tb.mjs";
 
 const API_VERSION = "v10";
+const SCHEMA_VERSION = "2026-08-18-stage7-controls-v1";
 const config = discordTbConfig(process.env);
+const ifConfigured = process.argv.includes("--if-configured");
 const phaseChoices = ["P1", "P2", "P3", "P4", "P5", "P6"].map((phase) => ({ name: phase, value: phase }));
 const preferenceChoices = [
   { name: "GIVE — favor this member as a donor", value: "give" },
@@ -52,223 +54,269 @@ function assertRequiredOptionsBeforeOptional(options = [], path = "command") {
   }
 }
 
-if (!config.commandRegistrationConfigured) {
-  console.error("Discord command registration requires DISCORD_APPLICATION_ID, DISCORD_BOT_TOKEN, and DISCORD_DEFAULT_GUILD_ID.");
-  process.exitCode = 1;
-} else {
-  const commands = [
-    {
-      type: 1,
-      name: "tb",
-      description: "SWGOH Territory Battle guild command",
-      // Picker visibility stays broad in the pilot so configured officers and linked members can invoke
-      // the appropriate subcommands. Signed server-side authorization remains authoritative.
-      options: [
-        {
-          type: 1,
-          name: "status",
-          description: "Show the SWGOH Command Center TB integration status",
-        },
-        {
-          type: 1,
-          name: "me",
-          description: "Show your own linked SWGOH player from the bound live guild roster",
-        },
-        {
-          type: 1,
-          name: "availability",
-          description: "Read or change TB availability for your linked player or a guildmate",
-          options: [
-            {
-              type: 6,
-              name: "member",
-              description: "Optional member target; normal members may target only themselves",
-              required: false,
-            },
-            {
-              type: 3,
-              name: "state",
-              description: "Optional availability change; omit to read current status",
-              required: false,
-              choices: availabilityChoices,
-            },
-          ],
-        },
-        {
-          type: 1,
-          name: "setup",
-          description: "Durably bind this pilot server, channel, and optional officer role",
-          options: [
-            {
-              type: 7,
-              name: "channel",
-              description: "Channel for future TB delivery; defaults to the current channel",
-              required: false,
-            },
-            {
-              type: 8,
-              name: "officer_role",
-              description: "Role allowed to use officer read commands",
-              required: false,
-            },
-          ],
-        },
-        {
-          type: 1,
-          name: "link",
-          description: "Officer-link a Discord member to a verified guild Ally Code",
-          options: [
-            {
-              type: 6,
-              name: "member",
-              description: "Discord member to link",
-              required: true,
-            },
-            {
-              type: 3,
-              name: "ally_code",
-              description: "9-digit SWGOH Ally Code; guild membership is checked against the bound roster",
-              required: true,
-              min_length: 9,
-              max_length: 11,
-            },
-          ],
-        },
-        {
-          type: 1,
-          name: "unlink",
-          description: "Remove a durable Discord-to-SWGOH player link",
-          options: [
-            {
-              type: 6,
-              name: "member",
-              description: "Discord member whose player link should be removed",
-              required: true,
-            },
-          ],
-        },
-        {
-          type: 1,
-          name: "links",
-          description: "Show durable Discord-to-SWGOH player links for this server",
-        },
-        {
-          type: 1,
-          name: "preference",
-          description: "Set a GIVE/DEFAULT/KEEP unit preference for your linked player or a guildmate",
-          options: [
-            {
-              type: 3,
-              name: "unit",
-              description: "Search SWGOH unit name or Base ID",
-              required: true,
-              autocomplete: true,
-              min_length: 1,
-              max_length: 80,
-            },
-            {
-              type: 3,
-              name: "preference",
-              description: "Donation preference used by the mission-safe ROTE planner",
-              required: true,
-              choices: preferenceChoices,
-            },
-            {
-              type: 6,
-              name: "member",
-              description: "Optional member target; normal members may target only themselves",
-              required: false,
-            },
-          ],
-        },
-        {
-          type: 1,
-          name: "preferences",
-          description: "Show durable GIVE/KEEP overrides used by the ROTE planner",
-          options: [
-            {
-              type: 6,
-              name: "member",
-              description: "Optional member scope; normal members may view only themselves",
-              required: false,
-            },
-          ],
-        },
-        {
-          type: 1,
-          name: "controls",
-          description: "Officer summary of linked member availability and GIVE/KEEP controls",
-          options: [
-            {
-              type: 6,
-              name: "member",
-              description: "Optional linked member scope",
-              required: false,
-            },
-          ],
-        },
-        {
-          type: 1,
-          name: "sync",
-          description: "Force-refresh the pilot guild roster from the live SWGOH gateway",
-        },
-        {
-          type: 1,
-          name: "activity",
-          description: "Show the persisted Guild Activity Command officer summary",
-        },
-        {
-          type: 1,
-          name: "phase",
-          description: "Show the officer Phase Command Board summary for one ROTE phase",
-          options: [requiredPhaseOption],
-        },
-        {
-          type: 1,
-          name: "assignments",
-          description: "Preview the current mission-safe ROTE Operation assignment draft",
-          options: [optionalPhaseOption],
-        },
-        {
-          type: 1,
-          name: "farms",
-          description: "Show the highest-impact ROTE mission farms from the live guild roster",
-          options: [optionalPhaseOption],
-        },
-      ],
-    },
-  ];
+function retryableStatus(status) {
+  return status === 429 || status >= 500;
+}
 
-  for (const command of commands) {
-    assertRequiredOptionsBeforeOptional(command.options, `/${command.name}`);
-  }
+async function sleep(ms) {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
 
+async function registerCommands(commands) {
   const endpoint = `https://discord.com/api/${API_VERSION}/applications/${config.applicationId}/guilds/${config.pilotGuildId}/commands`;
-  const response = await fetch(endpoint, {
-    method: "PUT",
-    headers: {
-      Authorization: `Bot ${config.botToken}`,
-      "Content-Type": "application/json",
-      "User-Agent": "SWGOH-Command-Center (guild-tb-command-registration)",
-    },
-    body: JSON.stringify(commands),
-  });
+  let lastFailure = null;
 
-  const text = await response.text();
-  let body;
-  try {
-    body = text ? JSON.parse(text) : null;
-  } catch {
-    body = text;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      const response = await fetch(endpoint, {
+        method: "PUT",
+        headers: {
+          Authorization: `Bot ${config.botToken}`,
+          "Content-Type": "application/json",
+          "User-Agent": `SWGOH-Command-Center (guild-tb-command-registration; ${SCHEMA_VERSION})`,
+        },
+        body: JSON.stringify(commands),
+      });
+
+      const text = await response.text();
+      let body;
+      try {
+        body = text ? JSON.parse(text) : null;
+      } catch {
+        body = text;
+      }
+
+      if (response.ok) return { body, attempt };
+
+      lastFailure = {
+        status: response.status,
+        body,
+        message: `Discord command registration failed with HTTP ${response.status}.`,
+      };
+      if (!retryableStatus(response.status) || attempt === 3) break;
+    } catch (error) {
+      lastFailure = {
+        status: 0,
+        body: null,
+        message: error?.message || "Discord command registration request failed.",
+      };
+      if (attempt === 3) break;
+    }
+
+    await sleep(500 * attempt);
   }
 
-  if (!response.ok) {
-    console.error(`Discord command registration failed with HTTP ${response.status}.`);
-    console.error(typeof body === "string" ? body : JSON.stringify(body, null, 2));
-    process.exitCode = 1;
+  const error = new Error(lastFailure?.message || "Discord command registration failed.");
+  error.status = lastFailure?.status || 0;
+  error.body = lastFailure?.body;
+  throw error;
+}
+
+const commands = [
+  {
+    type: 1,
+    name: "tb",
+    description: "SWGOH Territory Battle guild command",
+    // Picker visibility stays broad in the pilot so configured officers and linked members can invoke
+    // the appropriate subcommands. Signed server-side authorization remains authoritative.
+    options: [
+      {
+        type: 1,
+        name: "status",
+        description: "Show the SWGOH Command Center TB integration status",
+      },
+      {
+        type: 1,
+        name: "me",
+        description: "Show your own linked SWGOH player from the bound live guild roster",
+      },
+      {
+        type: 1,
+        name: "availability",
+        description: "Read or change TB availability for your linked player or a guildmate",
+        options: [
+          {
+            type: 6,
+            name: "member",
+            description: "Optional member target; normal members may target only themselves",
+            required: false,
+          },
+          {
+            type: 3,
+            name: "state",
+            description: "Optional availability change; omit to read current status",
+            required: false,
+            choices: availabilityChoices,
+          },
+        ],
+      },
+      {
+        type: 1,
+        name: "setup",
+        description: "Durably bind this pilot server, channel, and optional officer role",
+        options: [
+          {
+            type: 7,
+            name: "channel",
+            description: "Channel for future TB delivery; defaults to the current channel",
+            required: false,
+          },
+          {
+            type: 8,
+            name: "officer_role",
+            description: "Role allowed to use officer read commands",
+            required: false,
+          },
+        ],
+      },
+      {
+        type: 1,
+        name: "link",
+        description: "Officer-link a Discord member to a verified guild Ally Code",
+        options: [
+          {
+            type: 6,
+            name: "member",
+            description: "Discord member to link",
+            required: true,
+          },
+          {
+            type: 3,
+            name: "ally_code",
+            description: "9-digit SWGOH Ally Code; guild membership is checked against the bound roster",
+            required: true,
+            min_length: 9,
+            max_length: 11,
+          },
+        ],
+      },
+      {
+        type: 1,
+        name: "unlink",
+        description: "Remove a durable Discord-to-SWGOH player link",
+        options: [
+          {
+            type: 6,
+            name: "member",
+            description: "Discord member whose player link should be removed",
+            required: true,
+          },
+        ],
+      },
+      {
+        type: 1,
+        name: "links",
+        description: "Show durable Discord-to-SWGOH player links for this server",
+      },
+      {
+        type: 1,
+        name: "preference",
+        description: "Set a GIVE/DEFAULT/KEEP unit preference for your linked player or a guildmate",
+        options: [
+          {
+            type: 3,
+            name: "unit",
+            description: "Search SWGOH unit name or Base ID",
+            required: true,
+            autocomplete: true,
+            min_length: 1,
+            max_length: 80,
+          },
+          {
+            type: 3,
+            name: "preference",
+            description: "Donation preference used by the mission-safe ROTE planner",
+            required: true,
+            choices: preferenceChoices,
+          },
+          {
+            type: 6,
+            name: "member",
+            description: "Optional member target; normal members may target only themselves",
+            required: false,
+          },
+        ],
+      },
+      {
+        type: 1,
+        name: "preferences",
+        description: "Show durable GIVE/KEEP overrides used by the ROTE planner",
+        options: [
+          {
+            type: 6,
+            name: "member",
+            description: "Optional member scope; normal members may view only themselves",
+            required: false,
+          },
+        ],
+      },
+      {
+        type: 1,
+        name: "controls",
+        description: "Officer summary of linked member availability and GIVE/KEEP controls",
+        options: [
+          {
+            type: 6,
+            name: "member",
+            description: "Optional linked member scope",
+            required: false,
+          },
+        ],
+      },
+      {
+        type: 1,
+        name: "sync",
+        description: "Force-refresh the pilot guild roster from the live SWGOH gateway",
+      },
+      {
+        type: 1,
+        name: "activity",
+        description: "Show the persisted Guild Activity Command officer summary",
+      },
+      {
+        type: 1,
+        name: "phase",
+        description: "Show the officer Phase Command Board summary for one ROTE phase",
+        options: [requiredPhaseOption],
+      },
+      {
+        type: 1,
+        name: "assignments",
+        description: "Preview the current mission-safe ROTE Operation assignment draft",
+        options: [optionalPhaseOption],
+      },
+      {
+        type: 1,
+        name: "farms",
+        description: "Show the highest-impact ROTE mission farms from the live guild roster",
+        options: [optionalPhaseOption],
+      },
+    ],
+  },
+];
+
+for (const command of commands) {
+  assertRequiredOptionsBeforeOptional(command.options, `/${command.name}`);
+}
+
+if (!config.commandRegistrationConfigured) {
+  const message = "Discord command registration requires DISCORD_APPLICATION_ID, DISCORD_BOT_TOKEN, and DISCORD_DEFAULT_GUILD_ID.";
+  if (ifConfigured) {
+    console.log(`Skipping Discord TB schema registration: ${message}`);
   } else {
-    const registered = Array.isArray(body) ? body : [];
-    console.log(`Registered ${registered.length} guild-scoped Discord command${registered.length === 1 ? "" : "s"} in ${config.pilotGuildId}.`);
+    console.error(message);
+    process.exitCode = 1;
+  }
+} else {
+  try {
+    const result = await registerCommands(commands);
+    const registered = Array.isArray(result.body) ? result.body : [];
+    console.log(`Discord TB schema ${SCHEMA_VERSION} registered in ${config.pilotGuildId} on attempt ${result.attempt}.`);
+    console.log(`Registered ${registered.length} guild-scoped Discord command${registered.length === 1 ? "" : "s"}.`);
     for (const command of registered) console.log(`- /${command.name} (${command.id})`);
+  } catch (error) {
+    console.error(error?.message || "Discord command registration failed.");
+    if (error?.body != null) console.error(typeof error.body === "string" ? error.body : JSON.stringify(error.body, null, 2));
+    process.exitCode = 1;
   }
 }
