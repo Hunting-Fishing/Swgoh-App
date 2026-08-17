@@ -141,7 +141,8 @@ async function load(force = false) {
   const panel = $("playerHistoryPanel");
   if (panel) panel.innerHTML = '<div class="workspace-note">Loading persisted progression history…</div>';
   try {
-    const response = await fetch(`/api/player/${allyCode}/history?events=100&snapshots=90`, { cache: "no-store" });
+    const refresh = force ? "&refresh=1" : "";
+    const response = await fetch(`/api/player/${allyCode}/history?events=100&snapshots=90${refresh}`, { cache: "no-store" });
     const body = await response.json();
     if (!response.ok) throw new Error(body?.error || `Player history returned HTTP ${response.status}`);
     state.allyCode = allyCode;
