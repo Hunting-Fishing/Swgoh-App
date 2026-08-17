@@ -50,7 +50,18 @@ function ensureNav() {
     nav.appendChild(link);
   }
   link.href = routeUrl(INTELLIGENCE_PATH);
-  for (const item of nav.querySelectorAll('a')) item.classList.toggle('active', item === link ? isIntelligenceRoute() : (!isIntelligenceRoute() && item.classList.contains('active')));
+  for (const item of nav.querySelectorAll('a')) {
+    if (isIntelligenceRoute()) item.classList.toggle('active', item === link);
+  }
+}
+
+function enhanceReturnedEvents() {
+  for (const row of document.querySelectorAll('.guild-change')) {
+    const label = String(row.querySelector('strong')?.textContent || '').trim().toUpperCase();
+    if (label !== 'RETURNED') continue;
+    row.classList.remove('renamed', 'joined', 'left');
+    row.classList.add('returned');
+  }
 }
 
 function statusLabel(value) {
@@ -156,6 +167,7 @@ async function load(force = false) {
   }
   const key = `${code}|${location.pathname}`;
   if (!force && state.body && state.renderedKey === key) {
+    if (target.querySelector('.guild-intelligence-shell')) return;
     renderBody(state.body);
     return;
   }
@@ -178,6 +190,7 @@ async function load(force = false) {
 function postRender() {
   ensureStyles();
   ensureNav();
+  enhanceReturnedEvents();
   if (isIntelligenceRoute()) load(false);
 }
 
