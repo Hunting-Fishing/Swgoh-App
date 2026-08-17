@@ -20,7 +20,7 @@ test("normalizes donation preferences", () => {
   assert.equal(normalizeDonationPreference("anything"), "default");
 });
 
-test("GIVE beats DEFAULT while KEEP is avoided when another owner exists", () => {
+test("GIVE beats DEFAULT while KEEP is avoided when owners are equally mission-safe", () => {
   const plan = planGuildRoteSafeAssignments(guild, { slots: [slot("x", "X"), slot("y", "Y", 2)] }, {
     preferences: [
       { memberId: "b", baseId: "X", preference: "give" },
@@ -42,6 +42,52 @@ test("mission-protected owner is avoided when a safe owner exists", () => {
   assert.equal(plan.assignments[0].member.playerId, "b");
   assert.equal(plan.assignments[0].safety.status, "SAFE");
   assert.equal(plan.assignments[0].safeOwners, 1);
+});
+
+test("mission protection outranks GIVE so a protected donor cannot jump a safe default owner", () => {
+  const plan = planGuildRoteSafeAssignments(guild, { slots: [slot("x-protected-give", "X")] }, {
+    preferences: [{ memberId: "a", baseId: "X", preference: "give" }],
+    protections: [{ memberId: "a", phase: "P1", baseId: "X", severity: 100, reasons: ["sole mission owner"] }],
+  });
+  const assignment = plan.assignments[0];
+  assert.equal(assignment.member.playerId, "b");
+  assert.equal(assignment.safety.status, "SAFE");
+  assert.equal(assignment.safeOwners, 1);
+  assert.equal(plan.safetySummary.protectedOverrides, 0);
+});
+
+test("mission protection outranks KEEP so an unprotected KEEP owner is safer than a protected default owner", () => {
+  const plan = planGuildRoteSafeAssignments(guild, { slots: [slot("y-safe-keep", "Y")] }, {
+    preferences: [{ memberId: "b", baseId: "Y", preference: "keep" }],
+    protections: [{ memberId: "a", phase: "P1", baseId: "Y", severity: 82, reasons: ["tight mission depth"] }],
+  });
+  const assignment = plan.assignments[0];
+  assert.equal(assignment.member.playerId, "b");
+  assert.equal(assignment.safety.preference, "keep");
+  assert.equal(assignment.safety.status, "KEEP OVERRIDE");
+  assert.equal(assignment.safety.help, true);
+  assert.equal(assignment.safeOwners, 0);
+  assert.equal(plan.safetySummary.keepOverrides, 1);
+  assert.equal(plan.safetySummary.protectedOverrides, 0);
+});
+
+test("protected GIVE remains a clearly risky last resort when it is the only eligible owner", () => {
+  const onlyProtected = {
+    members: [member("a", 9_000_000, [unit("ONLY")])],
+  };
+  const plan = planGuildRoteSafeAssignments(onlyProtected, { slots: [slot("protected-only", "ONLY")] }, {
+    preferences: [{ memberId: "a", baseId: "ONLY", preference: "give" }],
+    protections: [{ memberId: "a", phase: "P1", baseId: "ONLY", severity: 100, reasons: ["sole mission owner"] }],
+  });
+  assert.equal(plan.unfilledSlots, 0);
+  assert.equal(plan.assignments.length, 1);
+  assert.equal(plan.assignments[0].member.playerId, "a");
+  assert.equal(plan.assignments[0].safety.preference, "give");
+  assert.equal(plan.assignments[0].safety.status, "MISSION PROTECTED — GIVE DEFERRED");
+  assert.equal(plan.assignments[0].safety.help, true);
+  assert.equal(plan.assignments[0].safeOwners, 0);
+  assert.equal(plan.safetySummary.protectedOverrides, 1);
+  assert.equal(plan.safetySummary.helpAssignments, 1);
 });
 
 test("KEEP remains a last-resort donor instead of making a completable slot unfilled", () => {

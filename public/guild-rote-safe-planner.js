@@ -91,17 +91,24 @@ function candidateSafety(state, slot, preferences, protections) {
   const protection = protections.get(`${state.id}|${String(slot.phase)}|${String(slot.baseId)}`) || null;
   const severity = finite(protection?.severity, 0);
 
-  let rank = 10;
-  if (preference === "give") rank = 0;
-  else if (preference === "keep") rank = 90 + Math.min(9, Math.round(severity / 12));
-  else if (protection) rank = severity >= 80 ? 60 : severity >= 50 ? 45 : 30;
+  // Mission-entry safety is authoritative. GIVE/KEEP can order candidates only
+  // within the same protection class; no member preference may make a protected
+  // unit outrank an unprotected owner. Hard reservations remain an absolute
+  // exclusion earlier in eligibleCandidates().
+  const preferenceRank = preference === "give" ? 0 : preference === "keep" ? 20 : 10;
+  const protectionRank = protection ? 100 + Math.max(0, Math.min(100, severity)) : 0;
+  const rank = protectionRank + preferenceRank;
 
-  const status = preference === "keep"
-    ? "KEEP OVERRIDE"
-    : preference === "give"
-      ? "GIVE"
-      : protection
-        ? "MISSION PROTECTED OVERRIDE"
+  const status = protection
+    ? preference === "give"
+      ? "MISSION PROTECTED — GIVE DEFERRED"
+      : preference === "keep"
+        ? "MISSION PROTECTED — KEEP"
+        : "MISSION PROTECTED OVERRIDE"
+    : preference === "keep"
+      ? "KEEP OVERRIDE"
+      : preference === "give"
+        ? "GIVE"
         : "SAFE";
 
   return Object.freeze({
@@ -196,7 +203,7 @@ function countOwners(slot, memberStates, reservations, ignoredMembers, preferenc
     if (ignoredMembers.has(state.id) || isReserved(reservations, state.id, slot)) continue;
     available += 1;
     const safety = candidateSafety(state, slot, preferences, protections);
-    if (safety.rank <= 10) safe += 1;
+    if (!safety.protection && safety.preference !== "keep") safe += 1;
   }
   return { physical, available, safe };
 }
@@ -354,7 +361,7 @@ export function planGuildRoteSafeAssignments(guildSnapshot, operations, options 
   const safetySummary = {
     safeAssignments: assignments.filter((row) => row.safety?.status === "SAFE").length,
     giveAssignments: assignments.filter((row) => row.safety?.preference === "give").length,
-    protectedOverrides: assignments.filter((row) => row.safety?.protection && row.safety?.preference !== "give").length,
+    protectedOverrides: assignments.filter((row) => row.safety?.protection).length,
     keepOverrides: assignments.filter((row) => row.safety?.preference === "keep").length,
     helpAssignments: assignments.filter((row) => row.safety?.help).length,
     ignoredMembers: ignoredMembers.size,
