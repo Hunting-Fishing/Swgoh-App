@@ -301,8 +301,8 @@ for (const command of commands) {
 
 if (!config.commandRegistrationConfigured) {
   const message = "Discord command registration requires DISCORD_APPLICATION_ID, DISCORD_BOT_TOKEN, and DISCORD_DEFAULT_GUILD_ID.";
-  if (ifConfigured) {
-    console.log(`Skipping Discord TB schema registration: ${message}`);
+  if (ifConfigured && !config.interactionsEnabled) {
+    console.log(`Skipping Discord TB schema registration because Discord interactions are disabled: ${message}`);
   } else {
     console.error(message);
     process.exitCode = 1;
