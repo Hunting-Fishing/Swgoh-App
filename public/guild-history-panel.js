@@ -46,11 +46,97 @@ function eventChangeLabels(event) {
   if (Number(delta.zetaCount || 0) > 0) labels.push(`Zeta +${number(delta.zetaCount)}`);
   if (Number(delta.ultimateUnlocked || 0) > 0) labels.push("Ultimate unlocked");
   if (Number(delta.relicTier || 0) !== 0 && before.relicTier != null && after.relicTier != null) labels.push(`R${number(before.relicTier)} → R${number(after.relicTier)}`);
-  if (Number(delta.gearLevel || 0) !== 0 && before.gearLevel != null && after.gearLevel != null) labels.push(`G${number(before.gearLevel)} → G${number(after.gearLevel)}`);
+  if (Number(delta.gearLevel || 0) !== 0 && before.gearLevel != null && after.gearLevel != null) labels.push(`G${number(before.gearLevel)} → G${number(after.gearLevel)} `);
   if (Number(delta.rarity || 0) !== 0 && before.rarity != null && after.rarity != null) labels.push(`${number(before.rarity)}★ → ${number(after.rarity)}★`);
   if (Number(delta.level || 0) !== 0 && before.level != null && after.level != null) labels.push(`Lv ${number(before.level)} → ${number(after.level)}`);
   if (Number(delta.galacticPower || 0) !== 0) labels.push(`${signed(delta.galacticPower)} GP`);
   return labels.length ? labels : (event.changedFields || []).map(String);
+}
+
+function momentumLabels(member = {}) {
+  const labels = [];
+  if (Number(member.omicronsAdded || 0) > 0) labels.push(`+${number(member.omicronsAdded)} Omi`);
+  if (Number(member.ultimatesAdded || 0) > 0) labels.push(`+${number(member.ultimatesAdded)} Ult`);
+  if (Number(member.relicLevelsGained || 0) > 0) labels.push(`+${number(member.relicLevelsGained)} relic`);
+  if (Number(member.zetasAdded || 0) > 0) labels.push(`+${number(member.zetasAdded)} Zeta`);
+  if (Number(member.gpGained || 0) > 0) labels.push(`${signed(member.gpGained)} GP`);
+  return labels.length ? labels.join(" · ") : `${number(member.eventCount || 0)} tracked changes`;
+}
+
+function abilityInvestmentLabels(event = {}) {
+  const labels = [];
+  if (Number(event.omicronsAdded || 0) > 0) labels.push(`Omicron +${number(event.omicronsAdded)}`);
+  if (Number(event.zetasAdded || 0) > 0) labels.push(`Zeta +${number(event.zetasAdded)}`);
+  if (Number(event.ultimatesAdded || 0) > 0) labels.push("Ultimate unlocked");
+  return labels.join(" · ") || "Ability investment";
+}
+
+function activityCommandHtml(body) {
+  const command = body?.activityCommand;
+  if (!command) return '<div class="workspace-note">Guild Activity Command is waiting for the next persisted history response.</div>';
+  const summary = command.summary || {};
+  const window = command.window || {};
+  const leaders = Array.isArray(command.momentumLeaders) ? command.momentumLeaders : [];
+  const watchlist = Array.isArray(command.noCapturedProgression) ? command.noCapturedProgression : [];
+  const investments = Array.isArray(command.recentAbilityInvestments) ? command.recentAbilityInvestments : [];
+  const windowText = window.from && window.to
+    ? `${formatTime(window.from)} → ${formatTime(window.to)}${window.truncated ? " · latest event window is capped" : ""}`
+    : "A progression window will appear after persisted roster changes are captured.";
+
+  const leaderHtml = leaders.length
+    ? `<div class="guild-change-list">${leaders.slice(0, 10).map((member, index) => `
+        <div class="guild-change gp">
+          <strong>#${index + 1} ${escapeHtml(member.name || member.allyCode || member.playerId)}</strong>
+          <span>${escapeHtml(momentumLabels(member))}</span>
+          <small>${number(member.eventCount)} tracked changes · latest ${escapeHtml(formatTime(member.latestChangeAt))}</small>
+        </div>`).join("")}</div>`
+    : '<div class="workspace-note">No member progression has been captured in the current event window yet.</div>';
+
+  const watchHtml = watchlist.length
+    ? `<div class="guild-change-list">${watchlist.slice(0, 12).map((member) => `
+        <div class="guild-change renamed">
+          <strong>${escapeHtml(member.name || member.allyCode || member.playerId)}</strong>
+          <span>No tracked roster progression in this event window</span>
+          <small>${number(member.galacticPower)} GP</small>
+        </div>`).join("")}</div>`
+    : '<div class="workspace-note">Every current member appears in at least one captured progression event in this window.</div>';
+
+  const investmentHtml = investments.length
+    ? `<div class="guild-change-list">${investments.slice(0, 12).map((event) => `
+        <div class="guild-change gp">
+          <strong>${escapeHtml(abilityInvestmentLabels(event))}</strong>
+          <span>${escapeHtml(event.playerName || event.allyCode || "Guild member")} · <button type="button" class="pro-unit-link" data-inspect-base-id="${escapeAttr(event.baseId)}">${escapeHtml(event.unitName || event.baseId)}</button></span>
+          <small>${escapeHtml(formatTime(event.changedAt))}</small>
+        </div>`).join("")}</div>`
+    : '<div class="workspace-note">No classified Zeta, Omicron, or Ultimate investment was captured in this window.</div>';
+
+  return `
+    <section class="guild-page-card">
+      <div class="database-heading">
+        <div>
+          <div class="kicker">OFFICER INTELLIGENCE</div>
+          <h2>Guild Activity Command</h2>
+          <p>Turns canonical roster-history events into an officer review queue. “No tracked progression” is evidence about this captured window only; it is not an inactivity accusation.</p>
+        </div>
+        <div class="status ${summary.membersWithoutCapturedProgression ? "warn" : "ready"}">${number(summary.membersWithCapturedProgression)}/${number(summary.currentMembers)} progressing</div>
+      </div>
+      <div class="guild-page-stat-grid">
+        ${stat("Progressing Members", `${number(summary.membersWithCapturedProgression)}/${number(summary.currentMembers)}`, "captured in this window")}
+        ${stat("Review Queue", number(summary.membersWithoutCapturedProgression), "no tracked roster progression")}
+        ${stat("Ability Investments", number(summary.abilityInvestments), "Zeta / Omicron / Ultimate")}
+        ${stat("Membership Changes", number(summary.membershipChanges), "baseline bootstrap excluded")}
+        ${stat("GP Gained", signed(summary.gpGained))}
+        ${stat("Relic Levels", signed(summary.relicLevelsGained))}
+        ${stat("Zetas Added", signed(summary.zetasAdded))}
+        ${stat("Omicrons Added", signed(summary.omicronsAdded))}
+      </div>
+      <div class="workspace-note">Evidence window: ${escapeHtml(windowText)}</div>
+      <div class="guild-page-two-col">
+        <section class="guild-page-card"><div class="kicker">MOMENTUM LEADERS</div><h3>Highest captured progression</h3>${leaderHtml}</section>
+        <section class="guild-page-card"><div class="kicker">OFFICER REVIEW QUEUE</div><h3>No captured progression</h3>${watchHtml}</section>
+      </div>
+      <section class="guild-page-card"><div class="kicker">ABILITY INVESTMENT FEED</div><h3>Recent strategic upgrades</h3>${investmentHtml}</section>
+    </section>`;
 }
 
 function trendHtml(body) {
@@ -123,6 +209,7 @@ function render() {
   const body = state.body;
   const summary = body.progressionSummary || {};
   panel.innerHTML = `
+    ${activityCommandHtml(body)}
     <div class="database-heading">
       <div><div class="kicker">PERSISTED GUILD HISTORY</div><h2>Guild Progression Ledger</h2><p>Shared membership, daily snapshot and real roster-change history from the canonical persistence layer.</p></div>
       <div><div class="status ready">${escapeHtml(body.guild?.name || "Guild")}</div><button id="guildHistoryRefresh" type="button">Refresh History</button></div>
