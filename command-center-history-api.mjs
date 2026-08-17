@@ -1,4 +1,5 @@
 import { commandCenterHistoryService } from "./command-center-history-service.mjs";
+import { guildIntelligenceService } from "./guild-intelligence-service.mjs";
 
 function positiveLimit(value, fallback, max) {
   const parsed = Math.floor(Number(value));
@@ -16,6 +17,7 @@ function writeJson(response, status, body) {
 
 export function createCommandCenterHistoryApi(options = {}) {
   const service = options.service || commandCenterHistoryService;
+  const intelligence = options.intelligence || guildIntelligenceService;
 
   async function handle(request, response, url) {
     if (request.method !== "GET") return false;
@@ -31,6 +33,19 @@ export function createCommandCenterHistoryApi(options = {}) {
       } catch (error) {
         writeJson(response, [400, 404, 503].includes(error?.status) ? error.status : 502, {
           error: error?.message || "Player history is unavailable.",
+        });
+      }
+      return true;
+    }
+
+    const intelligenceMatch = url.pathname.match(/^\/api\/guild\/by-player\/(\d{9})\/intelligence$/);
+    if (intelligenceMatch) {
+      try {
+        const body = await intelligence.getByPlayer(intelligenceMatch[1]);
+        writeJson(response, 200, body);
+      } catch (error) {
+        writeJson(response, [400, 404, 503].includes(error?.status) ? error.status : 502, {
+          error: error?.message || "Guild Intelligence is unavailable.",
         });
       }
       return true;
