@@ -154,6 +154,42 @@ function historyHtml(model) {
     <div class="guild-change-list">${rows}</div>`;
 }
 
+function rankSignalHtml(row) {
+  const band = row.band === "lower-quartile" ? "LOWER QUARTILE" : "LOWER HALF";
+  return `<div class="guild-change ${row.band === "lower-quartile" ? "left" : "gp"}">
+    <strong>${escapeHtml(row.label)} · #${number(row.rank)} / ${number(row.total)}</strong>
+    <span>${escapeHtml(band)} in the current Guild baseline</span>
+    <small><button type="button" class="pro-unit-link" data-player-development-action="${escapeAttr(row.action)}">Open related roster view →</button></small>
+  </div>`;
+}
+
+function developmentHtml(model) {
+  const development = model.development;
+  if (!development?.hasEvidence) return '<div class="workspace-note">No current development signals are available from ROTE gaps, lower Guild ranks or persisted progression history.</div>';
+  const roteRows = development.roteGaps.length ? development.roteGaps.map((row) => `
+    <div class="guild-change ${row.owned ? "gp" : "left"}">
+      <strong><button type="button" class="pro-unit-link" data-inspect-base-id="${escapeAttr(row.baseId)}">${escapeHtml(row.name || row.baseId)}</button></strong>
+      <span>${escapeHtml(gapLabel(row))}</span>
+      <small>${number(row.requiredCount)} aggregated ROTE slot${Number(row.requiredCount) === 1 ? "" : "s"} · requirement evidence</small>
+    </div>`).join("") : '<div class="workspace-note">No highest-gate ROTE gaps in the current requirement dataset.</div>';
+  const rankRows = development.guildRankSignals.length
+    ? development.guildRankSignals.map(rankSignalHtml).join("")
+    : '<div class="workspace-note">No tracked Guild-relative dimension is currently in the lower half of the canonical Guild baseline.</div>';
+  const momentumRows = development.recentMomentum.length ? development.recentMomentum.map((row) => `
+    <div class="guild-change gp">
+      <strong><button type="button" class="pro-unit-link" data-inspect-base-id="${escapeAttr(row.baseId)}">${escapeHtml(row.unitName || row.baseId)}</button></strong>
+      <span>${escapeHtml(row.evidence.join(" · ") || "Recorded progression")}</span>
+      <small>${escapeHtml(formatTime(row.changedAt))} · momentum evidence, not a recommendation</small>
+    </div>`).join("") : '<div class="workspace-note">No recent persisted player progression events.</div>';
+  return `
+    <div class="section-heading"><div><div class="kicker">PLAYER DEVELOPMENT QUEUE</div><h3>Actionable evidence without a universal score</h3><p class="workspace-note">Each lane answers a different question. ROTE demand, Guild-relative position and recent momentum are never weighted together.</p></div></div>
+    <div class="guild-page-two-col">
+      <section class="guild-page-card"><div class="kicker">ROTE REQUIREMENTS</div><h4>Highest-demand progression gaps</h4><div class="guild-change-list">${roteRows}</div></section>
+      <section class="guild-page-card"><div class="kicker">GUILD RELATIVE</div><h4>Lower-ranked development dimensions</h4><div class="guild-change-list">${rankRows}</div></section>
+    </div>
+    <section class="guild-page-card"><div class="kicker">RECENT MOMENTUM</div><h4>What this roster has actually been upgrading</h4><div class="guild-change-list">${momentumRows}</div></section>`;
+}
+
 function render() {
   const panel = $("playerCommandDashboard");
   if (!panel) return;
@@ -187,6 +223,7 @@ function render() {
       <section class="guild-page-card"><div class="kicker">GUILD RELATIVE</div><h3>Rank inside current 50-member baseline</h3>${ranksHtml(model)}</section>
       <section class="guild-page-card"><div class="kicker">ROTE PRESSURE</div><h3>Operations requirement coverage</h3>${roteHtml(model)}</section>
     </div>
+    <section class="guild-page-card">${developmentHtml(model)}</section>
     <section class="guild-page-card"><div class="kicker">WHAT CHANGED</div><h3>Persistent progression intelligence</h3>${historyHtml(model)}</section>
     <div class="guild-member-evidence"><strong>Metric boundary:</strong> GP rank, roster depth, ROTE requirement coverage and progression history remain separate evidence streams. The Command Center does not collapse them into a fabricated universal player score.</div>`;
 
@@ -194,6 +231,9 @@ function render() {
   $("playerCommandLive")?.addEventListener("click", refreshLiveDetail);
   $("playerCommandOpenRoster")?.addEventListener("click", () => openRoster(false));
   $("playerCommandOpenRote")?.addEventListener("click", () => openRoster(true));
+  for (const button of panel.querySelectorAll("[data-player-development-action]")) {
+    button.addEventListener("click", () => openRosterSlice(button.dataset.playerDevelopmentAction));
+  }
 }
 
 function refreshLiveDetail() {
@@ -210,6 +250,23 @@ function openRoster(roteOnly) {
     if (!select) return;
     select.value = "required";
     select.dispatchEvent(new Event("change", { bubbles: true }));
+  }, 60);
+}
+
+function openRosterSlice(action) {
+  const tab = document.querySelector('button[data-workspace-tab="roster"]');
+  if (tab) tab.click();
+  setTimeout(() => {
+    const type = $("proRosterType");
+    const relic = $("proRosterMinRelic");
+    const upgrade = $("proRosterUpgrade");
+    if (action === "characters" && type) type.value = "Character";
+    else if (action === "ships" && type) type.value = "Ship";
+    else if (action === "relic7" && relic) relic.value = "7";
+    else if (action === "zeta" && upgrade) upgrade.value = "zeta";
+    else if (action === "omicron" && upgrade) upgrade.value = "omicron";
+    const changed = action === "characters" ? type : action === "ships" ? type : action === "relic7" ? relic : ["zeta", "omicron"].includes(action) ? upgrade : null;
+    if (changed) changed.dispatchEvent(new Event("change", { bubbles: true }));
   }, 60);
 }
 
