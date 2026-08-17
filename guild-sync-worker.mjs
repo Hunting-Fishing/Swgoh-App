@@ -20,6 +20,9 @@ function configFromEnv(env = process.env) {
     pollMs: positiveInteger(env.GUILD_SYNC_WORKER_POLL_MS, 15_000, 2_000, 300_000),
     batchSize: positiveInteger(env.GUILD_SYNC_WORKER_BATCH_SIZE, 1, 1, 10),
     retryBaseSeconds: positiveInteger(env.GUILD_SYNC_RETRY_BASE_SECONDS, 30, 5, 3600),
+    heartbeatMs: positiveInteger(env.GUILD_SYNC_WORKER_HEARTBEAT_MS, 20_000, 5_000, 120_000),
+    staleLeaseSeconds: positiveInteger(env.GUILD_SYNC_STALE_LEASE_SECONDS, 90, 30, 3600),
+    jobTimeoutMs: positiveInteger(env.GUILD_SYNC_JOB_TIMEOUT_MS, 180_000, 30_000, 900_000),
   });
 }
 
@@ -31,6 +34,12 @@ function errorText(error) {
   return clean(error?.message || error || 'Guild sync worker failed.').slice(0, 1000);
 }
 
+function timeoutError(ms) {
+  const error = new Error(`Guild synchronization exceeded the worker hard limit of ${Math.round(ms / 1000)} seconds.`);
+  error.code = 'GUILD_SYNC_JOB_TIMEOUT';
+  return error;
+}
+
 export function createGuildSyncWorker(env = process.env, options = {}) {
   const config = configFromEnv(env);
   const store = options.store || supabaseCoreStore;
@@ -38,6 +47,11 @@ export function createGuildSyncWorker(env = process.env, options = {}) {
   const now = typeof options.now === 'function' ? options.now : () => new Date();
   const sleeper = typeof options.sleep === 'function' ? options.sleep : sleep;
   const logger = options.logger || console;
+  const terminate = typeof options.terminate === 'function' ? options.terminate : (code) => process.exit(code);
+  const scheduleInterval = typeof options.setInterval === 'function' ? options.setInterval : setInterval;
+  const cancelInterval = typeof options.clearInterval === 'function' ? options.clearInterval : clearInterval;
+  const scheduleTimeout = typeof options.setTimeout === 'function' ? options.setTimeout : setTimeout;
+  const cancelTimeout = typeof options.clearTimeout === 'function' ? options.clearTimeout : clearTimeout;
   let stopped = false;
 
   function status() {
@@ -46,8 +60,19 @@ export function createGuildSyncWorker(env = process.env, options = {}) {
       workerId: config.workerId,
       pollMs: config.pollMs,
       batchSize: config.batchSize,
+      heartbeatMs: config.heartbeatMs,
+      staleLeaseSeconds: config.staleLeaseSeconds,
+      jobTimeoutMs: config.jobTimeoutMs,
       persistenceConfigured: Boolean(store.status?.().configured),
     });
+  }
+
+  async function recoverStale() {
+    const value = await store.rpc('recover_stale_guild_sync_jobs', {
+      p_stale_seconds: config.staleLeaseSeconds,
+    });
+    if (Array.isArray(value)) return Number(value[0] || 0);
+    return Number(value || 0);
   }
 
   async function claim() {
@@ -56,6 +81,45 @@ export function createGuildSyncWorker(env = process.env, options = {}) {
       p_limit: config.batchSize,
     });
     return Array.isArray(rows) ? rows : rows ? [rows] : [];
+  }
+
+  function startHeartbeat(job) {
+    let stoppedHeartbeat = false;
+    let inFlight = false;
+    const beat = async () => {
+      if (stoppedHeartbeat || inFlight) return;
+      inFlight = true;
+      try {
+        await store.update('guild_sync_jobs', {
+          id: `eq.${job.id}`,
+          status: 'eq.running',
+          claimed_by: `eq.${config.workerId}`,
+        }, {
+          updated_at: now().toISOString(),
+        }, { returning: false });
+      } catch (error) {
+        logger.error(`[guild-sync-worker] heartbeat ${job.id}: ${errorText(error)}`);
+      } finally {
+        inFlight = false;
+      }
+    };
+    const timer = scheduleInterval(beat, config.heartbeatMs);
+    return () => {
+      stoppedHeartbeat = true;
+      cancelInterval(timer);
+    };
+  }
+
+  async function withHardTimeout(work) {
+    let timer;
+    const deadline = new Promise((_, reject) => {
+      timer = scheduleTimeout(() => reject(timeoutError(config.jobTimeoutMs)), config.jobTimeoutMs);
+    });
+    try {
+      return await Promise.race([work, deadline]);
+    } finally {
+      cancelTimeout(timer);
+    }
   }
 
   async function markCompleted(job, result) {
@@ -118,6 +182,20 @@ export function createGuildSyncWorker(env = process.env, options = {}) {
     return 'retry';
   }
 
+  async function markTimedOut(job, error) {
+    // Keep the row RUNNING so another replica cannot steal it while this
+    // process still owns an in-flight network request. The process is then
+    // terminated. A restarted worker will recover the stale lease only after
+    // the heartbeat has stopped for the configured stale window.
+    await store.update('guild_sync_jobs', {
+      id: `eq.${job.id}`,
+      status: 'eq.running',
+      claimed_by: `eq.${config.workerId}`,
+    }, {
+      last_error: errorText(error),
+    }, { returning: false });
+  }
+
   async function processJob(job) {
     const userId = clean(job?.requested_by_user_id);
     if (!userId) {
@@ -127,38 +205,51 @@ export function createGuildSyncWorker(env = process.env, options = {}) {
       return Object.freeze({ id: job?.id, ok: false, error: error.message });
     }
 
+    const stopHeartbeat = startHeartbeat(job);
     try {
       // guildPersistence.sync re-resolves VERIFIED player ownership and ACTIVE
       // Guild membership from Supabase before it fetches or stores anything.
       // The queue's guild_id is never trusted as authorization input.
-      const result = await persistence.sync({ id: userId });
+      const result = await withHardTimeout(persistence.sync({ id: userId }));
       if (clean(result?.guild?.id) && clean(job?.guild_id) && clean(result.guild.id) !== clean(job.guild_id)) {
         const mismatch = new Error('The verified user now resolves to a different Guild than the queued tenant.');
         mismatch.code = 'QUEUED_GUILD_TENANT_MISMATCH';
         throw mismatch;
       }
+      stopHeartbeat();
       await markCompleted(job, result);
       return Object.freeze({ id: job.id, ok: true, result });
     } catch (error) {
+      stopHeartbeat();
+      if (error?.code === 'GUILD_SYNC_JOB_TIMEOUT') {
+        await markTimedOut(job, error);
+        logger.error(`[guild-sync-worker] ${job.id} timed out; terminating worker so in-flight requests cannot outlive the lease`);
+        terminate(1);
+        return Object.freeze({ id: job.id, ok: false, disposition: 'terminated', error: errorText(error) });
+      }
       const disposition = await markFailedOrRetry(job, error);
       return Object.freeze({ id: job.id, ok: false, disposition, error: errorText(error) });
+    } finally {
+      stopHeartbeat();
     }
   }
 
   async function runOnce() {
-    if (!config.enabled) return Object.freeze({ claimed: 0, results: Object.freeze([]) });
+    if (!config.enabled) return Object.freeze({ recovered: 0, claimed: 0, results: Object.freeze([]) });
     if (!store.status?.().configured) throw new Error('Supabase persistence is not configured for the Guild sync worker.');
+    const recovered = await recoverStale();
     const jobs = await claim();
     const results = [];
     for (const job of jobs) results.push(await processJob(job));
-    return Object.freeze({ claimed: jobs.length, results: Object.freeze(results) });
+    return Object.freeze({ recovered, claimed: jobs.length, results: Object.freeze(results) });
   }
 
   async function runLoop() {
-    logger.log(`[guild-sync-worker] ${config.workerId} starting; batch=${config.batchSize} pollMs=${config.pollMs}`);
+    logger.log(`[guild-sync-worker] ${config.workerId} starting; batch=${config.batchSize} pollMs=${config.pollMs} heartbeatMs=${config.heartbeatMs} timeoutMs=${config.jobTimeoutMs}`);
     while (!stopped) {
       try {
         const cycle = await runOnce();
+        if (cycle.recovered) logger.warn(`[guild-sync-worker] recovered ${cycle.recovered} stale Guild sync lease(s)`);
         if (cycle.claimed) logger.log(`[guild-sync-worker] processed ${cycle.claimed} queued Guild sync job(s)`);
       } catch (error) {
         logger.error(`[guild-sync-worker] ${errorText(error)}`);
@@ -170,6 +261,7 @@ export function createGuildSyncWorker(env = process.env, options = {}) {
 
   return Object.freeze({
     status,
+    recoverStale,
     claim,
     processJob,
     runOnce,

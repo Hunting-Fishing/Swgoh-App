@@ -5,18 +5,24 @@ import { createGuildSyncWorker } from '../guild-sync-worker.mjs';
 const USER = '0f4c45c0-b8f6-4b22-aad7-56ad6390b010';
 const GUILD = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 
-function storeFixture(jobs = []) {
+function storeFixture(jobs = [], { recovered = 0 } = {}) {
   const updates = [];
+  const rpcCalls = [];
   let claimed = false;
   return {
     updates,
+    rpcCalls,
     status() { return { configured: true }; },
     async rpc(name, args) {
-      assert.equal(name, 'claim_guild_sync_jobs');
-      assert.ok(args.p_worker_id);
-      if (claimed) return [];
-      claimed = true;
-      return structuredClone(jobs);
+      rpcCalls.push({ name, args: structuredClone(args) });
+      if (name === 'recover_stale_guild_sync_jobs') return recovered;
+      if (name === 'claim_guild_sync_jobs') {
+        assert.ok(args.p_worker_id);
+        if (claimed) return [];
+        claimed = true;
+        return structuredClone(jobs);
+      }
+      throw new Error(`Unexpected RPC ${name}`);
     },
     async update(table, query, values) {
       updates.push({ table, query: structuredClone(query), values: structuredClone(values) });
@@ -46,7 +52,27 @@ const env = {
   GUILD_SYNC_WORKER_BATCH_SIZE: '1',
   GUILD_SYNC_WORKER_POLL_MS: '15000',
   GUILD_SYNC_RETRY_BASE_SECONDS: '30',
+  GUILD_SYNC_WORKER_HEARTBEAT_MS: '20000',
+  GUILD_SYNC_STALE_LEASE_SECONDS: '90',
+  GUILD_SYNC_JOB_TIMEOUT_MS: '180000',
 };
+
+test('worker recovers stale leases before claiming queued work', async () => {
+  const store = storeFixture([], { recovered: 2 });
+  const worker = createGuildSyncWorker(env, {
+    store,
+    persistence: { async sync() { throw new Error('must not run'); } },
+  });
+
+  const cycle = await worker.runOnce();
+  assert.equal(cycle.recovered, 2);
+  assert.equal(cycle.claimed, 0);
+  assert.deepEqual(store.rpcCalls.map((call) => call.name), [
+    'recover_stale_guild_sync_jobs',
+    'claim_guild_sync_jobs',
+  ]);
+  assert.equal(store.rpcCalls[0].args.p_stale_seconds, 90);
+});
 
 test('worker revalidates through signed user persistence rather than trusting queued Guild id', async () => {
   const store = storeFixture([job()]);
@@ -133,4 +159,47 @@ test('job reaches failed state only after maximum claimed attempts', async () =>
   assert.equal(cycle.results[0].disposition, 'failed');
   assert.equal(store.updates[0].values.status, 'failed');
   assert.equal(store.updates[0].values.completed_at, '2026-08-17T05:00:00.000Z');
+});
+
+test('hard timeout keeps lease running, records error, then terminates worker for safe stale recovery', async () => {
+  const store = storeFixture([job()]);
+  const terminated = [];
+  const timers = [];
+  const worker = createGuildSyncWorker(env, {
+    store,
+    persistence: { async sync() { return new Promise(() => {}); } },
+    now: () => new Date('2026-08-17T05:00:00Z'),
+    setInterval() { return 1; },
+    clearInterval() {},
+    setTimeout(fn) {
+      timers.push(fn);
+      queueMicrotask(fn);
+      return 2;
+    },
+    clearTimeout() {},
+    terminate(code) { terminated.push(code); },
+    logger: { log() {}, warn() {}, error() {} },
+  });
+
+  const cycle = await worker.runOnce();
+  assert.equal(timers.length, 1);
+  assert.equal(cycle.results[0].ok, false);
+  assert.equal(cycle.results[0].disposition, 'terminated');
+  assert.deepEqual(terminated, [1]);
+  assert.equal(store.updates.length, 1);
+  assert.match(store.updates[0].values.last_error, /hard limit/i);
+  assert.equal(store.updates[0].values.status, undefined, 'timeout must not requeue while old process still owns the request');
+  assert.equal(store.updates[0].values.claimed_by, undefined);
+});
+
+test('worker status exposes lease safety settings without secrets', () => {
+  const worker = createGuildSyncWorker(env, {
+    store: storeFixture([]),
+    persistence: { async sync() { return null; } },
+  });
+  const status = worker.status();
+  assert.equal(status.heartbeatMs, 20000);
+  assert.equal(status.staleLeaseSeconds, 90);
+  assert.equal(status.jobTimeoutMs, 180000);
+  assert.equal(JSON.stringify(status).includes('secret'), false);
 });
