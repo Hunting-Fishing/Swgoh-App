@@ -1,7 +1,15 @@
 import { describeGpQuality, selectProfileGp } from "./gp-policy.js";
 import { mergeAbilityProgression, progressionCounts } from "./progression-policy.js";
 import { readinessAnalysis } from "./readiness-policy.js";
-import { isCanonicalRosterBody, isLiveRosterBody, nullableMetric, rosterEndpoint, rosterSourceStatus } from "./roster-source-policy.js";
+import {
+  isCanonicalRosterBody,
+  isLiveRosterBody,
+  nullableMetric,
+  rosterCapabilityKnown,
+  rosterEndpoint,
+  rosterSourceStatus,
+  unitCapabilityKnown,
+} from "./roster-source-policy.js";
 import { buildFactionSquads, squadReadiness } from "./team-builder.js";
 
 const state = {
@@ -86,9 +94,9 @@ function enrichUnit(unit) {
   const staticUnit = staticUnitFor(unit.baseId);
   if (!staticUnit) return {
     ...unit,
-    zetas: Number(unit.zetas || 0),
-    omegas: unit.omegas === null ? null : Number(unit.omegas || 0),
-    omicrons: Number(unit.omicrons || 0),
+    zetas: unitCapabilityKnown(unit, "zetas") ? Number(unit.zetas || 0) : null,
+    omegas: unitCapabilityKnown(unit, "omegas") ? Number(unit.omegas || 0) : null,
+    omicrons: unitCapabilityKnown(unit, "omicrons") ? Number(unit.omicrons || 0) : null,
   };
 
   const staticAbilities = staticUnit.abilities || [];
@@ -110,7 +118,9 @@ function enrichUnit(unit) {
     image: unit.image || staticUnit.image,
     imageFallback: unit.image && staticUnit.image && unit.image !== staticUnit.image ? staticUnit.image : "",
     ...counts,
-    omegas: unit.omegas === null ? null : counts.omegas,
+    zetas: unitCapabilityKnown(unit, "zetas") ? counts.zetas : null,
+    omegas: unitCapabilityKnown(unit, "omegas") ? counts.omegas : null,
+    omicrons: unitCapabilityKnown(unit, "omicrons") ? counts.omicrons : null,
     abilities: mergedAbilities.length ? mergedAbilities : liveAbilities,
   };
 }
@@ -268,11 +278,15 @@ function renderProfile(body) {
     : 0;
   const summary = body.summary || {};
   const capabilities = body.capabilities || {};
-  const zetas = nullableMetric(summary.zetas, null) ?? characters.reduce((sum, unit) => sum + Number(unit.zetas || 0), 0);
-  const omegas = capabilities.omegas === true
+  const zetas = rosterCapabilityKnown(body, "zetas")
+    ? nullableMetric(summary.zetas, null) ?? characters.reduce((sum, unit) => sum + Number(unit.zetas || 0), 0)
+    : null;
+  const omegas = rosterCapabilityKnown(body, "omegas")
     ? nullableMetric(summary.omegaUpgrades, null) ?? characters.reduce((sum, unit) => sum + Number(unit.omegas || 0), 0)
     : null;
-  const omicrons = nullableMetric(summary.omicrons, null) ?? characters.reduce((sum, unit) => sum + Number(unit.omicrons || 0), 0);
+  const omicrons = rosterCapabilityKnown(body, "omicrons")
+    ? nullableMetric(summary.omicrons, null) ?? characters.reduce((sum, unit) => sum + Number(unit.omicrons || 0), 0)
+    : null;
   const rosterCount = characters.length + ships.length;
   const sixDotMods = capabilities.sixDotMods === true ? nullableMetric(summary.sixDotMods, null) : null;
   const datacrons = capabilities.datacrons === true ? nullableMetric(summary.datacrons, null) : null;
@@ -458,7 +472,9 @@ function cardHtml(unit) {
   const sourceDescription = unit.summary || unit.description || (liveDetail ? "Live roster unit" : "Persisted roster unit");
   const readinessBand = readiness ? readiness.band : "Readiness";
   const readinessValue = readiness ? `${number(readiness.score)}%` : "—";
+  const zetaValue = optionalNumber(unit.zetas);
   const omegaValue = optionalNumber(unit.omegas);
+  const omicronValue = optionalNumber(unit.omicrons);
 
   return `
     <article class="unit-card">
@@ -471,7 +487,7 @@ function cardHtml(unit) {
           <div><span>Speed</span><strong>${number(unit.speed)}</strong></div>
           <div><span>${escapeHtml(readinessBand)}</span><strong>${escapeHtml(readinessValue)}</strong></div>
         </div>
-        <div class="upgrade-line">Z ${number(unit.zetas)} · Ω ${omegaValue} · Omi ${number(unit.omicrons)}</div>
+        <div class="upgrade-line">Z ${zetaValue} · Ω ${omegaValue} · Omi ${omicronValue}</div>
         <div class="tags">${tags}</div>
         <button data-base-id="${escapeAttr(unit.baseId)}">Inspect</button>
       </div>
@@ -531,9 +547,9 @@ function showDetails(unit) {
       <div><span>Gear</span><strong>${number(unit.gear)}</strong></div>
       <div><span>Relic</span><strong>${number(unit.relic)}</strong></div>
       <div><span>Equipped Mods</span><strong>${liveDetail ? optionalNumber(unit.equippedMods) : "—"}</strong></div>
-      <div><span>Zetas</span><strong>${number(unit.zetas)}</strong></div>
+      <div><span>Zetas</span><strong>${optionalNumber(unit.zetas)}</strong></div>
       <div><span>Omegas / Eta</span><strong>${optionalNumber(unit.omegas)}</strong></div>
-      <div><span>Omicrons</span><strong>${number(unit.omicrons)}</strong></div>
+      <div><span>Omicrons</span><strong>${optionalNumber(unit.omicrons)}</strong></div>
       <div><span>Purchased Abilities</span><strong>${liveDetail ? number(unit.purchasedAbilityIds?.length) : "—"}</strong></div>
     </div>
     <h3>Development Gaps</h3>

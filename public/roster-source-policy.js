@@ -28,6 +28,20 @@ export function nullableMetric(value, fallback = "—") {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+export function rosterCapabilityKnown(body = {}, capability = "") {
+  const capabilities = body?.capabilities && typeof body.capabilities === "object" ? body.capabilities : {};
+  if (isCanonicalRosterBody(body)) return capabilities[capability] === true;
+  return capabilities[capability] !== false;
+}
+
+export function unitCapabilityKnown(unit = {}, capability = "") {
+  const capabilities = unit?.persistenceCapabilities && typeof unit.persistenceCapabilities === "object"
+    ? unit.persistenceCapabilities
+    : null;
+  if (!capabilities) return true;
+  return capabilities[capability] === true;
+}
+
 export function rosterSourceStatus(body, totalOwned = 0) {
   const player = clean(body?.player?.name || body?.player?.allyCode || "Player");
   const count = Number.isFinite(Number(totalOwned)) ? Number(totalOwned).toLocaleString() : "0";

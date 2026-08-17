@@ -49,21 +49,21 @@
         <div class="kicker">LIVE + STATIC SWGOH INTELLIGENCE</div>
         <h1>Roster Command</h1>
       </div>
-      <div id="health" class="status">Checking gateway…</div>
+      <div id="health" class="status">Checking data pipeline…</div>
     </header>
 
     <main>
       <section class="hero card">
         <div>
           <div class="kicker">COMLINK + SWGOH STATS + VERSIONED GAMEDATA + AE2</div>
-          <h2>One game database. Live player rosters on demand.</h2>
-          <p>The full player-obtainable unit catalog is built once from versioned SWGOH game data. Ally Code lookups then fetch only live player ownership and progression, keeping the app fast enough to scale.</p>
+          <h2>One game database. Canonical rosters with live detail on demand.</h2>
+          <p>The full player-obtainable unit catalog is shared across users. Ally Code lookups load the persisted full-roster baseline first, while live-only detail is promoted from Comlink only when the workflow actually needs it.</p>
         </div>
         <form id="allyForm" class="ally-form">
           <label for="allyCode">Ally Code</label>
           <div class="input-row">
             <input id="allyCode" inputmode="numeric" autocomplete="off" maxlength="11" placeholder="123-456-789">
-            <button id="loadButton" type="submit">Load Live Roster</button>
+            <button id="loadButton" type="submit">Load Roster</button>
           </div>
           <div id="error" class="error hidden"></div>
         </form>
@@ -74,11 +74,11 @@
       <section id="intelligence" class="database card hidden">
         <div class="database-heading">
           <div>
-            <div class="kicker">LIVE ROSTER INTELLIGENCE</div>
+            <div class="kicker">ROSTER INTELLIGENCE</div>
             <h3>Player Intelligence &amp; Squad Builder</h3>
-            <p>Public Comlink profile data is combined with the owned roster to surface mod coverage, special abilities, GAC status and deterministic faction-based squad suggestions. Squad suggestions use owned roster strength only; they are not presented as live meta rankings.</p>
+            <p>The canonical owned roster is the baseline. Live Comlink enrichment supplies mod coverage, public profile detail, competitive status and readiness-sensitive squad analysis only when that evidence is available.</p>
           </div>
-          <div id="intelligenceStatus" class="status ready">Live roster</div>
+          <div id="intelligenceStatus" class="status ready">Roster baseline</div>
         </div>
 
         <div id="intelligenceSummary" class="collection-summary intelligence-summary"></div>
@@ -137,8 +137,8 @@
 
       <section id="empty" class="empty card">
         <div class="orb"></div>
-        <h3>No live roster loaded</h3>
-        <p>The static game database below is available to everyone. Enter a 9-digit Ally Code to overlay a current player's ownership, GP, relics and ability progression.</p>
+        <h3>No roster loaded</h3>
+        <p>The static game database below is available to everyone. Enter a 9-digit Ally Code to load the persisted owned-roster baseline; live-only enrichment is requested separately when required.</p>
       </section>
 
       <section class="database card">
@@ -179,7 +179,7 @@
 
   <dialog id="details" class="details"></dialog>
   <script src="/live-fetch-cache.js?v=20260818-cache4"></script>
-  <script type="module" src="/app.js?v=20260815-pro10"></script>
+  <script type="module" src="/app.js?v=20260818-canonical2"></script>
   <script type="module" src="/ui-fixes.js?v=20260815-pro10"></script>
   <script type="module" src="/workspace-tabs.js?v=20260815-pro10"></script>
   <script type="module" src="/player-command-dashboard.js?v=20260818-playercmd3"></script>
