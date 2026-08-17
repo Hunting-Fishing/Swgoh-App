@@ -86,6 +86,7 @@ body::before {
 .verified-stat span { display: block; margin-top: 7px; color: #86a3b8; font-size: .76rem; line-height: 1.4; }
 .verified-stat-clearance { border-color: rgba(124,227,179,.25); background: linear-gradient(145deg, rgba(25,91,66,.17), rgba(7,21,27,.72)); }
 .verified-stat-clearance strong { color: var(--green); letter-spacing: .08em; }
+.verified-stat-wide { grid-column: 1 / -1; }
 .verified-confirmation { display: grid; gap: 5px; padding: 14px 16px; border-left: 3px solid rgba(242,206,104,.7); background: rgba(61,48,17,.14); }
 .verified-confirmation strong { color: var(--gold); font-size: .79rem; letter-spacing: .08em; text-transform: uppercase; }
 .verified-confirmation span { color: #a9b8c5; font-size: .82rem; line-height: 1.55; }
@@ -96,5 +97,6 @@ body::before {
   .onboard-step { min-height: 0; }
   .onboard-top { align-items: flex-start; }
   .verified-grid { grid-template-columns: 1fr; }
+  .verified-stat-wide { grid-column: auto; }
   .verified-header { grid-template-columns: 1fr; }
 }
