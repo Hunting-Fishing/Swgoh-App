@@ -113,7 +113,9 @@ function normalizedMember(member = {}) {
   const powers = memberPowers(member);
   const units = asArray(member.units).map(normalizedUnit).filter(Boolean);
   if (!units.length) return null;
-  const galacticPower = Math.max(0, integer(member.galacticPower, powers.characterPower + powers.shipPower));
+  const directGp = Math.max(0, integer(member.galacticPower, 0));
+  const derivedGp = Math.max(0, powers.characterPower + powers.shipPower);
+  const galacticPower = directGp || derivedGp;
 
   return Object.freeze({
     swgohPlayerId,
@@ -180,7 +182,24 @@ function calculationFailureMessage(calculation = {}) {
   const failed = Math.max(0, integer(calculation.failed, Math.max(0, requested - calculated)));
   const diagnostic = safeUpstreamDiagnostic(calculation.error);
   const upstream = diagnostic ? `; upstream: ${diagnostic}` : '';
-  return `Guild GP/stat calculation is incomplete (${source}: configured ${configured}, requested ${requested}, calculated ${calculated}, failed ${failed}${upstream}); no permanent snapshot was written.`;
+  return `Guild GP/stat enrichment is incomplete (${source}: configured ${configured}, requested ${requested}, calculated ${calculated}, failed ${failed}${upstream}). The fully hydrated raw Guild roster remains eligible for persistence.`;
+}
+
+function calculationQuality(calculation = {}, memberCount = 0) {
+  const requested = Math.max(0, integer(calculation.requested, memberCount));
+  const calculated = Math.max(0, integer(calculation.calculated, 0));
+  const failed = Math.max(0, integer(calculation.failed, Math.max(0, requested - calculated)));
+  const complete = calculation.complete === true && requested > 0 && calculated >= requested && failed === 0;
+  return Object.freeze({
+    source: clean(calculation.source) || 'SWGOH Stats',
+    configured: calculation.configured === true,
+    requested,
+    calculated,
+    failed,
+    complete,
+    dataQuality: complete ? 'hydrated-and-stats-complete' : 'hydrated-raw-stats-partial',
+    error: safeUpstreamDiagnostic(calculation.error) || null,
+  });
 }
 
 function assertIntegrity(body, context) {
@@ -192,9 +211,6 @@ function assertIntegrity(body, context) {
   }
   if (body?.hydration?.complete !== true || Number(body?.hydration?.failed || 0) !== 0) {
     throw httpError('Guild roster hydration is incomplete; no permanent snapshot was written.', 409, 'GUILD_SYNC_HYDRATION_INCOMPLETE');
-  }
-  if (body?.calculation?.complete !== true) {
-    throw httpError(calculationFailureMessage(body?.calculation), 409, 'GUILD_SYNC_CALCULATION_INCOMPLETE');
   }
   if (clean(body.guild.id) !== clean(context.guild.swgoh_guild_id)) {
     throw httpError('The fresh live Guild does not match this account’s authorized Guild tenant.', 409, 'GUILD_SYNC_TENANT_MISMATCH');
@@ -307,6 +323,7 @@ export function createGuildPersistence(options = {}) {
       recentTerritoryWarResult: asArray(rawActivity.recentTerritoryWarResult),
       territoryBattleResult: asArray(rawActivity.territoryBattleResult),
     });
+    const calculation = calculationQuality(body.calculation, members.length);
 
     const payload = Object.freeze({
       requesterUserId: user.id,
@@ -328,6 +345,7 @@ export function createGuildPersistence(options = {}) {
           level: integer(body.guild.level, 0),
           levelRequirement: integer(body.guild.levelRequirement, 0),
           guildType: clean(body.guild.guildType),
+          dataQuality: calculation.dataQuality,
         }),
       }),
       hydration: Object.freeze({
@@ -336,15 +354,7 @@ export function createGuildPersistence(options = {}) {
         failed: integer(body.hydration.failed, 0),
         complete: body.hydration.complete === true,
       }),
-      calculation: Object.freeze({
-        source: clean(body.calculation.source) || 'SWGOH Stats',
-        configured: body.calculation.configured === true,
-        requested: integer(body.calculation.requested, members.length),
-        calculated: integer(body.calculation.calculated, members.length),
-        failed: integer(body.calculation.failed, 0),
-        complete: body.calculation.complete === true,
-        error: safeUpstreamDiagnostic(body.calculation.error) || null,
-      }),
+      calculation,
       activity,
       activityFingerprint: activityFingerprint(activity, members),
       members,
@@ -367,7 +377,10 @@ export function createGuildPersistence(options = {}) {
         expectedMembers: integer(body.hydration.requested, members.length),
         hydratedMembers: integer(body.hydration.hydrated, members.length),
         failedRosters: integer(body.hydration.failed, 0),
-        calculationComplete: body.calculation.complete === true,
+        calculationComplete: calculation.complete,
+        calculatedMembers: calculation.calculated,
+        calculationFailedMembers: calculation.failed,
+        dataQuality: calculation.dataQuality,
       }),
     });
   }
@@ -413,5 +426,5 @@ export function createGuildPersistence(options = {}) {
   return Object.freeze({ handle, sync, latestStatus, verifiedContext, assertIntegrity });
 }
 
-export { activityFingerprint, assertIntegrity, calculationFailureMessage, normalizedMember, normalizedUnit, timestampFromGameValue };
+export { activityFingerprint, assertIntegrity, calculationFailureMessage, calculationQuality, normalizedMember, normalizedUnit, timestampFromGameValue };
 export const guildPersistence = createGuildPersistence();
