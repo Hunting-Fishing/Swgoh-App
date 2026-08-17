@@ -24,6 +24,12 @@ function finiteInteger(value, fallback = 0) {
   return Number.isFinite(parsed) ? Math.trunc(parsed) : fallback;
 }
 
+function nullableInteger(value) {
+  if (value == null || value === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? Math.trunc(parsed) : null;
+}
+
 function combatType(unit = {}) {
   const text = clean(unit.unitType).toLowerCase();
   const numeric = Number(unit.combatType);
@@ -79,6 +85,39 @@ export function normalizeGameUnitCatalogRow(unit = {}, context = {}) {
       gearTiers: asArray(unit.gearTiers),
     }),
   });
+}
+
+export function normalizeGameUnitAbilityRows(unit = {}, context = {}) {
+  const baseId = clean(unit.baseId || unit.baseID || unit.id).split(":")[0];
+  if (!baseId) return [];
+  const rows = [];
+  const seen = new Set();
+  for (const ability of asArray(unit.abilities)) {
+    if (!ability || typeof ability !== "object") continue;
+    const abilityId = clean(ability.id || ability.abilityId || ability.skillId);
+    if (!abilityId || seen.has(abilityId)) continue;
+    seen.add(abilityId);
+    rows.push(Object.freeze({
+      base_id: baseId,
+      ability_id: abilityId,
+      name: clean(ability.name) || abilityId,
+      ability_type: clean(ability.type) || null,
+      max_tier: Math.max(0, finiteInteger(ability.maxTier, 0)),
+      has_zeta: ability.zeta === true,
+      has_omicron: ability.omicron === true,
+      has_omega: ability.omega === true,
+      omicron_mode: nullableInteger(ability.omicronMode),
+      catalog_version: clean(context.catalogVersion) || null,
+      updated_at: context.updatedAt,
+      metadata: Object.freeze({
+        source: "swgoh-command-center-static-catalog",
+        description: clean(ability.description),
+        upgradeTiers: asArray(ability.upgradeTiers),
+        icon: clean(ability.icon),
+      }),
+    }));
+  }
+  return rows;
 }
 
 export async function readGameUnitCatalog({
@@ -137,10 +176,22 @@ export async function syncGameUnitCatalog({
     throw new Error(`Static game-unit catalog normalized unsafely (${rows.length} rows / ${baseIds.size} unique Base IDs / ${source.units.length} source units).`);
   }
 
+  const abilityRows = source.units.flatMap((unit) => normalizeGameUnitAbilityRows(unit, context));
+  const abilityKeys = new Set(abilityRows.map((row) => `${row.base_id}\u0000${row.ability_id}`));
+  if (abilityKeys.size !== abilityRows.length) {
+    throw new Error(`Static game-unit ability catalog contains duplicate unit/ability identity (${abilityRows.length} rows / ${abilityKeys.size} unique keys).`);
+  }
+
   const size = Math.max(1, Math.min(500, finiteInteger(batchSize, 100)));
   for (let index = 0; index < rows.length; index += size) {
     await store.upsert("game_units", rows.slice(index, index + size), {
       onConflict: "base_id",
+      returning: false,
+    });
+  }
+  for (let index = 0; index < abilityRows.length; index += size) {
+    await store.upsert("game_unit_abilities", abilityRows.slice(index, index + size), {
+      onConflict: "base_id,ability_id",
       returning: false,
     });
   }
@@ -150,8 +201,11 @@ export async function syncGameUnitCatalog({
     catalogVersion: source.version,
     gameVersion: clean(context.gameVersion),
     rowsStored: rows.length,
+    abilitiesStored: abilityRows.length,
     characterCount: rows.filter((row) => row.combat_type === "character").length,
     shipCount: rows.filter((row) => row.combat_type === "ship").length,
+    zetaAbilityCount: abilityRows.filter((row) => row.has_zeta).length,
+    omicronAbilityCount: abilityRows.filter((row) => row.has_omicron).length,
     updatedAt,
   });
 }
