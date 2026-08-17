@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { accountOnboarding } from "./account-onboarding.mjs";
 import { withCapabilityContract } from "./capability-contract.mjs";
+import { canonicalRosterService } from "./canonical-roster-service.mjs";
 import { discordStateStore } from "./discord-state-store.mjs";
 import { discordTbPublicStatus, handleDiscordInteractionRequest } from "./discord-tb.mjs";
 import { resolveGuildPlanningOverlay } from "./guild-planning-overlay.mjs";
@@ -23,7 +24,7 @@ const rosterCacheStaleMs = positiveNumber(process.env.SWGOH_CACHE_STALE_SECONDS,
 const rosterCacheMaxEntries = Math.max(1, Math.floor(positiveNumber(process.env.SWGOH_CACHE_MAX_ENTRIES, 500)));
 const modCacheFreshMs = positiveNumber(process.env.SWGOH_MOD_CACHE_FRESH_SECONDS, 300) * 1000;
 const modCacheStaleMs = positiveNumber(process.env.SWGOH_MOD_CACHE_STALE_SECONDS, 900) * 1000;
-const modCacheMaxEntries = Math.max(1, Math.floor(positiveNumber(process.env.SWGOH_MOD_CACHE_MAX_ENTRIES, 500)));
+const modCacheMaxEntries = Math.max(1, Math.floor(positiveNumber(process.env.SWGOH_CACHE_MAX_ENTRIES, 500)));
 const roteOperationsUrl = String(process.env.SWGOH_ROTE_OPERATIONS_URL || "https://raw.githubusercontent.com/swgoh-utils/gamedata/main/swgoh_rote_operations.json").trim();
 const roteCacheMs = positiveNumber(process.env.SWGOH_ROTE_CACHE_SECONDS, 21600) * 1000;
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "public");
@@ -190,6 +191,30 @@ async function loadEquippedMods(allyCode) {
   return body;
 }
 
+async function writeCanonicalGuildOrLiveFallback(response, allyCode) {
+  try {
+    const body = await canonicalRosterService.getGuildRosterByPlayer(allyCode);
+    writeJson(response, 200, body, {
+      "X-Guild-Source": "supabase-canonical",
+      "X-Guild-Cache": "persistent",
+      "X-Guild-Refresh": "normal",
+      "X-Guild-Logical-Members": String(body?.members?.length || 0),
+      Age: String(Math.max(0, Math.floor((Date.now() - Date.parse(body?.fetchedAt || Date.now())) / 1000))),
+    });
+    return;
+  } catch (canonicalError) {
+    if (![404, 503].includes(canonicalError?.status)) throw canonicalError;
+    const cached = await guildRosterService.getGuildRoster(allyCode, { staleWhileRevalidate: true });
+    writeJson(response, 200, cached.value, {
+      "X-Guild-Source": "comlink-live-fallback",
+      "X-Guild-Cache": cached.cache,
+      "X-Guild-Refresh": "fallback",
+      "X-Guild-Canonical-Error": String(canonicalError?.message || "canonical unavailable").slice(0, 180),
+      Age: String(Math.max(0, Math.floor((cached.ageMs || 0) / 1000))),
+    });
+  }
+}
+
 async function handleApi(request, response, url) {
   if (url.pathname === "/api/discord/status") {
     writeJson(response, 200, discordPublicStatus());
@@ -201,10 +226,11 @@ async function handleApi(request, response, url) {
       const gateway = await requestGateway("/healthz", false);
       writeJson(response, 200, {
         status: gateway?.status === "configured" ? "ready" : "needs-configuration",
-        liveOnly: true,
+        dataMode: "supabase-canonical-baseline+comlink-live-refresh",
         gateway,
         auth: supabaseAuthSession.status(),
         persistence: supabaseCoreStore.status(),
+        canonicalRoster: canonicalRosterService.status(),
         discordTb: discordPublicStatus(),
         rosterCache: {
           mode: "process-local-coalesced-swr-lru",
@@ -230,10 +256,11 @@ async function handleApi(request, response, url) {
       });
     } catch (error) {
       writeJson(response, error?.status || 502, {
-        status: "unavailable",
-        liveOnly: true,
+        status: "live-gateway-unavailable",
+        dataMode: "supabase-canonical-baseline+comlink-live-refresh",
         auth: supabaseAuthSession.status(),
         persistence: supabaseCoreStore.status(),
+        canonicalRoster: canonicalRosterService.status(),
         discordTb: discordPublicStatus(),
         error: error?.name === "AbortError" ? "The live gateway timed out." : error?.message || "The live gateway is unavailable.",
       });
@@ -293,25 +320,63 @@ async function handleApi(request, response, url) {
     return true;
   }
 
+  const guildBaselineMatch = url.pathname.match(/^\/api\/guild\/by-player\/(\d{9})\/baseline$/);
+  if (guildBaselineMatch) {
+    try {
+      const body = await canonicalRosterService.getGuildRosterByPlayer(guildBaselineMatch[1]);
+      writeJson(response, 200, body, {
+        "X-Guild-Source": "supabase-canonical",
+        "X-Guild-Cache": "persistent",
+        "X-Guild-Logical-Members": String(body?.members?.length || 0),
+      });
+    } catch (error) {
+      writeJson(response, [400, 404, 503].includes(error?.status) ? error.status : 502, {
+        error: error?.message || "The persisted Guild baseline is unavailable.",
+      });
+    }
+    return true;
+  }
+
   const guildMatch = url.pathname.match(/^\/api\/guild\/by-player\/(\d{9})\/roster$/);
   if (guildMatch) {
     try {
       const allyCode = guildMatch[1];
       const forceRefresh = url.searchParams.get("refresh") === "1";
+      if (!forceRefresh) {
+        await writeCanonicalGuildOrLiveFallback(response, allyCode);
+        return true;
+      }
       const cached = await guildRosterService.getGuildRoster(allyCode, {
-        forceRefresh,
-        staleWhileRevalidate: !forceRefresh,
+        forceRefresh: true,
+        staleWhileRevalidate: false,
       });
       writeJson(response, 200, cached.value, {
         "X-Guild-Source": "comlink-live",
         "X-Guild-Cache": cached.cache,
-        "X-Guild-Refresh": forceRefresh ? "requested" : "normal",
+        "X-Guild-Refresh": "requested",
         Age: String(Math.max(0, Math.floor((cached.ageMs || 0) / 1000))),
       });
     } catch (error) {
       const status = [400, 401, 404, 429, 503].includes(error?.status) ? error.status : 502;
       writeJson(response, status, {
-        error: error?.name === "AbortError" ? "The live guild request timed out." : error?.message || "The live SWGOH guild pipeline is unavailable.",
+        error: error?.name === "AbortError" ? "The live guild request timed out." : error?.message || "The SWGOH guild pipeline is unavailable.",
+      });
+    }
+    return true;
+  }
+
+  const playerBaselineMatch = url.pathname.match(/^\/api\/player\/(\d{9})\/baseline$/);
+  if (playerBaselineMatch) {
+    try {
+      const body = await canonicalRosterService.getPlayerRoster(playerBaselineMatch[1]);
+      writeJson(response, 200, body, {
+        "X-Roster-Source": "supabase-canonical",
+        "X-Roster-Cache": "persistent",
+        "X-Roster-Logical-Units": String((body?.units?.length || 0) + (body?.ships?.length || 0)),
+      });
+    } catch (error) {
+      writeJson(response, [400, 404, 503].includes(error?.status) ? error.status : 502, {
+        error: error?.message || "The persisted player roster is unavailable.",
       });
     }
     return true;
