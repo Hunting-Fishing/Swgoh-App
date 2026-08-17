@@ -3,6 +3,12 @@ function numeric(value) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function knownNumeric(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 function memberScore(unit) {
   return numeric(unit.readiness) * 1000 + numeric(unit.power) + numeric(unit.speed) * 10;
 }
@@ -40,30 +46,37 @@ export function buildFactionSquads(units = [], options = {}) {
       ? [leader, ...ranked.filter((unit) => unit !== leader)].slice(0, size)
       : ranked.slice(0, size);
     const totalPower = selected.reduce((sum, unit) => sum + numeric(unit.power), 0);
-    const averageReadiness = selected.reduce((sum, unit) => sum + numeric(unit.readiness), 0) / selected.length;
+    const knownReadiness = selected.map((unit) => knownNumeric(unit.readiness)).filter((value) => value !== null);
+    const averageReadiness = knownReadiness.length
+      ? knownReadiness.reduce((sum, value) => sum + value, 0) / knownReadiness.length
+      : null;
     suggestions.push({
       faction,
       members: selected,
       ...(leader ? { leader, leaderBaseId: leader.baseId } : {}),
       totalPower: Math.round(totalPower),
-      averageReadiness: Math.round(averageReadiness),
+      averageReadiness: averageReadiness === null ? null : Math.round(averageReadiness),
+      readinessKnown: knownReadiness.length === selected.length,
       benchCount: Math.max(0, members.length - size),
     });
   }
 
   return suggestions
-    .sort((a, b) => b.averageReadiness - a.averageReadiness || b.totalPower - a.totalPower || a.faction.localeCompare(b.faction))
+    .sort((a, b) => numeric(b.averageReadiness) - numeric(a.averageReadiness) || b.totalPower - a.totalPower || a.faction.localeCompare(b.faction))
     .slice(0, limit);
 }
 
 export function squadReadiness(squad = {}) {
   const members = Array.isArray(squad.members) ? squad.members : [];
-  if (!members.length) return { ready: 0, developing: 0, needsWork: 0 };
-  return members.reduce((counts, unit) => {
-    const score = numeric(unit.readiness);
-    if (score >= 85) counts.ready += 1;
-    else if (score >= 65) counts.developing += 1;
-    else counts.needsWork += 1;
-    return counts;
+  if (!members.length) return { ready: 0, developing: 0, needsWork: 0, known: true };
+  const known = members.filter((unit) => knownNumeric(unit.readiness) !== null);
+  if (!known.length) return { ready: "—", developing: "—", needsWork: "—", known: false };
+  const counts = known.reduce((result, unit) => {
+    const score = knownNumeric(unit.readiness) ?? 0;
+    if (score >= 85) result.ready += 1;
+    else if (score >= 65) result.developing += 1;
+    else result.needsWork += 1;
+    return result;
   }, { ready: 0, developing: 0, needsWork: 0 });
+  return { ...counts, known: known.length === members.length };
 }
