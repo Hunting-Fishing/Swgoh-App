@@ -54,7 +54,7 @@ test("all 17 ROTE fleet entry pools are source-audited and presented as exact", 
   }
 });
 
-test("fleet side restrictions intersect the actual roster instead of recommended fleet templates", () => {
+test("fleet side restrictions intersect selectable roster slots while Mission Units remain locked", () => {
   const mustafar = normalizedRoteMissionsForPlanet("mustafar").find((mission) => mission.id === "mustafar-fleet");
   const bracca = normalizedRoteMissionsForPlanet("bracca").find((mission) => mission.id === "bracca-fleet");
   const felucia = normalizedRoteMissionsForPlanet("felucia").find((mission) => mission.id === "felucia-fleet");
@@ -69,9 +69,12 @@ test("fleet side restrictions intersect the actual roster instead of recommended
     ],
   };
 
+  const mustafarEligibility = missionRosterEligibility(body, mustafar);
+  assert.equal(mustafarEligibility.lockedSlots, 1);
+  assert.equal(mustafarEligibility.mandatory[0].baseId, "SCYTHE");
   assert.deepEqual(
-    missionRosterEligibility(body, mustafar).candidates.map((unit) => unit.baseId).sort(),
-    ["DARKSHIP", "SCYTHE"].sort(),
+    mustafarEligibility.candidates.map((unit) => unit.baseId),
+    ["DARKSHIP"],
   );
   assert.deepEqual(
     missionRosterEligibility(body, bracca).candidates.map((unit) => unit.baseId),
