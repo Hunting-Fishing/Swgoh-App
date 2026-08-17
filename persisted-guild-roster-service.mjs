@@ -54,6 +54,11 @@ function sourceAgeMs(body, now = Date.now()) {
   return Number.isFinite(syncedAt) ? Math.max(0, now - syncedAt) : 0;
 }
 
+function cacheLabel(value) {
+  const label = clean(value) || 'unknown';
+  return label.startsWith('persisted-') ? label : `persisted-${label}`;
+}
+
 export function createPersistedGuildRosterService(env = process.env, options = {}) {
   const store = options.store || supabaseCoreStore;
   const now = typeof options.now === 'function' ? options.now : () => Date.now();
@@ -85,12 +90,12 @@ export function createPersistedGuildRosterService(env = process.env, options = {
     const normalized = normalizeAllyCode(allyCode);
     if (options.forceRefresh) {
       const value = await cache.refresh(normalized, () => load(normalized));
-      return Object.freeze({ value, cache: 'refreshed', ageMs: sourceAgeMs(value, now()) });
+      return Object.freeze({ value, cache: 'persisted-refreshed', ageMs: sourceAgeMs(value, now()) });
     }
     const result = await cache.getOrLoad(normalized, () => load(normalized), {
       staleWhileRevalidate: options.staleWhileRevalidate !== false,
     });
-    return Object.freeze({ ...result, ageMs: sourceAgeMs(result.value, now()) });
+    return Object.freeze({ ...result, cache: cacheLabel(result.cache), ageMs: sourceAgeMs(result.value, now()) });
   }
 
   return Object.freeze({
