@@ -2,7 +2,7 @@ import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
-export const DISCORD_TB_COMMAND_SCHEMA_VERSION = "2026-08-18-stage7-controls-v1";
+export const DISCORD_TB_COMMAND_SCHEMA_VERSION = "2026-08-18-stage8-hard-reserve-v1";
 const RECEIPT_VERSION = 1;
 const RECEIPT_FILE = "discord-command-registration-v1.json";
 const PUBLIC_RECEIPT_PATH = "/data/discord-command-registration.json";
