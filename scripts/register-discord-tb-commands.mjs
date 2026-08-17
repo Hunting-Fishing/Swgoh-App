@@ -160,9 +160,10 @@ if (!config.commandRegistrationConfigured) {
             {
               type: 3,
               name: "unit",
-              description: "SWGOH unit Base ID, for example JEDIKNIGHTCAL",
+              description: "Search SWGOH unit name or Base ID",
               required: true,
-              min_length: 2,
+              autocomplete: true,
+              min_length: 1,
               max_length: 80,
             },
             {
