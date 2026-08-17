@@ -20,10 +20,10 @@ test("app shell loads Player Command after workspace tabs with cache-busted cano
 
 test("shared fetch cache coalesces player and Guild baselines plus history", async () => {
   const source = await text("public/live-fetch-cache.js");
-  assert.match(source, /\/api\\\/player\\\/\(\\d\{9\}\)\\\/baseline/);
-  assert.match(source, /\/api\\\/player\\\/\(\\d\{9\}\)\\\/history/);
-  assert.match(source, /\/api\\\/guild\\\/by-player\\\/\(\\d\{9\}\)\\\/baseline/);
-  assert.match(source, /\/api\\\/guild\\\/by-player\\\/\(\\d\{9\}\)\\\/history/);
+  assert.match(source, /kind: "player-baseline"/);
+  assert.match(source, /kind: "player-history"/);
+  assert.match(source, /kind: "guild-baseline"/);
+  assert.match(source, /kind: "guild-history"/);
   assert.match(source, /inflight\.has\(info\.key\)/);
   assert.match(source, /params\.delete\("refresh"\)/);
 });
