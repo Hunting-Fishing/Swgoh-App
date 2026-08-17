@@ -1,6 +1,7 @@
 import { roteFleetBattleStrategyForMission as rawFleetStrategy } from "./tb-battle-strategy-rote-fleet-data.js";
 
 const SHIP_BASE_IDS = Object.freeze({
+  Scythe: "SCYTHE",
   "Lando's Millennium Falcon": "MILLENNIUMFALCONPRISTINE",
   Outrider: "OUTRIDER",
   Executor: "CAPITALEXECUTOR",
