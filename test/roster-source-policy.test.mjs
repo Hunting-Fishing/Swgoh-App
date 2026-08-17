@@ -4,9 +4,11 @@ import {
   isCanonicalRosterBody,
   isLiveRosterBody,
   nullableMetric,
+  rosterCapabilityKnown,
   rosterEndpoint,
   rosterNeedsLiveDetail,
   rosterSourceStatus,
+  unitCapabilityKnown,
 } from "../public/roster-source-policy.js";
 
 test("normal Roster Commander loads the persisted full-roster endpoint", () => {
@@ -36,6 +38,21 @@ test("unknown persisted metrics remain unknown instead of becoming fake zero", (
   assert.equal(nullableMetric(null, null), null);
   assert.equal(nullableMetric(0), 0);
   assert.equal(nullableMetric("28"), 28);
+});
+
+test("canonical progression capability must be explicitly verified", () => {
+  assert.equal(rosterCapabilityKnown({ source: "canonical", capabilities: { zetas: true } }, "zetas"), true);
+  assert.equal(rosterCapabilityKnown({ source: "canonical", capabilities: { zetas: false } }, "zetas"), false);
+  assert.equal(rosterCapabilityKnown({ source: "canonical", capabilities: {} }, "zetas"), false);
+  assert.equal(rosterCapabilityKnown({ source: "live", capabilities: {} }, "zetas"), true);
+  assert.equal(rosterCapabilityKnown({ source: "live", capabilities: { zetas: false } }, "zetas"), false);
+});
+
+test("canonical unit progression honors persistence classification completeness", () => {
+  assert.equal(unitCapabilityKnown({ persistenceCapabilities: { zetas: true } }, "zetas"), true);
+  assert.equal(unitCapabilityKnown({ persistenceCapabilities: { zetas: false } }, "zetas"), false);
+  assert.equal(unitCapabilityKnown({ persistenceCapabilities: {} }, "omicrons"), false);
+  assert.equal(unitCapabilityKnown({ zetas: 2 }, "zetas"), true);
 });
 
 test("user-facing roster source wording never labels canonical data as live", () => {
