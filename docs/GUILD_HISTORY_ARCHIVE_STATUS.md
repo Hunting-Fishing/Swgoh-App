@@ -1,0 +1,1 @@
+Historical archive production index is populated from the LV Unit Tracker workbook. Source counts: 666 Guild snapshots, 1,723 raw player-month observations, 107 membership periods, 16 confirmed returns, 4,299 tracked GL/Inquisitor milestone events, 961 ticket days, 136 Raid events, 81 ROTE events, and 76 Reva events.
