@@ -7,6 +7,8 @@ const USER_B = 'b487b586-cd7f-47de-8317-f37706152010';
 const PLAYER_A = '11111111-1111-4111-8111-111111111111';
 const PLAYER_B = '22222222-2222-4222-8222-222222222222';
 const GUILD_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const DISCORD_GUILD_ID = '1422643338586099745';
+const DISCORD_USER_ID = '555555555555555555';
 
 function matches(row, query = {}) {
   for (const [key, value] of Object.entries(query)) {
@@ -85,11 +87,34 @@ function liveGuild(ally = '123456789') {
   };
 }
 
-function service({ userId = USER_A, store, guildBody = liveGuild() } = {}) {
+function durableDiscordState({ ally = '123456789', discordUserId = DISCORD_USER_ID } = {}) {
+  return {
+    status() { return { enabled: true, durable: true, reason: 'ready' }; },
+    async readGuild(discordGuildId) {
+      assert.equal(discordGuildId, DISCORD_GUILD_ID);
+      return {
+        discordGuildId,
+        userLinks: {
+          [discordUserId]: {
+            discordUserId,
+            swgohAllyCode: ally,
+            playerId: 'swgoh-player-a',
+            linkedAt: '2026-08-17T03:00:00Z',
+            updatedAt: '2026-08-17T03:00:00Z',
+          },
+        },
+      };
+    },
+  };
+}
+
+function service({ userId = USER_A, store, guildBody = liveGuild(), discordStateStore, discordGuildId = DISCORD_GUILD_ID } = {}) {
   return createAccountOnboarding({
     session: { async currentUser() { return { id: userId, email: `${userId}@example.test` }; } },
     store,
     guildService: { async getGuildRoster() { return { value: guildBody, cache: 'fresh', ageMs: 0 }; } },
+    ...(discordStateStore ? { discordStateStore } : {}),
+    discordGuildId,
     now: () => new Date('2026-08-17T04:00:00Z'),
   });
 }
@@ -105,11 +130,58 @@ test('pending link stores only canonical identity plus pending user/guild relati
   assert.equal(store.tables.user_player_links.length, 1);
   assert.equal(store.tables.user_player_links[0].user_id, USER_A);
   assert.equal(store.tables.user_player_links[0].verification_status, 'pending');
+  assert.equal(store.tables.user_player_links[0].verification_method, 'manual');
   assert.equal(store.tables.guild_user_memberships[0].status, 'pending');
   assert.equal(store.tables.guild_user_memberships[0].user_id, USER_A);
   assert.equal(store.calls.some((call) => call.table === 'player_units_current'), false);
   assert.equal(store.calls.some((call) => call.table === 'guild_members_current'), false);
   assert.equal(store.calls.some((call) => call.table === 'guild_snapshots'), false);
+});
+
+test('signed-in Discord identity reuses the durable /tb link without retyping the Ally Code', async () => {
+  const store = createMemoryStore({
+    user_social_identities: [{
+      user_id: USER_A,
+      provider: 'discord',
+      provider_user_id: DISCORD_USER_ID,
+      display_name: 'Alpha Discord',
+      last_seen_at: '2026-08-17T03:30:00Z',
+    }],
+  });
+  const onboarding = service({ store, discordStateStore: durableDiscordState() });
+
+  const discovered = await onboarding.resolveDiscordPlayerLink({ id: USER_A });
+  assert.equal(discovered.source, 'discord-bot-link');
+  assert.equal(discovered.discordUserId, DISCORD_USER_ID);
+  assert.equal(discovered.allyCode, '123456789');
+  assert.equal(discovered.playerId, 'swgoh-player-a');
+
+  const result = await onboarding.requestDiscordPlayerLink({ id: USER_A });
+  assert.equal(result.status, 'pending');
+  assert.equal(result.verificationMethod, 'discord');
+  assert.equal(result.discovery.allyCode, '123456789');
+  assert.equal(store.tables.players[0].ally_code, '123456789');
+  assert.equal(store.tables.user_player_links[0].verification_status, 'pending');
+  assert.equal(store.tables.user_player_links[0].verification_method, 'discord');
+  assert.equal(store.tables.guild_user_memberships[0].status, 'pending');
+});
+
+test('Google-only social identity cannot be mistaken for a Discord /tb player link', async () => {
+  const store = createMemoryStore({
+    user_social_identities: [{
+      user_id: USER_A,
+      provider: 'google',
+      provider_user_id: 'google-user-1',
+      display_name: 'Alpha Google',
+      last_seen_at: '2026-08-17T03:30:00Z',
+    }],
+  });
+  const onboarding = service({ store, discordStateStore: durableDiscordState() });
+  assert.equal(await onboarding.resolveDiscordPlayerLink({ id: USER_A }), null);
+  await assert.rejects(
+    () => onboarding.requestDiscordPlayerLink({ id: USER_A }),
+    (error) => error?.status === 404 && error?.code === 'DISCORD_PLAYER_LINK_NOT_FOUND',
+  );
 });
 
 test('account status filters every private relationship by the signed-in user id', async () => {
