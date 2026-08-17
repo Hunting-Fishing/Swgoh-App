@@ -5,6 +5,7 @@ const submit = document.querySelector('[data-auth-submit]');
 const sessionCard = document.querySelector('[data-session-card]');
 const sessionEmail = document.querySelector('[data-session-email]');
 const signoutButton = document.querySelector('[data-signout]');
+const socialButtons = [...document.querySelectorAll('[data-social-provider]')];
 
 function setMessage(text = '', type = 'info') {
   if (!message) return;
@@ -52,6 +53,56 @@ function showExistingSession(user) {
   form.hidden = true;
   sessionCard.classList.add('is-visible');
   if (sessionEmail) sessionEmail.textContent = user?.email || 'Signed-in user';
+}
+
+function oauthErrorMessage(code) {
+  const value = String(code || '').trim().toLowerCase();
+  if (!value) return '';
+  if (value.includes('discord_not_enabled')) return 'Discord sign-in is not enabled yet. An administrator must finish the Discord OAuth provider setup.';
+  if (value.includes('google_not_enabled')) return 'Google sign-in is not enabled yet. An administrator must finish the Google OAuth provider setup.';
+  if (value.includes('access_denied')) return 'Social sign-in was cancelled or access was denied.';
+  if (value.includes('state')) return 'The social sign-in security check expired or did not match. Please start again.';
+  if (value.includes('missing_auth_code')) return 'The social provider did not return a usable authorization code. Please try again.';
+  return 'Social sign-in could not be completed. Please try again or use email and password.';
+}
+
+function showOAuthReturnError() {
+  const params = new URLSearchParams(window.location.search);
+  const code = params.get('oauth_error');
+  if (!code) return;
+  setMessage(oauthErrorMessage(code), 'error');
+  params.delete('oauth_error');
+  const next = `${window.location.pathname}${params.toString() ? `?${params}` : ''}${window.location.hash}`;
+  window.history.replaceState(null, '', next);
+}
+
+function setSocialProviderState(provider, enabled) {
+  const button = socialButtons.find((node) => node.dataset.socialProvider === provider);
+  if (!button) return;
+  button.classList.toggle('is-disabled', !enabled);
+  button.setAttribute('aria-disabled', enabled ? 'false' : 'true');
+  if (!button.dataset.oauthHref) button.dataset.oauthHref = button.getAttribute('href') || '';
+  button.setAttribute('href', enabled ? button.dataset.oauthHref : '#');
+  button.title = enabled ? '' : `${provider[0].toUpperCase()}${provider.slice(1)} sign-in setup is pending.`;
+}
+
+async function checkSocialProviders() {
+  try {
+    const state = await requestJson('/api/auth/providers');
+    const social = state?.social || {};
+    for (const provider of ['discord', 'google']) setSocialProviderState(provider, social[provider] === true);
+  } catch {
+    for (const provider of ['discord', 'google']) setSocialProviderState(provider, false);
+  }
+}
+
+for (const button of socialButtons) {
+  button.addEventListener('click', (event) => {
+    if (!button.classList.contains('is-disabled')) return;
+    event.preventDefault();
+    const provider = button.dataset.socialProvider || 'social';
+    setMessage(`${provider[0].toUpperCase()}${provider.slice(1)} sign-in is not enabled yet. Email/password remains available.`, 'info');
+  });
 }
 
 async function checkSession() {
@@ -142,4 +193,6 @@ signoutButton?.addEventListener('click', async () => {
   window.location.reload();
 });
 
+showOAuthReturnError();
+checkSocialProviders();
 checkSession();
