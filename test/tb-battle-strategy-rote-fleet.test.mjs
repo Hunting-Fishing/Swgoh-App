@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
+import { ROTE_FLEET_ENTRY_AUDIT } from "../public/rote-fleet-entry-audit-data.js";
 import { ROTE_MISSIONS_BY_PLANET } from "../public/rote-mission-data.js";
 import { evaluateBattleStrategy } from "../public/tb-battle-strategy.js";
 import { ROTE_FLEET_BATTLE_STRATEGIES } from "../public/tb-battle-strategy-rote-fleet-data.js";
@@ -38,16 +39,24 @@ test("canonical ROTE data exposes exactly 17 fleet missions", () => {
   assert.equal(fleetMissions.length, 17);
   assert.deepEqual(fleetIds, expectedFleetIds);
   assert.deepEqual(Object.keys(ROTE_FLEET_BATTLE_STRATEGIES).sort(), expectedFleetIds);
+  assert.deepEqual(Object.keys(ROTE_FLEET_ENTRY_AUDIT).sort(), expectedFleetIds);
 });
 
-test("every canonical ROTE fleet mission resolves to sourced execution stages", () => {
+test("every canonical ROTE fleet mission resolves to sourced execution stages plus the audited entry gate", () => {
   for (const mission of fleetMissions) {
     const strategy = roteFleetBattleStrategyForMission(mission.id);
+    const audit = ROTE_FLEET_ENTRY_AUDIT[mission.id];
     assert.ok(strategy, `${mission.id} should resolve`);
+    assert.ok(audit, `${mission.id} should have an entry audit`);
     assert.equal(strategy.missionId, mission.id);
     assert.ok(strategy.sources.some((source) => source.kind === "official" || source.kind === "current-reference"));
     assert.ok(strategy.stages.length >= 3);
     assert.ok(strategy.evidenceBoundary);
+    assert.deepEqual(strategy.entryAudit.allowedAlignments, [...audit.allowedAlignments]);
+    assert.deepEqual(strategy.entryAudit.mandatoryBaseIds, audit.mandatoryMembers.map((member) => member.baseId));
+    assert.equal(strategy.entryAudit.sourceRequirement, audit.sourceRequirement);
+    assert.equal(strategy.stages[0].steps[0].id, "entry-audit");
+    assert.match(strategy.stages[0].steps[0].instruction, new RegExp(audit.sourceRequirement.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 
     const analysis = evaluateBattleStrategy({ missionId: mission.id, members: [] }, mission);
     assert.equal(analysis.available, true, `${mission.id} should be available through the global resolver`);
@@ -66,23 +75,14 @@ test("all 17 fleet missions count as covered in the strategy coverage layer", ()
   }
 });
 
-test("canonical required ship identifiers match live roster member ids", () => {
-  const cases = [
-    ["corellia-fleet", "MILLENNIUMFALCONPRISTINE"],
-    ["coruscant-fleet", "OUTRIDER"],
-    ["tatooine-fleet", "CAPITALEXECUTOR"],
-    ["kashyyyk-fleet", "CAPITALPROFUNDITY"],
-    ["zeffo-fleet", "CAPITALNEGOTIATOR"],
-    ["kessel-fleet", "GHOST"],
-    ["mandalore-fleet", "GAUNTLETSTARFIGHTER"],
-    ["death-star-fleet", "TIEFIGHTERIMPERIAL"],
-    ["scarif-fleet", "CAPITALPROFUNDITY"],
-  ];
-  for (const [missionId, baseId] of cases) {
+test("every audited required ship identifier is enforced by the strategy resolver", () => {
+  for (const [missionId, audit] of Object.entries(ROTE_FLEET_ENTRY_AUDIT)) {
     const strategy = roteFleetBattleStrategyForMission(missionId);
-    assert.ok(strategy.keyUnits.some((row) => row.baseId === baseId && row.importance === "critical"), `${missionId} should use ${baseId}`);
-    const analysis = evaluateBattleStrategy({ missionId, members: [ship(baseId)] });
-    assert.ok(!analysis.blockers.some((row) => row.type === "unit" && row.id === baseId), `${missionId} should recognize ${baseId}`);
+    for (const member of audit.mandatoryMembers) {
+      assert.ok(strategy.keyUnits.some((row) => row.baseId === member.baseId && row.importance === "critical"), `${missionId} should require ${member.baseId}`);
+      const analysis = evaluateBattleStrategy({ missionId, members: [ship(member.baseId, member.name)] }, fleetMissions.find((mission) => mission.id === missionId));
+      assert.ok(!analysis.blockers.some((row) => row.type === "unit" && row.id === member.baseId), `${missionId} should recognize ${member.baseId}`);
+    }
   }
 });
 
@@ -101,6 +101,7 @@ test("fleet packs preserve official modifier semantics and avoid fabricated odds
 
 test("fleet strategy modules parse", () => {
   for (const path of [
+    new URL("../public/rote-fleet-entry-audit-data.js", import.meta.url),
     new URL("../public/tb-battle-strategy-rote-fleet-data.js", import.meta.url),
     new URL("../public/tb-battle-strategy-rote-fleet-resolver.js", import.meta.url),
     new URL("../public/tb-battle-strategy.js", import.meta.url),
