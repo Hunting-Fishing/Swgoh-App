@@ -1,6 +1,16 @@
 import { describeGpQuality, selectProfileGp } from "./gp-policy.js";
 import { mergeAbilityProgression, progressionCounts } from "./progression-policy.js";
 import { readinessAnalysis } from "./readiness-policy.js";
+import {
+  isCanonicalRosterBody,
+  isLiveRosterBody,
+  loadPreferredPlayerRoster,
+  rosterCapabilityKnown,
+  rosterProgressionTotal,
+  rosterSourceStatus,
+  unitProgressionKnown,
+  unitProgressionValue,
+} from "./roster-source-policy.js";
 import { buildFactionSquads, squadReadiness } from "./team-builder.js";
 
 const state = {
@@ -50,6 +60,16 @@ function number(value) {
   return new Intl.NumberFormat().format(Number(value || 0));
 }
 
+function knownNumber(value, fallback = "N/A") {
+  if (value === null || value === undefined || value === "") return fallback;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? new Intl.NumberFormat().format(parsed) : fallback;
+}
+
+function capabilityNumber(body, capability, value, fallback = "N/A") {
+  return rosterCapabilityKnown(body, capability) ? knownNumber(value, fallback) : fallback;
+}
+
 function decimal(value, digits = 1) {
   return Number(value || 0).toFixed(digits);
 }
@@ -76,17 +96,26 @@ function appliedAbility(staticAbility, liveAbility) {
   return mergeAbilityProgression(staticAbility, liveAbility);
 }
 
+function persistedSkillEvidence(unit = {}) {
+  return (Array.isArray(unit.skillTiers) ? unit.skillTiers : []).map((skill) => ({
+    id: skill.id,
+    tier: skill.rawTier,
+    displayTier: skill.effectiveTier,
+  }));
+}
+
 function enrichUnit(unit) {
   const staticUnit = staticUnitFor(unit.baseId);
   if (!staticUnit) return {
     ...unit,
-    zetas: Number(unit.zetas || 0),
-    omegas: Number(unit.omegas || 0),
-    omicrons: Number(unit.omicrons || 0),
+    zetas: unitProgressionValue(unit, "zetas", "zetas"),
+    omegas: unitProgressionValue(unit, "omegas", "omegas"),
+    omicrons: unitProgressionValue(unit, "omicrons", "omicrons"),
   };
 
   const staticAbilities = staticUnit.abilities || [];
-  const liveAbilities = unit.abilities || [];
+  const directAbilities = Array.isArray(unit.abilities) ? unit.abilities : [];
+  const liveAbilities = directAbilities.length ? directAbilities : persistedSkillEvidence(unit);
   const liveById = new Map(liveAbilities.filter((ability) => ability?.id).map((ability) => [ability.id, ability]));
   const mergedAbilities = staticAbilities.map((ability, index) => appliedAbility(
     ability,
@@ -103,7 +132,9 @@ function enrichUnit(unit) {
     factions: Array.isArray(unit.factions) && unit.factions.length ? unit.factions : staticUnit.factions,
     image: unit.image || staticUnit.image,
     imageFallback: unit.image && staticUnit.image && unit.image !== staticUnit.image ? staticUnit.image : "",
-    ...counts,
+    zetas: unitProgressionKnown(unit, "zetas") ? counts.zetas : null,
+    omegas: unitProgressionKnown(unit, "omegas") ? counts.omegas : null,
+    omicrons: unitProgressionKnown(unit, "omicrons") ? counts.omicrons : null,
     abilities: mergedAbilities.length ? mergedAbilities : liveAbilities,
   };
 }
@@ -161,6 +192,28 @@ async function loadCatalog() {
   }
 }
 
+function applyRosterBody(body) {
+  state.player = body.player;
+  state.lastBody = body;
+  state.characters = (body.units || []).map(enrichUnit);
+  state.ships = (Array.isArray(body.ships) ? body.ships : []).map(enrichUnit);
+  state.units = [...state.characters, ...state.ships];
+  state.fetchedAt = body.fetchedAt || body.player.updatedAt;
+
+  if (isLiveRosterBody(body)) {
+    window.__swgohLiveSnapshot = { allyCode: sanitizeAllyCode(body.player?.allyCode), body, fetchedAt: Date.now() };
+  }
+
+  renderProfile(body);
+  renderRoster();
+  renderIntelligence(body);
+  empty.classList.add("hidden");
+  profile.classList.remove("hidden");
+  controls.classList.remove("hidden");
+  roster.classList.remove("hidden");
+  intelligence.classList.remove("hidden");
+}
+
 allyCode.addEventListener("input", () => {
   allyCode.value = formatAllyCode(allyCode.value);
 });
@@ -174,32 +227,12 @@ allyForm.addEventListener("submit", async (event) => {
   }
 
   loadButton.disabled = true;
-  loadButton.textContent = "Loading…";
+  loadButton.textContent = "Loading roster…";
   showError("");
 
   try {
-    const response = await fetch(`/api/player/${code}`, { cache: "no-store" });
-    const body = await response.json();
-    if (!response.ok) throw new Error(body?.error || `Live request failed with HTTP ${response.status}.`);
-    if (body?.source !== "live" || !body?.player || !Array.isArray(body?.units)) {
-      throw new Error("The live gateway returned an invalid roster response.");
-    }
-
-    state.player = body.player;
-    state.lastBody = body;
-    state.characters = (body.units || []).map(enrichUnit);
-    state.ships = (Array.isArray(body.ships) ? body.ships : []).map(enrichUnit);
-    state.units = [...state.characters, ...state.ships];
-    state.fetchedAt = body.fetchedAt || body.player.updatedAt;
-
-    renderProfile(body);
-    renderRoster();
-    renderIntelligence(body);
-    empty.classList.add("hidden");
-    profile.classList.remove("hidden");
-    controls.classList.remove("hidden");
-    roster.classList.remove("hidden");
-    intelligence.classList.remove("hidden");
+    const result = await loadPreferredPlayerRoster(code);
+    applyRosterBody(result.body);
   } catch (error) {
     state.player = null;
     state.lastBody = null;
@@ -211,10 +244,10 @@ allyForm.addEventListener("submit", async (event) => {
     roster.classList.add("hidden");
     intelligence.classList.add("hidden");
     empty.classList.remove("hidden");
-    showError(error.message || "Live SWGOH data is unavailable.");
+    showError(error.message || "SWGOH roster data is unavailable.");
   } finally {
     loadButton.disabled = false;
-    loadButton.textContent = "Load Live Roster";
+    loadButton.textContent = "Load Roster";
   }
 });
 
@@ -232,13 +265,11 @@ function renderProfile(body) {
   const avgRelic = relicCharacters.length
     ? relicCharacters.reduce((sum, unit) => sum + Number(unit.relic || 0), 0) / relicCharacters.length
     : 0;
-  const zetas = characters.reduce((sum, unit) => sum + Number(unit.zetas || 0), 0);
-  const omegas = characters.reduce((sum, unit) => sum + Number(unit.omegas || 0), 0);
-  const omicrons = characters.reduce((sum, unit) => sum + Number(unit.omicrons || 0), 0);
+  const zetas = rosterProgressionTotal(body, "zetas", "zetas");
+  const omegas = rosterProgressionTotal(body, "omegas", "omegas", { summaryAliases: ["omegaUpgrades"] });
+  const omicrons = rosterProgressionTotal(body, "omicrons", "omicrons");
   const rosterCount = characters.length + ships.length;
   const summary = body.summary || {};
-  const sixDotMods = Number.isFinite(Number(summary.sixDotMods)) ? Number(summary.sixDotMods) : null;
-  const datacrons = Number.isFinite(Number(summary.datacrons)) ? Number(summary.datacrons) : null;
   const competitive = body.competitive || {};
   const arenaRank = Number(player.arenaRank || competitive.arenaRank || 0);
   const fleetArenaRank = Number(player.fleetArenaRank || competitive.fleetArenaRank || 0);
@@ -262,18 +293,18 @@ function renderProfile(body) {
       <div><span>Characters</span><strong>${number(characters.length)}</strong><small>${number(sevenStarCharacters)} at 7★</small></div>
       <div><span>Ships</span><strong>${number(ships.length)}</strong><small>${number(sevenStarShips)} at 7★</small></div>
       <div><span>Relics</span><strong>${number(relicCharacters.length)}</strong><small>Avg R${decimal(avgRelic)}</small></div>
-      <div><span>Zetas</span><strong>${number(zetas)}</strong></div>
-      <div><span>Omegas</span><strong>${number(omegas)}</strong></div>
-      <div><span>Omicrons</span><strong>${number(omicrons)}</strong></div>
-      <div><span>6-dot Mods</span><strong>${sixDotMods === null ? "N/A" : number(sixDotMods)}</strong></div>
-      <div><span>Datacrons</span><strong>${datacrons === null ? "N/A" : number(datacrons)}</strong></div>
+      <div><span>Zetas</span><strong>${knownNumber(zetas)}</strong></div>
+      <div><span>Omegas</span><strong>${knownNumber(omegas)}</strong></div>
+      <div><span>Omicrons</span><strong>${knownNumber(omicrons)}</strong></div>
+      <div><span>6-dot Mods</span><strong>${capabilityNumber(body, "sixDotMods", summary.sixDotMods)}</strong></div>
+      <div><span>Datacrons</span><strong>${capabilityNumber(body, "datacrons", summary.datacrons)}</strong></div>
       <div><span>Squad Arena</span><strong>${arenaRank ? `#${number(arenaRank)}` : "N/A"}</strong></div>
       <div><span>Fleet Arena</span><strong>${fleetArenaRank ? `#${number(fleetArenaRank)}` : "N/A"}</strong></div>
       <div><span>GAC Rating</span><strong>${gacSkillRating ? number(gacSkillRating) : "N/A"}</strong></div>
     </div>
     <div class="data-quality"><strong>GP check:</strong> ${escapeHtml(gpQuality)}</div>
     <div class="data-quality muted"><strong>Account inventory:</strong> Comlink does not expose unequipped materials, gear, mods, or player currency balances, so this app does not show fake zero balances.</div>
-    <div class="freshness">Live player fetched ${escapeHtml(new Date(body.fetchedAt || player.updatedAt).toLocaleString())}</div>
+    <div class="freshness">${escapeHtml(rosterSourceStatus(body, rosterCount))}</div>
   `;
 }
 
@@ -286,18 +317,19 @@ function renderIntelligence(body) {
   const seasons = Array.isArray(body.seasonStatus) ? body.seasonStatus : [];
   const league = body.player?.gacLeague || competitive.gacLeague || "N/A";
   const division = body.player?.gacDivision || competitive.gacDivision || "";
+  const canonical = isCanonicalRosterBody(body);
 
-  intelligenceStatus.textContent = capabilities.liveRoster === false ? "Limited live data" : "Live roster intelligence";
-  intelligenceStatus.className = capabilities.liveRoster === false ? "status warning" : "status ready";
+  intelligenceStatus.textContent = canonical ? "Persisted roster intelligence" : capabilities.liveRoster === false ? "Limited live data" : "Live roster intelligence";
+  intelligenceStatus.className = canonical || capabilities.liveRoster === false ? "status warning" : "status ready";
   intelligenceSummary.innerHTML = `
-    <div><span>Equipped Mods</span><strong>${capabilities.equippedMods === false ? "N/A" : number(summary.equippedMods)}</strong></div>
-    <div><span>6-dot Mods</span><strong>${capabilities.sixDotMods === false ? "N/A" : number(summary.sixDotMods)}</strong></div>
-    <div><span>Purchased Abilities</span><strong>${capabilities.purchasedAbilities === false ? "N/A" : number(summary.purchasedAbilities)}</strong></div>
-    <div><span>Unlocked Titles</span><strong>${capabilities.unlockedCosmetics === false ? "N/A" : number(summary.unlockedTitles)}</strong></div>
-    <div><span>Unlocked Portraits</span><strong>${capabilities.unlockedCosmetics === false ? "N/A" : number(summary.unlockedPortraits)}</strong></div>
-    <div><span>Datacrons</span><strong>${capabilities.datacrons === false ? "N/A" : number(summary.datacrons)}</strong></div>
+    <div><span>Equipped Mods</span><strong>${capabilityNumber(body, "equippedMods", summary.equippedMods)}</strong></div>
+    <div><span>6-dot Mods</span><strong>${capabilityNumber(body, "sixDotMods", summary.sixDotMods)}</strong></div>
+    <div><span>Purchased Abilities</span><strong>${capabilityNumber(body, "purchasedAbilities", summary.purchasedAbilities)}</strong></div>
+    <div><span>Unlocked Titles</span><strong>${capabilityNumber(body, "unlockedCosmetics", summary.unlockedTitles)}</strong></div>
+    <div><span>Unlocked Portraits</span><strong>${capabilityNumber(body, "unlockedCosmetics", summary.unlockedPortraits)}</strong></div>
+    <div><span>Datacrons</span><strong>${capabilityNumber(body, "datacrons", summary.datacrons)}</strong></div>
     <div><span>GAC League</span><strong>${escapeHtml(String(league))}${division ? ` ${escapeHtml(String(division))}` : ""}</strong></div>
-    <div><span>GAC Rating</span><strong>${number(competitive.gacSkillRating || body.player?.gacSkillRating)}</strong></div>
+    <div><span>GAC Rating</span><strong>${rosterCapabilityKnown(body, "competitiveProfile") ? knownNumber(competitive.gacSkillRating || body.player?.gacSkillRating) : "N/A"}</strong></div>
   `;
 
   if (squads.length) {
@@ -342,7 +374,7 @@ function renderIntelligence(body) {
         <strong>${escapeHtml(String(stat.value ?? "N/A"))}</strong>
       </div>
     `).join("")
-    : `<div class="intel-empty">No public profile-stat entries returned for this player.</div>`;
+    : `<div class="intel-empty">${canonical ? "Public profile-stat detail requires a live refresh." : "No public profile-stat entries returned for this player."}</div>`;
 
   seasonGrid.innerHTML = seasons.length
     ? seasons.slice(0, 3).map((season) => `
@@ -353,7 +385,7 @@ function renderIntelligence(body) {
         <div><span>Rank</span><strong>${season.rank ? `#${number(season.rank)}` : "N/A"}</strong></div>
       </article>
     `).join("")
-    : `<div class="intel-empty">No public season-status entries returned for this player.</div>`;
+    : `<div class="intel-empty">${canonical ? "GAC season detail requires a live refresh." : "No public season-status entries returned for this player."}</div>`;
 }
 
 function renderRoster() {
@@ -409,20 +441,21 @@ function cardHtml(unit) {
     ${unit.image ? `<img data-portrait${fallback} src="${escapeAttr(unit.image)}" alt="${escapeAttr(unit.name)}" loading="lazy">` : ""}
   `;
   const badge = unit.unitType === "Ship" ? "SHIP" : Number(unit.relic) > 0 ? `R${number(unit.relic)}` : `G${number(unit.gear)}`;
-  const readiness = readinessAnalysis(unit);
+  const liveReadiness = isLiveRosterBody(state.lastBody);
+  const readiness = liveReadiness ? readinessAnalysis(unit) : null;
 
   return `
     <article class="unit-card">
       <div class="portrait">${image}<div class="relic">${escapeHtml(badge)}</div></div>
       <div class="unit-body">
         <div class="unit-title"><h3>${escapeHtml(unit.name)}</h3><span>${escapeHtml(unit.alignment)}</span></div>
-        <p>${escapeHtml(unit.summary || unit.description || "Live roster unit")}</p>
+        <p>${escapeHtml(unit.summary || unit.description || "Roster unit")}</p>
         <div class="metrics">
           <div><span>Power</span><strong>${number(unit.power)}</strong></div>
           <div><span>Speed</span><strong>${number(unit.speed)}</strong></div>
-          <div><span>${escapeHtml(readiness.band)}</span><strong>${number(unit.readiness)}%</strong></div>
+          <div><span>${escapeHtml(readiness?.band || "Readiness")}</span><strong>${readiness ? `${number(unit.readiness)}%` : "LIVE"}</strong></div>
         </div>
-        <div class="upgrade-line">Z ${number(unit.zetas)} · Ω ${number(unit.omegas)} · Omi ${number(unit.omicrons)}</div>
+        <div class="upgrade-line">Z ${knownNumber(unit.zetas, "—")} · Ω ${knownNumber(unit.omegas, "—")} · Omi ${knownNumber(unit.omicrons, "—")}</div>
         <div class="tags">${tags}</div>
         <button data-base-id="${escapeAttr(unit.baseId)}">Inspect</button>
       </div>
@@ -443,7 +476,8 @@ function abilityFlags(ability) {
 }
 
 function showDetails(unit) {
-  const readiness = readinessAnalysis(unit);
+  const liveReadiness = isLiveRosterBody(state.lastBody);
+  const readiness = liveReadiness ? readinessAnalysis(unit) : null;
   const abilities = (unit.abilities || []).map((ability) => `
     <li>
       <div class="ability-heading"><strong>${escapeHtml(ability.name || ability.type)}</strong><div class="ability-flags">${abilityFlags(ability)}</div></div>
@@ -451,10 +485,13 @@ function showDetails(unit) {
       <span>${escapeHtml(ability.note || ability.description || "")}</span>
     </li>
   `).join("");
-  const gaps = readiness.gaps.length
-    ? readiness.gaps.map((gap) => `<li class="requirement-gap ${escapeAttr(gap.severity)}"><strong>${escapeHtml(gap.label)}</strong><span>${escapeHtml(gap.severity)} priority</span></li>`).join("")
-    : `<li class="requirement-gap complete"><strong>Baseline development targets met</strong><span>No basic star, level, gear/relic or mod-slot gap detected.</span></li>`;
+  const gaps = readiness
+    ? readiness.gaps.length
+      ? readiness.gaps.map((gap) => `<li class="requirement-gap ${escapeAttr(gap.severity)}"><strong>${escapeHtml(gap.label)}</strong><span>${escapeHtml(gap.severity)} priority</span></li>`).join("")
+      : `<li class="requirement-gap complete"><strong>Baseline development targets met</strong><span>No basic star, level, gear/relic or mod-slot gap detected.</span></li>`
+    : `<li class="requirement-gap"><strong>Live detail required</strong><span>Refresh the live roster before calculating mod-slot readiness or readiness gaps.</span></li>`;
   const purchasedAbilities = (unit.purchasedAbilityIds || []).map((id) => `<li><code>${escapeHtml(id)}</code></li>`).join("");
+  const purchasedCount = rosterCapabilityKnown(state.lastBody || {}, "purchasedAbilities") ? knownNumber(unit.purchasedAbilityIds?.length) : "N/A";
 
   details.innerHTML = `
     <button class="close" aria-label="Close">×</button>
@@ -462,9 +499,9 @@ function showDetails(unit) {
     <h2>${escapeHtml(unit.name)}</h2>
     <p>${escapeHtml(unit.role)} · ${escapeHtml(unit.alignment)}</p>
     <div class="readiness-banner">
-      <div><span>Readiness</span><strong>${number(readiness.score)}%</strong></div>
-      <div><span>Status</span><strong>${escapeHtml(readiness.band)}</strong></div>
-      <div><span>Development Gaps</span><strong>${number(readiness.gapCount)}</strong></div>
+      <div><span>Readiness</span><strong>${readiness ? `${number(readiness.score)}%` : "—"}</strong></div>
+      <div><span>Status</span><strong>${escapeHtml(readiness?.band || "Live detail required")}</strong></div>
+      <div><span>Development Gaps</span><strong>${readiness ? number(readiness.gapCount) : "—"}</strong></div>
     </div>
     <div class="detail-metrics">
       <div><span>Power</span><strong>${number(unit.power)}</strong></div>
@@ -472,15 +509,15 @@ function showDetails(unit) {
       <div><span>Stars</span><strong>${number(unit.stars)}</strong></div>
       <div><span>Gear</span><strong>${number(unit.gear)}</strong></div>
       <div><span>Relic</span><strong>${number(unit.relic)}</strong></div>
-      <div><span>Equipped Mods</span><strong>${number(unit.equippedMods)}</strong></div>
-      <div><span>Zetas</span><strong>${number(unit.zetas)}</strong></div>
-      <div><span>Omegas</span><strong>${number(unit.omegas)}</strong></div>
-      <div><span>Omicrons</span><strong>${number(unit.omicrons)}</strong></div>
-      <div><span>Purchased Abilities</span><strong>${number(unit.purchasedAbilityIds?.length)}</strong></div>
+      <div><span>Equipped Mods</span><strong>${capabilityNumber(state.lastBody || {}, "equippedMods", unit.equippedMods)}</strong></div>
+      <div><span>Zetas</span><strong>${knownNumber(unit.zetas)}</strong></div>
+      <div><span>Omegas</span><strong>${knownNumber(unit.omegas)}</strong></div>
+      <div><span>Omicrons</span><strong>${knownNumber(unit.omicrons)}</strong></div>
+      <div><span>Purchased Abilities</span><strong>${purchasedCount}</strong></div>
     </div>
     <h3>Development Gaps</h3>
     <ul class="requirement-gaps">${gaps}</ul>
-    ${purchasedAbilities ? `<h3>Purchased Special Abilities</h3><ul class="purchased-abilities">${purchasedAbilities}</ul>` : ""}
+    ${purchasedAbilities && rosterCapabilityKnown(state.lastBody || {}, "purchasedAbilities") ? `<h3>Purchased Special Abilities</h3><ul class="purchased-abilities">${purchasedAbilities}</ul>` : ""}
     <h3>Abilities</h3>
     <ul class="abilities">${abilities || "<li>No ability detail returned.</li>"}</ul>
   `;
@@ -601,7 +638,12 @@ function escapeAttr(value) {
 search.addEventListener("input", renderRoster);
 unitType.addEventListener("change", renderRoster);
 alignment.addEventListener("change", renderRoster);
-sort.addEventListener("change", renderRoster);
+sort.addEventListener("change", () => {
+  if (sort.value === "readiness" && isCanonicalRosterBody(state.lastBody || {})) {
+    showError("Readiness requires live-only roster detail. Use Refresh Live Detail in Roster Commander to promote this persisted baseline before ranking readiness.");
+  }
+  renderRoster();
+});
 catalogSearch.addEventListener("input", () => { state.catalogShown = 24; renderCatalog(); });
 catalogType.addEventListener("change", () => { state.catalogShown = 24; renderCatalog(); });
 catalogAlignment.addEventListener("change", () => { state.catalogShown = 24; renderCatalog(); });
