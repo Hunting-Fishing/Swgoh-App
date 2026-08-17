@@ -151,4 +151,64 @@ test("Player Command preserves a 394-unit logical roster and ranks across all 50
   assert.equal(model.rote.supportedOccurrences, 6);
   assert.equal(model.roster.omegaEta, null);
   assert.equal(model.history.recentChanges.length, 2);
+  assert.equal(model.development.roteGaps.length, 1);
+  assert.equal(model.development.roteGaps[0].baseId, "MISSING_R7");
+  assert.deepEqual(model.development.guildRankSignals, []);
+  assert.equal(model.development.hasEvidence, true);
+});
+
+test("Player development queue keeps Guild-rank weakness and recent momentum as separate evidence", () => {
+  const playerBody = {
+    source: "canonical",
+    player: { allyCode: "732764286", name: "Warm Bacon", galacticPower: 10_000_000 },
+    units: [character(1, { baseId: "REY", name: "Rey", relic: 7 })],
+    ships: [],
+    summary: { characters: 1, ships: 0, relic7Plus: 1, zetas: 10, omicrons: 2 },
+    persistence: { logicalRosterComplete: true, expectedOwnedUnits: 1, returnedOwnedUnits: 1 },
+  };
+  const target = {
+    allyCode: "732764286",
+    galacticPower: 10_000_000,
+    characterGalacticPower: 5_000_000,
+    shipGalacticPower: 2_000_000,
+    galacticLegendCount: 2,
+    relic7: 10,
+    relic9: 1,
+    zetaCount: 10,
+    omicronCount: 2,
+  };
+  const members = [target, ...Array.from({ length: 49 }, (_, index) => ({
+    allyCode: String(200000000 + index),
+    galacticPower: 11_000_000 + index,
+    characterGalacticPower: index < 20 ? 4_000_000 : 6_000_000 + index,
+    shipGalacticPower: 3_000_000 + index,
+    galacticLegendCount: 3,
+    relic7: 20,
+    relic9: 2,
+    zetaCount: 20,
+    omicronCount: 4,
+  }))];
+  const model = buildPlayerCommandDashboard({
+    playerBody,
+    guildBody: { members },
+    historyBody: {
+      player: { allyCode: "732764286" },
+      progression: [{
+        id: 9,
+        baseId: "REY",
+        unitName: "Rey",
+        changedAt: "2026-08-18T00:00:00Z",
+        delta: { relicTier: 1, galacticPower: 850, omicronCount: 1 },
+      }],
+    },
+    operations: { requirements: [] },
+  });
+
+  assert.ok(model);
+  assert.ok(model.development.guildRankSignals.some((row) => row.key === "shipGp" && row.band === "lower-quartile"));
+  assert.ok(model.development.guildRankSignals.some((row) => row.key === "omicrons"));
+  assert.equal(model.development.guildRankSignals.some((row) => row.key === "characterGp"), false);
+  assert.equal(model.development.recentMomentum.length, 1);
+  assert.equal(model.development.recentMomentum[0].baseId, "REY");
+  assert.deepEqual(model.development.recentMomentum[0].evidence, ["Omicron", "Relic", "GP"]);
 });
