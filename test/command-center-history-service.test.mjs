@@ -51,7 +51,7 @@ function fixture() {
   return {
     players: [
       { id: playerId, ally_code: "732764286", swgoh_player_id: "swgoh-warm-bacon", name: "Warm Bacon", current_guild_id: guildId, galactic_power: 12655455, character_power: 8146249, ship_power: 4515899, last_synced_at: "2026-08-17T17:55:08.229Z" },
-      { id: "player-db-2", ally_code: "700000002", swgoh_player_id: "swgoh-other", name: "Other Member", current_guild_id: guildId },
+      { id: "player-db-2", ally_code: "700000002", swgoh_player_id: "swgoh-other", name: "Other Member", current_guild_id: guildId, galactic_power: 11000000, last_synced_at: "2026-08-17T17:55:08.229Z" },
     ],
     guilds: [{ id: guildId, swgoh_guild_id: "swgoh-guild-1", name: "Ludus Venatus", member_count: 50, galactic_power: 574397661, character_power: 368491019, ship_power: 206238998, last_synced_at: "2026-08-17T17:55:08.229Z" }],
     catalog: [
@@ -93,10 +93,13 @@ test("player history exposes real progression deltas and snapshot trend", async 
   assert.equal(body.snapshots[0].omegaUpgradeCount, null);
 });
 
-test("Guild history combines snapshot trend, membership, and member progression", async () => {
+test("Guild history combines snapshot trend, membership, member progression, and officer activity intelligence", async () => {
   const service = createCommandCenterHistoryService({ store: fakeStore(fixture()) });
   const body = await service.getGuildHistoryByPlayer("732764286");
   assert.equal(body.guild.name, "Ludus Venatus");
+  assert.equal(body.currentMembers.length, 2);
+  assert.equal(body.currentMembers.find((row) => row.name === "Warm Bacon")?.galacticPower, 12655455);
+  assert.equal(body.currentMembers.find((row) => row.name === "Other Member")?.galacticPower, 11000000);
   assert.equal(body.progression.length, 2);
   assert.equal(body.progressionSummary.relicLevelsGained, 1);
   assert.equal(body.progressionSummary.omicronsAdded, 1);
@@ -105,4 +108,11 @@ test("Guild history combines snapshot trend, membership, and member progression"
   assert.equal(body.trend.galacticPower, 1397661);
   assert.equal(body.trend.galacticLegends, 1);
   assert.equal(body.trend.omicrons, 10);
+  assert.equal(body.activityCommand.summary.currentMembers, 2);
+  assert.equal(body.activityCommand.summary.membersWithCapturedProgression, 2);
+  assert.equal(body.activityCommand.summary.membersWithoutCapturedProgression, 0);
+  assert.equal(body.activityCommand.summary.abilityInvestments, 1);
+  assert.equal(body.activityCommand.summary.membershipChanges, 1);
+  assert.equal(body.activityCommand.momentumLeaders[0].name, "Warm Bacon");
+  assert.equal(body.activityCommand.recentAbilityInvestments[0].unitName, "Rotta the Hutt");
 });
