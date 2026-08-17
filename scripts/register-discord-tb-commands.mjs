@@ -200,6 +200,11 @@ if (!config.commandRegistrationConfigured) {
         },
         {
           type: 1,
+          name: "activity",
+          description: "Show the persisted Guild Activity Command officer summary",
+        },
+        {
+          type: 1,
           name: "phase",
           description: "Show the officer Phase Command Board summary for one ROTE phase",
           options: [requiredPhaseOption],
