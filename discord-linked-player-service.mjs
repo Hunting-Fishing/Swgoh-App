@@ -60,8 +60,11 @@ export async function getDiscordLinkedPlayerSnapshot({
     throw error;
   }
 
+  // Linked-player reads need calculated GP. The gateway exposes that on the rich
+  // guild snapshot, which remains a separate cache key from the compact planner roster.
   const rosterResult = await rosterService.getGuildRoster(guildBindingAllyCode, {
     staleWhileRevalidate: false,
+    includeActivity: true,
   });
   const snapshot = rosterResult?.value;
   const members = Array.isArray(snapshot?.members) ? snapshot.members : null;
