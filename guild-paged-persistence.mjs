@@ -21,6 +21,7 @@ function configFromEnv(env = process.env) {
     gatewayUrl: trimUrl(env.SWGOH_GATEWAY_URL),
     gatewayApiKey: clean(env.SWGOH_GATEWAY_API_KEY),
     pageSize: positiveInteger(env.GUILD_SYNC_PAGE_SIZE, 5, 1, 10),
+    ingestBatchSize: positiveInteger(env.GUILD_SYNC_INGEST_BATCH_SIZE, 1, 1, 5),
     pageTimeoutMs: Math.max(30_000, Math.min(180_000, positiveInteger(env.GUILD_SYNC_PAGE_TIMEOUT_MS, 90_000, 30_000, 180_000))),
   });
 }
@@ -49,6 +50,10 @@ function fingerprintMember(member = {}) {
     lifetimeSeasonScore: member.lifetimeSeasonScore,
     leagueId: member.leagueId,
   };
+}
+
+function rpcResult(value) {
+  return Array.isArray(value) ? value[0] : value;
 }
 
 export function createPagedGuildPersistence(env = process.env, options = {}) {
@@ -195,7 +200,7 @@ export function createPagedGuildPersistence(env = process.env, options = {}) {
       capturedAt,
       sourceCache: 'bounded-live-pages',
       snapshotKind: 'user_sync',
-      rosterDetail: 'rich',
+      rosterDetail: 'durable-baseline',
       guild: {
         swgohGuildId: clean(guildBody.id),
         name: clean(guildBody.name) || context.guild.name,
@@ -210,7 +215,9 @@ export function createPagedGuildPersistence(env = process.env, options = {}) {
           levelRequirement: integer(guildBody.levelRequirement, 0),
           guildType: clean(guildBody.guildType),
           boundedTransport: true,
+          persistenceProjection: 'durable-baseline-v1',
           pageSize: config.pageSize,
+          ingestBatchSize: config.ingestBatchSize,
         },
       },
       hydration: { requested: expectedMembers, hydrated: hydratedMembers, failed: 0, complete: true },
@@ -228,19 +235,47 @@ export function createPagedGuildPersistence(env = process.env, options = {}) {
       activityFingerprint: fingerprint.digest('hex'),
     };
 
-    const finalized = await store.rpc('finalize_staged_guild_sync', { p_job_id: jobId, p_header: header });
-    const result = Array.isArray(finalized) ? finalized[0] : finalized;
-    if (!result?.ok) throw httpError(result?.error || 'Bounded Guild finalize failed.', 502, 'GUILD_SYNC_PERSISTENCE_FAILED');
+    const prepared = rpcResult(await store.rpc('prepare_bounded_guild_sync', {
+      p_job_id: jobId,
+      p_header: header,
+    }));
+    if (!prepared?.ok || !clean(prepared.syncRunId)) {
+      throw httpError('Bounded Guild canonical ingest could not be prepared.', 502, 'GUILD_SYNC_PREPARE_FAILED');
+    }
+
+    let remaining = expectedMembers;
+    let canonicalUnits = 0;
+    let safety = 0;
+    while (remaining > 0) {
+      safety += 1;
+      if (safety > expectedMembers + 5) throw httpError('Bounded Guild canonical ingest cursor stalled.', 502, 'GUILD_SYNC_CANONICAL_CURSOR_STALLED');
+      const batch = rpcResult(await store.rpc('ingest_bounded_guild_sync_members', {
+        p_job_id: jobId,
+        p_limit: config.ingestBatchSize,
+      }));
+      if (!batch?.ok) throw httpError('Bounded Guild member ingest failed.', 502, 'GUILD_SYNC_MEMBER_INGEST_FAILED');
+      const processed = Math.max(0, integer(batch.processedMembers, 0));
+      canonicalUnits += Math.max(0, integer(batch.unitsProcessed, 0));
+      remaining = Math.max(0, integer(batch.remainingMembers, remaining));
+      if (remaining > 0 && processed <= 0) throw httpError('Bounded Guild member ingest made no progress.', 502, 'GUILD_SYNC_CANONICAL_CURSOR_STALLED');
+    }
+
+    const result = rpcResult(await store.rpc('complete_bounded_guild_sync', {
+      p_job_id: jobId,
+      p_header: header,
+    }));
+    if (!result?.ok) throw httpError(result?.error || 'Bounded Guild completion failed.', 502, 'GUILD_SYNC_PERSISTENCE_FAILED');
 
     return Object.freeze({
       ok: true,
       guild: Object.freeze({ id: context.guild.id, swgohGuildId: context.guild.swgoh_guild_id, name: clean(guildBody.name) || context.guild.name }),
       syncRunId: result.syncRunId,
       membersStored: Number(result.membersStored || stagedMembers),
-      unitsStored: Number(result.unitsStored || stagedUnits),
-      activitySnapshotId: result.activitySnapshotId || null,
-      capturedAt: result.capturedAt || capturedAt,
+      unitsStored: Number(result.unitsStored || canonicalUnits || stagedUnits),
+      activitySnapshotId: result.activitySnapshotId || prepared.activitySnapshotId || null,
+      capturedAt: result.capturedAt || prepared.capturedAt || capturedAt,
       boundedTransport: true,
+      canonicalIngest: 'bounded-member-rpc-v1',
       integrity: Object.freeze({
         expectedMembers,
         hydratedMembers,
@@ -253,7 +288,17 @@ export function createPagedGuildPersistence(env = process.env, options = {}) {
     });
   }
 
-  return Object.freeze({ sync, fetchPage, status: () => Object.freeze({ mode: 'bounded-staged-guild-pages', pageSize: config.pageSize, pageTimeoutMs: config.pageTimeoutMs }) });
+  return Object.freeze({
+    sync,
+    fetchPage,
+    status: () => Object.freeze({
+      mode: 'bounded-staged-guild-pages',
+      canonicalIngest: 'bounded-member-rpc-v1',
+      pageSize: config.pageSize,
+      ingestBatchSize: config.ingestBatchSize,
+      pageTimeoutMs: config.pageTimeoutMs,
+    }),
+  });
 }
 
 export const pagedGuildPersistence = createPagedGuildPersistence(process.env);
