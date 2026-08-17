@@ -202,6 +202,8 @@ export function missionRosterEligibility(body, mission) {
       candidates: Object.freeze([]),
       mandatory: Object.freeze([]),
       squadSize: rule.squadSize,
+      lockedSlots: rule.mandatory.length,
+      selectableSlots: Math.max(0, Number(rule.squadSize || 0) - rule.mandatory.length),
     });
   }
 
@@ -221,7 +223,9 @@ export function missionRosterEligibility(body, mission) {
     candidates: Object.freeze(candidates),
     mandatory: Object.freeze(mandatory),
     squadSize: Number(entrySummary.squadSize || rule.squadSize || 0),
+    lockedSlots: Number(entrySummary.lockedSlots || mandatory.length || 0),
     poolTarget: Number(entrySummary.poolTarget || 0),
+    selectableSlots: Number(entrySummary.selectableSlots || entrySummary.poolTarget || 0),
   });
 }
 
