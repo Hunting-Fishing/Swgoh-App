@@ -42,7 +42,7 @@ function rosterService(members, calls = []) {
   };
 }
 
-test("linked player read resolves the durable identity against the bound live guild roster", async () => {
+test("linked player read resolves the durable identity against the bound live rich guild roster", async () => {
   const calls = [];
   const result = await getDiscordLinkedPlayerSnapshot({
     discordGuildId: guildId,
@@ -61,6 +61,7 @@ test("linked player read resolves the durable identity against the bound live gu
   assert.equal(calls.length, 1);
   assert.equal(calls[0].allyCode, "123456789");
   assert.equal(calls[0].options.staleWhileRevalidate, false);
+  assert.equal(calls[0].options.includeActivity, true);
   assert.equal(result.guildName, "Command Guild");
   assert.equal(result.link.swgohAllyCode, "444555666");
   assert.equal(result.member.name, "Linked Player");
