@@ -196,6 +196,19 @@ if (!config.commandRegistrationConfigured) {
         },
         {
           type: 1,
+          name: "controls",
+          description: "Officer summary of linked member availability and GIVE/KEEP controls",
+          options: [
+            {
+              type: 6,
+              name: "member",
+              description: "Optional linked member scope",
+              required: false,
+            },
+          ],
+        },
+        {
+          type: 1,
           name: "sync",
           description: "Force-refresh the pilot guild roster from the live SWGOH gateway",
         },
