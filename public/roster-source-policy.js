@@ -2,12 +2,31 @@ function clean(value) {
   return String(value ?? "").trim();
 }
 
+function finiteOrNull(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function asArray(value) {
+  return Array.isArray(value) ? value : [];
+}
+
 export function isLiveRosterBody(body) {
   return clean(body?.source).toLowerCase() === "live";
 }
 
 export function isCanonicalRosterBody(body) {
   return clean(body?.source).toLowerCase() === "canonical" || body?.capabilities?.persistedFullRoster === true;
+}
+
+export function validPlayerRosterBody(body) {
+  return Boolean(
+    body?.player
+    && Array.isArray(body?.units)
+    && Array.isArray(body?.ships)
+    && (isLiveRosterBody(body) || isCanonicalRosterBody(body))
+  );
 }
 
 export function rosterEndpoint(allyCode, { forceLive = false } = {}) {
@@ -23,9 +42,46 @@ export function rosterNeedsLiveDetail(filters = {}) {
 }
 
 export function nullableMetric(value, fallback = "—") {
-  if (value === null || value === undefined || value === "") return fallback;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : fallback;
+  const parsed = finiteOrNull(value);
+  return parsed === null ? fallback : parsed;
+}
+
+export function rosterCapabilityKnown(body = {}, capability) {
+  const capabilities = body?.capabilities && typeof body.capabilities === "object" ? body.capabilities : {};
+  if (isCanonicalRosterBody(body)) return capabilities[capability] === true;
+  return capabilities[capability] !== false;
+}
+
+export function unitProgressionKnown(unit = {}, capability) {
+  const capabilities = unit?.persistenceCapabilities && typeof unit.persistenceCapabilities === "object"
+    ? unit.persistenceCapabilities
+    : null;
+  if (!capabilities) return true;
+  return capabilities[capability] === true;
+}
+
+export function unitProgressionValue(unit = {}, field, capability) {
+  if (!unitProgressionKnown(unit, capability)) return null;
+  return finiteOrNull(unit?.[field]);
+}
+
+export function rosterProgressionTotal(body = {}, field, capability, options = {}) {
+  if (!rosterCapabilityKnown(body, capability)) return null;
+  const summary = body?.summary && typeof body.summary === "object" ? body.summary : {};
+  const summaryFields = [field, ...(Array.isArray(options.summaryAliases) ? options.summaryAliases : [])];
+  for (const key of summaryFields) {
+    const value = finiteOrNull(summary?.[key]);
+    if (value !== null) return value;
+  }
+
+  const units = [...asArray(body?.units), ...(options.includeShips ? asArray(body?.ships) : [])];
+  let total = 0;
+  for (const unit of units) {
+    const value = unitProgressionValue(unit, field, capability);
+    if (value === null) return null;
+    total += value;
+  }
+  return total;
 }
 
 export function rosterSourceStatus(body, totalOwned = 0) {
