@@ -1,4 +1,5 @@
 import { supabaseCoreStore } from "./supabase-core-store.mjs";
+import { buildGuildActivityCommand } from "./guild-activity-command.mjs";
 
 const DEFAULT_PLAYER_EVENTS = 100;
 const DEFAULT_GUILD_EVENTS = 200;
@@ -80,6 +81,17 @@ function guildSnapshotRow(row = {}) {
     ...snapshotRow(row),
     memberCount: finite(row.member_count),
     hydratedMemberCount: finite(row.hydrated_member_count),
+  });
+}
+
+function currentPlayerRow(row = {}) {
+  return Object.freeze({
+    playerId: clean(row.id),
+    swgohPlayerId: clean(row.swgoh_player_id),
+    allyCode: clean(row.ally_code),
+    name: clean(row.name),
+    galacticPower: finite(row.galactic_power),
+    lastSyncedAt: clean(row.last_synced_at),
   });
 }
 
@@ -303,7 +315,7 @@ export function createCommandCenterHistoryService(options = {}) {
         limit: eventLimit,
       }),
       store.select("players", {
-        select: "id,ally_code,name,swgoh_player_id,current_guild_id",
+        select: "id,ally_code,name,swgoh_player_id,current_guild_id,galactic_power,last_synced_at",
         current_guild_id: `eq.${guildId}`,
         order: "name.asc",
         limit: 100,
@@ -332,6 +344,14 @@ export function createCommandCenterHistoryService(options = {}) {
         newValue: clean(row.new_value),
       });
     });
+    const currentMembers = asArray(currentPlayers).map(currentPlayerRow);
+    const activityCommand = buildGuildActivityCommand({
+      currentMembers,
+      progression,
+      membership,
+      guildMemberCount: finite(guild.member_count, currentMembers.length),
+      eventLimit,
+    });
 
     return Object.freeze({
       source: "canonical-history",
@@ -345,10 +365,12 @@ export function createCommandCenterHistoryService(options = {}) {
         shipPower: finite(guild.ship_power),
         lastSyncedAt: clean(guild.last_synced_at),
       }),
+      currentMembers: Object.freeze(currentMembers),
       snapshots: Object.freeze(snapshots),
       membership: Object.freeze(membership),
       progression: Object.freeze(progression),
       progressionSummary: summarizeProgression(progression),
+      activityCommand,
       trend: trendDelta(snapshots),
       limits: Object.freeze({ events: eventLimit, snapshots: snapshotLimit }),
     });
