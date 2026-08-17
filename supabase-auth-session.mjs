@@ -1,4 +1,5 @@
 import { supabaseAuthVerifier } from './supabase-auth.mjs';
+import { supabaseSocialAuth } from './supabase-social-auth.mjs';
 
 const ACCESS_COOKIE = 'swgoh_cc_access';
 const REFRESH_COOKIE = 'swgoh_cc_refresh';
@@ -199,12 +200,14 @@ export function createSupabaseAuthSession(env = process.env, options = {}) {
   const config = configFromEnv(env);
   const verifier = options.verifier || supabaseAuthVerifier;
   const fetchImpl = options.fetch || fetch;
+  const socialAuth = options.socialAuth || supabaseSocialAuth;
 
   function status() {
     return Object.freeze({
       enabled: config.enabled,
       secureCookies: config.secureCookies,
       mode: config.enabled ? 'supabase-auth-http-only-session' : 'disabled',
+      social: socialAuth.status(),
     });
   }
 
@@ -222,6 +225,9 @@ export function createSupabaseAuthSession(env = process.env, options = {}) {
 
   async function handle(request, response, url) {
     if (!url.pathname.startsWith('/api/auth/')) return false;
+
+    const socialHandled = await socialAuth.handle(request, response, url);
+    if (socialHandled) return true;
 
     try {
       if (request.method === 'GET' && url.pathname === '/api/auth/status') {
