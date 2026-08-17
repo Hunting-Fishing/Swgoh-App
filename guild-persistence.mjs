@@ -79,6 +79,7 @@ function normalizedUnit(unit = {}) {
   const baseId = clean(unit.baseId || unit.baseID || unit.definitionId).split(':')[0];
   if (!baseId) return null;
   const purchasedAbilityIds = asArray(unit.purchasedAbilityIds).map(clean).filter(Boolean);
+  const abilityClassificationComplete = Array.isArray(unit.zetas) && Array.isArray(unit.omicrons);
   return Object.freeze({
     baseId,
     name: clean(unit.name) || baseId,
@@ -88,8 +89,8 @@ function normalizedUnit(unit = {}) {
     gearLevel: Math.max(0, integer(unit.gear ?? unit.gearLevel, 0)),
     relicTier: Math.max(0, integer(unit.relic ?? unit.relicTier, 0)),
     galacticPower: unitPower(unit),
-    zetaCount: Math.max(0, integer(asArray(unit.zetas).length, 0)),
-    omicronCount: Math.max(0, integer(asArray(unit.omicrons).length, 0)),
+    zetaCount: abilityClassificationComplete ? asArray(unit.zetas).length : null,
+    omicronCount: abilityClassificationComplete ? asArray(unit.omicrons).length : null,
     ultimateUnlocked: null,
     metadata: Object.freeze({
       unitId: clean(unit.id),
@@ -100,7 +101,7 @@ function normalizedUnit(unit = {}) {
       equippedStatMods: asArray(unit.equippedStatMods),
       purchasedAbilityIds,
       calculatedStats: unit.calculatedStats && typeof unit.calculatedStats === 'object' ? unit.calculatedStats : {},
-      abilityClassificationPendingCatalog: true,
+      abilityClassificationPendingCatalog: !abilityClassificationComplete,
     }),
   });
 }
@@ -163,6 +164,25 @@ function activityFingerprint(activity, members) {
   return createHash('sha256').update(JSON.stringify(stable)).digest('hex');
 }
 
+function safeUpstreamDiagnostic(value) {
+  return clean(value)
+    .replace(/https?:\/\/\S+/gi, '[upstream-url]')
+    .replace(/[\r\n\t]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .slice(0, 220);
+}
+
+function calculationFailureMessage(calculation = {}) {
+  const source = clean(calculation.source) || 'SWGOH Stats';
+  const configured = calculation.configured === true ? 'yes' : 'no';
+  const requested = Math.max(0, integer(calculation.requested, 0));
+  const calculated = Math.max(0, integer(calculation.calculated, 0));
+  const failed = Math.max(0, integer(calculation.failed, Math.max(0, requested - calculated)));
+  const diagnostic = safeUpstreamDiagnostic(calculation.error);
+  const upstream = diagnostic ? `; upstream: ${diagnostic}` : '';
+  return `Guild GP/stat calculation is incomplete (${source}: configured ${configured}, requested ${requested}, calculated ${calculated}, failed ${failed}${upstream}); no permanent snapshot was written.`;
+}
+
 function assertIntegrity(body, context) {
   if (body?.source !== 'live' || !body?.guild || !Array.isArray(body?.members)) {
     throw httpError('The live Guild response is not a valid rich roster.', 502, 'GUILD_SYNC_INVALID_LIVE_RESPONSE');
@@ -174,7 +194,7 @@ function assertIntegrity(body, context) {
     throw httpError('Guild roster hydration is incomplete; no permanent snapshot was written.', 409, 'GUILD_SYNC_HYDRATION_INCOMPLETE');
   }
   if (body?.calculation?.complete !== true) {
-    throw httpError('Guild GP/stat calculation is incomplete; no permanent snapshot was written.', 409, 'GUILD_SYNC_CALCULATION_INCOMPLETE');
+    throw httpError(calculationFailureMessage(body?.calculation), 409, 'GUILD_SYNC_CALCULATION_INCOMPLETE');
   }
   if (clean(body.guild.id) !== clean(context.guild.swgoh_guild_id)) {
     throw httpError('The fresh live Guild does not match this account’s authorized Guild tenant.', 409, 'GUILD_SYNC_TENANT_MISMATCH');
@@ -323,6 +343,7 @@ export function createGuildPersistence(options = {}) {
         calculated: integer(body.calculation.calculated, members.length),
         failed: integer(body.calculation.failed, 0),
         complete: body.calculation.complete === true,
+        error: safeUpstreamDiagnostic(body.calculation.error) || null,
       }),
       activity,
       activityFingerprint: activityFingerprint(activity, members),
@@ -392,5 +413,5 @@ export function createGuildPersistence(options = {}) {
   return Object.freeze({ handle, sync, latestStatus, verifiedContext, assertIntegrity });
 }
 
-export { activityFingerprint, assertIntegrity, normalizedMember, normalizedUnit, timestampFromGameValue };
+export { activityFingerprint, assertIntegrity, calculationFailureMessage, normalizedMember, normalizedUnit, timestampFromGameValue };
 export const guildPersistence = createGuildPersistence();
