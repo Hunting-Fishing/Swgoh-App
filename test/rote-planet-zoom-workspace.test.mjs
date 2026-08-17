@@ -2,19 +2,113 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 
+import { ROTE_PLANETS } from "../public/rote-map-data.js";
+import { ROTE_FLEET_ENTRY_AUDIT, ROTE_FLEET_ENTRY_AUDIT_COUNT } from "../public/rote-fleet-entry-audit-data.js";
 import { roteMissionMap } from "../public/rote-mission-map-registry.js";
-import { missionEntryRule, resolveRoteMissionNodes } from "../public/rote-mission-node-eligibility.js";
+import {
+  missionEntryRule,
+  missionRosterEligibility,
+  normalizedRoteMissionsForPlanet,
+  resolveRoteMissionNodes,
+} from "../public/rote-mission-node-eligibility.js";
 import {
   missionTypeConflict,
   poolEvidenceLevel,
   recommendationBaseIds,
 } from "../public/rote-planet-zoom-workspace.js";
 
-test("character pools are presented as exact while incomplete generic fleet pools fail closed", () => {
+const ship = (baseId, name = baseId, overrides = {}) => ({
+  baseId,
+  name,
+  unitType: "Ship",
+  stars: 7,
+  power: 100000,
+  alignment: "Light",
+  factions: [],
+  categories: [],
+  ...overrides,
+});
+
+function allNormalizedFleetMissions() {
+  return ROTE_PLANETS.flatMap((planet) => normalizedRoteMissionsForPlanet(planet.id)).filter((mission) => mission.missionType === "fleet");
+}
+
+test("all 17 ROTE fleet entry pools are source-audited and presented as exact", () => {
+  const fleets = allNormalizedFleetMissions();
+  assert.equal(ROTE_FLEET_ENTRY_AUDIT_COUNT, 17);
+  assert.equal(fleets.length, 17);
+  assert.deepEqual(fleets.map((mission) => mission.id).sort(), Object.keys(ROTE_FLEET_ENTRY_AUDIT).sort());
+
+  for (const mission of fleets) {
+    const audit = ROTE_FLEET_ENTRY_AUDIT[mission.id];
+    assert.ok(audit, `${mission.id} audit missing`);
+    const rule = missionEntryRule(mission);
+    assert.equal(rule.unitType, "Ship", `${mission.id} must remain a fleet rule`);
+    assert.deepEqual(rule.threshold, ["7★"], `${mission.id} star gate changed`);
+    assert.deepEqual(rule.alignments, [...audit.allowedAlignments], `${mission.id} alignment gate changed`);
+    assert.deepEqual(rule.mandatory.map((member) => member.baseId), audit.mandatoryMembers.map((member) => member.baseId), `${mission.id} mandatory ship changed`);
+    assert.equal(poolEvidenceLevel(rule), "exact", `${mission.id} should no longer degrade to gate-only evidence`);
+    assert.ok(mission.sources.includes("swgoh-wiki-rote-zones"), `${mission.id} wiki source missing`);
+    assert.ok(mission.sources.includes("genskaar-rote"), `${mission.id} GenSkaar source missing`);
+    assert.match(mission.entry.notes, /^Audited fleet entry:/, `${mission.id} audit note missing`);
+  }
+});
+
+test("fleet side restrictions intersect the actual roster instead of recommended fleet templates", () => {
+  const mustafar = normalizedRoteMissionsForPlanet("mustafar").find((mission) => mission.id === "mustafar-fleet");
+  const bracca = normalizedRoteMissionsForPlanet("bracca").find((mission) => mission.id === "bracca-fleet");
+  const felucia = normalizedRoteMissionsForPlanet("felucia").find((mission) => mission.id === "felucia-fleet");
+  const body = {
+    units: [],
+    ships: [
+      ship("SCYTHE", "Scythe", { alignment: "Dark" }),
+      ship("DARKSHIP", "Dark Ship", { alignment: "Dark" }),
+      ship("LIGHTSHIP", "Light Ship", { alignment: "Light" }),
+      ship("NEUTRALSHIP", "Neutral Ship", { alignment: "Neutral" }),
+      ship("LOWSTAR", "Below Gate", { alignment: "Dark", stars: 6 }),
+    ],
+  };
+
+  assert.deepEqual(
+    missionRosterEligibility(body, mustafar).candidates.map((unit) => unit.baseId).sort(),
+    ["DARKSHIP", "SCYTHE"].sort(),
+  );
+  assert.deepEqual(
+    missionRosterEligibility(body, bracca).candidates.map((unit) => unit.baseId),
+    ["LIGHTSHIP"],
+  );
+  assert.deepEqual(
+    missionRosterEligibility(body, felucia).candidates.map((unit) => unit.baseId).sort(),
+    ["DARKSHIP", "LIGHTSHIP", "NEUTRALSHIP", "SCYTHE"].sort(),
+  );
+});
+
+test("named fleet requirements resolve by canonical Base ID and remain mandatory", () => {
+  const cases = [
+    ["mustafar", "mustafar-fleet", "SCYTHE"],
+    ["corellia", "corellia-fleet", "MILLENNIUMFALCONPRISTINE"],
+    ["coruscant", "coruscant-fleet", "OUTRIDER"],
+    ["tatooine", "tatooine-fleet", "CAPITALEXECUTOR"],
+    ["kashyyyk", "kashyyyk-fleet", "CAPITALPROFUNDITY"],
+    ["zeffo", "zeffo-fleet", "CAPITALNEGOTIATOR"],
+    ["kessel", "kessel-fleet", "GHOST"],
+    ["mandalore", "mandalore-fleet", "GAUNTLETSTARFIGHTER"],
+    ["death-star", "death-star-fleet", "TIEFIGHTERIMPERIAL"],
+    ["scarif", "scarif-fleet", "CAPITALPROFUNDITY"],
+  ];
+
+  for (const [planetId, missionId, baseId] of cases) {
+    const mission = normalizedRoteMissionsForPlanet(planetId).find((item) => item.id === missionId);
+    const rule = missionEntryRule(mission);
+    assert.ok(rule.mandatory.some((member) => member.baseId === baseId), `${missionId} should require ${baseId}`);
+  }
+});
+
+test("character pools and audited fleet pools are both presented as exact", () => {
   const qira = resolveRoteMissionNodes("corellia", roteMissionMap("corellia")).nodes.find((node) => node.missionId === "corellia-qira");
   const genericFleet = resolveRoteMissionNodes("felucia", roteMissionMap("felucia")).nodes.find((node) => node.mission?.missionType === "fleet");
   assert.equal(poolEvidenceLevel(missionEntryRule(qira.mission)), "exact");
-  assert.equal(poolEvidenceLevel(missionEntryRule(genericFleet.mission)), "gate-only");
+  assert.equal(poolEvidenceLevel(missionEntryRule(genericFleet.mission)), "exact");
 });
 
 test("Hondo mission-type disagreement is surfaced while Reva marker alias is not treated as a conflict", () => {
