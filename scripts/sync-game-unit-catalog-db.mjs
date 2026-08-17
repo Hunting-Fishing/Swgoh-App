@@ -14,7 +14,8 @@ async function main() {
   const result = await syncGameUnitCatalog({ store: supabaseCoreStore });
   console.log(
     `[catalog-db] stored ${result.rowsStored} units ` +
-    `(${result.characterCount} characters, ${result.shipCount} ships) ` +
+    `(${result.characterCount} characters, ${result.shipCount} ships) and ` +
+    `${result.abilitiesStored} abilities (${result.zetaAbilityCount} zeta, ${result.omicronAbilityCount} omicron) ` +
     `for ${result.catalogVersion}.`,
   );
 }
