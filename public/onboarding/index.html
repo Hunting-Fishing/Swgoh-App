@@ -6,7 +6,7 @@
   <meta name="color-scheme" content="dark">
   <meta name="theme-color" content="#050914">
   <title>Onboarding · SWGOH Command Center</title>
-  <link rel="stylesheet" href="/onboarding.css?v=20260817a">
+  <link rel="stylesheet" href="/onboarding.css?v=20260817b">
 </head>
 <body>
   <main class="onboard-shell">
@@ -16,9 +16,9 @@
     </div>
 
     <section class="onboard-hero">
-      <div class="onboard-kicker">Secure Player & Guild Enrollment</div>
-      <h1>Establish your command identity.</h1>
-      <p>Your account, SWGOH player and Guild are linked as separate identities. We verify that you control the Ally Code before activating Guild access or saving full Guild analytics.</p>
+      <div class="onboard-kicker" data-hero-kicker>Secure Player & Guild Enrollment</div>
+      <h1 data-hero-title>Establish your command identity.</h1>
+      <p data-hero-copy>Your account, SWGOH player and Guild are linked as separate identities. We verify that you control the Ally Code before activating Guild access or saving full Guild analytics.</p>
     </section>
 
     <nav class="onboard-steps" aria-label="Onboarding progress">
@@ -85,15 +85,50 @@
       </div>
 
       <div class="hidden verified-card" data-view="verified">
-        <strong>✓ Player identity verified</strong>
-        <p>Your Command Center account is linked to the verified SWGOH player and the matching Guild membership is active. Permanent Guild synchronization can now be scoped to this authenticated tenant.</p>
-        <div class="challenge-actions">
+        <div class="verified-header">
+          <div class="verified-signal" aria-hidden="true">✓</div>
+          <div>
+            <div class="verified-eyebrow">Command identity confirmed</div>
+            <h2>Welcome aboard, <span data-verified-player-name>Commander</span>.</h2>
+            <p>Your SWGOH ownership challenge passed and your Guild workspace clearance is active.</p>
+          </div>
+        </div>
+
+        <div class="verified-grid" aria-label="Verified Command Center identity">
+          <article class="verified-stat">
+            <small>SWGOH Player</small>
+            <strong data-verified-player>Verified player</strong>
+            <span data-verified-ally>Ally Code verified</span>
+          </article>
+          <article class="verified-stat">
+            <small>Guild Assignment</small>
+            <strong data-verified-guild>Verified Guild</strong>
+            <span>Live Guild membership matched</span>
+          </article>
+          <article class="verified-stat verified-stat-clearance">
+            <small>Command Clearance</small>
+            <strong data-verified-access>ACTIVE</strong>
+            <span data-verified-role>Guild member access</span>
+          </article>
+          <article class="verified-stat">
+            <small>Ownership Proof</small>
+            <strong data-verified-method>SWGOH Profile Challenge</strong>
+            <span data-verified-time>Verification recorded</span>
+          </article>
+        </div>
+
+        <div class="verified-confirmation">
+          <strong>Identity lock established</strong>
+          <span>This Command Center account is now bound to the verified SWGOH player above. Guild analytics and player tools can use this authenticated identity.</span>
+        </div>
+
+        <div class="challenge-actions verified-actions">
           <a class="onboard-button" href="/guild" style="display:inline-grid;place-items:center;text-decoration:none">Open Guild Command Center</a>
           <a class="onboard-button secondary" href="/" style="display:inline-grid;place-items:center;text-decoration:none">Player Command Center</a>
         </div>
       </div>
     </section>
   </main>
-  <script type="module" src="/onboarding.js?v=20260817a"></script>
+  <script type="module" src="/onboarding.js?v=20260817b"></script>
 </body>
 </html>
