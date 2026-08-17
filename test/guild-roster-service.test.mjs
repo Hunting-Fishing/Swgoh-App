@@ -50,6 +50,41 @@ test("shared guild roster service lets a forced Discord sync replace the snapsho
   assert.equal(fetches, 2);
 });
 
+test("rich guild reads normalize total member GP from calculated character and ship GP", async () => {
+  const service = createGuildRosterService({
+    SWGOH_GATEWAY_URL: "https://gateway.test",
+    SWGOH_GATEWAY_API_KEY: "secret",
+  }, {
+    fetch: async (url, options) => {
+      assert.equal(url, "https://gateway.test/v1/guild/by-player/123456789/roster?activity=1");
+      assert.equal(options.headers["X-API-Key"], "secret");
+      return response({
+        source: "live",
+        guild: { id: "guild-1", name: "GP Guild", galacticPower: 0 },
+        members: [{
+          playerId: "p1",
+          allyCode: "123456789",
+          name: "Officer",
+          galacticPower: 0,
+          characterGalacticPower: 6_250_000,
+          shipGalacticPower: 3_750_000,
+          rosterAvailable: true,
+          units: [],
+        }],
+      });
+    },
+  });
+
+  const result = await service.getGuildRoster("123456789", {
+    staleWhileRevalidate: false,
+    includeActivity: true,
+  });
+
+  assert.equal(result.includeActivity, true);
+  assert.equal(result.value.members[0].galacticPower, 10_000_000);
+  assert.equal(result.value.guild.galacticPower, 10_000_000);
+});
+
 test("Discord-style fresh-or-refresh reads block on stale entries instead of planning from stale data", async () => {
   let now = 0;
   let fetches = 0;
