@@ -53,6 +53,7 @@ function membershipWithoutBaseline(rows = [], guildSize = 0) {
 function memberMomentum(currentMembers = [], progression = []) {
   const members = asArray(currentMembers).map(currentMember).filter((row) => row.playerId);
   const memberById = new Map(members.map((row) => [row.playerId, row]));
+  const restrictToCurrent = memberById.size > 0;
   const aggregates = new Map(members.map((member) => [member.playerId, {
     ...member,
     eventCount: 0,
@@ -67,10 +68,10 @@ function memberMomentum(currentMembers = [], progression = []) {
 
   for (const event of asArray(progression)) {
     const playerId = clean(event.playerId);
-    if (!playerId) continue;
+    if (!playerId || (restrictToCurrent && !memberById.has(playerId))) continue;
     let row = aggregates.get(playerId);
     if (!row) {
-      const fallback = memberById.get(playerId) || currentMember({
+      const fallback = currentMember({
         playerId,
         allyCode: event.allyCode,
         name: event.playerName,
@@ -112,8 +113,9 @@ function compareMomentum(a, b) {
     || a.name.localeCompare(b.name);
 }
 
-function abilityInvestments(events = []) {
+function abilityInvestments(events = [], currentMemberIds = null) {
   return asArray(events)
+    .filter((event) => !currentMemberIds || currentMemberIds.has(clean(event.playerId)))
     .filter((event) => positive(event?.delta?.omicronCount)
       || positive(event?.delta?.zetaCount)
       || positive(event?.delta?.ultimateUnlocked))
@@ -136,11 +138,12 @@ function abilityInvestments(events = []) {
 export function buildGuildActivityCommand(input = {}) {
   const progression = asArray(input.progression).slice().sort((a, b) => eventTime(b.changedAt) - eventTime(a.changedAt));
   const currentMembers = asArray(input.currentMembers).map(currentMember).filter((row) => row.playerId);
+  const currentMemberIds = currentMembers.length ? new Set(currentMembers.map((row) => row.playerId)) : null;
   const momentum = memberMomentum(currentMembers, progression);
   const active = momentum.filter((row) => row.eventCount > 0).sort(compareMomentum);
   const quiet = momentum.filter((row) => row.eventCount === 0)
     .sort((a, b) => b.galacticPower - a.galacticPower || a.name.localeCompare(b.name));
-  const investments = abilityInvestments(progression);
+  const investments = abilityInvestments(progression, currentMemberIds);
   const membershipChanges = membershipWithoutBaseline(input.membership, input.guildMemberCount || currentMembers.length);
   const newest = progression[0] || null;
   const oldest = progression[progression.length - 1] || null;
