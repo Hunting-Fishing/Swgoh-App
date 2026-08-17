@@ -41,7 +41,7 @@ test("every source mission node across all 20 ROTE planets resolves to one missi
   }
 });
 
-test("Corellia Qi'ra special exposes required units separately from the legal pool", () => {
+test("Corellia Qi'ra special exposes locked Mission Units separately from the selectable legal pool", () => {
   const map = resolveRoteMissionNodes("corellia", roteMissionMap("corellia"));
   const qiraNode = map.nodes.find((node) => node.missionId === "corellia-qira");
   assert.ok(qiraNode, "Corellia Qi'ra source node should resolve");
@@ -67,10 +67,12 @@ test("Corellia Qi'ra special exposes required units separately from the legal po
   const eligibility = missionRosterEligibility(body, qiraNode.mission);
   assert.equal(eligibility.ready, true);
   assert.equal(eligibility.mandatory.length, 2);
+  assert.equal(eligibility.lockedSlots, 2);
+  assert.equal(eligibility.selectableSlots, 3);
   assert.ok(eligibility.mandatory.every((row) => row.legal));
   assert.deepEqual(
     eligibility.candidates.map((candidate) => candidate.baseId).sort(),
-    ["BOBAFETT", "HONDO", "JEDIKNIGHTREVAN", "QIRA", "VADER", "YOUNGHAN"].sort(),
+    ["BOBAFETT", "HONDO", "JEDIKNIGHTREVAN", "VADER"].sort(),
   );
 });
 
