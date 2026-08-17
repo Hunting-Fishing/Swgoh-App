@@ -97,6 +97,19 @@ function currentMembership() {
   return accountState?.guildMemberships?.find((row) => row?.status !== 'left') || null;
 }
 
+function accountIdentity() {
+  const identities = Array.isArray(accountState?.socialIdentities) ? accountState.socialIdentities : [];
+  const google = identities.find((row) => row?.provider === 'google' && row?.displayName);
+  const discord = identities.find((row) => row?.provider === 'discord' && row?.displayName);
+  const preferred = google || discord || identities.find((row) => row?.displayName) || null;
+  const providers = [...new Set(identities.map((row) => String(row?.provider || '').trim()).filter(Boolean))];
+  return {
+    displayName: preferred?.displayName || 'Command Center User',
+    providers,
+    discordName: discord?.displayName || '',
+  };
+}
+
 function updateSteps(stage) {
   const order = ['account', 'player', 'verify'];
   const current = order.indexOf(stage);
@@ -127,15 +140,18 @@ function renderPendingIdentity(link, membership) {
 function renderVerifiedIdentity(link, membership) {
   const player = link?.player || {};
   const guild = membership?.guild || {};
+  const account = accountIdentity();
   const playerName = player.name || 'Commander';
   const ally = formatAlly(player.ally_code);
   const guildName = guild.name || 'Verified Guild';
 
   if (heroKicker) heroKicker.textContent = 'Command Clearance Granted';
   if (heroTitle) heroTitle.textContent = `Welcome aboard, ${playerName}.`;
-  if (heroCopy) heroCopy.textContent = `${guildName} is linked to your verified SWGOH identity. Your Command Center workspace is cleared for authenticated player and Guild operations.`;
+  if (heroCopy) heroCopy.textContent = `${account.displayName}'s Command Center account is linked to ${playerName} in ${guildName}. Your authenticated player and Guild workspace is ready.`;
 
   const welcome = document.querySelector('[data-verified-player-name]');
+  const accountNode = document.querySelector('[data-verified-account]');
+  const providersNode = document.querySelector('[data-verified-providers]');
   const playerNode = document.querySelector('[data-verified-player]');
   const allyNode = document.querySelector('[data-verified-ally]');
   const guildNode = document.querySelector('[data-verified-guild]');
@@ -145,6 +161,13 @@ function renderVerifiedIdentity(link, membership) {
   const timeNode = document.querySelector('[data-verified-time]');
 
   if (welcome) welcome.textContent = playerName;
+  if (accountNode) accountNode.textContent = account.displayName;
+  if (providersNode) {
+    const providerLabel = account.providers.length
+      ? account.providers.map((provider) => provider.charAt(0).toUpperCase() + provider.slice(1)).join(' + ')
+      : 'Authenticated Command Center account';
+    providersNode.textContent = account.discordName ? `${providerLabel} · Discord @${account.discordName}` : providerLabel;
+  }
   if (playerNode) playerNode.textContent = playerName;
   if (allyNode) allyNode.textContent = ally ? `Ally Code ${ally}` : 'Ally Code verified';
   if (guildNode) guildNode.textContent = guildName;
