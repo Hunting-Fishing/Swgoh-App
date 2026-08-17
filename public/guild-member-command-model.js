@@ -113,6 +113,9 @@ export function buildGuildMemberCommandProfile({
   const operationRisk = assignments.filter(riskAssignment);
 
   return Object.freeze({
+    source: normalized.source,
+    sourceDetail: normalized.sourceDetail,
+    persistence: normalized.persistence,
     guild: normalized.guild,
     hydration: normalized.hydration,
     member: rosterMember,
