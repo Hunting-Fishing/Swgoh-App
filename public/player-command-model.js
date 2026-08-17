@@ -120,6 +120,81 @@ function buildRanks(guildBody, allyCode) {
   });
 }
 
+function rankBand(row) {
+  if (!row?.known || row.total <= 0) return "unknown";
+  if (row.rank > Math.ceil(row.total * 0.75)) return "lower-quartile";
+  if (row.rank > Math.ceil(row.total * 0.5)) return "lower-half";
+  return "upper-half";
+}
+
+function buildGuildRankSignals(ranks) {
+  if (!ranks?.available) return Object.freeze([]);
+  const dimensions = [
+    ["gp", "Galactic Power", "power"],
+    ["characterGp", "Character GP", "characters"],
+    ["shipGp", "Ship GP", "ships"],
+    ["galacticLegends", "Galactic Legends", "gl"],
+    ["relic7", "R7+ depth", "relic7"],
+    ["relic9", "R9 depth", "relic9"],
+    ["zetas", "Zeta investment", "zeta"],
+    ["omicrons", "Omicron investment", "omicron"],
+  ];
+  return Object.freeze(dimensions.map(([key, label, action]) => {
+    const row = ranks[key];
+    return Object.freeze({
+      key,
+      label,
+      action,
+      known: Boolean(row?.known),
+      rank: finite(row?.rank),
+      total: finite(row?.total),
+      value: nullableFinite(row?.value),
+      band: rankBand(row),
+    });
+  }).filter((row) => row.known && row.band !== "upper-half")
+    .sort((a, b) => {
+      const aFraction = a.total ? a.rank / a.total : 0;
+      const bFraction = b.total ? b.rank / b.total : 0;
+      return bFraction - aFraction || a.label.localeCompare(b.label);
+    }));
+}
+
+function momentumLabels(event = {}) {
+  const delta = event.delta || {};
+  const labels = [];
+  if (finite(delta.omicronCount) > 0) labels.push("Omicron");
+  if (finite(delta.zetaCount) > 0) labels.push("Zeta");
+  if (finite(delta.ultimateUnlocked) > 0) labels.push("Ultimate");
+  if (finite(delta.relicTier) > 0) labels.push("Relic");
+  if (finite(delta.gearLevel) > 0) labels.push("Gear");
+  if (finite(delta.rarity) > 0) labels.push("Stars");
+  if (finite(delta.level) > 0) labels.push("Level");
+  if (finite(delta.galacticPower) > 0) labels.push("GP");
+  return labels;
+}
+
+function buildRecentMomentum(historyBody) {
+  return Object.freeze(asArray(historyBody?.progression).slice(0, 10).map((event) => Object.freeze({
+    id: event?.id ?? null,
+    baseId: clean(event?.baseId),
+    unitName: clean(event?.unitName || event?.baseId || "Unit"),
+    changedAt: clean(event?.changedAt),
+    evidence: Object.freeze(momentumLabels(event)),
+  })).filter((row) => row.baseId || row.evidence.length));
+}
+
+function buildDevelopment(rote, ranks, historyBody) {
+  const roteGaps = Object.freeze(asArray(rote?.priorityGaps).slice(0, 8).map((row) => Object.freeze({ ...row })));
+  const guildRankSignals = buildGuildRankSignals(ranks);
+  const recentMomentum = buildRecentMomentum(historyBody);
+  return Object.freeze({
+    hasEvidence: roteGaps.length > 0 || guildRankSignals.length > 0 || recentMomentum.length > 0,
+    roteGaps,
+    guildRankSignals,
+    recentMomentum,
+  });
+}
+
 export function buildPlayerCommandDashboard({ playerBody, guildBody = null, historyBody = null, operations = null } = {}) {
   if (!playerBody?.player || !Array.isArray(playerBody?.units) || !Array.isArray(playerBody?.ships)) return null;
   const player = playerBody.player;
@@ -129,6 +204,8 @@ export function buildPlayerCommandDashboard({ playerBody, guildBody = null, hist
   const expected = finite(playerBody?.persistence?.expectedOwnedUnits, finite(summary.characters) + finite(summary.ships));
   const complete = playerBody?.persistence?.logicalRosterComplete === true
     && (expected <= 0 || units.length === expected);
+  const guildRanks = buildRanks(guildBody, allyCode);
+  const rote = buildRote(units, operations);
 
   return Object.freeze({
     source: Object.freeze({
@@ -162,13 +239,14 @@ export function buildPlayerCommandDashboard({ playerBody, guildBody = null, hist
       ultimates: nullableFinite(summary.ultimates),
       omegaEta: nullableFinite(summary.omegaUpgrades),
     }),
-    guildRanks: buildRanks(guildBody, allyCode),
-    rote: buildRote(units, operations),
+    guildRanks,
+    rote,
     history: Object.freeze({
       available: Boolean(historyBody?.player),
       summary: Object.freeze({ ...(historyBody?.summary || {}) }),
       trend: Object.freeze({ ...(historyBody?.trend || {}) }),
       recentChanges: Object.freeze(asArray(historyBody?.progression).slice(0, 10)),
     }),
+    development: buildDevelopment(rote, guildRanks, historyBody),
   });
 }
