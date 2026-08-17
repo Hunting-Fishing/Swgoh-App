@@ -33,7 +33,7 @@ test("cross-mode profile is lazy-loaded only on member profile routes", () => {
   assert.match(router, /import\("\.\/guild-member-command-page\.js"\)/);
   assert.equal(index.includes('/guild-member-command-page.js?v='), false);
   assert.equal(index.includes('/guild-member-command-model.js?v='), false);
-  assert.match(index, /guild-member-command-router\.js\?v=20260817-guildmember1/);
+  assert.match(index, /guild-member-command-router\.js\?v=20260818-guildmember2/);
 });
 
 test("member page exposes TB TW Raid and player drilldowns without a universal score", () => {
@@ -46,9 +46,9 @@ test("member page exposes TB TW Raid and player drilldowns without a universal s
 
 test("member command CSS and router load after other Guild mode assets", () => {
   const raidCss = index.indexOf('/guild-raid-order66.css?v=20260817-guildraid1');
-  const memberCss = index.indexOf('/guild-member-command.css?v=20260817-guildmember1');
+  const memberCss = index.indexOf('/guild-member-command.css?v=20260818-guildmember2');
   const raidRouter = index.indexOf('/guild-raid-router.js?v=20260817-guildraid1');
-  const memberRouter = index.indexOf('/guild-member-command-router.js?v=20260817-guildmember1');
+  const memberRouter = index.indexOf('/guild-member-command-router.js?v=20260818-guildmember2');
   assert.ok(memberCss > raidCss);
   assert.ok(memberRouter > raidRouter);
   assert.match(css, /guild-member-command-header/);
