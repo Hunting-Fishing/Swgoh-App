@@ -98,7 +98,8 @@ test("Guild history combines snapshot trend, membership, member progression, and
   const body = await service.getGuildHistoryByPlayer("732764286");
   assert.equal(body.guild.name, "Ludus Venatus");
   assert.equal(body.currentMembers.length, 2);
-  assert.equal(body.currentMembers[0].galacticPower, 11000000);
+  assert.equal(body.currentMembers.find((row) => row.name === "Warm Bacon")?.galacticPower, 12655455);
+  assert.equal(body.currentMembers.find((row) => row.name === "Other Member")?.galacticPower, 11000000);
   assert.equal(body.progression.length, 2);
   assert.equal(body.progressionSummary.relicLevelsGained, 1);
   assert.equal(body.progressionSummary.omicronsAdded, 1);
