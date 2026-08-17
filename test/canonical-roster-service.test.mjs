@@ -93,14 +93,26 @@ test("canonical Guild read returns all current members without shipping every un
 
 test("canonical player read pages internally but returns every owned unit", async () => {
   const seed = seedFixture({ unitCount: 1_205 });
+  seed.playerSnapshots[0].character_count = 603;
+  seed.playerSnapshots[0].ship_count = 602;
   const service = createCanonicalRosterService({ store: fakeStore(seed), pageSize: 200 });
   const body = await service.getPlayerRoster("732764286");
   assert.equal(body.persistence.logicalRosterComplete, true);
+  assert.equal(body.persistence.expectedOwnedUnits, 1_205);
   assert.equal(body.persistence.returnedOwnedUnits, 1_205);
   assert.equal(body.units.length + body.ships.length, 1_205);
   assert.equal(body.units[0].factions[0], "Jedi");
   assert.equal(body.ships[0].unitType, "Ship");
   assert.equal(body.ships[0].omegas, null);
+});
+
+test("canonical player read refuses a silently truncated owned roster", async () => {
+  const seed = seedFixture({ unitCount: 393 });
+  const service = createCanonicalRosterService({ store: fakeStore(seed), pageSize: 100 });
+  await assert.rejects(
+    () => service.getPlayerRoster("732764286"),
+    /expected 394 owned units but loaded 393/i
+  );
 });
 
 test("canonical Guild read refuses a silently truncated member list", async () => {
