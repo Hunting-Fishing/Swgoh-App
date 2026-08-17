@@ -169,7 +169,7 @@ test("Player development queue keeps Guild-rank weakness and recent momentum as 
   const target = {
     allyCode: "732764286",
     galacticPower: 10_000_000,
-    characterGalacticPower: 5_000_000,
+    characterGalacticPower: 7_000_000,
     shipGalacticPower: 2_000_000,
     galacticLegendCount: 2,
     relic7: 10,
