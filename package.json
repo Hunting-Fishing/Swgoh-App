@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node scripts/sync-game-unit-catalog-db.mjs --if-configured --soft-fail && node server.mjs",
+    "start": "node scripts/sync-game-unit-catalog-db.mjs --if-configured --soft-fail && node scripts/register-discord-tb-commands.mjs --if-configured && node server.mjs",
     "build": "node scripts/build-production-data.mjs",
     "test": "node --test",
     "verify": "node --test",
