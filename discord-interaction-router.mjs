@@ -16,8 +16,11 @@ import {
   formatDiscordGuildActivityCommand,
   getDiscordGuildActivityCommand,
 } from "./discord-guild-activity-service.mjs";
+import { autocompleteSwgohUnits } from "./discord-unit-autocomplete.mjs";
 
 const EPHEMERAL_FLAG = 1 << 6;
+const APPLICATION_COMMAND_AUTOCOMPLETE_TYPE = 4;
+const APPLICATION_COMMAND_AUTOCOMPLETE_RESULT_TYPE = 8;
 
 function jsonResponse(response, status, body) {
   response.writeHead(status, {
@@ -46,6 +49,15 @@ function deferredEphemeral() {
   };
 }
 
+function autocompleteResult(choices = []) {
+  return {
+    type: APPLICATION_COMMAND_AUTOCOMPLETE_RESULT_TYPE,
+    data: {
+      choices: (Array.isArray(choices) ? choices : []).slice(0, 25),
+    },
+  };
+}
+
 function replayRequest(request, rawBody) {
   const replay = Readable.from([rawBody]);
   replay.headers = request?.headers || {};
@@ -58,6 +70,18 @@ function safeError(error) {
     .replace(/\s+/g, " ")
     .trim();
   return `**SWGOH Command Center · Guild Activity failed**\n${message}\nNo guild state was changed and no DMs were sent.`;
+}
+
+function autocompleteContext(interaction = {}) {
+  if (Number(interaction?.type) !== APPLICATION_COMMAND_AUTOCOMPLETE_TYPE) return null;
+  if (String(interaction?.data?.name || "").toLowerCase() !== "tb") return null;
+  const options = Array.isArray(interaction?.data?.options) ? interaction.data.options : [];
+  const subcommand = options.find((row) => Number(row?.type) === 1 || Number(row?.type) === 2);
+  if (String(subcommand?.name || "").toLowerCase() !== "preference") return null;
+  const parameters = Array.isArray(subcommand?.options) ? subcommand.options : [];
+  const focused = parameters.find((row) => row?.focused === true);
+  if (String(focused?.name || "").toLowerCase() !== "unit") return null;
+  return Object.freeze({ value: String(focused?.value || "") });
 }
 
 function scheduleActivityResponse(interaction, config, services) {
@@ -97,10 +121,11 @@ export async function handleDiscordInteractionRequest(request, response, env = p
     return handleCoreDiscordInteractionRequest(replayRequest(request, rawBody), response, env, services);
   }
 
+  const autocomplete = autocompleteContext(interaction);
   const isActivity = Number(interaction?.type) === DISCORD_INTERACTION_TYPES.APPLICATION_COMMAND
     && String(interaction?.data?.name || "").toLowerCase() === "tb"
     && discordTbSubcommand(interaction) === "activity";
-  if (!isActivity) {
+  if (!autocomplete && !isActivity) {
     return handleCoreDiscordInteractionRequest(replayRequest(request, rawBody), response, env, services);
   }
 
@@ -130,7 +155,21 @@ export async function handleDiscordInteractionRequest(request, response, env = p
     return true;
   }
   if (config.pilotGuildId && String(interaction?.guild_id || "") !== config.pilotGuildId) {
-    jsonResponse(response, 200, ephemeral("This TB command is currently restricted to the configured pilot Discord server."));
+    jsonResponse(response, 200, autocomplete ? autocompleteResult([]) : ephemeral("This TB command is currently restricted to the configured pilot Discord server."));
+    return true;
+  }
+
+  if (autocomplete) {
+    const lookup = typeof services?.autocompleteSwgohUnits === "function"
+      ? services.autocompleteSwgohUnits
+      : autocompleteSwgohUnits;
+    try {
+      const choices = await lookup(autocomplete.value, { limit: 25 });
+      jsonResponse(response, 200, autocompleteResult(choices));
+    } catch (error) {
+      console.error("Discord unit autocomplete failed:", error?.message || error);
+      jsonResponse(response, 200, autocompleteResult([]));
+    }
     return true;
   }
 
