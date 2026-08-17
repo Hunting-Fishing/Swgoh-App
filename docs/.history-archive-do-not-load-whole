@@ -1,0 +1,1 @@
+Historical archive sections must be lazy-loaded; do not attach the complete archive to ordinary Guild roster responses.
