@@ -11,7 +11,7 @@ async function text(path) {
 test("app shell loads Player Command after workspace tabs with cache-busted canonical fetch layer", async () => {
   const html = await text("public/index.html");
   const workspace = html.indexOf('/workspace-tabs.js?v=20260815-pro10');
-  const playerCommand = html.indexOf('/player-command-dashboard.js?v=20260818-playercmd2');
+  const playerCommand = html.indexOf('/player-command-dashboard.js?v=20260818-playercmd3');
   assert.ok(workspace >= 0, "workspace tabs loader missing");
   assert.ok(playerCommand > workspace, "Player Command must load after workspace creation");
   assert.match(html, /live-fetch-cache\.js\?v=20260818-cache4/);
@@ -28,12 +28,16 @@ test("shared fetch cache coalesces player and Guild baselines plus history", asy
   assert.match(source, /params\.delete\("refresh"\)/);
 });
 
-test("Player Command exposes persisted refresh, live promotion, full roster and ROTE drill-down", async () => {
+test("Player Command exposes persisted refresh, live promotion, full roster, ROTE drill-down and evidence queue", async () => {
   const source = await text("public/player-command-dashboard.js");
   assert.match(source, /Refresh Persisted/);
   assert.match(source, /Refresh Live Detail/);
   assert.match(source, /Open Full Roster/);
   assert.match(source, /ROTE Required Units/);
+  assert.match(source, /PLAYER DEVELOPMENT QUEUE/);
+  assert.match(source, /data-player-development-action/);
+  assert.match(source, /openRosterSlice/);
+  assert.match(source, /momentum evidence, not a recommendation/);
   assert.match(source, /\/api\/player\/\$\{allyCode\}\/baseline/);
   assert.match(source, /\/api\/guild\/by-player\/\$\{allyCode\}\/baseline/);
 });
