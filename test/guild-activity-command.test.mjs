@@ -77,6 +77,25 @@ test("Guild Activity Command exposes recent classified ability investments", () 
   assert.equal(command.window.truncated, true);
 });
 
+test("Guild Activity Command scopes rankings and ability feeds to current members", () => {
+  const departed = {
+    id: 99,
+    playerId: "former",
+    playerName: "Former Member",
+    allyCode: "999999999",
+    baseId: "FORMER_UNIT",
+    unitName: "Former Unit",
+    changedAt: "2026-08-18T03:00:00Z",
+    delta: { galacticPower: 100_000, relicTier: 5, gearLevel: 0, zetaCount: 3, omicronCount: 2, ultimateUnlocked: 1 },
+  };
+  const command = buildGuildActivityCommand({ currentMembers: members, progression: [departed, ...progression], eventLimit: 200 });
+
+  assert.equal(command.momentumLeaders.some((row) => row.playerId === "former"), false);
+  assert.equal(command.recentAbilityInvestments.some((row) => row.playerId === "former"), false);
+  assert.equal(command.summary.gpGained, 23_000);
+  assert.equal(command.summary.omicronsAdded, 1);
+});
+
 test("Guild Activity Command removes mass-join bootstrap rows from true membership movement", () => {
   const baselineTime = "2026-08-17T00:00:00Z";
   const membership = [
