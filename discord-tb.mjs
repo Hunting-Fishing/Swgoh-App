@@ -88,7 +88,8 @@ export async function handleDiscordInteractionRequest(request, response, env = p
   try {
     rawBody = await readDiscordInteractionBody(request);
   } catch (error) {
-    return handleCoreDiscordInteractionRequest(replayRequest(request, Buffer.alloc(0)), response, env, services);
+    jsonResponse(response, error?.status === 413 ? 413 : 400, { error: error?.message || "Invalid Discord interaction body." });
+    return true;
   }
 
   let interaction = null;
