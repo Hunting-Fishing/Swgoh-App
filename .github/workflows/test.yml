@@ -2,7 +2,7 @@ name: SWGOH App Tests
 
 on:
   push:
-    branches: [main, feature/gac-live-matchup-engine]
+    branches: [main]
   pull_request:
 
 permissions:
