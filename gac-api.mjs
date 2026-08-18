@@ -28,6 +28,15 @@ function historyHasRows(body) {
   return Array.isArray(body?.rounds) && body.rounds.length > 0;
 }
 
+function scoutingHasEvidence(body) {
+  return Boolean(
+    body?.coverage?.hasDefenseEvidence ||
+    body?.coverage?.hasOffenseEvidence ||
+    (Array.isArray(body?.defensiveTendencies) && body.defensiveTendencies.length) ||
+    (Array.isArray(body?.offensiveTendencies) && body.offensiveTendencies.length)
+  );
+}
+
 export function createGacApi({
   requestGateway,
   writeJson,
@@ -56,6 +65,7 @@ export function createGacApi({
         imported: Number(result?.imported || 0),
         importedRounds: Number(result?.importedRounds || 0),
         importedCounters: Number(result?.importedCounters || 0),
+        failedModes: Number(result?.failedModes || 0),
         importedAt: result?.importedAt || new Date(now()).toISOString(),
       }))
       .catch((error) => Object.freeze({
@@ -104,6 +114,17 @@ export function createGacApi({
     }
 
     return { body: body || emptyHistoryBody(allyCode), autoImport };
+  }
+
+  async function scoutingWithLazyImport(allyCode, options = {}) {
+    let body = await scouting.getScoutingReport(allyCode, { limit: options.limit });
+    if (scoutingHasEvidence(body) || options.import === false) return { body, autoImport: null };
+
+    const autoImport = await importHistoryOnce(allyCode, { force: options.forceImport === true });
+    if (autoImport.status === "complete" && autoImport.imported > 0) {
+      body = await scouting.getScoutingReport(allyCode, { limit: options.limit });
+    }
+    return { body, autoImport };
   }
 
   return Object.freeze({
@@ -155,10 +176,16 @@ export function createGacApi({
       const scoutingMatch = url.pathname.match(/^\/api\/gac\/scouting\/(\d{9})$/);
       if (scoutingMatch) {
         try {
-          const body = await scouting.getScoutingReport(scoutingMatch[1], {
+          const result = await scoutingWithLazyImport(scoutingMatch[1], {
             limit: positiveLimit(url.searchParams.get("limit"), 2000, 5000),
+            import: url.searchParams.get("import") !== "0",
+            forceImport: url.searchParams.get("refresh") === "1",
           });
-          writeJson(response, 200, body, { "X-GAC-Source": body?.source || "persisted-gac-battle-scouting" });
+          const body = result.autoImport ? { ...result.body, autoImport: result.autoImport } : result.body;
+          writeJson(response, 200, body, {
+            "X-GAC-Source": body?.source || "persisted-gac-battle-scouting",
+            ...(result.autoImport ? { "X-GAC-History-Import": result.autoImport.status } : {}),
+          });
         } catch (error) {
           writeError(writeJson, response, error, "GAC opponent scouting evidence is unavailable.");
         }
