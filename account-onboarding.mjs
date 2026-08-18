@@ -1,4 +1,5 @@
 import { discordStateStore } from './discord-state-store.mjs';
+import { guildOperationScheduleApi } from './guild-operation-schedule-api.mjs';
 import { guildOperationsApi } from './guild-operations-api.mjs';
 import { guildRosterService } from './guild-roster-service.mjs';
 import { playerVerification } from './player-verification.mjs';
@@ -322,6 +323,9 @@ export function createAccountOnboarding(options = {}) {
 
   async function handle(request, response, url) {
     if (!url.pathname.startsWith('/api/account/')) return false;
+    if (url.pathname.startsWith('/api/account/guild-operation-schedules/')) {
+      return guildOperationScheduleApi.handle(request, response, url);
+    }
     if (url.pathname.startsWith('/api/account/guild-operations/')) {
       return guildOperationsApi.handle(request, response, url);
     }
