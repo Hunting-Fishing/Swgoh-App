@@ -121,7 +121,9 @@ export function planGuildTwDefenseAssignments(guildSnapshot, strategy, options =
       units: unitMap(member),
       usedUnits: new Set(),
       load: 0,
-      ignored: !member?.rosterAvailable || ignoredMembers.has(id),
+      // Missing availability evidence should not silently exclude the entire Guild.
+      // Only an explicit canonical false, or a durable officer ignore, removes a member.
+      ignored: member?.rosterAvailable === false || ignoredMembers.has(id),
     };
   });
 
