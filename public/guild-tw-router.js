@@ -3,6 +3,7 @@ import "./guild-operations-publish-enhancer.js";
 import "./guild-operations-professional-enhancer.js";
 import "./guild-operations-schedule-enhancer.js";
 import "./guild-discord-admin-enhancer.js";
+import "./guild-integration-report-enhancer.js";
 
 const ALLY_STORAGE_KEY = "swgoh:guild-route-ally-code";
 const TW_ROUTES = Object.freeze([
