@@ -29,3 +29,30 @@
   color: #737d91;
   font-size: .57rem;
 }
+.gac-datacron-mechanics {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .24rem;
+  margin-top: .3rem;
+}
+.gac-datacron-mechanics > span {
+  color: #75839a;
+  font-size: .51rem;
+  font-weight: 900;
+  letter-spacing: .08em;
+}
+.gac-datacron-mechanics b {
+  border: 1px solid rgba(109, 191, 255, .2);
+  border-radius: 999px;
+  padding: .12rem .34rem;
+  background: rgba(31, 91, 132, .14);
+  color: #9ddcff;
+  font-size: .53rem;
+  font-weight: 800;
+}
+.gac-datacron-counter-fit.is-full .gac-datacron-mechanics b {
+  border-color: rgba(102, 231, 167, .22);
+  background: rgba(30, 112, 76, .13);
+  color: #9ce7be;
+}

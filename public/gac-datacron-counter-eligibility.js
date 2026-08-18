@@ -3,6 +3,7 @@ import {
   datacronLabel,
   loadEligibilityContext,
 } from "./gac-datacron-eligibility.js";
+import { mechanicsLabels } from "./gac-datacron-mechanics.js";
 
 let refreshToken = 0;
 
@@ -11,14 +12,14 @@ function clean(value) { return String(value ?? "").trim(); }
 function allyCode(value) { return clean(value).replace(/\D/g, "").slice(0, 9); }
 function normalizedName(value) { return clean(value).toLowerCase().replace(/\s+/g, " "); }
 function escapeHtml(value) {
-  return String(value ?? "").replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[char]));
+  return String(value ?? "").replace(/[&<>'\"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '\"': "&quot;" }[char]));
 }
 
 function injectStyles() {
   if (document.querySelector('link[data-gac-datacron-counter-fit="true"]')) return;
   const link = document.createElement("link");
   link.rel = "stylesheet";
-  link.href = "/gac-datacron-counter-eligibility.css?v=20260819-gacdcfit1";
+  link.href = "/gac-datacron-counter-eligibility.css?v=20260819-gacdcfit2";
   link.dataset.gacDatacronCounterFit = "true";
   document.head.append(link);
 }
@@ -87,29 +88,54 @@ function resolvedAbilityNames(datacron) {
     .slice(0, 3);
 }
 
+function loadoutRecommendation(coverage, catalog = null) {
+  if (!coverage?.datacron || !Number.isFinite(Number(coverage?.squadSize))) return null;
+  const mechanics = mechanicsLabels(coverage.datacron, 8);
+  return Object.freeze({
+    datacronId: clean(coverage.datacron?.id),
+    label: datacronLabel(coverage.datacron, catalog),
+    level: Number(coverage.datacron?.level || 0),
+    eligibleMembers: Number(coverage.eligibleMembers || 0),
+    squadSize: Number(coverage.squadSize || 0),
+    leaderEligible: coverage.leaderEligible === true,
+    fullCoverage: Number(coverage.eligibleMembers || 0) === Number(coverage.squadSize || 0),
+    mechanics: Object.freeze(mechanics),
+  });
+}
+
 function renderUnknown(card, message) {
   card.querySelector(".gac-datacron-counter-fit")?.remove();
+  delete card.dataset.datacronId;
+  delete card.dataset.datacronCoverage;
   const output = document.createElement("div");
   output.className = "gac-datacron-counter-fit is-unknown";
-  output.innerHTML = `<strong>Datacron benefit coverage:</strong> ${escapeHtml(message)}<small>Coverage is separate from counter strength; unknown evidence is never scored as zero.</small>`;
+  output.innerHTML = `<strong>Datacron loadout:</strong> ${escapeHtml(message)}<small>Datacron evidence is separate from historical counter strength; unknown evidence is never scored as zero.</small>`;
   card.append(output);
 }
 
 function renderCoverage(card, coverage, catalog) {
   card.querySelector(".gac-datacron-counter-fit")?.remove();
-  const full = coverage.eligibleMembers === coverage.squadSize;
+  const recommendation = loadoutRecommendation(coverage, catalog);
+  const full = recommendation?.fullCoverage === true;
   const output = document.createElement("div");
   output.className = `gac-datacron-counter-fit ${full ? "is-full" : "is-partial"}`;
-  const label = datacronLabel(coverage.datacron, catalog);
+  const label = recommendation?.label || datacronLabel(coverage.datacron, catalog);
   const blocked = blockedSummary(coverage);
   const abilityNames = resolvedAbilityNames(coverage.datacron);
+  const mechanics = recommendation?.mechanics || [];
+  if (recommendation?.datacronId) card.dataset.datacronId = recommendation.datacronId;
+  card.dataset.datacronCoverage = `${recommendation?.eligibleMembers || 0}/${recommendation?.squadSize || 0}`;
   const abilityLine = abilityNames.length
     ? `<small>Official ability text: ${escapeHtml(abilityNames.join(" · "))}</small>`
     : `<small>Ability mechanics text is not resolved for this selected datacron; coverage uses target/gate evidence only.</small>`;
+  const mechanicsLine = mechanics.length
+    ? `<div class="gac-datacron-mechanics"><span>MECHANICS</span>${mechanics.map((labelText) => `<b>${escapeHtml(labelText)}</b>`).join("")}</div>`
+    : `<small>No traceable mechanics labels were resolved from official ability text.</small>`;
   output.innerHTML = `
-    <strong>Best verified datacron coverage:</strong> ${escapeHtml(label)} · ${coverage.eligibleMembers}/${coverage.squadSize} members receive ≥1 unlocked ability target${coverage.leaderEligible === true ? " · leader eligible" : ""}
+    <strong>Recommended owned datacron:</strong> ${escapeHtml(label)} · ${recommendation?.eligibleMembers || 0}/${recommendation?.squadSize || 0} members receive ≥1 unlocked ability target${recommendation?.leaderEligible ? " · leader eligible" : ""}
     ${abilityLine}
-    ${blocked ? `<small>${escapeHtml(blocked)}</small>` : `<small>Eligibility/coverage only. Official ability text is displayed when available but is not yet assigned an arbitrary combat-strength weight.</small>`}`;
+    ${mechanicsLine}
+    ${blocked ? `<small>${escapeHtml(blocked)}</small>` : `<small>Eligibility and mechanics evidence only. Historical win rate remains the counter-strength signal; no arbitrary datacron power multiplier is applied.</small>`}`;
   card.append(output);
 }
 
@@ -170,6 +196,8 @@ async function enhanceCards() {
 function resetCards() {
   document.querySelectorAll("#gacCounterGrid .gac-counter-card").forEach((card) => {
     card.dataset.datacronFit = "";
+    delete card.dataset.datacronId;
+    delete card.dataset.datacronCoverage;
   });
 }
 
@@ -191,4 +219,4 @@ document.addEventListener("DOMContentLoaded", ensureMounted, { once: true });
 window.addEventListener("hashchange", () => setTimeout(ensureMounted, 0));
 new MutationObserver(ensureMounted).observe(document.documentElement, { childList: true, subtree: true });
 
-export { blockedSummary, resolvedAbilityNames, squadFromCard };
+export { blockedSummary, loadoutRecommendation, resolvedAbilityNames, squadFromCard };
