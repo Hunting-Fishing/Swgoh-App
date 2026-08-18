@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "start": "node scripts/sync-game-unit-catalog-db.mjs --if-configured --soft-fail && node scripts/register-discord-tb-commands.mjs --if-configured --soft-fail && node server.mjs",
-    "build": "node scripts/build-production-data.mjs",
+    "build": "node --test test/discord-donation-preference.test.mjs test/discord-tb-preference-command.test.mjs && node scripts/build-production-data.mjs",
     "test": "node --test",
     "verify": "node --test",
     "report:tb-coverage": "node scripts/report-tb-strategy-coverage.mjs",
