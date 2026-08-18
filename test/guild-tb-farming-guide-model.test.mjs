@@ -69,6 +69,21 @@ test('guide classifies direct, partial, multi-unlock and already-satisfied prere
   assert.equal(guide.summary.journeyTargets, 4);
 });
 
+test('gear or star progress toward a future relic prerequisite is still recognized as partial Journey value', () => {
+  const partialCoverage = {
+    summary:{},
+    farms:[{
+      key:'player-a|EARLY', member:memberA, baseId:'EARLY', unitName:'Early Farm',
+      unit:{baseId:'EARLY',name:'Early Farm',unitType:'Character',stars:6,gear:11,relic:0,power:10000},
+      mandatoryImpact:1,poolImpact:0,missionImpact:1,gapLabel:'+1 star · +2 gear',
+      maxGap:{missing:false,stars:1,gear:2,relic:0,power:0,score:102000},minGap:{score:102000},missionRefs:[mission('E')],
+    }],
+  };
+  const guide = buildGuildTbFarmingGuide(partialCoverage,[{id:'JR',name:'Future Relic Journey',targetBaseId:'TARGET',requirements:[{baseId:'EARLY',type:'RELIC',tier:5}]}]);
+  assert.equal(guide.rows[0].classification,'partial');
+  assert.equal(guide.rows[0].partialCount,1);
+});
+
 test('member, phase and Journey-overlap filters preserve member-specific farm rows', () => {
   const guide = buildGuildTbFarmingGuide(coverage, presets);
   const memberRows = filterGuildTbFarmingRows(guide.rows,{member:'player-a'});
