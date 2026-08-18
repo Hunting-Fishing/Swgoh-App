@@ -110,6 +110,32 @@ function resolveOpponent(currentEvent, allyCode, playerContext = {}) {
   return null;
 }
 
+function eventInstanceIdFrom(...values) {
+  for (const value of values) {
+    const id = clean(value?.eventInstanceId || value?.event?.eventInstanceId);
+    if (id) return id;
+  }
+  return "";
+}
+
+function currentRoundFrom(...values) {
+  for (const value of values) {
+    const candidates = [
+      value?.round,
+      value?.roundNumber,
+      value?.currentRound,
+      value?.currentRoundNumber,
+      value?.event?.round,
+      value?.event?.roundNumber,
+    ];
+    for (const candidate of candidates) {
+      const round = Number(candidate);
+      if (Number.isInteger(round) && round >= 1 && round <= 3) return round;
+    }
+  }
+  return null;
+}
+
 function normalizeUnit(unit = {}) {
   const baseId = normalizeBaseId(unit.baseId || unit.base_id || unit.defId || unit.definitionId || unit.definition_id);
   if (!baseId) return null;
@@ -252,6 +278,7 @@ function counterScore(observation, rosterIndex) {
 export function createGacMatchupService(options = {}) {
   const requestGateway = options.requestGateway;
   const history = options.history;
+  const confirmedOpponent = options.confirmedOpponent;
   if (typeof requestGateway !== "function") throw new TypeError("requestGateway is required");
 
   async function analyze(allyCodeInput, analyzeOptions = {}) {
@@ -261,14 +288,31 @@ export function createGacMatchupService(options = {}) {
       requestGateway(`/v1/gac/player/${allyCode}`, true).catch(() => ({})),
       requestGateway(`/v1/player/${allyCode}`, true),
     ]);
-    const opponent = resolveOpponent(currentEvent, allyCode, playerContext);
+
+    let opponent = resolveOpponent(currentEvent, allyCode, playerContext);
+    let opponentResolution = opponent?.allyCode
+      ? Object.freeze({ exact: true, method: "live-event-payload", source: "comlink-live" })
+      : null;
+
+    if ((!opponent || !opponent.allyCode) && confirmedOpponent?.findLatestConfirmed) {
+      const eventInstanceId = eventInstanceIdFrom(currentEvent, playerContext);
+      const round = currentRoundFrom(currentEvent, playerContext);
+      if (eventInstanceId) {
+        const confirmed = await confirmedOpponent.findLatestConfirmed(allyCode, eventInstanceId, round).catch(() => null);
+        if (confirmed?.opponent?.allyCode) {
+          opponent = confirmed.opponent;
+          opponentResolution = confirmed.resolution;
+        }
+      }
+    }
+
     if (!opponent) {
-      const error = new Error("The live GAC payload did not expose a resolvable current opponent for this player.");
+      const error = new Error("The live GAC payload did not expose a resolvable current opponent and no verified saved pairing exists for this event.");
       error.status = 404;
       throw error;
     }
     if (!opponent.allyCode) {
-      const error = new Error(`Current opponent ${opponent.name || opponent.playerId || "unknown"} was found, but the live payload did not expose their Ally Code.`);
+      const error = new Error(`Current opponent ${opponent.name || opponent.playerId || "unknown"} was found, but no usable Ally Code or verified saved pairing is available.`);
       error.status = 409;
       throw error;
     }
@@ -294,15 +338,18 @@ export function createGacMatchupService(options = {}) {
         .slice(0, 10);
     }
 
+    const eventInstanceId = eventInstanceIdFrom(currentEvent, playerContext);
+    const eventRound = currentRoundFrom(currentEvent, playerContext) || validResolutionRound(opponentResolution?.round);
     return Object.freeze({
       source: "live-gac-matchup-intelligence",
       fetchedAt: new Date().toISOString(),
       format,
       event: Object.freeze({
-        eventInstanceId: clean(currentEvent?.eventInstanceId || currentEvent?.event?.eventInstanceId || currentEvent?.id),
-        round: finite(currentEvent?.round ?? currentEvent?.roundNumber ?? playerContext?.round ?? playerContext?.roundNumber),
-        status: clean(currentEvent?.status || currentEvent?.phase || playerContext?.status || playerContext?.phase),
+        eventInstanceId,
+        round: eventRound || 0,
+        status: clean(currentEvent?.status || currentEvent?.phase || currentEvent?.event?.status || playerContext?.status || playerContext?.phase),
       }),
+      opponentResolution: opponentResolution || Object.freeze({ exact: false, method: "unresolved" }),
       matchup: Object.freeze({ me, opponent: rival, delta: delta(me, rival) }),
       defense: Object.freeze({
         mine: myDefense,
@@ -313,6 +360,9 @@ export function createGacMatchupService(options = {}) {
       recommendedCounters: Object.freeze(counters),
       notes: Object.freeze([
         "Relic, zeta and omicron deltas are calculated from the two live roster payloads.",
+        opponentResolution?.source === "user-confirmed-current-bracket"
+          ? "Opponent identity came from a verified owner confirmation bound to this GAC event."
+          : "Opponent identity came from the live GAC payload.",
         opponentDefense.length ? "Opponent defense squads were present in the live event payload." : "Opponent defense squads were not present in the live event payload; counter selection can still be requested by enemy leader.",
         counters.length ? "Counter ranking uses persisted battle evidence and removes squads that require units detected on your defense." : "No counter ranking was requested or no owned evidence-backed counter was available.",
       ]),
@@ -322,9 +372,16 @@ export function createGacMatchupService(options = {}) {
   return Object.freeze({ analyze });
 }
 
+function validResolutionRound(value) {
+  const round = Number(value);
+  return Number.isInteger(round) && round >= 1 && round <= 3 ? round : null;
+}
+
 export {
   counterScore,
+  currentRoundFrom,
   delta,
+  eventInstanceIdFrom,
   extractDefenseSquads,
   normalizeAllyCode,
   resolveOpponent,
