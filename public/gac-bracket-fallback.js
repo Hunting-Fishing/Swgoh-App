@@ -4,6 +4,7 @@ const state = {
   requestId: 0,
   loadedFor: "",
   bracket: null,
+  autoSelectedKey: "",
 };
 
 function byId(id) { return document.getElementById(id); }
@@ -25,7 +26,7 @@ function injectStylesheet() {
   if (document.querySelector('link[data-gac-bracket-fallback="true"]')) return;
   const link = document.createElement("link");
   link.rel = "stylesheet";
-  link.href = "/gac-bracket-fallback.css?v=20260818-gac-bracket1";
+  link.href = "/gac-bracket-fallback.css?v=20260819-gac-bracket2";
   link.dataset.gacBracketFallback = "true";
   document.head.append(link);
 }
@@ -34,7 +35,7 @@ function setBusy(busy) {
   const button = byId("gacFindBracketButton");
   if (!button) return;
   button.disabled = busy;
-  button.textContent = busy ? "Scanning Live Brackets…" : "Find My Live Bracket";
+  button.textContent = busy ? "Resolving Current Opponent…" : "Resolve Current Opponent";
 }
 
 function setError(message = "") {
@@ -44,42 +45,83 @@ function setError(message = "") {
   output.classList.toggle("gac-hidden", !message);
 }
 
-function selectOpponent(entry) {
+function selectOpponent(entry, options = {}) {
   const code = allyCode(entry?.allyCode);
   if (!/^\d{9}$/.test(code)) {
     setError(`${entry?.name || "This player"} was found in the bracket, but their Ally Code could not be resolved from the public profile.`);
-    return;
+    return false;
   }
   const input = byId("gacOpponentCode");
-  if (!input) return;
+  if (!input) return false;
+  const alreadySelected = allyCode(input.value) === code;
   input.value = formatAllyCode(code);
   input.dispatchEvent(new Event("input", { bubbles: true }));
   input.dispatchEvent(new Event("change", { bubbles: true }));
-  byId("gacMatchupForm")?.requestSubmit?.();
-  byId("gacComparison")?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+  if (!alreadySelected || options.forceSubmit) byId("gacMatchupForm")?.requestSubmit?.();
+  if (options.scroll !== false) byId("gacComparison")?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+  return true;
+}
+
+function exactOpponentCard(bracket) {
+  const entry = bracket?.currentOpponent;
+  const resolution = bracket?.opponentResolution || {};
+  const code = allyCode(entry?.allyCode);
+  const round = Number(resolution?.round || 0);
+  const confidence = Number(resolution?.confidence || 0);
+  return `
+    <article class="gac-bracket-opponent is-current-opponent">
+      <div class="gac-bracket-opponent-index">R${round || "?"}</div>
+      <div class="gac-bracket-opponent-main">
+        <strong>${escapeHtml(entry?.name || "Current Opponent")}</strong>
+        <span>Exact current pairing · ${escapeHtml(resolution?.source || "verified event/round evidence")}</span>
+        <small>${code ? escapeHtml(formatAllyCode(code)) : "Ally Code unresolved"}${confidence ? ` · ${(confidence * 100).toFixed(0)}% evidence confidence` : ""}</small>
+      </div>
+      <div class="gac-bracket-opponent-score">
+        <span>STATUS</span>
+        <strong>LOCKED</strong>
+      </div>
+      <button type="button" class="gac-action gac-bracket-select" data-exact-opponent="true" ${code ? "" : "disabled"}>Load Matchup</button>
+    </article>`;
 }
 
 function renderBracket() {
   const output = byId("gacBracketGrid");
   const meta = byId("gacBracketMeta");
+  const truth = document.querySelector(".gac-bracket-truth");
   if (!output || !meta) return;
   const bracket = state.bracket;
   if (!bracket) {
-    meta.textContent = "Public Comlink does not expose exact current-round pairings. Scan your live bracket, then select the opponent shown in-game.";
+    meta.textContent = "Resolve your live bracket. Exact current opponent is only auto-selected when event and round evidence match; otherwise choose the player shown in-game.";
+    if (truth) truth.textContent = "PUBLIC DATA · NO GUESSING";
     output.innerHTML = `<div class="workspace-note">No bracket loaded yet.</div>`;
     return;
   }
+
   const opponents = Array.isArray(bracket.opponents) ? bracket.opponents : [];
-  meta.textContent = `${bracket.league || "GAC"} · bracket ${Number(bracket.bracketIndex ?? 0)} · ${opponents.length} other bracket players · ${bracket.lookup?.method === "rank-hint" ? "fast rank lookup" : "live bracket scan"}`;
-  if (!opponents.length) {
+  const exact = bracket?.opponentResolution?.exact === true && bracket?.currentOpponent;
+  const source = bracket.source === "persisted-gac-bracket-index" ? "indexed bracket" : (bracket.lookup?.method === "rank-hint" ? "fast live lookup" : "live bracket scan");
+
+  if (exact) {
+    const round = Number(bracket.opponentResolution?.round || 0);
+    meta.textContent = `${bracket.league || "GAC"} · bracket ${Number(bracket.bracketIndex ?? 0)} · Round ${round || "?"} exact opponent resolved · ${source}`;
+    if (truth) truth.textContent = "EXACT PAIRING · EVIDENCE MATCH";
+  } else {
+    meta.textContent = `${bracket.league || "GAC"} · bracket ${Number(bracket.bracketIndex ?? 0)} · ${opponents.length} other bracket players · ${source} · exact current pairing not exposed`;
+    if (truth) truth.textContent = "PUBLIC DATA · NO GUESSING";
+  }
+
+  if (!opponents.length && !exact) {
     output.innerHTML = `<div class="workspace-note">Your bracket was found, but no opponent profiles were returned.</div>`;
     return;
   }
-  output.innerHTML = opponents.map((entry, index) => {
+
+  const exactHtml = exact ? exactOpponentCard(bracket) : "";
+  const listHtml = opponents.map((entry, index) => {
     const code = allyCode(entry?.allyCode);
     const available = /^\d{9}$/.test(code);
+    const isExact = exact && code === allyCode(bracket.currentOpponent?.allyCode);
     return `
-      <article class="gac-bracket-opponent ${available ? "" : "is-unresolved"}">
+      <article class="gac-bracket-opponent ${available ? "" : "is-unresolved"} ${isExact ? "is-exact-member" : ""}">
         <div class="gac-bracket-opponent-index">${index + 1}</div>
         <div class="gac-bracket-opponent-main">
           <strong>${escapeHtml(entry?.name || "Unknown Player")}</strong>
@@ -90,15 +132,31 @@ function renderBracket() {
           <span>SCORE</span>
           <strong>${Number(entry?.score || 0).toLocaleString()}</strong>
         </div>
-        <button type="button" class="gac-action gac-bracket-select" data-bracket-opponent="${index}" ${available ? "" : "disabled"}>Use Opponent</button>
+        <button type="button" class="gac-action gac-bracket-select" data-bracket-opponent="${index}" ${available ? "" : "disabled"}>${isExact ? "Exact Opponent" : "Use Opponent"}</button>
       </article>`;
   }).join("");
-  output.querySelectorAll(".gac-bracket-select").forEach((button) => {
-    button.addEventListener("click", () => selectOpponent(opponents[Number(button.dataset.bracketOpponent)]));
+
+  output.innerHTML = `${exactHtml}${exact ? `<div class="gac-bracket-divider">OTHER PLAYERS IN THIS 8-PLAYER BRACKET</div>` : ""}${listHtml}`;
+  output.querySelector('[data-exact-opponent="true"]')?.addEventListener("click", () => selectOpponent(bracket.currentOpponent, { forceSubmit: true }));
+  output.querySelectorAll(".gac-bracket-select[data-bracket-opponent]").forEach((button) => {
+    button.addEventListener("click", () => selectOpponent(opponents[Number(button.dataset.bracketOpponent)], { forceSubmit: true }));
   });
 }
 
-async function loadBracket() {
+function autoSelectExactOpponent() {
+  const bracket = state.bracket;
+  if (bracket?.opponentResolution?.exact !== true || !bracket?.currentOpponent) return;
+  const code = allyCode(bracket.currentOpponent?.allyCode);
+  if (!code) return;
+  const eventId = String(bracket?.opponentResolution?.eventInstanceId || bracket?.event?.eventInstanceId || "");
+  const round = Number(bracket?.opponentResolution?.round || 0);
+  const key = `${eventId}|${round}|${code}`;
+  if (state.autoSelectedKey === key) return;
+  state.autoSelectedKey = key;
+  selectOpponent(bracket.currentOpponent, { forceSubmit: true, scroll: true });
+}
+
+async function loadBracket(options = {}) {
   const code = allyCode(byId("allyCode")?.value);
   if (!/^\d{9}$/.test(code)) {
     setError("Load your 9-digit Ally Code at the top of Command Center first.");
@@ -108,11 +166,12 @@ async function loadBracket() {
   setError("");
   setBusy(true);
   try {
-    const bracket = await fetchJson(`/api/gac/bracket/by-player/${code}`);
+    const bracket = await fetchJson(`/api/gac/bracket/by-player/${code}${options.refresh ? "?refresh=1" : ""}`);
     if (requestId !== state.requestId) return;
     state.loadedFor = code;
     state.bracket = bracket;
     renderBracket();
+    autoSelectExactOpponent();
   } catch (error) {
     if (requestId !== state.requestId) return;
     state.bracket = null;
@@ -133,7 +192,7 @@ function mount() {
   button.id = "gacFindBracketButton";
   button.type = "button";
   button.className = "gac-bracket-find";
-  button.textContent = "Find My Live Bracket";
+  button.textContent = "Resolve Current Opponent";
   button.addEventListener("click", () => void loadBracket());
   form.append(button);
 
@@ -144,7 +203,7 @@ function mount() {
       <div>
         <div class="kicker">LIVE 8-PLAYER BRACKET</div>
         <h4>Opponent Discovery</h4>
-        <p id="gacBracketMeta">Public Comlink does not expose exact current-round pairings. Scan your live bracket, then select the opponent shown in-game.</p>
+        <p id="gacBracketMeta">Resolve your live bracket. Exact current opponent is only auto-selected when event and round evidence match; otherwise choose the player shown in-game.</p>
       </div>
       <span class="gac-bracket-truth">PUBLIC DATA · NO GUESSING</span>
     </div>
@@ -164,6 +223,7 @@ function ensureMounted() {
   if (state.loadedFor && code && state.loadedFor !== code) {
     state.loadedFor = "";
     state.bracket = null;
+    state.autoSelectedKey = "";
     renderBracket();
   }
 }
