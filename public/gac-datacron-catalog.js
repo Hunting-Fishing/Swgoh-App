@@ -26,6 +26,11 @@ function humanize(value) {
     .replace(/^profession_/i, "")
     .replace(/^affiliation_/i, "")
     .replace(/^category_/i, "")
+    .replace(/maxhealth/gi, "max health")
+    .replace(/criticalchance/gi, "critical chance")
+    .replace(/criticaldamage/gi, "critical damage")
+    .replace(/armorpenetration/gi, "armor penetration")
+    .replace(/specialpenetration/gi, "special penetration")
     .replace(/_/g, " ")
     .replace(/\s+/g, " ")
     .trim()
@@ -176,6 +181,12 @@ function buildCatalog(payloads = {}) {
   });
 }
 
+function inPublishedRange(value, candidate) {
+  if (value === null) return false;
+  if (candidate?.statValueMin === null || candidate?.statValueMax === null) return false;
+  return value >= candidate.statValueMin && value <= candidate.statValueMax;
+}
+
 function bestAffixMatch(raw = {}, catalog) {
   if (!catalog) return null;
   const abilityId = clean(raw?.abilityId);
@@ -183,9 +194,13 @@ function bestAffixMatch(raw = {}, catalog) {
   const statType = finite(raw?.statType);
   const statValue = finite(raw?.statValue);
   const tags = new Set(asArray(raw?.tags || raw?.tag).map(clean).filter(Boolean));
-  const candidates = abilityId
-    ? asArray(catalog?.abilityAffixes?.get(abilityId))
-    : catalog.affixes.filter((entry) => entry.statType !== null && entry.statType === statType);
+  let candidates;
+  if (abilityId) {
+    candidates = asArray(catalog?.abilityAffixes?.get(abilityId));
+  } else {
+    if (statType === null || statValue === null) return null;
+    candidates = catalog.affixes.filter((entry) => entry.statType === statType && inPublishedRange(statValue, entry));
+  }
   if (!candidates.length) return null;
 
   const scored = candidates.map((candidate) => {
@@ -193,7 +208,7 @@ function bestAffixMatch(raw = {}, catalog) {
     if (abilityId && candidate.abilityId === abilityId) score += 100;
     if (targetRule && candidate.targetRule === targetRule) score += 30;
     if (statType !== null && candidate.statType === statType) score += 20;
-    if (statValue !== null && candidate.statValueMin !== null && candidate.statValueMax !== null && statValue >= candidate.statValueMin && statValue <= candidate.statValueMax) score += 20;
+    if (statValue !== null && inPublishedRange(statValue, candidate)) score += 20;
     for (const tag of candidate.tags) if (tags.has(tag)) score += 4;
     return { candidate, score };
   }).sort((a, b) => b.score - a.score);
