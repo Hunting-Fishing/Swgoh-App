@@ -186,7 +186,17 @@ function bind() {
   return true;
 }
 
-function ensureBound() { bind(); }
+function updateLegacyWarning() {
+  const warning = byId("gacCommandCenterPro")?.querySelector(".gac-warning");
+  if (!warning || warning.dataset.datacronUpdated === "true") return;
+  warning.dataset.datacronUpdated = "true";
+  warning.textContent = "Historical win rates are shown only when imported evidence exists. Roster-fit suggestions remain explicitly labeled as heuristics. Public live datacron instance details are displayed when exposed, but raw ability/target/stat IDs are not converted into counter strength until their game-data definitions are resolved.";
+}
+
+function ensureBound() {
+  bind();
+  updateLegacyWarning();
+}
 ensureBound();
 document.addEventListener("DOMContentLoaded", ensureBound, { once: true });
 window.addEventListener("hashchange", () => setTimeout(ensureBound, 0));
