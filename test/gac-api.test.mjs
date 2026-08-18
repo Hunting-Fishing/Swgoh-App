@@ -121,6 +121,37 @@ test("persisted bracket membership prevents another Comlink bracket scan", async
   assert.equal(written[0].body.source, "persisted-gac-bracket-index");
 });
 
+test("matching event and round evidence resolves the exact current opponent only when they belong to the live bracket", async () => {
+  const indexed = { ...liveBracket(), source: "persisted-gac-bracket-index", lookup: { allyCode: "732764286", method: "persisted-bracket-index" } };
+  const bracketIndex = {
+    currentRoundFrom() { return 3; },
+    async findIndexedBracket() { return indexed; },
+    async persistBracket() { throw new Error("persist should not run on a hit"); },
+    async findExactOpponent(code, eventId, round) {
+      assert.equal(code, "732764286");
+      assert.equal(eventId, "GAC:1");
+      assert.equal(round, 3);
+      return {
+        opponent: { playerId: "PLAYER_2", allyCode: "123456789", name: "Navygators" },
+        resolution: {
+          exact: true,
+          method: "persisted-event-round-evidence",
+          eventInstanceId: "GAC:1",
+          round: 3,
+          source: "c3po-gahistory",
+          confidence: 0.95,
+        },
+      };
+    },
+  };
+  const { api, written } = harness({ bracketIndex });
+  await api.handle({ method: "GET" }, {}, new URL("http://app.test/api/gac/bracket/by-player/732764286"));
+  assert.equal(written[0].body.opponentResolution.exact, true);
+  assert.equal(written[0].body.opponentResolution.round, 3);
+  assert.equal(written[0].body.currentOpponent.name, "Navygators");
+  assert.equal(written[0].body.currentOpponent.allyCode, "123456789");
+});
+
 test("scouting route reads persisted battle evidence without calling the live gateway", async () => {
   const { api, calls, scoutCalls, written } = harness();
   const handled = await api.handle({ method: "GET" }, {}, new URL("http://app.test/api/gac/scouting/732764286?limit=2500"));
