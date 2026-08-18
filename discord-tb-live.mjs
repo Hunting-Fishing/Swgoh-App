@@ -5,6 +5,7 @@ import { discordStateStore } from "./discord-state-store.mjs";
 import { discordHardReservationStore } from "./discord-hard-reservation-store.mjs";
 import { createGuildRosterService, guildRosterService } from "./guild-roster-service.mjs";
 import { aggregateRoteOperations } from "./rote-operations.mjs";
+import { supabaseCoreStore } from "./supabase-core-store.mjs";
 import { buildGuildRoteOperationSafety } from "./public/guild-rote-operation-safety.js";
 import { planGuildRoteSafeAssignments } from "./public/guild-rote-safe-planner.js";
 import { buildGuildTbPhaseCommand } from "./public/guild-tb-phase-command-model.js";
@@ -85,7 +86,65 @@ export async function resolveDiscordGuildAllyCode({ allyCode, interaction = {}, 
   return Object.freeze({ allyCode: fallback, source: "explicit-fallback", discordGuildId });
 }
 
-async function readDiscordPlanningControls(binding, stateStore, reservationStore) {
+async function readCanonicalOperationControls(binding, store) {
+  if (!store?.status?.()?.configured) return Object.freeze({ preferences: [], ignoredMembers: [] });
+  try {
+    const seedRows = await store.select("players", {
+      select: "id,ally_code,current_guild_id",
+      ally_code: `eq.${normalizedAllyCode(binding?.allyCode)}`,
+      limit: 1,
+    });
+    const seed = Array.isArray(seedRows) ? seedRows[0] : null;
+    if (!seed?.current_guild_id) return Object.freeze({ preferences: [], ignoredMembers: [] });
+
+    const [players, controls, preferences] = await Promise.all([
+      store.select("players", {
+        select: "id,ally_code,swgoh_player_id,name,current_guild_id",
+        current_guild_id: `eq.${seed.current_guild_id}`,
+        limit: 100,
+      }),
+      store.select("guild_member_operation_controls", {
+        select: "player_id,available,ignored_until,ignore_reason,source,updated_at",
+        guild_id: `eq.${seed.current_guild_id}`,
+        limit: 100,
+      }),
+      store.select("guild_unit_donation_preferences", {
+        select: "player_id,base_id,preference,source,updated_at",
+        guild_id: `eq.${seed.current_guild_id}`,
+        limit: 500,
+      }),
+    ]);
+    const playerMap = new Map((Array.isArray(players) ? players : []).map((row) => [String(row.id), row]));
+    const now = Date.now();
+    const ignoredMembers = (Array.isArray(controls) ? controls : [])
+      .filter((row) => {
+        const until = Date.parse(row?.ignored_until || "");
+        return row?.available === false || (Number.isFinite(until) && until > now);
+      })
+      .map((row) => playerMap.get(String(row.player_id)))
+      .filter(Boolean)
+      .map((player) => String(player.swgoh_player_id || player.ally_code || "").trim())
+      .filter(Boolean);
+    const normalizedPreferences = (Array.isArray(preferences) ? preferences : [])
+      .map((row) => {
+        const player = playerMap.get(String(row.player_id));
+        return {
+          memberId: String(player?.swgoh_player_id || player?.ally_code || "").trim(),
+          baseId: normalizedBaseId(row?.base_id),
+          preference: normalizedPreference(row?.preference),
+        };
+      })
+      .filter((row) => row.memberId && row.baseId && row.preference);
+    return Object.freeze({ preferences: normalizedPreferences, ignoredMembers });
+  } catch (error) {
+    const wrapped = new Error("Canonical Guild Operations controls could not be read; refusing to build a Discord plan without shared officer controls.");
+    wrapped.code = "CANONICAL_OPERATION_CONTROLS_READ_FAILED";
+    wrapped.cause = error;
+    throw wrapped;
+  }
+}
+
+async function readDiscordPlanningControls(binding, stateStore, reservationStore, operationStore) {
   const discordGuildId = normalizedSnowflake(binding?.discordGuildId);
   const canRead = Boolean(
     discordGuildId
@@ -112,7 +171,7 @@ async function readDiscordPlanningControls(binding, stateStore, reservationStore
     throw wrapped;
   }
 
-  const preferences = Object.values(guild?.memberPreferences && typeof guild.memberPreferences === "object" ? guild.memberPreferences : {})
+  const statePreferences = Object.values(guild?.memberPreferences && typeof guild.memberPreferences === "object" ? guild.memberPreferences : {})
     .map((row) => ({
       memberId: normalizedMemberId(row),
       baseId: normalizedBaseId(row?.baseId),
@@ -120,10 +179,15 @@ async function readDiscordPlanningControls(binding, stateStore, reservationStore
     }))
     .filter((row) => row.memberId && row.baseId && row.preference);
 
-  const ignoredMembers = Object.values(guild?.memberAvailability && typeof guild.memberAvailability === "object" ? guild.memberAvailability : {})
+  const stateIgnored = Object.values(guild?.memberAvailability && typeof guild.memberAvailability === "object" ? guild.memberAvailability : {})
     .filter((row) => String(row?.availability || "").toLowerCase() === "unavailable")
     .map((row) => normalizedMemberId(row))
     .filter(Boolean);
+
+  const canonical = await readCanonicalOperationControls(binding, operationStore);
+  const preferenceMap = new Map();
+  for (const row of [...statePreferences, ...canonical.preferences]) preferenceMap.set(`${row.memberId}|${row.baseId}`, row);
+  const ignoredMembers = [...new Set([...stateIgnored, ...canonical.ignoredMembers])];
 
   let reservations = [];
   const reservationStatus = typeof reservationStore?.status === "function" ? reservationStore.status() : null;
@@ -160,8 +224,8 @@ async function readDiscordPlanningControls(binding, stateStore, reservationStore
   }
 
   return Object.freeze({
-    preferences: Object.freeze(preferences.map((row) => Object.freeze(row))),
-    ignoredMembers: Object.freeze([...new Set(ignoredMembers)]),
+    preferences: Object.freeze([...preferenceMap.values()].map((row) => Object.freeze(row))),
+    ignoredMembers: Object.freeze(ignoredMembers),
     reservations: Object.freeze(reservations.map((row) => Object.freeze(row))),
   });
 }
@@ -287,6 +351,7 @@ export function createDiscordTbLiveServices(env = process.env, options = {}) {
   const sharedGuildService = selectGuildRosterService(env, options, fetchImpl);
   const stateStore = options.stateStore || discordStateStore;
   const reservationStore = options.reservationStore || discordHardReservationStore;
+  const operationStore = options.store || supabaseCoreStore;
 
   async function resolveRequestGuild(args = {}) {
     return resolveDiscordGuildAllyCode({
@@ -298,7 +363,7 @@ export function createDiscordTbLiveServices(env = process.env, options = {}) {
 
   async function resolvePlanningRequest(args = {}) {
     const binding = await resolveRequestGuild(args);
-    const controls = await readDiscordPlanningControls(binding, stateStore, reservationStore);
+    const controls = await readDiscordPlanningControls(binding, stateStore, reservationStore, operationStore);
     return { binding, controls };
   }
 
