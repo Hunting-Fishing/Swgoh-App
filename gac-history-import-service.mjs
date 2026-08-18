@@ -71,6 +71,35 @@ function battleRow(battle, context) {
   };
 }
 
+function roundRowsFromBattles(battles, context) {
+  const byRound = new Map();
+  for (const battle of battles) {
+    if (![1, 2, 3].includes(Number(battle.roundNumber))) continue;
+    const key = Number(battle.roundNumber);
+    if (!byRound.has(key)) byRound.set(key, battle);
+  }
+  return [...byRound.entries()].map(([roundNumber, battle]) => ({
+    event_id: context.eventRowId,
+    round_number: roundNumber,
+    player_id: context.playerRowId,
+    opponent_swgoh_player_id: battle.opponentPlayerId || null,
+    opponent_ally_code: battle.opponentAllyCode || null,
+    opponent_name: battle.opponentName || null,
+    result: "unknown",
+    player_banners: null,
+    opponent_banners: null,
+    source: "c3po-gahistory",
+    source_ref: context.sourceRef,
+    confidence: battle.opponentPlayerId || battle.opponentAllyCode || battle.opponentName ? 0.95 : 0.85,
+    verified: false,
+    recorded_at: context.sourceUpdatedAt,
+    metadata: {
+      importedFromMatchIndex: battle.matchIndex,
+      sourceRoundNumber: true,
+    },
+  }));
+}
+
 export function createGacHistoryImportService(options = {}) {
   const store = options.store || supabaseCoreStore;
   const source = options.source || createC3poHistorySource(options.sourceOptions);
@@ -110,8 +139,17 @@ export function createGacHistoryImportService(options = {}) {
       captured_at: now().toISOString(),
       metadata: {},
     };
-    await store.upsert("gac_events", [row], { onConflict: "event_instance_id" });
-    return eventInstanceId;
+    const upserted = asArray(await store.upsert("gac_events", [row], { onConflict: "event_instance_id" }));
+    let event = upserted[0] || null;
+    if (!event?.id) {
+      const selected = asArray(await store.select("gac_events", {
+        select: "id,event_instance_id",
+        event_instance_id: `eq.${eventInstanceId}`,
+        limit: 1,
+      }));
+      event = selected[0] || event;
+    }
+    return { eventInstanceId, eventRowId: clean(event?.id) };
   }
 
   async function importMode(player, mode) {
@@ -120,28 +158,46 @@ export function createGacHistoryImportService(options = {}) {
     if (!raw) {
       return Object.freeze({ mode, eventInstanceId: info.eventInstanceId, season: info.season, imported: 0, available: false });
     }
-    const eventInstanceId = await upsertEvent(info);
+    const event = await upsertEvent(info);
     const sourceUpdatedAt = now().toISOString();
+    const sourceRef = `${source.baseUrl}/${mode}/${encodeURIComponent(player.swgoh_player_id)}.json`;
     const battles = normalizePlayerBattles(raw, {
       mode,
       playerId: player.swgoh_player_id,
       allyCode: player.ally_code,
-      eventInstanceId,
+      eventInstanceId: event.eventInstanceId,
       season: info.season,
     });
     const rows = battles.map((battle) => battleRow(battle, {
       playerRowId: player.id,
-      sourceRef: `${source.baseUrl}/${mode}/${encodeURIComponent(player.swgoh_player_id)}.json`,
+      sourceRef,
       sourceUpdatedAt,
     }));
     for (const batch of chunks(rows, 200)) {
       if (batch.length) await store.upsert("gac_battles", batch, { onConflict: "battle_key" });
     }
+
+    let roundRows = [];
+    if (event.eventRowId) {
+      roundRows = roundRowsFromBattles(battles, {
+        eventRowId: event.eventRowId,
+        playerRowId: player.id,
+        sourceRef,
+        sourceUpdatedAt,
+      });
+      if (roundRows.length) {
+        await store.upsert("gac_rounds", roundRows, {
+          onConflict: "event_id,round_number,player_id,source",
+        });
+      }
+    }
+
     return Object.freeze({
       mode,
-      eventInstanceId,
+      eventInstanceId: event.eventInstanceId,
       season: info.season,
       imported: rows.length,
+      importedRounds: roundRows.length,
       available: true,
       characterBattles: battles.filter((battle) => battle.battleType === "character").length,
       fleetBattles: battles.filter((battle) => battle.battleType === "fleet").length,
@@ -159,6 +215,7 @@ export function createGacHistoryImportService(options = {}) {
       player: Object.freeze({ allyCode, playerId: player.swgoh_player_id, name: clean(player.name) }),
       results: Object.freeze(results),
       imported: results.reduce((sum, result) => sum + result.imported, 0),
+      importedRounds: results.reduce((sum, result) => sum + (result.importedRounds || 0), 0),
       importedAt: now().toISOString(),
     });
   }
