@@ -1,6 +1,7 @@
 import { canonicalRosterService } from './canonical-roster-service.mjs';
 import { buildOrder66RaidMax } from './public/raid-max-order66.js';
 import { supabaseCoreStore } from './supabase-core-store.mjs';
+import { executePersonalTbFarmPlan } from './tb-farm-plan-action.mjs';
 import { findWebAction, publicWebActionCatalog } from './web-action-registry.mjs';
 
 const text = (value) => String(value ?? '').trim();
@@ -50,6 +51,33 @@ function raidMaxDiscordContent(run) {
   }
   lines.push('', '_Ceilings are roster/difficulty eligibility, not guaranteed damage. Generated on the Command Center website._');
   return lines.join('\n').slice(0, 1950);
+}
+
+function tbFarmPlanDiscordContent(run) {
+  const result = run?.result || {};
+  const player = result.player || {};
+  const guild = result.guild || {};
+  const summary = result.summary || {};
+  const lines = [
+    '🛰️ **SWGOH Command Center · TB Farm Plan**',
+    `**${text(player.name) || 'Player'}** · ${allyCode(player.allyCode) || 'Ally Code unavailable'} · ${text(guild.name) || 'Guild'}`,
+    `${summary.personalFarmRows || 0} personal TB farm targets · ${summary.doubleUseRows || 0} Journey-overlap targets · ${summary.journeyTargetsAdvanced || 0} unlock paths advanced`,
+    `Ranking: ${text(summary.priorityMode || 'guild-impact').replaceAll('-', ' ')}`,
+    '',
+  ];
+  for (const row of array(result.recommendations).slice(0, 8)) {
+    const journey = array(row?.journey?.targets).filter((entry) => ['direct','partial'].includes(text(entry.status))).slice(0, 2);
+    const overlap = journey.length ? ` · ${journey.map((entry) => `${text(entry.shortName || entry.eventName)} ${text(entry.requirementLabel)} (${text(entry.status)})`).join(' / ')}` : '';
+    lines.push(`**#${row.rank || '?'} ${text(row.unitName || row.baseId)}** — ${text(row.currentLabel)} → ${text(row.tbTargetLabel)} · ${row?.tb?.missionImpact || 0} TB mission${Number(row?.tb?.missionImpact || 0) === 1 ? '' : 's'}${overlap}`);
+  }
+  lines.push('', '_Journey overlap means this farm advances or satisfies a prerequisite; it does not guarantee the Journey target unlock. Generated on the Command Center website._');
+  return lines.join('\n').slice(0, 1950);
+}
+
+function discordActionContent(run) {
+  if (run?.action_key === 'raid-max') return raidMaxDiscordContent(run);
+  if (run?.action_key === 'tb-farm-plan') return tbFarmPlanDiscordContent(run);
+  return `SWGOH Command Center action: ${text(run?.action_key)}`;
 }
 
 function feedItem(publication, run) {
@@ -147,6 +175,12 @@ export function createWebActionService(options = {}) {
     if (action.key === 'raid-max') {
       const roster = await canonical.getPlayerRoster(identity.player.ally_code);
       result = buildOrder66RaidMax(roster, { maxAttempts: input?.maxAttempts });
+    } else if (action.key === 'tb-farm-plan') {
+      if (!identity.membership || !identity.guildId) throw httpError('Active Guild membership is required to build a Guild-impact TB Farm Plan.', 403, 'ACTIVE_GUILD_MEMBERSHIP_REQUIRED');
+      result = await executePersonalTbFarmPlan(canonical, identity.player.ally_code, {
+        priorityMode: input?.priorityMode,
+        maxRecommendations: input?.maxRecommendations,
+      });
     } else {
       throw httpError('That website action has no execution adapter.', 501, 'WEB_ACTION_ADAPTER_MISSING');
     }
@@ -160,7 +194,7 @@ export function createWebActionService(options = {}) {
       input: input && typeof input === 'object' ? input : {},
       result,
       summary: result?.summary || {},
-      source_data_at: text(result?.player?.rosterSyncedAt) || null,
+      source_data_at: text(result?.sourceDataAt || result?.player?.rosterSyncedAt) || null,
       created_at: now().toISOString(),
     }]));
     if (!row?.id) throw httpError('The website action completed but its durable result could not be saved.', 502, 'WEB_ACTION_RESULT_NOT_SAVED');
@@ -234,7 +268,7 @@ export function createWebActionService(options = {}) {
     if (existing) return Object.freeze({ reused: true, publication: existing });
     const config = actionSharingConfig(env);
     if (!config.discordEnabled || !config.botToken) throw httpError('Discord action sharing is not enabled on this Command Center deployment.', 503, 'DISCORD_ACTION_SHARING_DISABLED');
-    const content = run.action_key === 'raid-max' ? raidMaxDiscordContent(run) : `SWGOH Command Center action: ${text(run.action_key)}`;
+    const content = discordActionContent(run);
     const response = await fetchImpl(`https://discord.com/api/v10/channels/${encodeURIComponent(destination.external_id)}/messages`, {
       method: 'POST',
       headers: { Authorization: `Bot ${config.botToken}`, 'Content-Type': 'application/json', Accept: 'application/json' },

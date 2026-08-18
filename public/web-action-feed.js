@@ -8,7 +8,7 @@ const dateTime = (value) => { const stamp = Date.parse(text(value)); return Numb
 
 function ensureCss() {
   if (document.querySelector('link[data-web-action-feed-css]')) return;
-  const link = document.createElement('link'); link.rel = 'stylesheet'; link.href = '/web-action-feed.css?v=20260818a'; link.dataset.webActionFeedCss = 'true'; document.head.appendChild(link);
+  const link = document.createElement('link'); link.rel = 'stylesheet'; link.href = '/web-action-feed.css?v=20260819a'; link.dataset.webActionFeedCss = 'true'; document.head.appendChild(link);
 }
 function currentAlly() {
   const query = digits(new URLSearchParams(location.search).get('allyCode'));
@@ -37,8 +37,15 @@ function raidMaxItem(item) {
   const attempts = Array.isArray(result.attempts) ? result.attempts : [];
   return `<article class="web-action-feed-item"><div class="web-action-feed-item-head"><div><div class="web-action-feed-kicker">RAID MAX · ORDER 66</div><h4>${escapeHtml(result.player?.name || 'Shared Raid Plan')}</h4></div><div><div class="web-action-feed-score">${compact(summary.recommendedMaxScoreCeiling)} validated ceiling</div><div class="web-action-feed-time">${escapeHtml(dateTime(item.publishedAt || item.run.createdAt))}</div></div></div><div class="web-action-feed-attempts">${attempts.slice(0,5).map((attempt)=>`<span class="web-action-feed-chip">#${Number(attempt.attempt||0)} ${escapeHtml(attempt.name)} · ${escapeHtml(attempt.difficulty?.requirement||'')} ${attempt.source==='roster-only-fallback'?'· fallback':''}</span>`).join('')}</div></article>`;
 }
+function tbFarmPlanItem(item) {
+  const result = item?.run?.result || {};
+  const summary = result.summary || item?.run?.summary || {};
+  const recommendations = Array.isArray(result.recommendations) ? result.recommendations : [];
+  return `<article class="web-action-feed-item"><div class="web-action-feed-item-head"><div><div class="web-action-feed-kicker">TB FARM PLAN · ROTE</div><h4>${escapeHtml(result.player?.name || 'Shared TB Farm Plan')}</h4><small>${escapeHtml(result.guild?.name || '')}</small></div><div><div class="web-action-feed-score">${Number(summary.doubleUseRows||0)} double-use farms</div><div class="web-action-feed-time">${escapeHtml(dateTime(item.publishedAt || item.run.createdAt))}</div></div></div><div class="web-action-feed-attempts">${recommendations.slice(0,6).map((row)=>`<span class="web-action-feed-chip">#${Number(row.rank||0)} ${escapeHtml(row.unitName||row.baseId)} · ${escapeHtml(row.tbTargetLabel||'')} · ${Number(row.tb?.missionImpact||0)} TB mission${Number(row.tb?.missionImpact||0)===1?'':'s'}${Number(row.journey?.activeOverlapCount||0)>0?` · ${Number(row.journey.activeOverlapCount)} Journey overlap`:''}</span>`).join('')}</div></article>`;
+}
 function itemHtml(item) {
   if (item?.run?.actionKey === 'raid-max') return raidMaxItem(item);
+  if (item?.run?.actionKey === 'tb-farm-plan') return tbFarmPlanItem(item);
   return `<article class="web-action-feed-item"><div class="web-action-feed-item-head"><div><div class="web-action-feed-kicker">COMMAND RESULT</div><h4>${escapeHtml(item?.run?.actionKey || 'Action')}</h4></div><div class="web-action-feed-time">${escapeHtml(dateTime(item?.publishedAt))}</div></div></article>`;
 }
 function feedHtml(title, subtitle, items) {
@@ -49,9 +56,7 @@ function playerAnchor() {
   if (profile && !profile.classList.contains('hidden')) return profile;
   return document.querySelector('main > .hero.card') || document.querySelector('.hero.card');
 }
-function guildAnchor() {
-  return document.getElementById('guildRouteContent');
-}
+function guildAnchor() { return document.getElementById('guildRouteContent'); }
 function removeExisting() { document.querySelector('[data-web-action-feed]')?.remove(); }
 async function renderPlayer(code) {
   const anchor = playerAnchor(); if (!anchor) return false;
@@ -59,9 +64,7 @@ async function renderPlayer(code) {
     const body = await requestJson(`/api/account/web-actions/feed/player/${code}`);
     removeExisting();
     anchor.insertAdjacentHTML('afterend', feedHtml(`${body.player?.name || 'Player'} Command Feed`, 'Results this player chose to publish from website-native tools.', body.items || []));
-  } catch (error) {
-    if (![401,403,404].includes(error.status)) console.warn('Player action feed unavailable', error);
-  }
+  } catch (error) { if (![401,403,404].includes(error.status)) console.warn('Player action feed unavailable', error); }
   return true;
 }
 async function renderGuild(code) {
@@ -70,22 +73,16 @@ async function renderGuild(code) {
     const body = await requestJson(`/api/account/web-actions/feed/guild/${code}`);
     removeExisting();
     anchor.insertAdjacentHTML('afterbegin', feedHtml(`${body.guild?.name || 'Guild'} Command Feed`, 'Website action results voluntarily shared by active Guild members.', body.items || []));
-  } catch (error) {
-    if (![401,403,404].includes(error.status)) console.warn('Guild action feed unavailable', error);
-  }
+  } catch (error) { if (![401,403,404].includes(error.status)) console.warn('Guild action feed unavailable', error); }
   return true;
 }
 async function render() {
   const path = location.pathname.replace(/\/+$/,'') || '/';
   const mode = path === '/' ? 'player' : path === '/guild' ? 'guild' : '';
   if (!mode) return;
-  let code = currentAlly();
-  if (code.length !== 9) code = await resolveAccountAlly();
-  if (code.length !== 9) return;
-  const key = `${mode}|${code}`;
-  if (state.lastKey === key && document.querySelector('[data-web-action-feed]')) return;
-  const done = mode === 'player' ? await renderPlayer(code) : await renderGuild(code);
-  if (done) state.lastKey = key;
+  let code = currentAlly(); if (code.length !== 9) code = await resolveAccountAlly(); if (code.length !== 9) return;
+  const key = `${mode}|${code}`; if (state.lastKey === key && document.querySelector('[data-web-action-feed]')) return;
+  const done = mode === 'player' ? await renderPlayer(code) : await renderGuild(code); if (done) state.lastKey = key;
 }
 function schedule(){clearTimeout(state.timer);state.timer=setTimeout(render,180);}
 function install(){ensureCss();schedule();new MutationObserver(()=>{const path=location.pathname.replace(/\/+$/,'')||'/';if(['/','/guild'].includes(path)&&!document.querySelector('[data-web-action-feed]'))schedule();}).observe(document.body,{childList:true,subtree:true});window.addEventListener('popstate',()=>{state.lastKey='';schedule();});window.addEventListener('swgoh:guild-command-snapshot',()=>{state.lastKey='';schedule();});}

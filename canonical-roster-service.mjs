@@ -110,6 +110,24 @@ export function createCanonicalRosterService(options = {}) {
     return catalogCache;
   }
 
+  async function getGameUnitCatalog() {
+    const catalog = await loadCatalog();
+    return Object.freeze(catalog.rows.map((row) => {
+      const metadata = asObject(row.metadata);
+      return Object.freeze({
+        baseId: clean(row.base_id),
+        name: clean(row.name || row.base_id),
+        unitType: normalizeUnitType(row.combat_type, row),
+        combatType: normalizeUnitType(row.combat_type, row) === "Ship" ? 2 : 1,
+        alignment: clean(row.alignment || "Unknown"),
+        categories: Object.freeze(asArray(row.categories).map(clean).filter(Boolean)),
+        factions: Object.freeze(asArray(metadata.factions).map(clean).filter(Boolean)),
+        image: clean(row.image_url || metadata.image),
+        catalogVersion: clean(row.catalog_version),
+      });
+    }));
+  }
+
   function normalizeOwnedUnit(row = {}, catalog = {}) {
     const metadata = asObject(row.metadata);
     const catalogMetadata = asObject(catalog.metadata);
@@ -403,6 +421,7 @@ export function createCanonicalRosterService(options = {}) {
 
   return Object.freeze({
     status,
+    getGameUnitCatalog,
     getPlayerRoster,
     getGuildRosterByPlayer,
     _selectPaged: selectPaged,
