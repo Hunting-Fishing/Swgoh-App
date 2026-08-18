@@ -83,6 +83,17 @@ export function createGacApi({ requestGateway, writeJson, history = gacHistorySe
         return true;
       }
 
+      const bracketByPlayerMatch = url.pathname.match(/^\/api\/gac\/bracket\/by-player\/(\d{9})$/);
+      if (bracketByPlayerMatch) {
+        try {
+          const body = await requestGateway(`/v1/gac/bracket/by-player/${bracketByPlayerMatch[1]}`, true);
+          writeJson(response, 200, body, { "X-GAC-Source": body?.source || "comlink-live" });
+        } catch (error) {
+          writeError(writeJson, response, error, "The player's live GAC bracket is unavailable.");
+        }
+        return true;
+      }
+
       const bracketMatch = url.pathname.match(/^\/api\/gac\/bracket\/(KYBER|AURODIUM|CHROMIUM|BRONZIUM|CARBONITE)\/(\d+)$/i);
       if (bracketMatch) {
         const league = bracketMatch[1].toUpperCase();
