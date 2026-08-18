@@ -41,8 +41,10 @@ test('Raid Max builds up to five non-overlapping validated routes and prefers st
 });
 
 test('route difficulty is capped by both roster progression and documented route ceiling', () => {
-  const lower = structuredClone(roster);
-  lower.units = lower.units.map((row) => row.baseId === 'SCORCH' ? { ...row, relic: 7 } : row);
+  const lower = {
+    player: roster.player,
+    units: [unit('Grand Moff Tarkin','TARKIN',{relic:9}), unit('RC-1262 “Scorch”','SCORCH',{relic:7})],
+  };
   const result = buildOrder66RaidMax(lower, { maxAttempts: 1 });
   assert.equal(result.attempts[0].name, 'Tarkin + Scorch');
   assert.equal(result.attempts[0].difficulty.requirement, 'R7');
