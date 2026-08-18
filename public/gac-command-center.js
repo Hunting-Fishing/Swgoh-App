@@ -60,12 +60,13 @@ async function fetchRoster(code) {
 }
 
 function playerCard(summary, side) {
+  const datacrons = summary.datacrons == null ? "" : ` · ${number.format(summary.datacrons)} datacrons`;
   return `
     <article class="gac-player-card ${side === "opponent" ? "enemy" : ""}">
       <span class="label">${side === "opponent" ? "Opponent" : "Your roster"}</span>
       <h4>${escapeHtml(summary.name)}</h4>
       <div class="rating">${escapeHtml(summary.league)} ${escapeHtml(summary.division)} · ${number.format(summary.skillRating || 0)} SR</div>
-      <div class="gac-counter-meta">${number.format(summary.gp)} GP · ${number.format(summary.relicUnits)} relic characters · ${number.format(summary.omicrons)} omicrons · ${number.format(summary.zetas)} zetas</div>
+      <div class="gac-counter-meta">${number.format(summary.gp)} GP · ${number.format(summary.relicUnits)} relic characters · ${number.format(summary.omicrons)} omicrons · ${number.format(summary.zetas)} zetas${escapeHtml(datacrons)}</div>
     </article>`;
 }
 
@@ -77,6 +78,9 @@ function renderComparison() {
   const output = byId("gacComparison");
   if (!output || !state.mine || !state.opponent) return;
   const comparison = compareRosters(state.mine, state.opponent);
+  const datacronDelta = comparison.delta.datacrons == null
+    ? `<div class="gac-delta"><span>Datacrons</span><strong class="gac-neutral">N/A</strong></div>`
+    : deltaCard("Datacron count", comparison.delta.datacrons);
   output.innerHTML = `
     <div class="gac-versus">
       ${playerCard(comparison.left, "mine")}
@@ -94,6 +98,7 @@ function renderComparison() {
       ${deltaCard("R9+", comparison.delta.r9Plus)}
       ${deltaCard("6-dot mods", comparison.delta.sixDotMods)}
       ${deltaCard("Top speed", comparison.delta.topSpeed)}
+      ${datacronDelta}
       ${deltaCard("Character GP", comparison.delta.characterGp)}
       ${deltaCard("Roster index", comparison.delta.combatValue)}
     </div>`;
@@ -196,13 +201,20 @@ function renderDefensePicker() {
 }
 
 function heuristicCounterCard(result, index) {
+  const ability = result?.abilityReadiness?.known
+    ? `${number.format(n(result.abilityReadiness.score))}% ability readiness`
+    : "ability evidence incomplete";
+  const risk = Array.isArray(result?.riskFlags) && result.riskFlags.length
+    ? result.riskFlags.map((flag) => String(flag).replace(/-/g, " ")).join(" · ")
+    : "no major heuristic risk flags";
   return `
     <article class="gac-counter-card">
       <div class="gac-counter-head"><strong>#${index + 1} ${escapeHtml(result.confidence)}</strong><span>${number.format(result.score)}</span></div>
       <div class="gac-counter-units">${result.squad.map((unit) => `<span title="${escapeAttr(unit.name)}">${image(unit)}</span>`).join("")}</div>
       <div class="gac-counter-meta">
         ${result.squad.map((unit) => escapeHtml(unit.name)).join(" · ")}<br>
-        Relic Δ ${formatSigned(result.relicDelta)} · Speed edge ${formatSigned(result.speedEdge)} · Omicron Δ ${formatSigned(result.omicronEdge)} · Zeta Δ ${formatSigned(result.zetaEdge)}
+        Relic Δ ${formatSigned(result.relicDelta)} · Fastest ${formatSigned(result.speedEdge)} · Omicron Δ ${formatSigned(result.omicronEdge)} · Zeta Δ ${formatSigned(result.zetaEdge)}<br>
+        ${escapeHtml(result?.speedProfile?.label || "Speed evidence incomplete")} · ${escapeHtml(ability)} · ${escapeHtml(risk)}
       </div>
     </article>`;
 }
@@ -252,7 +264,7 @@ async function renderCounters() {
     ? `<div class="workspace-note"><strong>Historical evidence</strong> · exact owned counter squads ranked by conservative win rate, sample size, banners and composition match.</div>${evidence.slice(0, 8).map(evidenceCounterCard).join("")}`
     : `<div class="workspace-note">No imported historical evidence matches this full defense yet. Showing roster-fit fallbacks without claiming a historical win rate.</div>`;
   const fallbackHtml = heuristic.length
-    ? `<div class="workspace-note"><strong>Roster-fit fallback</strong> · derived from your relics, speed, zetas, omicrons and squad synergy.</div>${heuristic.slice(0, 8).map(heuristicCounterCard).join("")}`
+    ? `<div class="workspace-note"><strong>Roster-fit fallback</strong> · derived from your relics, speed profile, ability readiness, zetas, omicrons and squad synergy. Speed/ability warnings are heuristics, not counter-specific minimum requirements.</div>${heuristic.slice(0, 8).map(heuristicCounterCard).join("")}`
     : `<div class="workspace-note">No roster-fit squads met the current eligibility filter.</div>`;
   output.innerHTML = `${evidenceHtml}${fallbackHtml}`;
 }
@@ -372,7 +384,7 @@ function mountMarkup(host) {
       <div>
         <div class="kicker">GAC TACTICAL COMMAND</div>
         <h3>Player vs Player · Roster Delta · Counter Planner</h3>
-        <p>Compare both live public rosters, inspect relic/omicron/zeta/ability progression, mark the defense actually placed on the board, then rank counter squads that exist in your roster.</p>
+        <p>Compare both live public rosters, inspect relic/omicron/zeta/ability progression and datacron counts, mark the defense actually placed on the board, then rank counter squads that exist in your roster.</p>
       </div>
       <div id="gacLiveChip" class="gac-live-chip">CHECKING GAC EVENT…</div>
     </div>
@@ -405,9 +417,9 @@ function mountMarkup(host) {
     </section>
 
     <section class="gac-section">
-      <div class="gac-section-heading"><div><h4>Counter Squad Intelligence</h4><p>Historical evidence wins when available; otherwise the system falls back to your actual roster's relic, speed, zeta, omicron and synergy profile.</p></div></div>
+      <div class="gac-section-heading"><div><h4>Counter Squad Intelligence</h4><p>Historical evidence wins when available; otherwise the system falls back to your actual roster's relics, speed profile, ability readiness, zetas, omicrons and squad synergy.</p></div></div>
       <div id="gacCounterGrid" class="gac-counter-grid"><div class="workspace-note">Select an enemy defense squad to calculate counters.</div></div>
-      <div class="gac-warning">Historical win rates are shown only when imported evidence exists. Roster-fit suggestions remain explicitly labeled as fallbacks. Datacron-specific evidence is stored separately and will be applied only when its source and matchup context are known.</div>
+      <div class="gac-warning">Historical win rates are shown only when imported evidence exists. Roster-fit suggestions remain explicitly labeled as heuristics. The live gateway currently exposes datacron counts, not individual datacron bonuses, so bonus compatibility is not guessed.</div>
     </section>
 
     <section class="gac-section">
