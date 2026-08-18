@@ -1,3 +1,4 @@
+import "./gac-datacron-counter-eligibility.js";
 import { loadDatacronCatalog, resolveAffix, resolveDatacron } from "./gac-datacron-catalog.js";
 
 const number = new Intl.NumberFormat("en-US");
