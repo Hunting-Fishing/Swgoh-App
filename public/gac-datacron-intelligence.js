@@ -1,3 +1,5 @@
+import { loadDatacronCatalog, resolveAffix, resolveDatacron } from "./gac-datacron-catalog.js";
+
 const number = new Intl.NumberFormat("en-US");
 const state = { requestId: 0 };
 
@@ -58,12 +60,25 @@ function metric(label, value) {
   return `<div class="gac-datacron-metric"><span>${escapeHtml(label)}</span><strong>${value == null ? "N/A" : number.format(value)}</strong></div>`;
 }
 
-function setLine(sets = {}) {
-  const entries = Object.entries(sets).sort((a, b) => Number(b[0]) - Number(a[0]));
-  return entries.length ? entries.map(([setId, count]) => `Set ${escapeHtml(setId)} ×${number.format(count)}`).join(" · ") : "No set IDs exposed";
+function dateLabel(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.valueOf())) return "";
+  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(date);
 }
 
-function sideCard(body, label, enemy = false) {
+function setLine(sets = {}, catalog = null) {
+  const entries = Object.entries(sets).sort((a, b) => Number(b[0]) - Number(a[0]));
+  if (!entries.length) return "No set IDs exposed";
+  return entries.map(([setId, count]) => {
+    const resolved = catalog?.sets?.get(String(setId));
+    const title = resolved?.displayName || `Set ${setId}`;
+    const expiry = dateLabel(resolved?.expirationTime);
+    return `${title} ×${number.format(count)}${expiry ? ` · expires ${expiry}` : ""}`;
+  }).join(" · ");
+}
+
+function sideCard(body, label, enemy = false, catalog = null) {
   const stats = summary(body);
   if (!stats.known) {
     return `<article class="gac-datacron-side ${enemy ? "enemy" : ""}"><strong>${escapeHtml(label)}</strong><div class="gac-datacron-unknown">Detailed datacron inventory is not exposed by this live roster response. No zero-value assumption is used.</div></article>`;
@@ -79,8 +94,8 @@ function sideCard(body, label, enemy = false) {
       ${metric("Rerolled", stats.rerolled)}
       ${metric("Ability affixes", stats.abilityAffixes)}
     </div>
-    <div class="gac-datacron-setline">${escapeHtml(setLine(stats.sets))}</div>
-    ${inventoryGrid(body)}
+    <div class="gac-datacron-setline">${escapeHtml(setLine(stats.sets, catalog))}</div>
+    ${inventoryGrid(body, catalog)}
   </article>`;
 }
 
@@ -90,18 +105,50 @@ function importantAffixes(item) {
     .slice(0, 5);
 }
 
-function affixLabel(affix, index) {
+function meaningfulTargetLabels(targetRule) {
+  if (!targetRule) return [];
+  const ignored = new Set(["Targeting Sets Exclude", "Any Obtainable"]);
+  return (targetRule.includeLabels || []).filter((label) => label && !ignored.has(label));
+}
+
+function affixLabel(affix, index, catalog = null) {
   const tier = Number.isInteger(Number(affix?.tier)) ? Number(affix.tier) : index + 1;
   const ability = clean(affix?.abilityId);
   const target = clean(affix?.targetRule);
   const statType = Number.isFinite(Number(affix?.statType)) ? Number(affix.statType) : null;
-  if (ability) return `L${tier} ability · ${ability}`;
-  if (target) return `L${tier} target · ${target}`;
-  if (statType !== null) return `L${tier} stat ${statType}`;
+  const resolved = catalog ? resolveAffix(affix, catalog) : null;
+  const targetLabels = meaningfulTargetLabels(resolved?.targetRule);
+  const eligibility = targetLabels.length ? targetLabels.join(" + ") : "";
+
+  if (ability) {
+    const scope = eligibility || resolved?.scopeLabel || (target ? target : "eligible units");
+    return `L${tier} · ${scope} · ability ${ability}`;
+  }
+  if (resolved?.scopeLabel) {
+    return `L${tier} · ${resolved.scopeLabel}${eligibility ? ` · ${eligibility}` : ""}`;
+  }
+  if (target) return `L${tier} · ${eligibility || target}`;
+  if (statType !== null) return `L${tier} · stat ${statType}`;
   return `L${tier} affix`;
 }
 
-function inventoryGrid(body) {
+function datacronTitle(item, catalog = null) {
+  const resolved = catalog ? resolveDatacron(item, catalog) : null;
+  const setName = resolved?.set?.displayName || `Set ${item.setId ?? "?"}`;
+  return `${setName} · L${n(item.level)}`;
+}
+
+function datacronMeta(item, catalog = null) {
+  const resolved = catalog ? resolveDatacron(item, catalog) : null;
+  const parts = [item.rerollCount == null ? "Rerolls unknown" : `${number.format(item.rerollCount)} rerolls`];
+  const expiry = dateLabel(resolved?.set?.expirationTime);
+  if (expiry) parts.push(`expires ${expiry}`);
+  if (resolved?.template?.requiredRelicTier != null) parts.push(`template R${number.format(resolved.template.requiredRelicTier)} gate`);
+  parts.push(item.templateId || item.id || "instance ID unavailable");
+  return parts.join(" · ");
+}
+
+function inventoryGrid(body, catalog = null) {
   const value = inventory(body);
   if (!value.known || !value.items.length) return "";
   const strongest = [...value.items]
@@ -110,9 +157,9 @@ function inventoryGrid(body) {
   return `<div class="gac-datacron-inventory">${strongest.map((item) => {
     const affixes = importantAffixes(item);
     return `<div class="gac-datacron-card">
-      <div class="gac-datacron-card-head"><strong>Set ${escapeHtml(item.setId ?? "?")} · L${n(item.level)}</strong><span>${item.locked ? "LOCKED" : "LIVE"}</span></div>
-      <small>${item.rerollCount == null ? "Rerolls unknown" : `${number.format(item.rerollCount)} rerolls`} · ${escapeHtml(item.templateId || item.id || "instance ID unavailable")}</small>
-      ${affixes.length ? `<div class="gac-datacron-affixes">${affixes.map((affix, index) => `<span class="gac-datacron-affix" title="Raw Comlink/game ID; description not resolved yet">${escapeHtml(affixLabel(affix, index))}</span>`).join("")}</div>` : ""}
+      <div class="gac-datacron-card-head"><strong>${escapeHtml(datacronTitle(item, catalog))}</strong><span>${item.locked ? "LOCKED" : "LIVE"}</span></div>
+      <small>${escapeHtml(datacronMeta(item, catalog))}</small>
+      ${affixes.length ? `<div class="gac-datacron-affixes">${affixes.map((affix, index) => `<span class="gac-datacron-affix" title="${escapeHtml(catalog ? "Resolved from current public game-data where exact; raw ability ID retained because ability prose is not yet resolved." : "Raw Comlink/game ID; catalog unavailable.")}">${escapeHtml(affixLabel(affix, index, catalog))}</span>`).join("")}</div>` : ""}
     </div>`;
   }).join("")}</div>`;
 }
@@ -136,21 +183,28 @@ function renderLoading() {
   panel.innerHTML = `<div class="gac-datacron-heading"><div><div class="kicker">DATACRON INTELLIGENCE</div><h4>Loading live inventories…</h4></div><span class="gac-datacron-truth">RAW LIVE EVIDENCE</span></div>`;
 }
 
-function render(mine, opponent) {
+function catalogVersionLabel(catalog) {
+  if (!catalog) return "CATALOG OFFLINE";
+  const version = Object.values(catalog.versions || {}).find(Boolean);
+  if (!version) return catalog.versionAligned ? "CATALOG LOADED" : "CATALOG PARTIAL";
+  return catalog.versionAligned ? `CATALOG ${version.split(":")[0]}` : "CATALOG VERSION MISMATCH";
+}
+
+function render(mine, opponent, catalog = null) {
   const panel = ensurePanel();
   if (!panel) return;
   const known = Array.isArray(mine?.datacrons) && Array.isArray(opponent?.datacrons);
   panel.innerHTML = `
     <div class="gac-datacron-heading">
-      <div><div class="kicker">DATACRON INTELLIGENCE</div><h4>Owned Datacrons · Level 3 / 6 / 9</h4><p>Live Comlink instance evidence. Raw target-rule and ability IDs stay unresolved until the game-data catalog layer is connected.</p></div>
-      <span class="gac-datacron-truth">${known ? "DETAILS VERIFIED" : "PARTIAL EVIDENCE"}</span>
+      <div><div class="kicker">DATACRON INTELLIGENCE</div><h4>Owned Datacrons · Level 3 / 6 / 9</h4><p>Live Comlink instances plus shared public game-data. Eligibility and stat scope resolve only when an exact catalog match exists; raw ability IDs remain visible until bonus prose/mechanics are proven.</p></div>
+      <span class="gac-datacron-truth">${known ? "DETAILS VERIFIED" : "PARTIAL EVIDENCE"} · ${escapeHtml(catalogVersionLabel(catalog))}</span>
     </div>
     <div class="gac-datacron-sides">
-      ${sideCard(mine, mine?.player?.name || "Your roster")}
+      ${sideCard(mine, mine?.player?.name || "Your roster", false, catalog)}
       <div class="gac-datacron-vs">VS</div>
-      ${sideCard(opponent, opponent?.player?.name || "Opponent", true)}
+      ${sideCard(opponent, opponent?.player?.name || "Opponent", true, catalog)}
     </div>
-    <div class="gac-datacron-footnote">No combat-value or counter bonus is assigned from raw statType, statValue, targetRule, abilityId, or rerollIndex yet. Those values are preserved as evidence only.</div>`;
+    <div class="gac-datacron-footnote">Set metadata, scope icons and target eligibility are resolved from the versioned public game-data catalog when available. No combat-value or counter bonus is assigned from abilityId, targetRule, statValue or rerollIndex yet.</div>`;
 }
 
 function renderError(message) {
@@ -166,12 +220,14 @@ async function refresh() {
   const requestId = ++state.requestId;
   renderLoading();
   try {
-    const [mine, opponent] = await Promise.all([
+    const catalogPromise = loadDatacronCatalog().catch(() => null);
+    const [mine, opponent, catalog] = await Promise.all([
       fetchJson(`/api/player/${mineCode}`),
       fetchJson(`/api/player/${opponentCode}`),
+      catalogPromise,
     ]);
     if (requestId !== state.requestId) return;
-    render(mine, opponent);
+    render(mine, opponent, catalog);
   } catch (error) {
     if (requestId !== state.requestId) return;
     renderError(error?.message || "Detailed datacron inventory could not be loaded.");
@@ -190,7 +246,7 @@ function updateLegacyWarning() {
   const warning = byId("gacCommandCenterPro")?.querySelector(".gac-warning");
   if (!warning || warning.dataset.datacronUpdated === "true") return;
   warning.dataset.datacronUpdated = "true";
-  warning.textContent = "Historical win rates are shown only when imported evidence exists. Roster-fit suggestions remain explicitly labeled as heuristics. Public live datacron instance details are displayed when exposed, but raw ability/target/stat IDs are not converted into counter strength until their game-data definitions are resolved.";
+  warning.textContent = "Historical win rates are shown only when imported evidence exists. Roster-fit suggestions remain explicitly labeled as heuristics. Public live datacron instances can be enriched with exact set/stat/eligibility catalog matches, but raw ability IDs are not converted into counter strength until their mechanics are resolved.";
 }
 
 function ensureBound() {
