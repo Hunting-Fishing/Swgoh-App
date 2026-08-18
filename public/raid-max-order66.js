@@ -199,7 +199,9 @@ function fallbackAttempts(eligibleUnits, usedKeys, count) {
 
 export function buildOrder66RaidMax(roster = {}, options = {}) {
   const maxAttempts = Math.max(1, Math.min(5, Math.trunc(finite(options.maxAttempts, 5))));
-  const owned = asArray(roster.units).filter((unit) => order66EligibilityEvidence(unit).allowed);
+  const owned = asArray(roster.units)
+    .filter((unit) => finite(unit.stars) >= 5)
+    .filter((unit) => order66EligibilityEvidence(unit).allowed);
   const candidates = candidateRoutes(owned);
   const recommended = bestRouteSet(candidates, maxAttempts);
   const used = new Set(recommended.flatMap((route) => route.unitKeys));
