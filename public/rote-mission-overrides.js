@@ -7,6 +7,10 @@ import {
   ROTE_TACTICAL_P3_SOURCE,
   roteTacticalP3Override,
 } from "./rote-tactical-p3-data.js";
+import {
+  ROTE_TACTICAL_P4_SOURCE,
+  roteTacticalP4Override,
+} from "./rote-tactical-p4-data.js";
 
 const CANONICAL_BASE_IDS = Object.freeze({
   BOKATANMANDALORE: "MANDALORBOKATAN",
@@ -133,6 +137,7 @@ export function normalizeRoteMission(mission = {}) {
 
   applyTacticalOverride(next, roteTacticalP1P2Override(next.id), ROTE_TACTICAL_P1_P2_SOURCE);
   applyTacticalOverride(next, roteTacticalP3Override(next.id), ROTE_TACTICAL_P3_SOURCE);
+  applyTacticalOverride(next, roteTacticalP4Override(next.id), ROTE_TACTICAL_P4_SOURCE);
 
   if (next.id === "tatooine-mandalore-unlock") {
     next.name = "Unlock Mandalore · Krayt Dragon";
