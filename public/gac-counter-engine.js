@@ -283,4 +283,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
   import("./gac-live-matchup-enhancer.js").catch((error) => {
     console.warn("GAC live matchup enhancer failed to load", error);
   });
+  import("./gac-bracket-fallback.js").catch((error) => {
+    console.warn("GAC live bracket fallback failed to load", error);
+  });
 }
