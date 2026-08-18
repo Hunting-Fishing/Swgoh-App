@@ -16,6 +16,11 @@ test('Guild Operations route loads member control drawer', () => {
   assert.match(ui, /Guild Member Command Drawer/);
 });
 
+test('member directory searches by name without treating an empty digit query as an Ally Code match-all', () => {
+  assert.match(ui, /const codeQuery = digits\(raw\)/);
+  assert.match(ui, /Boolean\(codeQuery && digits\(row\.allyCode\)\.includes\(codeQuery\)\)/);
+});
+
 test('drawer writes availability and GIVE KEEP through the existing canonical Guild Operations endpoints', () => {
   assert.match(ui, /writeApi\('\/member-control'\)/);
   assert.match(ui, /writeApi\('\/donation-preference'\)/);
