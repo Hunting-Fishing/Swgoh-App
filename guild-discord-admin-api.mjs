@@ -1,4 +1,5 @@
 import { guildDiscordAdminService } from './guild-discord-admin-service.mjs';
+import { guildIntegrationReportService } from './guild-integration-report-service.mjs';
 import { supabaseAuthSession } from './supabase-auth-session.mjs';
 
 const text = (value) => String(value ?? '').trim();
@@ -23,15 +24,17 @@ function writeJson(response, status, body) {
 export function createGuildDiscordAdminApi(options = {}) {
   const session = options.session || supabaseAuthSession;
   const service = options.service || guildDiscordAdminService;
+  const integration = options.integration || guildIntegrationReportService;
   async function handle(request, response, url) {
     if (!url.pathname.startsWith('/api/account/guild-discord-admin/')) return false;
     try {
       const user = await session.currentUser(request);
       if (!user?.id) throw httpError('A signed-in Command Center session is required.', 401, 'AUTH_REQUIRED');
-      const match = url.pathname.match(/^\/api\/account\/guild-discord-admin\/(\d{9})(?:\/(status|verify-channel|unverify-channel|match-guildmates))?$/);
+      const match = url.pathname.match(/^\/api\/account\/guild-discord-admin\/(\d{9})(?:\/(status|integration-report|verify-channel|unverify-channel|match-guildmates))?$/);
       if (!match) throw httpError('A valid Guild lookup Ally Code is required.', 400, 'INVALID_ALLY_CODE');
       const code = match[1]; const action = match[2] || 'status';
       if (request.method === 'GET' && action === 'status') { writeJson(response, 200, await service.status(user.id, code)); return true; }
+      if (request.method === 'GET' && action === 'integration-report') { writeJson(response, 200, await integration.report(user.id, code)); return true; }
       if (!sameOrigin(request)) throw httpError('Cross-origin Discord administration write rejected.', 403, 'CROSS_ORIGIN_REJECTED');
       if (request.method !== 'POST') throw httpError('Method not allowed for Discord administration route.', 405, 'METHOD_NOT_ALLOWED');
       const body = await readBody(request);
