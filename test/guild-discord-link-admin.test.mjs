@@ -23,6 +23,7 @@ function operationsFixture() {
 
 function serviceFixture(overrides = {}) {
   const writes = { links: [], unlinks: [], audits: [] };
+  const auditInsertFails = overrides.auditInsertFails === true;
   const players = [
     { id: 'db-alpha', ally_code: '111222333', swgoh_player_id: 'live-alpha', name: 'Alpha', current_guild_id: guildId },
     { id: 'db-bravo', ally_code: '444555666', swgoh_player_id: 'live-bravo', name: 'Bravo', current_guild_id: guildId },
@@ -46,12 +47,16 @@ function serviceFixture(overrides = {}) {
       }
       if (table === 'guild_members_current') {
         const target = String(query.player_id || '').replace(/^eq\./, '');
+        if (!target) return players.map((row) => ({ player_id: row.id }));
         return players.some((row) => row.id === target) ? [{ player_id: target }] : [];
       }
       return [];
     },
     async insert(table, rows) {
-      if (table === 'guild_operations_audit_log') writes.audits.push(...rows);
+      if (table === 'guild_operations_audit_log') {
+        if (auditInsertFails) throw new Error('secondary audit unavailable');
+        writes.audits.push(...rows);
+      }
       return rows;
     },
   };
@@ -94,6 +99,7 @@ function serviceFixture(overrides = {}) {
       fetch: defaultFetch,
       now: () => new Date('2026-08-18T13:00:00Z'),
       ...overrides,
+      store,
     }),
   };
 }
@@ -126,6 +132,8 @@ test('manual link requires both a current canonical Guild player and current Dis
   assert.equal(result.discordMemberPresent, true);
   assert.equal(result.swgohAllyCode, '444555666');
   assert.equal(result.playerName, 'Bravo');
+  assert.equal(result.auditRecorded, true);
+  assert.equal(result.durableAuditRecorded, true);
   assert.equal(writes.links.length, 1);
   assert.equal(writes.links[0].playerId, 'live-bravo');
   assert.equal(writes.links[0].actorDiscordUserId, '');
@@ -158,9 +166,20 @@ test('manual unlink uses durable unlink semantics and records the web officer au
   const result = await service.unlink('web-officer', '732764286', { discordUserId: user1 });
   assert.equal(result.removed, true);
   assert.equal(result.swgohAllyCode, '111222333');
+  assert.equal(result.auditRecorded, true);
+  assert.equal(result.durableAuditRecorded, true);
   assert.equal(writes.unlinks.length, 1);
   assert.equal(writes.audits.at(-1).action, 'discord-player-link.manual-unlink');
   assert.equal(writes.audits.at(-1).entity_type, 'discord_player_link');
+});
+
+test('secondary Supabase audit failure never reports a completed durable link as failed', async () => {
+  const { service, writes } = serviceFixture({ auditInsertFails: true });
+  const result = await service.link('web-officer', '732764286', { discordUserId: user2, swgohAllyCode: '444555666' });
+  assert.equal(writes.links.length, 1, 'durable state mutation completed');
+  assert.equal(result.currentGuildMember, true);
+  assert.equal(result.auditRecorded, false);
+  assert.equal(result.durableAuditRecorded, true);
 });
 
 test('link inventory does not falsely mark Discord presence stale when bot membership lookup is unavailable', async () => {
