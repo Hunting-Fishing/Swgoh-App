@@ -14,11 +14,34 @@ function escapeHtml(value) {
 }
 function escapeAttr(value) { return escapeHtml(value); }
 function formatAllyCode(value) { return allyCode(value).replace(/(\d{3})(?=\d)/g, "$1-"); }
+function validRound(value) {
+  const round = Number(value);
+  return Number.isInteger(round) && round >= 1 && round <= 3 ? round : null;
+}
 
 async function fetchJson(pathname) {
   const response = await fetch(pathname, { headers: { Accept: "application/json" } });
   const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(body?.error || `Request failed with HTTP ${response.status}.`);
+  if (!response.ok) {
+    const error = new Error(body?.error || `Request failed with HTTP ${response.status}.`);
+    error.status = response.status;
+    throw error;
+  }
+  return body;
+}
+
+async function postJson(pathname, payload) {
+  const response = await fetch(pathname, {
+    method: "POST",
+    headers: { Accept: "application/json", "Content-Type": "application/json" },
+    body: JSON.stringify(payload || {}),
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const error = new Error(body?.error || `Request failed with HTTP ${response.status}.`);
+    error.status = response.status;
+    throw error;
+  }
   return body;
 }
 
@@ -26,7 +49,7 @@ function injectStylesheet() {
   if (document.querySelector('link[data-gac-bracket-fallback="true"]')) return;
   const link = document.createElement("link");
   link.rel = "stylesheet";
-  link.href = "/gac-bracket-fallback.css?v=20260819-gac-bracket2";
+  link.href = "/gac-bracket-fallback.css?v=20260819-gac-confirm3";
   link.dataset.gacBracketFallback = "true";
   document.head.append(link);
 }
@@ -62,6 +85,20 @@ function selectOpponent(entry, options = {}) {
   return true;
 }
 
+function syncRoundControl() {
+  const select = byId("gacBracketRound");
+  if (!select) return;
+  const exact = state.bracket?.opponentResolution?.exact === true;
+  const serverRound = validRound(state.bracket?.opponentResolution?.round);
+  if (serverRound) select.value = String(serverRound);
+  select.disabled = exact || Boolean(serverRound);
+  const source = byId("gacBracketRoundSource");
+  if (!source) return;
+  if (exact) source.textContent = "PAIRING LOCKED";
+  else if (serverRound) source.textContent = "ROUND FROM LIVE CONTEXT";
+  else source.textContent = "SELECT ROUND TO SAVE PAIRING";
+}
+
 function exactOpponentCard(bracket) {
   const entry = bracket?.currentOpponent;
   const resolution = bracket?.opponentResolution || {};
@@ -94,6 +131,7 @@ function renderBracket() {
     meta.textContent = "Resolve your live bracket. Exact current opponent is only auto-selected when event and round evidence match; otherwise choose the player shown in-game.";
     if (truth) truth.textContent = "PUBLIC DATA · NO GUESSING";
     output.innerHTML = `<div class="workspace-note">No bracket loaded yet.</div>`;
+    syncRoundControl();
     return;
   }
 
@@ -106,12 +144,13 @@ function renderBracket() {
     meta.textContent = `${bracket.league || "GAC"} · bracket ${Number(bracket.bracketIndex ?? 0)} · Round ${round || "?"} exact opponent resolved · ${source}`;
     if (truth) truth.textContent = "EXACT PAIRING · EVIDENCE MATCH";
   } else {
-    meta.textContent = `${bracket.league || "GAC"} · bracket ${Number(bracket.bracketIndex ?? 0)} · ${opponents.length} other bracket players · ${source} · exact current pairing not exposed`;
-    if (truth) truth.textContent = "PUBLIC DATA · NO GUESSING";
+    meta.textContent = `${bracket.league || "GAC"} · bracket ${Number(bracket.bracketIndex ?? 0)} · ${opponents.length} other bracket players · ${source} · public data does not expose the exact pairing`;
+    if (truth) truth.textContent = "PUBLIC DATA · CONFIRM TO LOCK";
   }
 
   if (!opponents.length && !exact) {
     output.innerHTML = `<div class="workspace-note">Your bracket was found, but no opponent profiles were returned.</div>`;
+    syncRoundControl();
     return;
   }
 
@@ -139,8 +178,55 @@ function renderBracket() {
   output.innerHTML = `${exactHtml}${exact ? `<div class="gac-bracket-divider">OTHER PLAYERS IN THIS 8-PLAYER BRACKET</div>` : ""}${listHtml}`;
   output.querySelector('[data-exact-opponent="true"]')?.addEventListener("click", () => selectOpponent(bracket.currentOpponent, { forceSubmit: true }));
   output.querySelectorAll(".gac-bracket-select[data-bracket-opponent]").forEach((button) => {
-    button.addEventListener("click", () => selectOpponent(opponents[Number(button.dataset.bracketOpponent)], { forceSubmit: true }));
+    button.addEventListener("click", () => void useOpponent(opponents[Number(button.dataset.bracketOpponent)]));
   });
+  syncRoundControl();
+}
+
+async function confirmOpponent(entry) {
+  const ownCode = allyCode(byId("allyCode")?.value);
+  const opponentCode = allyCode(entry?.allyCode);
+  const round = validRound(byId("gacBracketRound")?.value);
+  if (!ownCode || !opponentCode || !round) return null;
+
+  const result = await postJson(`/api/gac/current-opponent/${ownCode}/confirm`, {
+    opponentAllyCode: opponentCode,
+    round,
+  });
+  state.bracket = {
+    ...state.bracket,
+    currentOpponent: result.opponent,
+    opponentResolution: result.resolution,
+  };
+  state.autoSelectedKey = `${result.resolution?.eventInstanceId || ""}|${result.resolution?.round || ""}|${opponentCode}`;
+  renderBracket();
+  return result;
+}
+
+async function useOpponent(entry) {
+  const selected = selectOpponent(entry, { forceSubmit: true });
+  if (!selected || state.bracket?.opponentResolution?.exact === true) return;
+
+  const round = validRound(byId("gacBracketRound")?.value);
+  if (!round) {
+    setError("Matchup loaded. Select the current Round 1, 2, or 3 first if you want Command Center to save this as the exact current pairing.");
+    return;
+  }
+
+  try {
+    setError("");
+    await confirmOpponent(entry);
+  } catch (error) {
+    if (Number(error?.status) === 401) {
+      setError("Matchup loaded. Sign in with the verified owner account to save this pairing for automatic resolution next time.");
+      return;
+    }
+    if (Number(error?.status) === 403) {
+      setError("Matchup loaded, but this signed-in account has not verified ownership of the loaded Ally Code, so the pairing was not saved.");
+      return;
+    }
+    setError(`Matchup loaded, but the exact pairing was not saved: ${error?.message || "confirmation failed"}`);
+  }
 }
 
 function autoSelectExactOpponent() {
@@ -205,7 +291,19 @@ function mount() {
         <h4>Opponent Discovery</h4>
         <p id="gacBracketMeta">Resolve your live bracket. Exact current opponent is only auto-selected when event and round evidence match; otherwise choose the player shown in-game.</p>
       </div>
-      <span class="gac-bracket-truth">PUBLIC DATA · NO GUESSING</span>
+      <div class="gac-bracket-controls">
+        <label class="gac-bracket-round-control">
+          <span>CURRENT ROUND</span>
+          <select id="gacBracketRound">
+            <option value="">Select</option>
+            <option value="1">Round 1</option>
+            <option value="2">Round 2</option>
+            <option value="3">Round 3</option>
+          </select>
+          <small id="gacBracketRoundSource">SELECT ROUND TO SAVE PAIRING</small>
+        </label>
+        <span class="gac-bracket-truth">PUBLIC DATA · NO GUESSING</span>
+      </div>
     </div>
     <div id="gacBracketError" class="gac-error gac-hidden"></div>
     <div id="gacBracketGrid" class="gac-bracket-grid"><div class="workspace-note">No bracket loaded yet.</div></div>`;
@@ -224,6 +322,8 @@ function ensureMounted() {
     state.loadedFor = "";
     state.bracket = null;
     state.autoSelectedKey = "";
+    const round = byId("gacBracketRound");
+    if (round) round.value = "";
     renderBracket();
   }
 }
