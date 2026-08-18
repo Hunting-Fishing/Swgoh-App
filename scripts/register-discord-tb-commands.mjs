@@ -140,37 +140,16 @@ const commands = [
     type: 1,
     name: "tb",
     description: "SWGOH Territory Battle guild command",
-    // Picker visibility stays broad in the pilot so configured officers and linked members can invoke
-    // the appropriate subcommands. Signed server-side authorization remains authoritative.
     options: [
-      {
-        type: 1,
-        name: "status",
-        description: "Show the SWGOH Command Center TB integration status",
-      },
-      {
-        type: 1,
-        name: "me",
-        description: "Show your own linked SWGOH player from the bound live guild roster",
-      },
+      { type: 1, name: "status", description: "Show the SWGOH Command Center TB integration status" },
+      { type: 1, name: "me", description: "Show your own linked SWGOH player from the bound live guild roster" },
       {
         type: 1,
         name: "availability",
         description: "Read or change TB availability for your linked player or a guildmate",
         options: [
-          {
-            type: 6,
-            name: "member",
-            description: "Optional member target; normal members may target only themselves",
-            required: false,
-          },
-          {
-            type: 3,
-            name: "state",
-            description: "Optional availability change; omit to read current status",
-            required: false,
-            choices: availabilityChoices,
-          },
+          { type: 6, name: "member", description: "Optional member target; normal members may target only themselves", required: false },
+          { type: 3, name: "state", description: "Optional availability change; omit to read current status", required: false, choices: availabilityChoices },
         ],
       },
       {
@@ -178,18 +157,8 @@ const commands = [
         name: "setup",
         description: "Durably bind this pilot server, channel, and optional officer role",
         options: [
-          {
-            type: 7,
-            name: "channel",
-            description: "Channel for future TB delivery; defaults to the current channel",
-            required: false,
-          },
-          {
-            type: 8,
-            name: "officer_role",
-            description: "Role allowed to use officer read commands",
-            required: false,
-          },
+          { type: 7, name: "channel", description: "Channel for future TB delivery; defaults to the current channel", required: false },
+          { type: 8, name: "officer_role", description: "Role allowed to use officer read commands", required: false },
         ],
       },
       {
@@ -197,167 +166,88 @@ const commands = [
         name: "link",
         description: "Officer-link a Discord member to a verified guild Ally Code",
         options: [
-          {
-            type: 6,
-            name: "member",
-            description: "Discord member to link",
-            required: true,
-          },
-          {
-            type: 3,
-            name: "ally_code",
-            description: "9-digit SWGOH Ally Code; guild membership is checked against the bound roster",
-            required: true,
-            min_length: 9,
-            max_length: 11,
-          },
+          { type: 6, name: "member", description: "Discord member to link", required: true },
+          { type: 3, name: "ally_code", description: "9-digit SWGOH Ally Code; guild membership is checked against the bound roster", required: true, min_length: 9, max_length: 11 },
         ],
       },
-      {
-        type: 1,
-        name: "unlink",
-        description: "Remove a durable Discord-to-SWGOH player link",
-        options: [
-          {
-            type: 6,
-            name: "member",
-            description: "Discord member whose player link should be removed",
-            required: true,
-          },
-        ],
-      },
-      {
-        type: 1,
-        name: "links",
-        description: "Show durable Discord-to-SWGOH player links for this server",
-      },
+      { type: 1, name: "unlink", description: "Remove a durable Discord-to-SWGOH player link", options: [{ type: 6, name: "member", description: "Discord member whose player link should be removed", required: true }] },
+      { type: 1, name: "links", description: "Show durable Discord-to-SWGOH player links for this server" },
       {
         type: 1,
         name: "preference",
         description: "Set a GIVE/DEFAULT/KEEP unit preference for your linked player or a guildmate",
         options: [
-          {
-            type: 3,
-            name: "unit",
-            description: "Search SWGOH unit name or Base ID",
-            required: true,
-            autocomplete: true,
-            min_length: 1,
-            max_length: 80,
-          },
-          {
-            type: 3,
-            name: "preference",
-            description: "Donation preference used by the mission-safe ROTE planner",
-            required: true,
-            choices: preferenceChoices,
-          },
-          {
-            type: 6,
-            name: "member",
-            description: "Optional member target; normal members may target only themselves",
-            required: false,
-          },
+          { type: 3, name: "unit", description: "Search SWGOH unit name or Base ID", required: true, autocomplete: true, min_length: 1, max_length: 80 },
+          { type: 3, name: "preference", description: "Donation preference used by the mission-safe ROTE planner", required: true, choices: preferenceChoices },
+          { type: 6, name: "member", description: "Optional member target; normal members may target only themselves", required: false },
         ],
       },
-      {
-        type: 1,
-        name: "preferences",
-        description: "Show durable GIVE/KEEP overrides used by the ROTE planner",
-        options: [
-          {
-            type: 6,
-            name: "member",
-            description: "Optional member scope; normal members may view only themselves",
-            required: false,
-          },
-        ],
-      },
-      {
-        type: 1,
-        name: "controls",
-        description: "Officer summary of linked member availability and GIVE/KEEP controls",
-        options: [
-          {
-            type: 6,
-            name: "member",
-            description: "Optional linked member scope",
-            required: false,
-          },
-        ],
-      },
+      { type: 1, name: "preferences", description: "Show durable GIVE/KEEP overrides used by the ROTE planner", options: [{ type: 6, name: "member", description: "Optional member scope; normal members may view only themselves", required: false }] },
+      { type: 1, name: "controls", description: "Officer summary of linked member availability and GIVE/KEEP controls", options: [{ type: 6, name: "member", description: "Optional linked member scope", required: false }] },
       {
         type: 1,
         name: "reserve",
         description: "Officer-set an absolute ROTE Operation donor reservation",
         options: [
-          {
-            type: 6,
-            name: "member",
-            description: "Linked Discord member whose unit should be reserved",
-            required: true,
-          },
-          {
-            type: 3,
-            name: "unit",
-            description: "Search SWGOH unit name or Base ID",
-            required: true,
-            autocomplete: true,
-            min_length: 1,
-            max_length: 80,
-          },
+          { type: 6, name: "member", description: "Linked Discord member whose unit should be reserved", required: true },
+          { type: 3, name: "unit", description: "Search SWGOH unit name or Base ID", required: true, autocomplete: true, min_length: 1, max_length: 80 },
           requiredPhaseOption,
-          {
-            type: 3,
-            name: "state",
-            description: "Set or clear the hard reservation",
-            required: true,
-            choices: reservationChoices,
-          },
+          { type: 3, name: "state", description: "Set or clear the hard reservation", required: true, choices: reservationChoices },
         ],
+      },
+      { type: 1, name: "reserves", description: "Officer-read active hard Operation donor reservations", options: [{ type: 6, name: "member", description: "Optional linked-member scope", required: false }, optionalPhaseOption] },
+      { type: 1, name: "sync", description: "Force-refresh the pilot guild roster from the live SWGOH gateway" },
+      { type: 1, name: "activity", description: "Show the persisted Guild Activity Command officer summary" },
+      { type: 1, name: "phase", description: "Show the officer Phase Command Board summary for one ROTE phase", options: [requiredPhaseOption] },
+      { type: 1, name: "assignments", description: "Preview the current mission-safe ROTE Operation assignment draft", options: [optionalPhaseOption] },
+      { type: 1, name: "farms", description: "Show the highest-impact ROTE mission farms from the live guild roster", options: [optionalPhaseOption] },
+    ],
+  },
+  {
+    type: 1,
+    name: "guild",
+    description: "Officer Guild operations, registration, Discord delivery, and ROTE readiness",
+    options: [
+      { type: 1, name: "status", description: "Show Guild registration, ignored members, verified channels, and roster status" },
+      {
+        type: 1,
+        name: "verify-channel",
+        description: "Verify a Discord channel for Guild assignment delivery",
+        options: [{ type: 7, name: "channel", description: "Channel to verify; defaults to the current channel", required: false }],
       },
       {
         type: 1,
-        name: "reserves",
-        description: "Officer-read active hard Operation donor reservations",
+        name: "unverify-channel",
+        description: "Remove a Discord channel from Guild assignment delivery",
+        options: [{ type: 7, name: "channel", description: "Channel to unverify; defaults to the current channel", required: false }],
+      },
+      {
+        type: 1,
+        name: "register-mates",
+        description: "Preview or apply exact-safe Discord to SWGOH Guild-member matches",
+        options: [{
+          type: 3,
+          name: "action",
+          description: "Preview first, or apply only exact unique matches",
+          required: false,
+          choices: [
+            { name: "Preview exact matches", value: "preview" },
+            { name: "Apply exact unique matches", value: "apply" },
+          ],
+        }],
+      },
+      {
+        type: 1,
+        name: "ignore",
+        description: "Ignore or unignore a linked Guild member for a timed number of days",
         options: [
-          {
-            type: 6,
-            name: "member",
-            description: "Optional linked-member scope",
-            required: false,
-          },
-          optionalPhaseOption,
+          { type: 4, name: "days", description: "Days to ignore; use 0 to unignore", required: true, min_value: 0, max_value: 365 },
+          { type: 6, name: "member", description: "Linked Discord member; defaults to yourself", required: false },
+          { type: 3, name: "reason", description: "Optional officer note", required: false, max_length: 200 },
         ],
       },
-      {
-        type: 1,
-        name: "sync",
-        description: "Force-refresh the pilot guild roster from the live SWGOH gateway",
-      },
-      {
-        type: 1,
-        name: "activity",
-        description: "Show the persisted Guild Activity Command officer summary",
-      },
-      {
-        type: 1,
-        name: "phase",
-        description: "Show the officer Phase Command Board summary for one ROTE phase",
-        options: [requiredPhaseOption],
-      },
-      {
-        type: 1,
-        name: "assignments",
-        description: "Preview the current mission-safe ROTE Operation assignment draft",
-        options: [optionalPhaseOption],
-      },
-      {
-        type: 1,
-        name: "farms",
-        description: "Show the highest-impact ROTE mission farms from the live guild roster",
-        options: [optionalPhaseOption],
-      },
+      { type: 1, name: "sync", description: "Force-refresh the bound Guild from the live SWGOH gateway" },
+      { type: 1, name: "platoon-report", description: "Show current ROTE Operations assignment coverage and shortages" },
     ],
   },
 ];
@@ -369,7 +259,7 @@ for (const command of commands) {
 if (!config.commandRegistrationConfigured) {
   const message = "Discord command registration requires DISCORD_APPLICATION_ID, DISCORD_BOT_TOKEN, and DISCORD_DEFAULT_GUILD_ID.";
   if (ifConfigured && !config.interactionsEnabled) {
-    console.log(`Skipping Discord TB schema registration because Discord interactions are disabled: ${message}`);
+    console.log(`Skipping Discord schema registration because Discord interactions are disabled: ${message}`);
   } else {
     console.error(message);
     markRegistrationFailure(message);
@@ -387,7 +277,7 @@ if (!config.commandRegistrationConfigured) {
     let publicReceipt = { written: false };
     if (ifConfigured) publicReceipt = await writePublicDiscordCommandRegistrationReceipt(receipt.receipt);
 
-    console.log(`Discord TB schema ${SCHEMA_VERSION} registered in ${config.pilotGuildId} on attempt ${result.attempt}.`);
+    console.log(`Discord schema ${SCHEMA_VERSION} registered in ${config.pilotGuildId} on attempt ${result.attempt}.`);
     console.log(`Registered ${registered.length} guild-scoped Discord command${registered.length === 1 ? "" : "s"}.`);
     console.log(receipt.written
       ? `Registration receipt persisted (${receipt.durable ? "durable" : "configured"} state).`
