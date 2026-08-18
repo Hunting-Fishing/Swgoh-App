@@ -278,3 +278,9 @@ export {
   rosterSummary,
   unitDeltaRows,
 };
+
+if (typeof window !== "undefined" && typeof document !== "undefined") {
+  import("./gac-live-matchup-enhancer.js").catch((error) => {
+    console.warn("GAC live matchup enhancer failed to load", error);
+  });
+}
