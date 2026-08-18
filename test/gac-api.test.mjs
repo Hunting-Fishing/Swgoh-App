@@ -29,6 +29,16 @@ test("player GAC context route validates a nine digit Ally Code", async () => {
   assert.equal(await api.handle({ method: "GET" }, {}, new URL("http://app.test/api/gac/player/not-a-code")), false);
 });
 
+test("bracket-by-player route proxies the Ally Code to the live gateway", async () => {
+  const { api, calls, written } = harness();
+  const handled = await api.handle({ method: "GET" }, {}, new URL("http://app.test/api/gac/bracket/by-player/732764286"));
+  assert.equal(handled, true);
+  assert.deepEqual(calls, [{ pathname: "/v1/gac/bracket/by-player/732764286", includeKey: true }]);
+  assert.equal(written[0].status, 200);
+  assert.equal(written[0].headers["X-GAC-Source"], "comlink-live");
+  assert.equal(await api.handle({ method: "GET" }, {}, new URL("http://app.test/api/gac/bracket/by-player/not-a-code")), false);
+});
+
 test("direct bracket route normalizes the league and bracket number", async () => {
   const { api, calls } = harness();
   const handled = await api.handle({ method: "GET" }, {}, new URL("http://app.test/api/gac/bracket/chromium/42"));
