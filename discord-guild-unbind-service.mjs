@@ -79,29 +79,80 @@ export async function unbindDiscordGuildIntegration(context, options = {}) {
     }, { returning: false });
   }
 
-  await store.insert('guild_operations_audit_log', [{
-    guild_id: guildId,
-    actor_user_id: null,
-    action: 'discord-guild.unregister',
-    entity_type: 'discord_guild_binding',
-    entity_id: discordGuildId,
-    before_state: summary,
-    after_state: { bound: false, destinationsVerified: 0, schedulesActive: 0 },
-    metadata: { actorDiscordUserId, preservation: 'canonical-history-and-delivery-receipts-retained' },
-    occurred_at: timestamp,
-  }], { returning: false });
-
+  const operationalStateChanged = verifiedDestinations.length > 0 || activeSchedules.length > 0 || array(settings).length > 0;
   let clearedHardReservations = 0;
-  const reservationStatus = typeof reservationStore?.status === 'function' ? reservationStore.status() : null;
-  if (reservationStatus?.enabled || reservationStatus?.durable) {
-    if (!reservationStatus?.enabled || !reservationStatus?.durable || typeof reservationStore?.clearGuild !== 'function') {
-      throw error('Durable Discord hard-reservation state cannot be safely cleared; Guild unregister stopped after delivery was disarmed.', 'HARD_RESERVATION_CLEAR_UNAVAILABLE');
+  let previous = null;
+  let bindingCleared = false;
+
+  try {
+    const reservationStatus = typeof reservationStore?.status === 'function' ? reservationStore.status() : null;
+    if (reservationStatus?.enabled || reservationStatus?.durable) {
+      if (!reservationStatus?.enabled || !reservationStatus?.durable || typeof reservationStore?.clearGuild !== 'function') {
+        throw error('Durable Discord hard-reservation state cannot be safely cleared; Guild unregister stopped after delivery was disarmed.', 'HARD_RESERVATION_CLEAR_UNAVAILABLE');
+      }
+      const result = await reservationStore.clearGuild({ discordGuildId, actorDiscordUserId });
+      clearedHardReservations = Number(result?.cleared || 0);
     }
-    const result = await reservationStore.clearGuild({ discordGuildId, actorDiscordUserId });
-    clearedHardReservations = Number(result?.cleared || 0);
+
+    previous = await stateStore.unbindGuild({ discordGuildId, actorDiscordUserId });
+    bindingCleared = true;
+
+    // This is a completion receipt, so it is written only after all Discord-only
+    // durable state has actually been cleared. Partial failures use a distinct
+    // audit action and never masquerade as a completed unregister.
+    await store.insert('guild_operations_audit_log', [{
+      guild_id: guildId,
+      actor_user_id: null,
+      action: 'discord-guild.unregister',
+      entity_type: 'discord_guild_binding',
+      entity_id: discordGuildId,
+      before_state: summary,
+      after_state: { bound: false, destinationsVerified: 0, schedulesActive: 0 },
+      metadata: {
+        actorDiscordUserId,
+        preservation: 'canonical-history-and-delivery-receipts-retained',
+        clearedHardReservations,
+        clearedDiscordLinks: Number(previous?.linkedPlayers || summary.linkedPlayers),
+      },
+      occurred_at: timestamp,
+    }], { returning: false });
+  } catch (cause) {
+    const failure = cause instanceof Error ? cause : error('Guild unregister failed while clearing Discord-only durable state.');
+    const partialStateChanged = operationalStateChanged || clearedHardReservations > 0 || bindingCleared;
+    failure.partialStateChanged = partialStateChanged;
+    failure.safeDisposition = bindingCleared
+      ? 'discord-binding-cleared-delivery-disarmed-review-audit-before-rebind'
+      : 'delivery-disarmed-binding-retained-safe-to-retry';
+
+    try {
+      await store.insert('guild_operations_audit_log', [{
+        guild_id: guildId,
+        actor_user_id: null,
+        action: 'discord-guild.unregister-partial',
+        entity_type: 'discord_guild_binding',
+        entity_id: discordGuildId,
+        before_state: summary,
+        after_state: {
+          bound: !bindingCleared,
+          destinationsVerified: 0,
+          schedulesActive: 0,
+          clearedHardReservations,
+        },
+        metadata: {
+          actorDiscordUserId,
+          failureCode: text(failure.code) || 'GUILD_UNBIND_FAILED',
+          failureMessage: text(failure.message),
+          safeDisposition: failure.safeDisposition,
+        },
+        occurred_at: timestamp,
+      }], { returning: false });
+    } catch {
+      // Preserve the original lifecycle failure. Delivery remains disarmed even
+      // when the secondary audit write is also unavailable.
+    }
+    throw failure;
   }
 
-  const previous = await stateStore.unbindGuild({ discordGuildId, actorDiscordUserId });
   return Object.freeze({
     unbound: true,
     guildId,
