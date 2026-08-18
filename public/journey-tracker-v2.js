@@ -57,6 +57,12 @@ function durableMatchesLoadedPlayer() {
   return accountAlly.length === 9 && loadedAlly.length === 9 && accountAlly === loadedAlly;
 }
 
+function hasUnsyncedLocalGoals() {
+  return durableMatchesLoadedPlayer()
+    && !(state.durableGoals?.trackedIds || []).length
+    && readLocalTracked().length > 0;
+}
+
 function readTracked() {
   if (durableMatchesLoadedPlayer()) return Array.isArray(state.durableGoals?.trackedIds) ? state.durableGoals.trackedIds.filter((id) => journeyPresetById(id)) : [];
   return readLocalTracked();
@@ -94,8 +100,10 @@ async function loadDurableGoals(force = false) {
 
 async function writeTracked(ids) {
   const normalized = [...new Set(ids)].filter((id) => journeyPresetById(id));
-  writeLocalTracked(normalized);
-  if (!durableMatchesLoadedPlayer()) return { durable: false, trackedIds: normalized };
+  if (!durableMatchesLoadedPlayer()) {
+    writeLocalTracked(normalized);
+    return { durable: false, trackedIds: normalized };
+  }
   state.durableGoals = await goalRequest("PUT", normalized);
   writeLocalTracked(state.durableGoals.trackedIds || normalized);
   return { durable: true, trackedIds: state.durableGoals.trackedIds || normalized };
@@ -226,10 +234,19 @@ async function render(force=false) {
 }
 
 async function addTracked(id) {
-  if(!journeyPresetById(id))return; const next=readTracked(); if(!next.includes(id))next.push(id);
+  if(!journeyPresetById(id))return;
+  if(hasUnsyncedLocalGoals()){
+    showError(new Error("Device-local Journey goals are waiting to be synced. Use 'Save device goals to my account' before changing the verified account list."));
+    return;
+  }
+  const next=readTracked(); if(!next.includes(id))next.push(id);
   try{await writeTracked(next);await render(false);}catch(error){showError(error);}
 }
 async function removeTracked(id) {
+  if(hasUnsyncedLocalGoals()){
+    showError(new Error("Device-local Journey goals are waiting to be synced before the verified account list can be changed."));
+    return;
+  }
   try{await writeTracked(readTracked().filter((value)=>value!==id));await render(false);}catch(error){showError(error);}
 }
 async function syncLocalGoals() {
