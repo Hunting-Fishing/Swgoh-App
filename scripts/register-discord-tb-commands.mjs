@@ -10,6 +10,7 @@ const SCHEMA_VERSION = DISCORD_TB_COMMAND_SCHEMA_VERSION;
 const REGISTRATION_TIMEOUT_MS = 15_000;
 const config = discordTbConfig(process.env);
 const ifConfigured = process.argv.includes("--if-configured");
+const softFail = process.argv.includes("--soft-fail");
 const phaseChoices = ["P1", "P2", "P3", "P4", "P5", "P6"].map((phase) => ({ name: phase, value: phase }));
 const preferenceChoices = [
   { name: "GIVE — favor this member as a donor", value: "give" },
@@ -123,6 +124,15 @@ async function registerCommands(commands) {
   error.status = lastFailure?.status || 0;
   error.body = lastFailure?.body;
   throw error;
+}
+
+function markRegistrationFailure(message) {
+  if (softFail) {
+    console.error(`Discord schema registration did not complete: ${message}`);
+    console.error("Continuing web startup with the last successfully registered Discord schema.");
+    return;
+  }
+  process.exitCode = 1;
 }
 
 const commands = [
@@ -362,7 +372,7 @@ if (!config.commandRegistrationConfigured) {
     console.log(`Skipping Discord TB schema registration because Discord interactions are disabled: ${message}`);
   } else {
     console.error(message);
-    process.exitCode = 1;
+    markRegistrationFailure(message);
   }
 } else {
   try {
@@ -385,8 +395,9 @@ if (!config.commandRegistrationConfigured) {
     if (publicReceipt.written) console.log(`Sanitized registration receipt exposed at ${publicReceipt.path}.`);
     for (const command of registered) console.log(`- /${command.name} (${command.id})`);
   } catch (error) {
-    console.error(error?.message || "Discord command registration failed.");
+    const message = error?.message || "Discord command registration failed.";
+    console.error(message);
     if (error?.body != null) console.error(typeof error.body === "string" ? error.body : JSON.stringify(error.body, null, 2));
-    process.exitCode = 1;
+    markRegistrationFailure(message);
   }
 }
