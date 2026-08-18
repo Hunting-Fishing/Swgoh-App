@@ -1,3 +1,5 @@
+import "./gac-scouting-enhancer.js";
+
 const state = {
   requestId: 0,
   loadedFor: "",
