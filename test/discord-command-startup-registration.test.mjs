@@ -4,11 +4,7 @@ import { spawnSync } from "node:child_process";
 import test from "node:test";
 
 const root = new URL("../", import.meta.url);
-
-async function text(path) {
-  return readFile(new URL(path, root), "utf8");
-}
-
+async function text(path) { return readFile(new URL(path, root), "utf8"); }
 function unconfiguredEnv({ interactionsEnabled = false } = {}) {
   return {
     ...process.env,
@@ -31,9 +27,7 @@ test("production start registers the current pilot Discord schema before serving
 
 test("startup-safe registration skips cleanly only when Discord interactions are disabled", () => {
   const result = spawnSync(process.execPath, ["scripts/register-discord-tb-commands.mjs", "--if-configured"], {
-    cwd: new URL("../", import.meta.url),
-    env: unconfiguredEnv({ interactionsEnabled: false }),
-    encoding: "utf8",
+    cwd: new URL("../", import.meta.url), env: unconfiguredEnv({ interactionsEnabled: false }), encoding: "utf8",
   });
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /Skipping Discord schema registration because Discord interactions are disabled/);
@@ -41,9 +35,7 @@ test("startup-safe registration skips cleanly only when Discord interactions are
 
 test("active Discord pilot fails startup when command registration credentials are incomplete", () => {
   const result = spawnSync(process.execPath, ["scripts/register-discord-tb-commands.mjs", "--if-configured"], {
-    cwd: new URL("../", import.meta.url),
-    env: unconfiguredEnv({ interactionsEnabled: true }),
-    encoding: "utf8",
+    cwd: new URL("../", import.meta.url), env: unconfiguredEnv({ interactionsEnabled: true }), encoding: "utf8",
   });
   assert.equal(result.status, 1);
   assert.match(result.stderr, /Discord command registration requires/);
@@ -51,19 +43,17 @@ test("active Discord pilot fails startup when command registration credentials a
 
 test("manual registration still fails closed when credentials are absent", () => {
   const result = spawnSync(process.execPath, ["scripts/register-discord-tb-commands.mjs"], {
-    cwd: new URL("../", import.meta.url),
-    env: unconfiguredEnv({ interactionsEnabled: false }),
-    encoding: "utf8",
+    cwd: new URL("../", import.meta.url), env: unconfiguredEnv({ interactionsEnabled: false }), encoding: "utf8",
   });
   assert.equal(result.status, 1);
   assert.match(result.stderr, /Discord command registration requires/);
 });
 
-test("startup schema contains TB controls plus EchoBase-class Guild operations and receipts", async () => {
+test("startup schema contains TB self-service plus EchoBase-class Guild operations and receipts", async () => {
   const source = await text("scripts/register-discord-tb-commands.mjs");
   const receiptSource = await text("discord-command-registration-receipt.mjs");
   assert.match(source, /SCHEMA_VERSION = DISCORD_TB_COMMAND_SCHEMA_VERSION/);
-  assert.match(receiptSource, /DISCORD_TB_COMMAND_SCHEMA_VERSION = "2026-08-18-guild-operations-v2"/);
+  assert.match(receiptSource, /DISCORD_TB_COMMAND_SCHEMA_VERSION = "2026-08-18-lifecycle-reports-v3"/);
   assert.match(source, /REGISTRATION_TIMEOUT_MS = 15_000/);
   assert.match(source, /name: "activity"/);
   assert.match(source, /name: "controls"/);
@@ -71,11 +61,13 @@ test("startup schema contains TB controls plus EchoBase-class Guild operations a
   assert.match(source, /name: "reserves"/);
   assert.match(source, /absolute ROTE Operation donor reservation/);
   assert.match(source, /name: "unit"[\s\S]*autocomplete: true/);
+  assert.match(source, /name: "ignore"[\s\S]*Self-service timed Operations ignore/);
+  assert.match(source, /name: "unregister"/);
   assert.match(source, /name: "guild"/);
   assert.match(source, /name: "verify-channel"/);
   assert.match(source, /name: "unverify-channel"/);
   assert.match(source, /name: "register-mates"/);
-  assert.match(source, /name: "ignore"/);
+  assert.match(source, /name: "donation-report"/);
   assert.match(source, /name: "platoon-report"/);
   assert.match(source, /for \(let attempt = 1; attempt <= 3; attempt \+= 1\)/);
   assert.match(source, /retryableStatus\(response\.status\)/);

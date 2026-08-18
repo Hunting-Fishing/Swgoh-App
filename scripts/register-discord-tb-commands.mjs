@@ -44,39 +44,25 @@ const requiredPhaseOption = {
 
 function assertRequiredOptionsBeforeOptional(options = [], path = "command") {
   let sawOptionalParameter = false;
-
   for (const option of options) {
     const isSubcommand = option?.type === 1 || option?.type === 2;
     if (!isSubcommand) {
       if (option?.required === true) {
         if (sawOptionalParameter) {
-          throw new Error(
-            `Invalid Discord command schema at ${path}: required option '${option.name}' appears after an optional option.`,
-          );
+          throw new Error(`Invalid Discord command schema at ${path}: required option '${option.name}' appears after an optional option.`);
         }
-      } else {
-        sawOptionalParameter = true;
-      }
+      } else sawOptionalParameter = true;
     }
-
-    if (Array.isArray(option?.options)) {
-      assertRequiredOptionsBeforeOptional(option.options, `${path} ${option.name}`);
-    }
+    if (Array.isArray(option?.options)) assertRequiredOptionsBeforeOptional(option.options, `${path} ${option.name}`);
   }
 }
 
-function retryableStatus(status) {
-  return status === 429 || status >= 500;
-}
-
-async function sleep(ms) {
-  await new Promise((resolve) => setTimeout(resolve, ms));
-}
+function retryableStatus(status) { return status === 429 || status >= 500; }
+async function sleep(ms) { await new Promise((resolve) => setTimeout(resolve, ms)); }
 
 async function registerCommands(commands) {
   const endpoint = `https://discord.com/api/${API_VERSION}/applications/${config.applicationId}/guilds/${config.pilotGuildId}/commands`;
   let lastFailure = null;
-
   for (let attempt = 1; attempt <= 3; attempt += 1) {
     try {
       const response = await fetch(endpoint, {
@@ -89,37 +75,22 @@ async function registerCommands(commands) {
         body: JSON.stringify(commands),
         signal: AbortSignal.timeout(REGISTRATION_TIMEOUT_MS),
       });
-
       const text = await response.text();
       let body;
-      try {
-        body = text ? JSON.parse(text) : null;
-      } catch {
-        body = text;
-      }
-
+      try { body = text ? JSON.parse(text) : null; } catch { body = text; }
       if (response.ok) return { body, attempt };
-
-      lastFailure = {
-        status: response.status,
-        body,
-        message: `Discord command registration failed with HTTP ${response.status}.`,
-      };
+      lastFailure = { status: response.status, body, message: `Discord command registration failed with HTTP ${response.status}.` };
       if (!retryableStatus(response.status) || attempt === 3) break;
     } catch (error) {
       lastFailure = {
         status: 0,
         body: null,
-        message: error?.name === "TimeoutError"
-          ? `Discord command registration timed out after ${REGISTRATION_TIMEOUT_MS}ms.`
-          : error?.message || "Discord command registration request failed.",
+        message: error?.name === "TimeoutError" ? `Discord command registration timed out after ${REGISTRATION_TIMEOUT_MS}ms.` : error?.message || "Discord command registration request failed.",
       };
       if (attempt === 3) break;
     }
-
     await sleep(500 * attempt);
   }
-
   const error = new Error(lastFailure?.message || "Discord command registration failed.");
   error.status = lastFailure?.status || 0;
   error.body = lastFailure?.body;
@@ -183,6 +154,16 @@ const commands = [
         ],
       },
       { type: 1, name: "preferences", description: "Show durable GIVE/KEEP overrides used by the ROTE planner", options: [{ type: 6, name: "member", description: "Optional member scope; normal members may view only themselves", required: false }] },
+      {
+        type: 1,
+        name: "ignore",
+        description: "Self-service timed Operations ignore; use 0 days to unignore yourself",
+        options: [
+          { type: 4, name: "days", description: "Days to ignore yourself; use 0 to clear", required: true, min_value: 0, max_value: 365 },
+          { type: 3, name: "reason", description: "Optional note for your Guild officers", required: false, max_length: 200 },
+        ],
+      },
+      { type: 1, name: "unregister", description: "Unlink your own Discord account from your SWGOH player in this server" },
       { type: 1, name: "controls", description: "Officer summary of linked member availability and GIVE/KEEP controls", options: [{ type: 6, name: "member", description: "Optional linked member scope", required: false }] },
       {
         type: 1,
@@ -239,28 +220,26 @@ const commands = [
       {
         type: 1,
         name: "ignore",
-        description: "Ignore or unignore a linked Guild member for a timed number of days",
+        description: "Officer-set timed ignore for a linked Guild member",
         options: [
           { type: 4, name: "days", description: "Days to ignore; use 0 to unignore", required: true, min_value: 0, max_value: 365 },
           { type: 6, name: "member", description: "Linked Discord member; defaults to yourself", required: false },
           { type: 3, name: "reason", description: "Optional officer note", required: false, max_length: 200 },
         ],
       },
+      { type: 1, name: "donation-report", description: "Show Guild-wide GIVE/KEEP donation preference counts by member" },
       { type: 1, name: "sync", description: "Force-refresh the bound Guild from the live SWGOH gateway" },
       { type: 1, name: "platoon-report", description: "Show current ROTE Operations assignment coverage and shortages" },
     ],
   },
 ];
 
-for (const command of commands) {
-  assertRequiredOptionsBeforeOptional(command.options, `/${command.name}`);
-}
+for (const command of commands) assertRequiredOptionsBeforeOptional(command.options, `/${command.name}`);
 
 if (!config.commandRegistrationConfigured) {
   const message = "Discord command registration requires DISCORD_APPLICATION_ID, DISCORD_BOT_TOKEN, and DISCORD_DEFAULT_GUILD_ID.";
-  if (ifConfigured && !config.interactionsEnabled) {
-    console.log(`Skipping Discord schema registration because Discord interactions are disabled: ${message}`);
-  } else {
+  if (ifConfigured && !config.interactionsEnabled) console.log(`Skipping Discord schema registration because Discord interactions are disabled: ${message}`);
+  else {
     console.error(message);
     markRegistrationFailure(message);
   }
@@ -268,20 +247,12 @@ if (!config.commandRegistrationConfigured) {
   try {
     const result = await registerCommands(commands);
     const registered = Array.isArray(result.body) ? result.body : [];
-    const receipt = await writeDiscordCommandRegistrationReceipt({
-      guildId: config.pilotGuildId,
-      applicationId: config.applicationId,
-      attempt: result.attempt,
-      commands: registered,
-    });
+    const receipt = await writeDiscordCommandRegistrationReceipt({ guildId: config.pilotGuildId, applicationId: config.applicationId, attempt: result.attempt, commands: registered });
     let publicReceipt = { written: false };
     if (ifConfigured) publicReceipt = await writePublicDiscordCommandRegistrationReceipt(receipt.receipt);
-
     console.log(`Discord schema ${SCHEMA_VERSION} registered in ${config.pilotGuildId} on attempt ${result.attempt}.`);
     console.log(`Registered ${registered.length} guild-scoped Discord command${registered.length === 1 ? "" : "s"}.`);
-    console.log(receipt.written
-      ? `Registration receipt persisted (${receipt.durable ? "durable" : "configured"} state).`
-      : `Registration receipt not persisted (${receipt.reason}).`);
+    console.log(receipt.written ? `Registration receipt persisted (${receipt.durable ? "durable" : "configured"} state).` : `Registration receipt not persisted (${receipt.reason}).`);
     if (publicReceipt.written) console.log(`Sanitized registration receipt exposed at ${publicReceipt.path}.`);
     for (const command of registered) console.log(`- /${command.name} (${command.id})`);
   } catch (error) {

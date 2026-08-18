@@ -26,6 +26,7 @@ import {
   formatDiscordMemberControlsSummary,
 } from "./discord-member-controls-summary.mjs";
 import { executeDiscordGuildCommand } from "./discord-guild-operations-command.mjs";
+import { executeDiscordPlayerLifecycleCommand } from "./discord-player-lifecycle-command.mjs";
 import { autocompleteSwgohUnits } from "./discord-unit-autocomplete.mjs";
 
 const EPHEMERAL_FLAG = 1 << 6;
@@ -255,6 +256,16 @@ function scheduleGuildCommandResponse(interaction, config, services) {
     });
 }
 
+function schedulePlayerLifecycleResponse(interaction, config, services) {
+  Promise.resolve()
+    .then(() => executeDiscordPlayerLifecycleCommand(interaction, services))
+    .catch((error) => safeError("Player Lifecycle", error))
+    .then((content) => editDiscordOriginalResponse(interaction, config, content, services?.fetch || fetch))
+    .catch((error) => {
+      console.error("Discord Player Lifecycle response failed:", error?.message || error);
+    });
+}
+
 export async function handleDiscordInteractionRequest(request, response, env = process.env, services = {}) {
   let rawBody;
   try {
@@ -275,6 +286,9 @@ export async function handleDiscordInteractionRequest(request, response, env = p
   const subcommand = discordTbSubcommand(interaction);
   const command = String(interaction?.data?.name || "").toLowerCase();
   const isGuildCommand = Number(interaction?.type) === DISCORD_INTERACTION_TYPES.APPLICATION_COMMAND && command === "guild";
+  const isPlayerLifecycle = Number(interaction?.type) === DISCORD_INTERACTION_TYPES.APPLICATION_COMMAND
+    && command === "tb"
+    && new Set(["ignore", "unregister"]).has(subcommand);
   const isActivity = Number(interaction?.type) === DISCORD_INTERACTION_TYPES.APPLICATION_COMMAND
     && command === "tb"
     && subcommand === "activity";
@@ -287,7 +301,7 @@ export async function handleDiscordInteractionRequest(request, response, env = p
   const isReserves = Number(interaction?.type) === DISCORD_INTERACTION_TYPES.APPLICATION_COMMAND
     && command === "tb"
     && subcommand === "reserves";
-  if (!autocomplete && !isGuildCommand && !isActivity && !isControls && !isReserve && !isReserves) {
+  if (!autocomplete && !isGuildCommand && !isPlayerLifecycle && !isActivity && !isControls && !isReserve && !isReserves) {
     return handleCoreDiscordInteractionRequest(replayRequest(request, rawBody), response, env, services);
   }
 
@@ -336,6 +350,13 @@ export async function handleDiscordInteractionRequest(request, response, env = p
   }
 
   const stateStore = services?.stateStore || discordStateStore;
+
+  if (isPlayerLifecycle) {
+    jsonResponse(response, 200, deferredEphemeral());
+    schedulePlayerLifecycleResponse(interaction, config, { ...services, stateStore, env });
+    return true;
+  }
+
   let officerAuthorized = discordTbMemberHasOfficerPermission(interaction);
   if (!officerAuthorized) {
     officerAuthorized = await discordTbMemberHasConfiguredOfficerRole(interaction, stateStore);

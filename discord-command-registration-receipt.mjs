@@ -2,7 +2,7 @@ import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
-export const DISCORD_TB_COMMAND_SCHEMA_VERSION = "2026-08-18-guild-operations-v2";
+export const DISCORD_TB_COMMAND_SCHEMA_VERSION = "2026-08-18-lifecycle-reports-v3";
 const RECEIPT_VERSION = 1;
 const RECEIPT_FILE = "discord-command-registration-v1.json";
 const PUBLIC_RECEIPT_PATH = "/data/discord-command-registration.json";
@@ -73,11 +73,10 @@ function buildReceipt(input = {}) {
   });
 }
 
-export async function writeDiscordCommandRegistrationReceipt(input = {}, env = process.env) {
+export async function writeDiscordCommandRegistrationReceipt(input, env = process.env) {
   const config = receiptConfig(env);
   const receipt = buildReceipt(input);
   if (!config.enabled) return Object.freeze({ written: false, durable: false, reason: "state-directory-unavailable", receipt });
-
   const payload = `${JSON.stringify(receipt, null, 2)}\n`;
   await mkdir(config.directory, { recursive: true, mode: 0o700 });
   const temporary = path.join(config.directory, `.discord-command-registration-${process.pid}-${Date.now()}.tmp`);
@@ -85,9 +84,7 @@ export async function writeDiscordCommandRegistrationReceipt(input = {}, env = p
     await writeFile(temporary, payload, { encoding: "utf8", mode: 0o600 });
     await rename(temporary, config.file);
   } finally {
-    await unlink(temporary).catch((error) => {
-      if (error?.code !== "ENOENT") throw error;
-    });
+    await unlink(temporary).catch((error) => { if (error?.code !== "ENOENT") throw error; });
   }
   return Object.freeze({ written: true, durable: config.durable, file: RECEIPT_FILE, receipt });
 }
@@ -113,12 +110,8 @@ export async function writePublicDiscordCommandRegistrationReceipt(receipt, opti
 export async function readDiscordCommandRegistrationReceipt(env = process.env) {
   const config = receiptConfig(env);
   if (!config.enabled) return null;
-  try {
-    return validateReceipt(JSON.parse(await readFile(config.file, "utf8")));
-  } catch (error) {
-    if (error?.code === "ENOENT") return null;
-    throw error;
-  }
+  try { return validateReceipt(JSON.parse(await readFile(config.file, "utf8"))); }
+  catch (error) { if (error?.code === "ENOENT") return null; throw error; }
 }
 
 export function discordCommandRegistrationStatus(env = process.env) {
@@ -137,14 +130,7 @@ export function discordCommandRegistrationStatus(env = process.env) {
   if (!config.enabled) return Object.freeze(base);
   try {
     const receipt = validateReceipt(JSON.parse(readFileSync(config.file, "utf8")));
-    return Object.freeze({
-      ...base,
-      registered: true,
-      registeredAt: receipt.registeredAt,
-      guildId: receipt.guildId,
-      commandNames: Object.freeze(receipt.commands.map((command) => command.name)),
-      attempt: receipt.attempt,
-    });
+    return Object.freeze({ ...base, registered: true, registeredAt: receipt.registeredAt, guildId: receipt.guildId, commandNames: Object.freeze(receipt.commands.map((command) => command.name)), attempt: receipt.attempt });
   } catch (error) {
     if (error?.code === "ENOENT") return Object.freeze(base);
     return Object.freeze({ ...base, error: clean(error?.message || "registration receipt unreadable") });
