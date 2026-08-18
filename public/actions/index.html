@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#050914">
   <title>Action Center · SWGOH Command Center</title>
   <link rel="stylesheet" href="/web-actions.css?v=20260818a">
-  <link rel="stylesheet" href="/web-actions-v2.css?v=20260819a">
+  <link rel="stylesheet" href="/web-actions-v2.css?v=20260819c">
 </head>
 <body>
   <header class="action-topbar">
@@ -29,6 +29,26 @@
     </section>
 
     <div class="action-message" data-action-message role="status" aria-live="polite"></div>
+
+    <section class="journey-goal-panel" data-journey-goal-panel>
+      <div class="section-head">
+        <div>
+          <div class="action-kicker">PERSONAL FARM PRIORITIES</div>
+          <h2>My Journey Goals</h2>
+          <p>Choose the Galactic Legends, Journey Guide characters, and fleets you are actively pursuing. TB Farm Plan uses these saved account goals to promote farms that help both your Guild and your own unlock path.</p>
+        </div>
+        <div class="journey-goal-summary" data-journey-goal-summary>Loading goals…</div>
+      </div>
+      <div class="journey-goal-toolbar">
+        <input type="search" data-journey-goal-search placeholder="Search Journey, GL, fleet…" aria-label="Search Journey goals">
+        <button type="button" class="secondary" data-journey-goal-clear>Clear selected</button>
+        <button type="button" data-journey-goal-save>Save My Goals</button>
+      </div>
+      <div class="journey-goal-status" data-journey-goal-status role="status" aria-live="polite"></div>
+      <div class="journey-goal-groups" data-journey-goal-list>
+        <div class="empty-state">Loading available Journey targets…</div>
+      </div>
+    </section>
 
     <section class="action-grid" data-action-catalog>
       <article class="action-card loading"><h2>Loading actions…</h2></article>
@@ -56,6 +76,6 @@
     </section>
   </main>
 
-  <script type="module" src="/web-actions.js?v=20260819b"></script>
+  <script type="module" src="/web-actions.js?v=20260819c"></script>
 </body>
 </html>
