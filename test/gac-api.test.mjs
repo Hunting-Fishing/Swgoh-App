@@ -4,13 +4,20 @@ import { createGacApi } from "../gac-api.mjs";
 
 function harness() {
   const calls = [];
+  const scoutCalls = [];
   const written = [];
   const requestGateway = async (pathname, includeKey) => {
     calls.push({ pathname, includeKey });
     return { source: "comlink-live", pathname };
   };
+  const scouting = {
+    async getScoutingReport(code, options) {
+      scoutCalls.push({ code, options });
+      return { source: "persisted-gac-battle-scouting", player: { allyCode: code } };
+    },
+  };
   const writeJson = (_response, status, body, headers = {}) => written.push({ status, body, headers });
-  return { api: createGacApi({ requestGateway, writeJson }), calls, written };
+  return { api: createGacApi({ requestGateway, writeJson, scouting }), calls, scoutCalls, written };
 }
 
 test("current GAC event route proxies through the authenticated server gateway", async () => {
@@ -37,6 +44,16 @@ test("bracket-by-player route proxies the Ally Code to the live gateway", async 
   assert.equal(written[0].status, 200);
   assert.equal(written[0].headers["X-GAC-Source"], "comlink-live");
   assert.equal(await api.handle({ method: "GET" }, {}, new URL("http://app.test/api/gac/bracket/by-player/not-a-code")), false);
+});
+
+test("scouting route reads persisted battle evidence without calling the live gateway", async () => {
+  const { api, calls, scoutCalls, written } = harness();
+  const handled = await api.handle({ method: "GET" }, {}, new URL("http://app.test/api/gac/scouting/732764286?limit=2500"));
+  assert.equal(handled, true);
+  assert.equal(calls.length, 0);
+  assert.deepEqual(scoutCalls, [{ code: "732764286", options: { limit: 2500 } }]);
+  assert.equal(written[0].status, 200);
+  assert.equal(written[0].headers["X-GAC-Source"], "persisted-gac-battle-scouting");
 });
 
 test("direct bracket route normalizes the league and bracket number", async () => {
