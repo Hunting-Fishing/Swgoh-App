@@ -145,6 +145,40 @@ export function createGuildOperationsService(options = {}) {
     return row || {};
   }
 
+  async function currentMemberIds(context) {
+    const rows = await store.select('guild_members_current', {
+      select: 'player_id',
+      guild_id: `eq.${context.guild.id}`,
+      limit: 100,
+    });
+    return new Set(array(rows).map((row) => text(row.player_id)).filter(Boolean));
+  }
+
+  async function requireCurrentMember(context, playerIdInput) {
+    const playerId = text(playerIdInput);
+    if (!playerId) throw httpError('playerId is required.', 400, 'PLAYER_ID_REQUIRED');
+    const member = await selectOne('guild_members_current', {
+      select: 'player_id',
+      guild_id: `eq.${context.guild.id}`,
+      player_id: `eq.${playerId}`,
+    });
+    if (!member) throw httpError('That player is not a current member of this Guild.', 409, 'PLAYER_NOT_CURRENT_GUILD_MEMBER');
+    return playerId;
+  }
+
+  async function requireVerifiedDestination(context, destinationIdInput) {
+    const destinationId = text(destinationIdInput);
+    if (!destinationId) return null;
+    const row = await selectOne('guild_discord_destinations', {
+      select: 'id,guild_id,verified,destination_kind',
+      id: `eq.${destinationId}`,
+      guild_id: `eq.${context.guild.id}`,
+      verified: 'eq.true',
+    });
+    if (!row) throw httpError('Default Discord destination must be verified for this Guild.', 409, 'VERIFIED_DESTINATION_REQUIRED');
+    return row;
+  }
+
   async function playerNameMap(playerIds) {
     const map = new Map();
     for (const playerId of [...new Set(playerIds.map(text).filter(Boolean))]) {
@@ -231,13 +265,15 @@ export function createGuildOperationsService(options = {}) {
     const context = await requireOfficer(userId, lookupAllyCode);
     const before = await ensureSettings(context);
     const deliveryMode = ['preview','discord_channel','webhook'].includes(text(input.defaultDeliveryMode)) ? text(input.defaultDeliveryMode) : 'preview';
+    const destinationId = text(input.defaultDiscordDestinationId);
+    if (destinationId) await requireVerifiedDestination(context, destinationId);
     const next = {
       guild_id: context.guild.id,
       assignment_algorithm: boundedText(input.assignmentAlgorithm || before.assignment_algorithm || 'mission-safe-scarcity-v1', 80),
       default_delivery_mode: deliveryMode,
       include_mentions: input.includeMentions === true,
       send_dms: input.sendDms === true,
-      default_discord_destination_id: text(input.defaultDiscordDestinationId) || null,
+      default_discord_destination_id: destinationId || null,
       metadata: object(input.metadata),
       updated_at: now(),
     };
@@ -248,10 +284,7 @@ export function createGuildOperationsService(options = {}) {
 
   async function setMemberControl(userId, lookupAllyCode, input = {}) {
     const context = await requireOfficer(userId, lookupAllyCode);
-    const playerId = text(input.playerId);
-    if (!playerId) throw httpError('playerId is required.', 400, 'PLAYER_ID_REQUIRED');
-    const member = await selectOne('guild_members_current', { select: 'player_id', guild_id: `eq.${context.guild.id}`, player_id: `eq.${playerId}` });
-    if (!member) throw httpError('That player is not a current member of this Guild.', 409, 'PLAYER_NOT_CURRENT_GUILD_MEMBER');
+    const playerId = await requireCurrentMember(context, input.playerId);
     const before = await selectOne('guild_member_operation_controls', { select: '*', guild_id: `eq.${context.guild.id}`, player_id: `eq.${playerId}` });
     const ignoredUntil = text(input.ignoredUntil);
     const row = first(await store.upsert('guild_member_operation_controls', [{
@@ -271,10 +304,10 @@ export function createGuildOperationsService(options = {}) {
 
   async function setDonationPreference(userId, lookupAllyCode, input = {}) {
     const context = await requireOfficer(userId, lookupAllyCode);
-    const playerId = text(input.playerId);
+    const playerId = await requireCurrentMember(context, input.playerId);
     const baseId = boundedText(input.baseId, 120).toUpperCase();
     const preference = text(input.preference).toLowerCase();
-    if (!playerId || !baseId) throw httpError('playerId and baseId are required.', 400, 'PREFERENCE_TARGET_REQUIRED');
+    if (!baseId) throw httpError('baseId is required.', 400, 'PREFERENCE_TARGET_REQUIRED');
     const before = await selectOne('guild_unit_donation_preferences', { select: '*', guild_id: `eq.${context.guild.id}`, player_id: `eq.${playerId}`, base_id: `eq.${baseId}` });
     if (preference === 'default' || !preference) {
       await store.delete('guild_unit_donation_preferences', { guild_id: `eq.${context.guild.id}`, player_id: `eq.${playerId}`, base_id: `eq.${baseId}` });
@@ -353,8 +386,7 @@ export function createGuildOperationsService(options = {}) {
     const planId = text(planIdInput);
     const plan = await selectOne('guild_tb_plans', { select: 'id', id: `eq.${planId}`, guild_id: `eq.${context.guild.id}` });
     if (!plan) throw httpError('TB plan was not found in this Guild.', 404, 'TB_PLAN_NOT_FOUND');
-    const before = await store.select('guild_tb_plan_preassignments', { select: '*', plan_id: `eq.${planId}` });
-    await store.delete('guild_tb_plan_preassignments', { plan_id: `eq.${planId}` });
+
     const rows = array(rowsInput).slice(0, 1000).map((row) => ({
       plan_id: planId,
       slot_id: boundedText(row.slotId || row.slot_id, 180),
@@ -365,6 +397,17 @@ export function createGuildOperationsService(options = {}) {
       metadata: object(row.metadata),
       updated_at: now(),
     })).filter((row) => row.slot_id && row.player_id);
+
+    const memberIds = await currentMemberIds(context);
+    const invalid = rows.filter((row) => !memberIds.has(row.player_id));
+    if (invalid.length) {
+      throw httpError('One or more pre-assigned players are no longer current Guild members.', 409, 'PREASSIGNMENT_PLAYER_NOT_CURRENT');
+    }
+    const duplicateSlots = rows.filter((row, index) => rows.findIndex((other) => other.slot_id === row.slot_id) !== index);
+    if (duplicateSlots.length) throw httpError('Each TB Operation slot may have only one pre-assignment.', 409, 'DUPLICATE_PREASSIGNMENT_SLOT');
+
+    const before = await store.select('guild_tb_plan_preassignments', { select: '*', plan_id: `eq.${planId}` });
+    await store.delete('guild_tb_plan_preassignments', { plan_id: `eq.${planId}` });
     const saved = rows.length ? await store.insert('guild_tb_plan_preassignments', rows) : [];
     await audit(context, 'tb-preassignments.replace', 'guild_tb_plan_preassignments', planId, { count: saved.length }, before, saved);
     return saved;
