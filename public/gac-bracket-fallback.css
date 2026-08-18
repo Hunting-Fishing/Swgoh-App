@@ -1,3 +1,7 @@
+.gac-matchup-form:has(.gac-bracket-find) {
+  grid-template-columns: auto minmax(180px, 1fr) auto auto;
+}
+
 .gac-bracket-find {
   border: 1px solid rgba(105, 206, 255, .42);
   border-radius: .65rem;
@@ -97,6 +101,7 @@
 .gac-bracket-select:disabled { opacity: .45; cursor: not-allowed; }
 
 @media (max-width: 760px) {
+  .gac-matchup-form:has(.gac-bracket-find) { grid-template-columns: 1fr; }
   .gac-bracket-heading { flex-direction: column; }
   .gac-bracket-grid { grid-template-columns: 1fr; }
   .gac-bracket-opponent { grid-template-columns: 30px minmax(0, 1fr); }
