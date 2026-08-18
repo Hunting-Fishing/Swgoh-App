@@ -48,7 +48,7 @@ function fixture({ stage = 'idle' } = {}) {
   return { store, stateStore, reservationStore, calls };
 }
 
-test('Guild unbind disarms delivery/schedules before clearing Discord-only state', async () => {
+test('Guild unbind disarms delivery/schedules before clearing Discord-only state and records completion last', async () => {
   const f = fixture();
   const result = await unbindDiscordGuildIntegration(context(f.store, f.stateStore), {
     store: f.store,
@@ -66,16 +66,18 @@ test('Guild unbind disarms delivery/schedules before clearing Discord-only state
   const destination = f.calls.findIndex((call) => call.type === 'update' && call.table === 'guild_discord_destinations');
   const schedule = f.calls.findIndex((call) => call.type === 'update' && call.table === 'guild_operation_schedules');
   const settings = f.calls.findIndex((call) => call.type === 'update' && call.table === 'guild_operation_settings');
-  const audit = f.calls.findIndex((call) => call.type === 'insert' && call.table === 'guild_operations_audit_log');
+  const audit = f.calls.findIndex((call) => call.type === 'insert' && call.table === 'guild_operations_audit_log' && call.row.action === 'discord-guild.unregister');
   const hardClear = f.calls.findIndex((call) => call.type === 'hard-clear');
   const stateUnbind = f.calls.findIndex((call) => call.type === 'state-unbind');
   assert.ok(destination >= 0 && schedule >= 0 && settings >= 0 && audit >= 0 && hardClear >= 0 && stateUnbind >= 0);
   assert.ok(destination < stateUnbind && schedule < stateUnbind && settings < stateUnbind, 'future delivery must be disarmed before durable binding is cleared');
   assert.ok(hardClear < stateUnbind, 'hard reserves must clear before Guild binding disappears');
+  assert.ok(stateUnbind < audit, 'completed unregister audit must be written only after durable Discord state is cleared');
   assert.equal(f.calls[destination].patch.verified, false);
   assert.equal(f.calls[schedule].patch.status, 'paused');
   assert.equal(f.calls[settings].patch.default_delivery_mode, 'preview');
   assert.equal(f.calls[audit].row.action, 'discord-guild.unregister');
+  assert.equal(f.calls.some((call) => call.type === 'insert' && call.row.action === 'discord-guild.unregister-partial'), false);
 });
 
 test('Guild unbind refuses to proceed while scheduled planning or publishing is in flight', async () => {
@@ -94,9 +96,10 @@ test('Guild unbind refuses to proceed while scheduled planning or publishing is 
   }
 });
 
-test('failure to clear configured hard-reservation storage leaves Guild delivery disarmed and state binding intact', async () => {
+test('failure to clear configured hard-reservation storage leaves Guild delivery disarmed, retains binding, and records partial state', async () => {
   const f = fixture();
   f.reservationStore = { status() { return { enabled: true, durable: true }; } };
+  let failure = null;
   await assert.rejects(
     unbindDiscordGuildIntegration(context(f.store, f.stateStore), {
       store: f.store,
@@ -104,9 +107,49 @@ test('failure to clear configured hard-reservation storage leaves Guild delivery
       reservationStore: f.reservationStore,
       actorDiscordUserId: ACTOR,
     }),
-    (error) => error?.code === 'HARD_RESERVATION_CLEAR_UNAVAILABLE',
+    (error) => {
+      failure = error;
+      return error?.code === 'HARD_RESERVATION_CLEAR_UNAVAILABLE';
+    },
   );
+  assert.equal(failure?.partialStateChanged, true);
+  assert.equal(failure?.safeDisposition, 'delivery-disarmed-binding-retained-safe-to-retry');
   assert.ok(f.calls.some((call) => call.type === 'update' && call.table === 'guild_discord_destinations' && call.patch.verified === false));
   assert.ok(f.calls.some((call) => call.type === 'update' && call.table === 'guild_operation_schedules' && call.patch.status === 'paused'));
   assert.equal(f.calls.some((call) => call.type === 'state-unbind'), false, 'binding remains so an officer can retry safely');
+  assert.equal(f.calls.some((call) => call.type === 'insert' && call.row.action === 'discord-guild.unregister'), false, 'partial failure must not record a completed unregister');
+  const partialAudit = f.calls.find((call) => call.type === 'insert' && call.row.action === 'discord-guild.unregister-partial');
+  assert.ok(partialAudit, 'partial lifecycle state must be audited');
+  assert.equal(partialAudit.row.after_state.bound, true);
+  assert.equal(partialAudit.row.metadata.failureCode, 'HARD_RESERVATION_CLEAR_UNAVAILABLE');
+});
+
+test('state-store unbind failure happens after hard-reserve clear and remains retry-safe', async () => {
+  const f = fixture();
+  f.stateStore.unbindGuild = async (input) => {
+    f.calls.push({ type: 'state-unbind', input });
+    const value = new Error('simulated state-store failure');
+    value.code = 'STATE_UNBIND_FAILED';
+    throw value;
+  };
+  let failure = null;
+  await assert.rejects(
+    unbindDiscordGuildIntegration(context(f.store, f.stateStore), {
+      store: f.store,
+      stateStore: f.stateStore,
+      reservationStore: f.reservationStore,
+      actorDiscordUserId: ACTOR,
+    }),
+    (error) => {
+      failure = error;
+      return error?.code === 'STATE_UNBIND_FAILED';
+    },
+  );
+  const hardClear = f.calls.findIndex((call) => call.type === 'hard-clear');
+  const stateUnbind = f.calls.findIndex((call) => call.type === 'state-unbind');
+  assert.ok(hardClear >= 0 && stateUnbind > hardClear);
+  assert.equal(failure?.partialStateChanged, true);
+  assert.equal(failure?.safeDisposition, 'delivery-disarmed-binding-retained-safe-to-retry');
+  assert.equal(f.calls.some((call) => call.type === 'insert' && call.row.action === 'discord-guild.unregister'), false);
+  assert.ok(f.calls.some((call) => call.type === 'insert' && call.row.action === 'discord-guild.unregister-partial'));
 });
