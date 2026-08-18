@@ -1,4 +1,5 @@
 import { canonicalRosterService } from './canonical-roster-service.mjs';
+import { journeyGoalService } from './journey-goal-service.mjs';
 import { buildOrder66RaidMax } from './public/raid-max-order66.js';
 import { supabaseCoreStore } from './supabase-core-store.mjs';
 import { executePersonalTbFarmPlan } from './tb-farm-plan-action.mjs';
@@ -58,16 +59,20 @@ function tbFarmPlanDiscordContent(run) {
   const player = result.player || {};
   const guild = result.guild || {};
   const summary = result.summary || {};
+  const personal = result.personalization || {};
   const lines = [
     '🛰️ **SWGOH Command Center · TB Farm Plan**',
     `**${text(player.name) || 'Player'}** · ${allyCode(player.allyCode) || 'Ally Code unavailable'} · ${text(guild.name) || 'Guild'}`,
     `${summary.personalFarmRows || 0} personal TB farm targets · ${summary.doubleUseRows || 0} Journey-overlap targets · ${summary.journeyTargetsAdvanced || 0} unlock paths advanced`,
+    personal.trackedGoalCount ? `Tracked goals: ${personal.trackedGoalCount} · matching farms ${personal.rowsMatchingTrackedGoals || 0}` : 'Tracked goals: none · Guild-impact fallback',
     `Ranking: ${text(summary.priorityMode || 'guild-impact').replaceAll('-', ' ')}`,
     '',
   ];
   for (const row of array(result.recommendations).slice(0, 8)) {
-    const journey = array(row?.journey?.targets).filter((entry) => ['direct','partial'].includes(text(entry.status))).slice(0, 2);
-    const overlap = journey.length ? ` · ${journey.map((entry) => `${text(entry.shortName || entry.eventName)} ${text(entry.requirementLabel)} (${text(entry.status)})`).join(' / ')}` : '';
+    const tracked = array(row?.personal?.targets).slice(0, 2);
+    const journey = tracked.length ? tracked : array(row?.journey?.targets).filter((entry) => ['direct','partial'].includes(text(entry.status))).slice(0, 2);
+    const prefix = tracked.length ? ' · MY GOAL ' : ' · ';
+    const overlap = journey.length ? `${prefix}${journey.map((entry) => `${text(entry.shortName || entry.eventName)} ${text(entry.requirementLabel)} (${text(entry.status)})`).join(' / ')}` : '';
     lines.push(`**#${row.rank || '?'} ${text(row.unitName || row.baseId)}** — ${text(row.currentLabel)} → ${text(row.tbTargetLabel)} · ${row?.tb?.missionImpact || 0} TB mission${Number(row?.tb?.missionImpact || 0) === 1 ? '' : 's'}${overlap}`);
   }
   lines.push('', '_Journey overlap means this farm advances or satisfies a prerequisite; it does not guarantee the Journey target unlock. Generated on the Command Center website._');
@@ -95,6 +100,7 @@ function feedItem(publication, run) {
 export function createWebActionService(options = {}) {
   const store = options.store || supabaseCoreStore;
   const canonical = options.canonical || canonicalRosterService;
+  const journeyGoals = options.journeyGoals || journeyGoalService;
   const env = options.env || process.env;
   const fetchImpl = options.fetch || fetch;
   const now = typeof options.now === 'function' ? options.now : () => new Date();
@@ -177,9 +183,11 @@ export function createWebActionService(options = {}) {
       result = buildOrder66RaidMax(roster, { maxAttempts: input?.maxAttempts });
     } else if (action.key === 'tb-farm-plan') {
       if (!identity.membership || !identity.guildId) throw httpError('Active Guild membership is required to build a Guild-impact TB Farm Plan.', 403, 'ACTIVE_GUILD_MEMBERSHIP_REQUIRED');
+      const trackedGoalIds = await journeyGoals.listForPlayer(userId, identity.player.id);
       result = await executePersonalTbFarmPlan(canonical, identity.player.ally_code, {
         priorityMode: input?.priorityMode,
         maxRecommendations: input?.maxRecommendations,
+        trackedGoalIds,
       });
     } else {
       throw httpError('That website action has no execution adapter.', 501, 'WEB_ACTION_ADAPTER_MISSING');

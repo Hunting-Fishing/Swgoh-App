@@ -6,7 +6,7 @@ Last updated: 2026-08-19
 
 SWGOH Command Center is the primary application. Discord is an optional identity, notification, and publication integration.
 
-Every useful command-style capability should be implemented as a reusable Command Center function first:
+Every useful command-style capability is implemented as a reusable Command Center function first:
 
 ```text
 Canonical Command Center function
@@ -41,6 +41,8 @@ When reproducing EchoBase, WookieeBot, C-3PO Bot, SWGoHBot, Omegabot, DSRBot, Ho
 - [x] ROTE/TB mission coverage and mission-impact farming queue
 - [x] TB Roster Farming Guide with Journey overlap
 - [x] Personal TB Farm Plan website action
+- [x] Durable verified-account Journey goals
+- [x] Personalized TB + tracked-Journey double-use ranking
 - [x] ROTE Operations assignment tooling
 - [x] Guild member Operations control drawer
 - [x] GIVE / KEEP preferences
@@ -61,11 +63,13 @@ When reproducing EchoBase, WookieeBot, C-3PO Bot, SWGoHBot, Omegabot, DSRBot, Ho
 - [x] Execute and publish are separate operations
 - [x] Durable `web_action_runs`
 - [x] Durable `web_action_publications`
+- [x] Durable `user_journey_goals`
 - [x] Player Command Feed
 - [x] Guild Command Feed
 - [x] Optional verified Discord publication
 - [x] Raid Max / `/raid max` / `/raidmax` as website-native action
 - [x] Personal TB Farm Plan / future `/tb farms` / `/tb farm` aliases as website-native action
+- [x] **My Journey Goals** account manager
 
 ### Historical Guild Intelligence
 
@@ -76,22 +80,19 @@ When reproducing EchoBase, WookieeBot, C-3PO Bot, SWGoHBot, Omegabot, DSRBot, Ho
 - [x] GL/Inquisitor milestone archive
 - [x] ROTE/EchoBase platoon reference archive
 
-## Current checkpoint — TB Farming Guide v1
+## Current checkpoint — TB Farming Guide
 
 Guild Command exposes `/guild/tb/farming` as a normal member-readable website page.
 
 Implemented:
 
 - [x] Persistent **TB Farming** Guild navigation
-- [x] TB Command callout
-- [x] Guild Overview capability card
 - [x] Existing exact ROTE mission-coverage engine reused
 - [x] Existing Journey preset graph reused
 - [x] SWGOH Base ID is the cross-system join key
 - [x] Member-specific recommendation rows
 - [x] All-Guild and individual-member filters
 - [x] Phase / mandatory / selectable-pool filters
-- [x] Search by member, unit, mission, or Journey target
 - [x] TB-impact / Journey-overlap / closest-upgrade sorting
 - [x] **DIRECT DOUBLE-USE**
 - [x] **PARTIAL DOUBLE-USE**
@@ -99,125 +100,135 @@ Implemented:
 - [x] **TB ONLY**
 - [x] Already-satisfied prerequisites do not count as new double-use value
 - [x] Gear/star advancement can count as partial progress toward a later relic prerequisite
-- [x] Player Farm-tool deep link
-- [x] Guild Unit Ownership deep link
+- [x] Player Farm-tool and Guild Unit Ownership deep links
 - [x] No Discord requirement
 
 Truth boundary:
 
 > Journey overlap means the proposed TB farm advances or satisfies a prerequisite. It does **not** mean one prerequisite automatically unlocks the Journey target.
 
-## Current checkpoint — Personal TB Farm Plan v1
+## Current checkpoint — Personal TB Farm Plan v2: Tracked Goals
 
-The TB/Journey model is now reusable from the authenticated Action Center.
+The authenticated Action Center now combines current Guild ROTE value with the verified player's own tracked Journey targets.
 
-### Execution
+### Durable goals
 
-- [x] Action key: `tb-farm-plan`
-- [x] Website label: **TB Farm Plan**
-- [x] Future command aliases reserved: `/tb farms`, `/tb farm`
-- [x] Verified website identity required
-- [x] Active Guild membership required
-- [x] Discord is **not** required to execute
-- [x] Execution does not publish automatically
-- [x] Result is saved privately to `web_action_runs`
-- [x] Existing `web_action_publications` is reused for optional sharing
-- [x] No new database table/migration required
+Tracked goals are account data, not merely browser state.
+
+```text
+Verified Command Center account
+       |
+       +-- verified SWGOH player
+       +-- durable user_journey_goals
+       |
+       +-- Farm Command
+       +-- TB Farm Plan
+       +-- future Raid/TW/GAC farm-value actions
+```
+
+Implemented:
+
+- [x] Server-only `user_journey_goals` table with RLS enabled
+- [x] Account + verified player + Journey event key
+- [x] Atomic replace RPC
+- [x] Event IDs validated against the versioned `JOURNEY_PRESETS` catalog before write
+- [x] Maximum 50 tracked goals
+- [x] No anon/authenticated direct table or RPC access
+- [x] Action Center **My Journey Goals** manager
+- [x] Farm Command syncs the same durable goals for the verified player
+- [x] Existing device-local Farm Command goals remain available for non-account or manually loaded other players
+- [x] Local goals are never silently uploaded; explicit **Save device goals to my account** handoff
+- [x] Manually loading another player's Ally Code cannot mutate the signed-in user's durable goals
+
+### Personalized ranking
+
+TB Farm Plan priority modes:
+
+1. **My tracked Journey goals** — default
+2. Guild TB impact
+3. Any Journey overlap
+4. Closest upgrade
+
+`My tracked Journey goals` ordering is explainable:
+
+```text
+tracked goals advanced
+  -> tracked prerequisites directly completed
+  -> mandatory TB impact
+  -> total verified TB mission impact
+  -> smaller upgrade gap
+  -> unit name tie-break
+```
+
+No hidden universal farm score is generated.
+
+Each recommendation can expose:
+
+- `MY GOAL`
+- `MY MULTI-GOAL`
+- tracked direct prerequisite count
+- tracked partial prerequisite count
+- tracked Journey targets advanced
+- normal Journey overlaps
+- verified TB mission impact
+- current -> TB target progression
+
+If the verified player has no durable goals, `My tracked Journey goals` **falls back transparently to Guild TB impact** and the result records `fallbackUsed: true`.
+
+### Security boundary
+
+The browser does not send authoritative tracked goal IDs to TB execution.
+
+The server resolves:
+
+```text
+signed-in user
+ -> verified player
+ -> durable goals for that exact user/player
+ -> TB Farm Plan
+```
+
+A client cannot submit a different goal list in the action payload and have it treated as the saved account preference.
 
 ### Canonical Guild-impact calculation
 
-A Personal TB Farm Plan is not calculated from the member roster in isolation.
+The personal plan still uses the full current Guild baseline so a claim that a farm helps the Guild has real redundancy context:
 
-It uses the current Guild baseline so its statement that a farm helps the Guild has real redundancy context:
-
-```text
-Verified website player
-       |
-       +-- canonical current Guild member list
-       +-- one batched current-Guild player_units_current read
-       +-- canonical static game-unit catalog
-       +-- verified ROTE mission rules
-       +-- Journey preset requirement graph
-       |
-       +-- member-specific TB Farm Plan
-```
-
-Safety rules:
-
-- [x] Full current Guild hydration is required
-- [x] Verified player must still be in the current Guild roster
-- [x] Current Guild member persistent identities must all be present
-- [x] Guild units are loaded with one bounded paged/batched read rather than one server request per member
-- [x] Each member's returned owned-unit count is compared with the expected character + ship count
-- [x] A truncated member roster fails closed instead of understating Guild redundancy
-- [x] Static definitions come from the canonical game-unit catalog
-
-This batching decision is important for the intended multi-user scale of Command Center.
-
-### Member controls
-
-The normal website form supports:
-
-**Prioritize by**
-
-- Guild TB impact
-- Journey overlap
-- Closest upgrade
-
-**Recommendations**
-
-- minimum 5
-- maximum 25
-- default 12
-
-The result shows:
-
-- current progression
-- TB target
-- TB gap
-- affected verified TB missions
-- mandatory mission impact
-- selectable-pool impact
-- Journey / GL / Fleet prerequisite overlaps
-- direct / partial / multi-unlock / TB-only classification
-- Guild exact coverage
-- Guild redundancy coverage
-
-No opaque universal farm score is generated.
+- [x] full current Guild hydration required
+- [x] verified player must still be in current Guild roster
+- [x] one bounded batched current-Guild `player_units_current` read
+- [x] per-member expected owned-unit count validation
+- [x] canonical static game-unit catalog
+- [x] verified ROTE mission rules
+- [x] Journey preset requirement graph
+- [x] truncated Guild/member data fails closed
 
 ### Publication
 
-After the action completes, the member can choose:
+After execution the saved result can be:
 
 ```text
 Keep private
 Share to My Player Page
 Share to Guild Command Feed
-Share to Discord (only when existing Guild officer/verified-destination permission allows it)
+Share to Discord (existing officer + verified destination gate)
 ```
 
-Implemented:
+Personalized publications identify MY GOAL farms while keeping the same Journey/unlock truth boundary.
 
-- [x] Personal TB Farm Plan card in Player Command Feed
-- [x] Personal TB Farm Plan card in Guild Command Feed
-- [x] Optional compact Discord publication from the same saved result
-- [x] Discord mentions disabled by default
-- [x] Normal members can use the website action without Discord
-- [x] Discord publication retains the existing Officer/Owner + verified-channel gate
-
-The `/tb farms` Discord slash adapter itself remains future work; the aliases currently document the intended dual-use command mapping.
+The actual `/tb farms` slash adapter remains future work and must call this same model rather than duplicate it.
 
 ## Website action roadmap
 
 ### Raid action pack
 
-- [x] Raid Max — roster-based non-overlapping Order 66 attempt planner
-- [ ] Raid Roster — eligible roster and progression bands
-- [ ] Raid Teams — selectable/optimized teams by strategy profile
-- [ ] Raid Readiness — progression/mod readiness and missing requirements
-- [ ] Raid Score / History — historical performance and current-run comparison
-- [ ] Guild Raid Report — member participation, score, readiness and farm needs
-- [ ] Broader Raid + Journey overlap
+- [x] Raid Max
+- [ ] Raid Roster
+- [ ] Raid Teams
+- [ ] Raid Readiness
+- [ ] Raid Score / History
+- [ ] Guild Raid Report
+- [ ] Raid + tracked Journey cross-mode value
 
 ### Territory Battle / ROTE action pack
 
@@ -227,9 +238,9 @@ The `/tb farms` Discord slash adapter itself remains future work; the aliases cu
 - [x] Member availability / ignores / reserves
 - [x] TB Roster Farming Guide with Journey overlap
 - [x] Personal TB Farm Plan in Action Center
-- [x] Personal TB Farm Plan -> Player Page
-- [x] Personal TB Farm Plan -> Guild Command Feed
-- [x] Personal TB Farm Plan -> optional officer Discord delivery
+- [x] Durable tracked Journey goals
+- [x] Personalized MY GOALS ranking
+- [x] Player Page / Guild Command Feed / optional officer Discord publication
 - [ ] `/tb farms` Discord slash adapter using the same service/model
 - [ ] Guild-wide farm campaign / officer target list
 - [ ] Farm acknowledgement / member commitment workflow
@@ -245,27 +256,29 @@ The `/tb farms` Discord slash adapter itself remains future work; the aliases cu
 - [ ] Counter recommendations
 - [ ] Datacron-aware recommendations
 - [ ] Member assignment sheets
-- [ ] TW + Journey farm overlap
+- [ ] TW + tracked Journey farm overlap
 - [ ] Player/Guild publication and optional Discord adapter
 
 ### Farming / Journey action pack
 
 - [x] Journey presets and Journey Map
 - [x] Player farming tools
+- [x] Durable tracked Journey goals
 - [x] Journey overlap classification v1
 - [x] TB + Journey overlap v1
+- [x] Personally tracked Journey weighting for TB
+- [ ] User-controlled ordering/weighting among several tracked Journey goals
 - [ ] Cross-Mode Farm Value engine across all supported modes
-- [ ] Personally tracked Journey weighting
 - [ ] TW + Journey overlap
 - [ ] Raid + Journey overlap
-- [ ] Ship / Fleet cross-mode overlap beyond Journey prerequisites
+- [ ] Ship/Fleet overlap beyond Journey prerequisites
 - [ ] GAC investment overlap
-- [ ] Multi-goal farm optimizer
+- [ ] Multi-goal farm optimizer across TB/Raid/TW/GAC
 - [ ] Guild-recommended farm campaigns
 
 ## Future feature — Cross-Mode Farm Value
 
-The TB/Journey guide is the first implementation of the broader question:
+The TB/Journey planner answers the first version of:
 
 > **If I invest in this unit, what else does it help?**
 
@@ -273,8 +286,7 @@ Future dimensions:
 
 - ROTE/TB missions
 - ROTE Operations/platoons
-- Journey Guide
-- Galactic Legends
+- tracked Journey Guide / Galactic Legend goals
 - capital ships / fleets
 - current Raid
 - TW offense/defense
@@ -292,7 +304,7 @@ Potential website actions / future command aliases:
 /journey overlap <unit>
 ```
 
-These aliases must call the **same web-first service** used by normal website buttons.
+These aliases must call the **same web-first services** used by normal website buttons.
 
 ## Data-quality rules
 
@@ -300,41 +312,38 @@ These aliases must call the **same web-first service** used by normal website bu
 - Static game definitions may be versioned in GitHub and refreshed with game updates.
 - Base IDs are the primary cross-system join key.
 - Exact TB mission claims only where mission evidence is verified.
-- Gate-only/partial evidence remains visibly partial and cannot create stronger claims.
 - Journey overlap is prerequisite progress, not a guaranteed unlock.
-- Do not fabricate material cost, ETA, farming time, raid damage, TW value, GAC value, or unlock probability without trustworthy evidence.
-- Do not invent an opaque "best" score unless the visible component weights are documented.
+- User-tracked goals are preferences, not evidence that an event is complete or unlockable.
+- Do not fabricate material cost, ETA, raid damage, TW value, GAC value, or unlock probability without trustworthy evidence.
+- Do not invent an opaque "best" score unless visible component weights are documented.
 
 ## Member UX target
 
-A normal Guild member should not need to know slash syntax.
+A normal Guild member should not need slash syntax.
 
 ```text
-Guild Command
-  -> Territory Battles
-     -> TB Farming Guide
-
-or
-
 Action Center
+  -> My Journey Goals
+     -> select JMK / GL Ahsoka / Executor / etc.
+     -> Save My Goals
   -> TB Farm Plan
-     -> Prioritize by Guild TB impact / Journey overlap / closest upgrade
+     -> My tracked Journey goals
      -> Run privately
-     -> Review recommendations
+     -> MY GOAL farms rise to the top
      -> Keep private OR Share to Player / Guild / optional Discord
 ```
+
+Farm Command uses the same saved goal list for the verified player.
 
 ## Near-term build order
 
 1. [x] Guild TB Farming Guide.
-2. [x] Member filter and loaded-player focus.
-3. [x] Direct / partial / multi-unlock classification.
-4. [x] Deep links to Farm tools / Guild Unit Ownership.
-5. [x] Personal TB Farm Plan website action.
-6. [x] Player/Guild feed publication for Personal TB Farm Plan.
-7. [x] Optional officer Discord publication adapter for the saved result.
-8. [ ] Add actual `/tb farms` Discord slash adapter using the same model.
-9. [ ] Add personally tracked Journey weighting.
-10. [ ] Add officer Guild farm campaigns only after the read/action model remains stable.
-11. [ ] Add member acknowledgement / committed / completed workflow.
-12. [ ] Add material-cost and ETA estimates only after trustworthy resource-cost evidence is integrated.
+2. [x] Personal TB Farm Plan website action.
+3. [x] Player/Guild/optional Discord publication.
+4. [x] Durable verified-account Journey goals.
+5. [x] Farm Command <-> Action Center goal synchronization.
+6. [x] Personalized MY GOALS TB ranking.
+7. [ ] Add actual `/tb farms` Discord slash adapter using the same model.
+8. [ ] Add officer Guild farm campaigns and member commitments.
+9. [ ] Expand tracked-goal Cross-Mode Farm Value into Raid/TW/GAC.
+10. [ ] Add material-cost/ETA only after trustworthy resource-cost evidence exists.

@@ -12,7 +12,7 @@ async function loadFarmWorkspace() {
 
   loadPromise = (async () => {
     // Journey Tracker owns the Farm shell, so it must initialize first.
-    await import("/journey-tracker-v2.js?v=20260815-lazy1");
+    await import("/journey-tracker-v2.js?v=20260819-account-goals1");
     await new Promise((resolve) => requestAnimationFrame(() => resolve()));
 
     // These modules enhance the shell but no longer need to exist while Farm is hidden.

@@ -1,6 +1,6 @@
 import { buildGuildRoteMissionCoverage } from './public/guild-rote-mission-coverage-model.js';
 import { buildGuildTbFarmingGuide, filterGuildTbFarmingRows } from './public/guild-tb-farming-guide-model.js';
-import { JOURNEY_PRESETS } from './public/farm-presets.js';
+import { JOURNEY_PRESETS, journeyPresetById } from './public/farm-presets.js';
 
 const asArray = (value) => Array.isArray(value) ? value : [];
 const text = (value) => String(value ?? '').trim();
@@ -114,6 +114,29 @@ function compactJourney(entry = {}) {
   });
 }
 
+function trackedGoalIds(input = []) {
+  const seen = new Set();
+  return Object.freeze(asArray(input).map((id) => text(id).toUpperCase()).filter((id) => {
+    if (!id || seen.has(id) || !journeyPresetById(id)) return false;
+    seen.add(id);
+    return true;
+  }));
+}
+
+function personalizeRow(row, trackedSet) {
+  const trackedOverlaps = asArray(row.journeyOverlaps).filter((entry) => trackedSet.has(text(entry.eventId)) && ['direct', 'partial'].includes(text(entry.status)));
+  const trackedDirectCount = trackedOverlaps.filter((entry) => entry.status === 'direct').length;
+  const trackedPartialCount = trackedOverlaps.filter((entry) => entry.status === 'partial').length;
+  return Object.freeze({
+    ...row,
+    trackedOverlaps: Object.freeze(trackedOverlaps),
+    trackedActiveCount: trackedOverlaps.length,
+    trackedDirectCount,
+    trackedPartialCount,
+    trackedGoalIds: Object.freeze([...new Set(trackedOverlaps.map((entry) => text(entry.eventId)).filter(Boolean))]),
+  });
+}
+
 function compactRecommendation(row, rank) {
   return Object.freeze({
     rank,
@@ -136,7 +159,24 @@ function compactRecommendation(row, rank) {
       activeOverlapCount: finite(row.activeJourneyOverlaps),
       targets: Object.freeze(asArray(row.journeyOverlaps).map(compactJourney)),
     }),
+    personal: Object.freeze({
+      matchesTrackedGoal: finite(row.trackedActiveCount) > 0,
+      trackedOverlapCount: finite(row.trackedActiveCount),
+      trackedDirectCount: finite(row.trackedDirectCount),
+      trackedPartialCount: finite(row.trackedPartialCount),
+      trackedGoalIds: Object.freeze(asArray(row.trackedGoalIds)),
+      targets: Object.freeze(asArray(row.trackedOverlaps).map(compactJourney)),
+    }),
   });
+}
+
+function myGoalsComparator(a, b) {
+  return finite(b.trackedActiveCount) - finite(a.trackedActiveCount)
+    || finite(b.trackedDirectCount) - finite(a.trackedDirectCount)
+    || finite(b.mandatoryImpact) - finite(a.mandatoryImpact)
+    || finite(b.missionImpact) - finite(a.missionImpact)
+    || finite(a.minGapScore, Number.MAX_SAFE_INTEGER) - finite(b.minGapScore, Number.MAX_SAFE_INTEGER)
+    || text(a.unitName).localeCompare(text(b.unitName));
 }
 
 export function buildPersonalTbFarmPlan(guildSnapshot, catalog, allyCodeInput, options = {}) {
@@ -146,16 +186,31 @@ export function buildPersonalTbFarmPlan(guildSnapshot, catalog, allyCodeInput, o
 
   const coverage = buildGuildRoteMissionCoverage(guildSnapshot, catalog, { redundancyTarget: 2 });
   const guide = buildGuildTbFarmingGuide(coverage, JOURNEY_PRESETS);
-  const mode = ['guild-impact', 'journey-overlap', 'closest-upgrade'].includes(text(options.priorityMode)) ? text(options.priorityMode) : 'guild-impact';
-  const sort = mode === 'journey-overlap' ? 'journey-overlap' : mode === 'closest-upgrade' ? 'gap' : 'tb-impact';
-  const allRows = filterGuildTbFarmingRows(guide.rows, { member: text(member.id || member.playerId || member.allyCode || member.name), sort });
+  const trackedIds = trackedGoalIds(options.trackedGoalIds);
+  const trackedSet = new Set(trackedIds);
+  const requestedMode = ['my-goals', 'guild-impact', 'journey-overlap', 'closest-upgrade'].includes(text(options.priorityMode)) ? text(options.priorityMode) : 'my-goals';
+  const effectiveMode = requestedMode === 'my-goals' && trackedIds.length === 0 ? 'guild-impact' : requestedMode;
+  const sort = effectiveMode === 'journey-overlap' ? 'journey-overlap' : effectiveMode === 'closest-upgrade' ? 'gap' : 'tb-impact';
+  const memberRows = filterGuildTbFarmingRows(guide.rows, { member: text(member.id || member.playerId || member.allyCode || member.name), sort });
+  const allRows = memberRows.map((row) => personalizeRow(row, trackedSet));
+  if (effectiveMode === 'my-goals') allRows.sort(myGoalsComparator);
+
   const maxRecommendations = Math.max(5, Math.min(25, Math.trunc(finite(options.maxRecommendations, 12))));
   const recommendations = allRows.slice(0, maxRecommendations).map((row, index) => compactRecommendation(row, index + 1));
   const doubleUse = allRows.filter((row) => row.activeJourneyOverlaps > 0);
+  const trackedRows = allRows.filter((row) => row.trackedActiveCount > 0);
+  const trackedTargetsAdvanced = new Set(trackedRows.flatMap((row) => asArray(row.trackedGoalIds)));
+  const trackedGoals = trackedIds.map((id) => journeyPresetById(id)).filter(Boolean).map((event) => Object.freeze({
+    id: text(event.id),
+    name: text(event.name || event.shortName || event.id),
+    shortName: text(event.shortName || event.name || event.id),
+    category: text(event.category || 'Journey Guide'),
+    targetBaseId: text(event.targetBaseId),
+  }));
 
   return Object.freeze({
     action: 'tb-farm-plan',
-    version: 'v1',
+    version: 'v2-tracked-goals',
     sourceDataAt: text(guildSnapshot?.fetchedAt),
     player: Object.freeze({
       allyCode,
@@ -168,7 +223,16 @@ export function buildPersonalTbFarmPlan(guildSnapshot, catalog, allyCodeInput, o
       name: text(guildSnapshot?.guild?.name),
       memberCount: finite(guildSnapshot?.guild?.memberCount, asArray(guildSnapshot?.members).length),
     }),
-    input: Object.freeze({ priorityMode: mode, maxRecommendations }),
+    personalization: Object.freeze({
+      trackedGoalCount: trackedIds.length,
+      trackedGoals: Object.freeze(trackedGoals),
+      rowsMatchingTrackedGoals: trackedRows.length,
+      trackedJourneyTargetsAdvanced: trackedTargetsAdvanced.size,
+      requestedPriorityMode: requestedMode,
+      effectivePriorityMode: effectiveMode,
+      fallbackUsed: requestedMode === 'my-goals' && trackedIds.length === 0,
+    }),
+    input: Object.freeze({ priorityMode: requestedMode, effectivePriorityMode: effectiveMode, maxRecommendations }),
     summary: Object.freeze({
       personalFarmRows: allRows.length,
       recommendationsReturned: recommendations.length,
@@ -178,15 +242,19 @@ export function buildPersonalTbFarmPlan(guildSnapshot, catalog, allyCodeInput, o
       multiUnlockRows: allRows.filter((row) => row.classification === 'multi-unlock').length,
       tbOnlyRows: allRows.filter((row) => row.activeJourneyOverlaps === 0).length,
       journeyTargetsAdvanced: new Set(doubleUse.flatMap((row) => asArray(row.journeyOverlaps).filter((entry) => ['direct','partial'].includes(entry.status)).map((entry) => entry.eventId))).size,
+      trackedGoalCount: trackedIds.length,
+      trackedGoalRows: trackedRows.length,
+      trackedJourneyTargetsAdvanced: trackedTargetsAdvanced.size,
       exactGuildCoveragePercent: finite(coverage?.summary?.exactCoveragePercent),
       redundancyCoveragePercent: finite(coverage?.summary?.redundancyCoveragePercent),
-      priorityMode: mode,
+      priorityMode: effectiveMode,
     }),
     recommendations: Object.freeze(recommendations),
     evidence: Object.freeze({
       tb: 'Verified ROTE mission-entry evidence from the canonical Guild roster.',
       journey: 'Journey overlap is a prerequisite relationship from the versioned Journey preset graph; it is not an unlock guarantee.',
-      ranking: 'Ranking uses visible TB impact, Journey overlap, or upgrade-gap ordering. No opaque universal farm score is used.',
+      personalization: trackedIds.length ? 'MY GOAL ranking uses only the verified account’s explicitly tracked Journey targets.' : 'No durable Journey goals are tracked for this verified player; MY GOAL mode falls back to Guild TB impact.',
+      ranking: 'Ranking uses visible tracked-goal overlap, TB impact, Journey overlap, or upgrade-gap ordering. No opaque universal farm score is used.',
     }),
   });
 }

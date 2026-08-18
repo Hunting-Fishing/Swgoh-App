@@ -1,3 +1,4 @@
+import { journeyGoalService } from './journey-goal-service.mjs';
 import { supabaseAuthSession } from './supabase-auth-session.mjs';
 import { webActionService } from './web-action-service.mjs';
 
@@ -46,6 +47,7 @@ function writeJson(response, status, body) {
 export function createWebActionApi(options = {}) {
   const session = options.session || supabaseAuthSession;
   const service = options.service || webActionService;
+  const goals = options.journeyGoals || journeyGoalService;
 
   async function requireUser(request) {
     const user = await session.currentUser(request);
@@ -66,6 +68,10 @@ export function createWebActionApi(options = {}) {
         writeJson(response, 200, { runs: await service.recent(user.id, url.searchParams.get('limit')) });
         return true;
       }
+      if (request.method === 'GET' && url.pathname === '/api/account/web-actions/journey-goals') {
+        writeJson(response, 200, await goals.snapshot(user.id));
+        return true;
+      }
 
       const playerFeed = url.pathname.match(/^\/api\/account\/web-actions\/feed\/player\/(\d{9})$/);
       if (request.method === 'GET' && playerFeed) {
@@ -75,6 +81,13 @@ export function createWebActionApi(options = {}) {
       const guildFeed = url.pathname.match(/^\/api\/account\/web-actions\/feed\/guild\/(\d{9})$/);
       if (request.method === 'GET' && guildFeed) {
         writeJson(response, 200, await service.guildFeed(user.id, guildFeed[1]));
+        return true;
+      }
+
+      if (request.method === 'PUT' && url.pathname === '/api/account/web-actions/journey-goals') {
+        if (!sameOrigin(request)) throw httpError('Cross-origin Journey goal write rejected.', 403, 'CROSS_ORIGIN_REJECTED');
+        const body = await readJsonBody(request);
+        writeJson(response, 200, await goals.replace(user.id, body?.eventIds));
         return true;
       }
 
