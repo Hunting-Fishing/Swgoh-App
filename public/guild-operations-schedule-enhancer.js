@@ -29,7 +29,8 @@ async function fetchJson(url, options = {}) {
 }
 
 function formatDate(value) {
-  const date = new Date(value || 0);
+  if (!value) return '—';
+  const date = new Date(value);
   return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString();
 }
 function defaultLocalDateTime() {
@@ -54,7 +55,7 @@ function planOptions(kind) {
     .map((option) => `<option value="${escapeHtml(option.value)}">${escapeHtml(option.textContent)}</option>`).join('') || '<option value="">Save a plan first</option>';
 }
 function destinationOptions() {
-  const select = document.getElementById('opsDeliveryDestination');
+  const select = document.getElementById('opsDestination') || document.getElementById('opsDeliveryDestination');
   if (!select) return '<option value="">Use verified default destination</option>';
   return `<option value="">Use verified default destination</option>${[...select.options].filter((o) => text(o.value)).map((o) => `<option value="${escapeHtml(o.value)}">${escapeHtml(o.textContent)}</option>`).join('')}`;
 }
@@ -178,8 +179,12 @@ function installCard() {
   if (!isRoute() || document.querySelector('[data-guild-ops-scheduler]')) return;
   const shell = document.querySelector('.guild-ops-shell');
   if (!shell) return;
-  const view = [...shell.querySelectorAll('.guild-ops-view,.guild-ops-card')].find((node) => /DISCORD|DELIVERY/i.test(text(node.textContent))) || shell;
-  view.insertAdjacentHTML('beforeend', cardHtml());
+  const deliveryCard = document.getElementById('opsSaveDelivery')?.closest('.guild-ops-card');
+  if (!deliveryCard) return;
+  const destinationCard = deliveryCard.nextElementSibling?.classList?.contains('guild-ops-card')
+    ? deliveryCard.nextElementSibling
+    : deliveryCard;
+  destinationCard.insertAdjacentHTML('afterend', cardHtml());
   document.getElementById('opsScheduleType')?.addEventListener('change', updatePlanOptions);
   document.getElementById('opsScheduleSave')?.addEventListener('click', createSchedule);
   loadSchedules();
