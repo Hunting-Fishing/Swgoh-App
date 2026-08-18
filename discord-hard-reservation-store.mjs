@@ -162,6 +162,34 @@ export function createDiscordHardReservationStore(env = process.env, options = {
       const state = await readUnlocked();
       return state.guilds[guildId] ? structuredClone(state.guilds[guildId]) : null;
     },
+    async clearGuild({ discordGuildId, actorDiscordUserId = "" }) {
+      requireEnabled();
+      const guildId = snowflake(discordGuildId, "Discord guild ID");
+      const actorId = actorDiscordUserId ? snowflake(actorDiscordUserId, "Discord actor user ID") : "";
+      return exclusive(async () => {
+        const state = structuredClone(await readUnlocked());
+        const timestamp = now().toISOString();
+        const guild = state.guilds[guildId];
+        const cleared = guild?.reservations && typeof guild.reservations === "object" && !Array.isArray(guild.reservations)
+          ? Object.keys(guild.reservations).length
+          : 0;
+        if (guild) {
+          guild.reservations = {};
+          guild.updatedAt = timestamp;
+        }
+        state.updatedAt = timestamp;
+        state.audit.push({
+          id: uuid(),
+          timestamp,
+          discordGuildId: guildId,
+          actorDiscordUserId: actorId,
+          action: "rote-hard-reservations-cleared-for-guild-unbind",
+          details: { cleared },
+        });
+        await writeUnlocked(state);
+        return Object.freeze({ discordGuildId: guildId, cleared });
+      });
+    },
     async setReservation({
       discordGuildId,
       discordUserId,
