@@ -6,6 +6,7 @@ const text = (value) => String(value ?? '').trim();
 const first = (value) => array(value)[0] || null;
 const snowflake = (value) => /^\d{16,22}$/.test(text(value)) ? text(value) : '';
 const allyCode = (value) => { const v = text(value).replace(/\D/g, ''); return /^\d{9}$/.test(v) ? v : ''; };
+const SELF_SOURCE = 'discord-player-self-service';
 
 function safe(value, fallback = '—') {
   return text(value).replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim() || fallback;
@@ -54,20 +55,48 @@ async function resolveSelf(interaction, services = {}) {
   return { stateStore, store, guildState, discordGuildId, discordUserId, link, player };
 }
 
+async function currentControl(context) {
+  return first(await context.store.select('guild_member_operation_controls', {
+    select: 'guild_id,player_id,available,ignored_until,ignore_reason,source,metadata,updated_at',
+    guild_id: `eq.${context.player.current_guild_id}`,
+    player_id: `eq.${context.player.id}`,
+    limit: 1,
+  }));
+}
+
+function activeOfficerControl(control) {
+  if (!control || text(control.source) === SELF_SOURCE) return false;
+  const ignoredUntil = Date.parse(control.ignored_until || '');
+  return control.available === false || (Number.isFinite(ignoredUntil) && ignoredUntil > Date.now());
+}
+
 async function ignoreSelf(interaction, services) {
   const context = await resolveSelf(interaction, services);
   const days = Math.max(0, Math.min(365, Math.trunc(Number(option(interaction, 'days') ?? 0))));
   const reason = safe(option(interaction, 'reason'), '').slice(0, 200);
+  const existing = await currentControl(context);
+
+  if (activeOfficerControl(existing)) {
+    const until = existing?.ignored_until && Number.isFinite(Date.parse(existing.ignored_until))
+      ? new Date(existing.ignored_until).toUTCString()
+      : 'until an officer clears it';
+    return `**SWGOH Command Center · Officer Control Remains**\n**${safe(context.player.name)}** · ${displayAlly(context.player.ally_code)} already has an officer-managed Operations exclusion. Your self-service command cannot weaken or replace it.\nCurrent officer control: **${existing.available === false ? 'UNAVAILABLE' : `ignored until ${until}`}**. Contact an officer if the dates need to change.`;
+  }
+
   const ignoredUntil = days > 0 ? new Date(Date.now() + days * 86400000).toISOString() : null;
   await context.store.upsert('guild_member_operation_controls', [{
     guild_id: context.player.current_guild_id,
     player_id: context.player.id,
-    available: true,
+    available: existing?.available === false ? false : true,
     ignored_until: ignoredUntil,
     ignore_reason: days > 0 ? (reason || 'Player self-service Discord ignore') : null,
-    source: 'discord-player-self-service',
+    source: SELF_SOURCE,
     updated_by_user_id: null,
-    metadata: { discordUserId: context.discordUserId, selfService: true },
+    metadata: {
+      ...(existing?.metadata && typeof existing.metadata === 'object' && !Array.isArray(existing.metadata) ? existing.metadata : {}),
+      discordUserId: context.discordUserId,
+      selfService: true,
+    },
     updated_at: new Date().toISOString(),
   }], { onConflict: 'guild_id,player_id', returning: false });
   return days > 0
@@ -77,12 +106,34 @@ async function ignoreSelf(interaction, services) {
 
 async function unregisterSelf(interaction, services) {
   const context = await resolveSelf(interaction, services);
+  const existing = await currentControl(context);
+  if (text(existing?.source) === SELF_SOURCE) {
+    await context.store.upsert('guild_member_operation_controls', [{
+      guild_id: context.player.current_guild_id,
+      player_id: context.player.id,
+      available: true,
+      ignored_until: null,
+      ignore_reason: null,
+      source: SELF_SOURCE,
+      updated_by_user_id: null,
+      metadata: {
+        ...(existing?.metadata && typeof existing.metadata === 'object' && !Array.isArray(existing.metadata) ? existing.metadata : {}),
+        discordUserId: context.discordUserId,
+        selfService: true,
+        clearedOnDiscordUnregister: true,
+      },
+      updated_at: new Date().toISOString(),
+    }], { onConflict: 'guild_id,player_id', returning: false });
+  }
   const previous = await context.stateStore.unlinkPlayer({
     discordGuildId: context.discordGuildId,
     discordUserId: context.discordUserId,
     actorDiscordUserId: context.discordUserId,
   });
-  return `**SWGOH Command Center · Player Unregistered**\nYour Discord account is no longer linked to **${safe(context.player.name)}** · ${displayAlly(context.player.ally_code)} in this server.\nDiscord GIVE/KEEP and legacy availability controls tied to this Discord link were cleared. Canonical Guild history and your Command Center account data were not deleted.\nPrevious link: ${displayAlly(previous?.swgohAllyCode || context.player.ally_code)}.`;
+  const officerNote = activeOfficerControl(existing)
+    ? '\nAn officer-managed Operations control for this player remains in force and was not removed.'
+    : '';
+  return `**SWGOH Command Center · Player Unregistered**\nYour Discord account is no longer linked to **${safe(context.player.name)}** · ${displayAlly(context.player.ally_code)} in this server.\nDiscord GIVE/KEEP and legacy availability controls tied to this Discord link were cleared. Your self-service timed ignore was cleared if present. Canonical Guild history and your Command Center account data were not deleted.${officerNote}\nPrevious link: ${displayAlly(previous?.swgohAllyCode || context.player.ally_code)}.`;
 }
 
 export async function executeDiscordPlayerLifecycleCommand(interaction, services = {}) {
