@@ -103,7 +103,7 @@ function cardHtml() {
   const delivery = r.delivery || {};
   const donations = r.donations || {};
   const guild = r.guild || {};
-  const deliveryReady = discord.bound && discord.durableState && discord.botConfigured && Number(destinations.verified || 0) > 0;
+  const deliveryReady = discord.bound && discord.durableState && discord.botConfigured && discord.deliveryEnabled && Number(destinations.verified || 0) > 0;
   const scheduleRisk = Number(schedules.errors || 0) > 0;
   return `<section class="guild-ops-card guild-integration-report" data-guild-integration-report>
     <div class="kicker">GUILD INTEGRATION INTELLIGENCE</div>
@@ -114,6 +114,7 @@ function cardHtml() {
       <span class="guild-ops-chip ${healthTone(discord.bound)}">${discord.bound ? 'GUILD ↔ DISCORD BOUND' : 'DISCORD NOT BOUND'}</span>
       <span class="guild-ops-chip ${healthTone(discord.durableState)}">${discord.durableState ? 'DURABLE STATE READY' : 'DURABLE STATE MISSING'}</span>
       <span class="guild-ops-chip ${healthTone(discord.botConfigured)}">${discord.botConfigured ? 'BOT API READY' : 'BOT API MISSING'}</span>
+      <span class="guild-ops-chip ${healthTone(discord.deliveryEnabled)}">${discord.deliveryEnabled ? 'PUBLISH GATE ON' : 'PUBLISH GATE OFF'}</span>
       <span class="guild-ops-chip ${healthTone(deliveryReady)}">${deliveryReady ? 'DELIVERY READY' : 'DELIVERY NEEDS ATTENTION'}</span>
       <span class="guild-ops-chip ${healthTone(!scheduleRisk, scheduleRisk)}">${scheduleRisk ? `${number(schedules.errors)} SCHEDULE ERROR(S)` : 'SCHEDULES HEALTHY'}</span>
     </div>
