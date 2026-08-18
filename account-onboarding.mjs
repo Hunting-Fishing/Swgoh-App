@@ -6,6 +6,7 @@ import { guildRosterService } from './guild-roster-service.mjs';
 import { playerVerification } from './player-verification.mjs';
 import { supabaseAuthSession } from './supabase-auth-session.mjs';
 import { supabaseCoreStore } from './supabase-core-store.mjs';
+import { webActionApi } from './web-action-api.mjs';
 
 const MAX_BODY_BYTES = 16 * 1024;
 
@@ -324,6 +325,9 @@ export function createAccountOnboarding(options = {}) {
 
   async function handle(request, response, url) {
     if (!url.pathname.startsWith('/api/account/')) return false;
+    if (url.pathname.startsWith('/api/account/web-actions')) {
+      return webActionApi.handle(request, response, url);
+    }
     if (url.pathname.startsWith('/api/account/guild-discord-admin/')) {
       return guildDiscordAdminApi.handle(request, response, url);
     }
