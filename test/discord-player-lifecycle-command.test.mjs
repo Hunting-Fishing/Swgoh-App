@@ -15,7 +15,7 @@ function interaction(subcommand, options = []) {
   };
 }
 
-function fixture({ linked = true, seedGuildId = GUILD_UUID } = {}) {
+function fixture({ linked = true, seedGuildId = GUILD_UUID, existingControl = null } = {}) {
   const writes = [];
   const unlinks = [];
   const guildState = {
@@ -27,12 +27,13 @@ function fixture({ linked = true, seedGuildId = GUILD_UUID } = {}) {
     async readGuild() { return guildState; },
     async unlinkPlayer(input) { unlinks.push(input); const previous = guildState.userLinks[USER]; delete guildState.userLinks[USER]; return previous; },
   };
-  let selectCount = 0;
+  let playerSelectCount = 0;
   const store = {
     async select(table) {
+      if (table === 'guild_member_operation_controls') return existingControl ? [existingControl] : [];
       if (table !== 'players') return [];
-      selectCount += 1;
-      if (selectCount === 1) return [{ id: PLAYER_UUID, ally_code: '732764286', swgoh_player_id: 'swgoh-warm', name: 'Warm Bacon', current_guild_id: GUILD_UUID }];
+      playerSelectCount += 1;
+      if (playerSelectCount === 1) return [{ id: PLAYER_UUID, ally_code: '732764286', swgoh_player_id: 'swgoh-warm', name: 'Warm Bacon', current_guild_id: GUILD_UUID }];
       return [{ id: PLAYER_UUID, current_guild_id: seedGuildId }];
     },
     async upsert(table, rows) { writes.push({ table, row: rows[0] }); return rows; },
@@ -56,12 +57,27 @@ test('/tb ignore writes only the invoking linked player to shared Guild Operatio
   assert.ok(Date.parse(f.writes[0].row.ignored_until) > Date.now());
 });
 
-test('/tb ignore days=0 clears only the invoking player timed ignore', async () => {
-  const f = fixture();
+test('/tb ignore days=0 clears only the invoking player self-service timed ignore', async () => {
+  const f = fixture({ existingControl: {
+    guild_id: GUILD_UUID, player_id: PLAYER_UUID, available: true,
+    ignored_until: new Date(Date.now() + 86400000).toISOString(),
+    ignore_reason: 'Vacation', source: 'discord-player-self-service', metadata: {},
+  } });
   const result = await executeDiscordPlayerLifecycleCommand(interaction('ignore', [{ type: 4, name: 'days', value: 0 }]), f);
   assert.match(result, /Your Ignore Cleared/);
   assert.equal(f.writes[0].row.ignored_until, null);
   assert.equal(f.writes[0].row.ignore_reason, null);
+});
+
+test('self-service cannot clear or replace an active officer Operations control', async () => {
+  const officerUntil = new Date(Date.now() + 3 * 86400000).toISOString();
+  const f = fixture({ existingControl: {
+    guild_id: GUILD_UUID, player_id: PLAYER_UUID, available: false,
+    ignored_until: officerUntil, ignore_reason: 'Officer hold', source: 'command-center-web', metadata: {},
+  } });
+  const result = await executeDiscordPlayerLifecycleCommand(interaction('ignore', [{ type: 4, name: 'days', value: 0 }]), f);
+  assert.match(result, /Officer Control Remains/);
+  assert.equal(f.writes.length, 0, 'member must not mutate officer-managed control');
 });
 
 test('/tb unregister removes only the invoking Discord player link', async () => {
@@ -72,6 +88,26 @@ test('/tb unregister removes only the invoking Discord player link', async () =>
   assert.equal(f.unlinks[0].discordGuildId, GUILD);
   assert.equal(f.unlinks[0].discordUserId, USER);
   assert.equal(f.unlinks[0].actorDiscordUserId, USER);
+});
+
+test('/tb unregister clears a self-service timed ignore but preserves officer controls', async () => {
+  const self = fixture({ existingControl: {
+    guild_id: GUILD_UUID, player_id: PLAYER_UUID, available: true,
+    ignored_until: new Date(Date.now() + 86400000).toISOString(), source: 'discord-player-self-service', metadata: {},
+  } });
+  await executeDiscordPlayerLifecycleCommand(interaction('unregister'), self);
+  assert.equal(self.writes.length, 1);
+  assert.equal(self.writes[0].row.ignored_until, null);
+  assert.equal(self.unlinks.length, 1);
+
+  const officer = fixture({ existingControl: {
+    guild_id: GUILD_UUID, player_id: PLAYER_UUID, available: false,
+    ignored_until: null, source: 'command-center-web', metadata: {},
+  } });
+  const result = await executeDiscordPlayerLifecycleCommand(interaction('unregister'), officer);
+  assert.equal(officer.writes.length, 0);
+  assert.equal(officer.unlinks.length, 1);
+  assert.match(result, /officer-managed Operations control.*remains in force/i);
 });
 
 test('self-service lifecycle rejects Discord users without a durable player link', async () => {
