@@ -1,3 +1,4 @@
+import { discordHardReservationStore } from './discord-hard-reservation-store.mjs';
 import { discordStateStore } from './discord-state-store.mjs';
 import { supabaseCoreStore } from './supabase-core-store.mjs';
 
@@ -14,6 +15,7 @@ function error(message, code = 'GUILD_UNBIND_FAILED') {
 export async function unbindDiscordGuildIntegration(context, options = {}) {
   const store = options.store || context?.store || supabaseCoreStore;
   const stateStore = options.stateStore || context?.stateStore || discordStateStore;
+  const reservationStore = options.reservationStore || discordHardReservationStore;
   const actorDiscordUserId = text(options.actorDiscordUserId);
   const timestamp = typeof options.now === 'function' ? options.now().toISOString() : nowIso();
   const guildId = text(context?.guild?.id);
@@ -50,8 +52,8 @@ export async function unbindDiscordGuildIntegration(context, options = {}) {
   };
 
   // Fail safe: server-side delivery and future scheduled execution are disabled
-  // before the durable Discord binding is cleared. If the final state-file write
-  // fails, retrying is safe and no new assignment delivery is armed.
+  // before Discord-only state is cleared. If a later durable-state write fails,
+  // retrying is safe and no new assignment delivery remains armed.
   if (verifiedDestinations.length) {
     await store.update('guild_discord_destinations', { guild_id: `eq.${guildId}`, verified: 'eq.true' }, {
       verified: false,
@@ -89,6 +91,16 @@ export async function unbindDiscordGuildIntegration(context, options = {}) {
     occurred_at: timestamp,
   }], { returning: false });
 
+  let clearedHardReservations = 0;
+  const reservationStatus = typeof reservationStore?.status === 'function' ? reservationStore.status() : null;
+  if (reservationStatus?.enabled || reservationStatus?.durable) {
+    if (!reservationStatus?.enabled || !reservationStatus?.durable || typeof reservationStore?.clearGuild !== 'function') {
+      throw error('Durable Discord hard-reservation state cannot be safely cleared; Guild unregister stopped after delivery was disarmed.', 'HARD_RESERVATION_CLEAR_UNAVAILABLE');
+    }
+    const result = await reservationStore.clearGuild({ discordGuildId, actorDiscordUserId });
+    clearedHardReservations = Number(result?.cleared || 0);
+  }
+
   const previous = await stateStore.unbindGuild({ discordGuildId, actorDiscordUserId });
   return Object.freeze({
     unbound: true,
@@ -98,6 +110,7 @@ export async function unbindDiscordGuildIntegration(context, options = {}) {
     disabledDestinations: verifiedDestinations.length,
     pausedSchedules: activeSchedules.length,
     clearedDiscordLinks: Number(previous?.linkedPlayers || summary.linkedPlayers),
+    clearedHardReservations,
     preserved: Object.freeze([
       'canonical Guild identity and roster history',
       'Guild Intelligence daily/history data',
