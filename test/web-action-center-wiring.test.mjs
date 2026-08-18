@@ -13,6 +13,8 @@ const feed = await readFile(new URL('public/web-action-feed.js', root), 'utf8');
 const guildRouter = await readFile(new URL('public/guild-tw-router.js', root), 'utf8');
 const onboarding = await readFile(new URL('public/onboarding/index.html', root), 'utf8');
 const migration = await readFile(new URL('supabase/migrations/20260818160000_web_action_center_foundation.sql', root), 'utf8');
+const tbAction = await readFile(new URL('tb-farm-plan-action.mjs', root), 'utf8');
+const canonical = await readFile(new URL('canonical-roster-service.mjs', root), 'utf8');
 
 test('Raid Max is registered as a website-native action with Discord explicitly optional', () => {
   assert.match(registry, /key: 'raid-max'/);
@@ -23,29 +25,49 @@ test('Raid Max is registered as a website-native action with Discord explicitly 
   assert.match(registry, /shareTargets: Object\.freeze\(\['player-page', 'guild-page', 'discord'\]\)/);
 });
 
+test('Personal TB Farm Plan is a website-native action and reserves future Discord aliases without requiring Discord', () => {
+  assert.match(registry, /key: 'tb-farm-plan'/);
+  assert.match(registry, /'\/tb farms'/);
+  assert.match(registry, /'\/tb farm'/);
+  assert.match(registry, /resultType: 'tb-farm-plan'/);
+  assert.match(registry, /key: 'priorityMode'[\s\S]*type: 'select'/);
+  assert.match(registry, /key: 'maxRecommendations'[\s\S]*type: 'integer'/);
+  assert.match(tbAction, /buildGuildRoteMissionCoverage/);
+  assert.match(tbAction, /buildGuildTbFarmingGuide/);
+  assert.match(tbAction, /JOURNEY_PRESETS/);
+  assert.match(canonical, /getGameUnitCatalog/);
+});
+
 test('execution and publication are separate server operations', () => {
   assert.match(api, /\/api\/account\/web-actions\/execute/);
   assert.match(api, /\/share\$/);
   assert.match(api, /sameOrigin/);
   assert.match(service, /canonical\.getPlayerRoster/);
+  assert.match(service, /executePersonalTbFarmPlan/);
   assert.match(service, /web_action_runs/);
   assert.match(service, /web_action_publications/);
   assert.doesNotMatch(service, /execute\([\s\S]{0,800}shareDiscord/);
 });
 
-test('website UI tells users Discord is optional and never auto-posts a completed action', () => {
+test('website UI tells users Discord is optional, renders generic action inputs, and never auto-posts a completed action', () => {
   assert.match(page, /Run the tools\. <span>Discord optional\.<\/span>/);
   assert.match(page, /Publishing is optional\. Running the action never posts automatically\./);
   assert.match(page, /Share to My Player Page/);
   assert.match(page, /Share to Guild Page/);
   assert.match(page, /Share to Discord/);
+  assert.match(ui, /function actionInput/);
+  assert.match(ui, /input\.type==='select'/);
+  assert.match(ui, /input\.type==='integer'/);
+  assert.match(ui, /renderTbFarmPlan/);
   assert.match(ui, /Nothing was posted automatically/);
 });
 
-test('app-native Player and Guild command feeds are wired globally and link back to the Action Center', () => {
+test('app-native Player and Guild command feeds render TB Farm Plan publications and link back to Action Center', () => {
   assert.match(guildRouter, /web-action-feed\.js/);
   assert.match(feed, /feed\/player/);
   assert.match(feed, /feed\/guild/);
+  assert.match(feed, /tbFarmPlanItem/);
+  assert.match(feed, /TB FARM PLAN · ROTE/);
   assert.match(feed, /Open Action Center/);
   assert.match(feed, /SHARED COMMAND RESULTS/);
 });
