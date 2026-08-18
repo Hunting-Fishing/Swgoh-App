@@ -63,7 +63,6 @@ function readableFailure(reason) {
   if (value.startsWith("requires-r")) return value.replace("requires-r", "needs R");
   if (value === "target-category-mismatch") return "not targeted by this bonus";
   if (value === "alignment-mismatch") return "alignment mismatch";
-  if (value === "combat-type-mismatch") return "combat type mismatch";
   if (value.startsWith("excluded:")) return `excluded ${value.slice(9).replace(/_/g, " ")}`;
   if (value === "unit-catalog-missing") return "unit catalog missing";
   if (value === "target-rule-unresolved") return "target rule unresolved";
@@ -81,6 +80,13 @@ function blockedSummary(coverage) {
     .join(" · ");
 }
 
+function resolvedAbilityNames(datacron) {
+  return [...new Set((Array.isArray(datacron?.affixes) ? datacron.affixes : [])
+    .filter((affix) => affix?.abilityTextResolved === true && clean(affix?.abilityName))
+    .map((affix) => clean(affix.abilityName)))]
+    .slice(0, 3);
+}
+
 function renderUnknown(card, message) {
   card.querySelector(".gac-datacron-counter-fit")?.remove();
   const output = document.createElement("div");
@@ -96,9 +102,14 @@ function renderCoverage(card, coverage, catalog) {
   output.className = `gac-datacron-counter-fit ${full ? "is-full" : "is-partial"}`;
   const label = datacronLabel(coverage.datacron, catalog);
   const blocked = blockedSummary(coverage);
+  const abilityNames = resolvedAbilityNames(coverage.datacron);
+  const abilityLine = abilityNames.length
+    ? `<small>Official ability text: ${escapeHtml(abilityNames.join(" · "))}</small>`
+    : `<small>Ability mechanics text is not resolved for this selected datacron; coverage uses target/gate evidence only.</small>`;
   output.innerHTML = `
     <strong>Best verified datacron coverage:</strong> ${escapeHtml(label)} · ${coverage.eligibleMembers}/${coverage.squadSize} members receive ≥1 unlocked ability target${coverage.leaderEligible === true ? " · leader eligible" : ""}
-    ${blocked ? `<small>${escapeHtml(blocked)}</small>` : `<small>Eligibility/coverage only. Ability mechanics and combat strength are not yet scored.</small>`}`;
+    ${abilityLine}
+    ${blocked ? `<small>${escapeHtml(blocked)}</small>` : `<small>Eligibility/coverage only. Official ability text is displayed when available but is not yet assigned an arbitrary combat-strength weight.</small>`}`;
   card.append(output);
 }
 
@@ -180,4 +191,4 @@ document.addEventListener("DOMContentLoaded", ensureMounted, { once: true });
 window.addEventListener("hashchange", () => setTimeout(ensureMounted, 0));
 new MutationObserver(ensureMounted).observe(document.documentElement, { childList: true, subtree: true });
 
-export { blockedSummary, squadFromCard };
+export { blockedSummary, resolvedAbilityNames, squadFromCard };
