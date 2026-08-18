@@ -103,3 +103,25 @@ test("exact opponent requires matching event, explicit round and high-confidence
   assert.equal(exact.resolution.round, 3);
   assert.equal(exact.resolution.method, "persisted-event-round-evidence");
 });
+
+test("low-confidence inferred round chronology can never resolve an exact opponent", async () => {
+  const store = {
+    async select(table) {
+      if (table === "players") return [{ id: "33333333-3333-3333-3333-333333333333", ally_code: "732764286", swgoh_player_id: "PLAYER_1", name: "Warm Bacon" }];
+      if (table === "gac_events") return [{ id: "11111111-1111-1111-1111-111111111111", event_instance_id: "GAC:1" }];
+      if (table === "gac_rounds") return [{
+        opponent_swgoh_player_id: "PLAYER_2",
+        opponent_ally_code: "123456789",
+        opponent_name: "Navygators",
+        source: "c3po-gahistory-inferred-round",
+        source_ref: "https://history.test/player.json",
+        confidence: 0.65,
+        verified: false,
+        recorded_at: "2026-08-18T17:00:00Z",
+      }];
+      return [];
+    },
+  };
+  const service = createGacBracketIndexService({ store });
+  assert.equal(await service.findExactOpponent("732764286", "GAC:1", 3), null);
+});

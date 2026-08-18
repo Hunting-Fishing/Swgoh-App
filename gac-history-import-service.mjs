@@ -71,6 +71,9 @@ function battleRow(battle, context) {
     metadata: {
       battleType: battle.battleType,
       rawOutcome: battle.rawOutcome,
+      roundDerivation: clean(battle.roundDerivation) || "unavailable",
+      roundConfidence: Number(battle.roundConfidence || 0),
+      roundInferred: clean(battle.roundDerivation) === "three-match-result-order",
     },
   };
 }
@@ -133,26 +136,37 @@ function roundRowsFromBattles(battles, context) {
     const key = Number(battle.roundNumber);
     if (!byRound.has(key)) byRound.set(key, battle);
   }
-  return [...byRound.entries()].map(([roundNumber, battle]) => ({
-    event_id: context.eventRowId,
-    round_number: roundNumber,
-    player_id: context.playerRowId,
-    opponent_swgoh_player_id: battle.opponentPlayerId || null,
-    opponent_ally_code: battle.opponentAllyCode || null,
-    opponent_name: battle.opponentName || null,
-    result: "unknown",
-    player_banners: null,
-    opponent_banners: null,
-    source: "c3po-gahistory",
-    source_ref: context.sourceRef,
-    confidence: battle.opponentPlayerId || battle.opponentAllyCode || battle.opponentName ? 0.95 : 0.85,
-    verified: false,
-    recorded_at: context.sourceUpdatedAt,
-    metadata: {
-      importedFromMatchIndex: battle.matchIndex,
-      sourceRoundNumber: true,
-    },
-  }));
+  return [...byRound.entries()].map(([roundNumber, battle]) => {
+    const derivation = clean(battle.roundDerivation) || "unavailable";
+    const inferred = derivation === "three-match-result-order";
+    const opponentKnown = Boolean(battle.opponentPlayerId || battle.opponentAllyCode || battle.opponentName);
+    const confidence = inferred
+      ? Math.min(0.8, Math.max(0.5, Number(battle.roundConfidence || 0.65)) + (opponentKnown ? 0.1 : 0))
+      : (opponentKnown ? 0.95 : 0.85);
+    return {
+      event_id: context.eventRowId,
+      round_number: roundNumber,
+      player_id: context.playerRowId,
+      opponent_swgoh_player_id: battle.opponentPlayerId || null,
+      opponent_ally_code: battle.opponentAllyCode || null,
+      opponent_name: battle.opponentName || null,
+      result: "unknown",
+      player_banners: null,
+      opponent_banners: null,
+      source: inferred ? "c3po-gahistory-inferred-round" : "c3po-gahistory",
+      source_ref: context.sourceRef,
+      confidence,
+      verified: false,
+      recorded_at: context.sourceUpdatedAt,
+      metadata: {
+        importedFromMatchIndex: battle.matchIndex,
+        sourceRoundNumber: !inferred,
+        roundDerivation: derivation,
+        roundInferred: inferred,
+        exactOpponentEligible: false,
+      },
+    };
+  });
 }
 
 export function createGacHistoryImportService(options = {}) {
@@ -211,7 +225,7 @@ export function createGacHistoryImportService(options = {}) {
     const info = await source.getInfo(mode);
     const raw = await source.getPlayer(mode, player.swgoh_player_id);
     if (!raw) {
-      return Object.freeze({ mode, eventInstanceId: info.eventInstanceId, season: info.season, imported: 0, importedCounters: 0, available: false });
+      return Object.freeze({ mode, eventInstanceId: info.eventInstanceId, season: info.season, imported: 0, importedCounters: 0, importedRounds: 0, inferredRounds: 0, available: false });
     }
     const event = await upsertEvent(info);
     const sourceUpdatedAt = now().toISOString();
@@ -246,9 +260,18 @@ export function createGacHistoryImportService(options = {}) {
         sourceUpdatedAt,
       });
       if (roundRows.length) {
-        await store.upsert("gac_rounds", roundRows, {
-          onConflict: "event_id,round_number,player_id,source",
-        });
+        const explicitRows = roundRows.filter((row) => row.source === "c3po-gahistory");
+        const inferredRows = roundRows.filter((row) => row.source === "c3po-gahistory-inferred-round");
+        if (explicitRows.length) {
+          await store.upsert("gac_rounds", explicitRows, {
+            onConflict: "event_id,round_number,player_id,source",
+          });
+        }
+        if (inferredRows.length) {
+          await store.upsert("gac_rounds", inferredRows, {
+            onConflict: "event_id,round_number,player_id,source",
+          });
+        }
       }
     }
 
@@ -258,6 +281,7 @@ export function createGacHistoryImportService(options = {}) {
       season: info.season,
       imported: rows.length,
       importedRounds: roundRows.length,
+      inferredRounds: roundRows.filter((row) => row?.metadata?.roundInferred === true).length,
       importedCounters: counterRows.length,
       available: true,
       characterBattles: battles.filter((battle) => battle.battleType === "character").length,
@@ -277,6 +301,7 @@ export function createGacHistoryImportService(options = {}) {
       results: Object.freeze(results),
       imported: results.reduce((sum, result) => sum + result.imported, 0),
       importedRounds: results.reduce((sum, result) => sum + (result.importedRounds || 0), 0),
+      inferredRounds: results.reduce((sum, result) => sum + (result.inferredRounds || 0), 0),
       importedCounters: results.reduce((sum, result) => sum + (result.importedCounters || 0), 0),
       importedAt: now().toISOString(),
     });
@@ -287,4 +312,4 @@ export function createGacHistoryImportService(options = {}) {
 
 export const gacHistoryImportService = createGacHistoryImportService();
 
-export { counterRowsFromBattles };
+export { counterRowsFromBattles, roundRowsFromBattles };
