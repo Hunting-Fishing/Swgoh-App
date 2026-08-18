@@ -142,6 +142,7 @@ async function createSchedule() {
     name: text(document.getElementById('opsScheduleName')?.value) || `${type.toUpperCase()} Scheduled Assignment`,
     recurrenceKind: text(document.getElementById('opsScheduleRecurrence')?.value) || 'once',
     scheduledTimezone: text(document.getElementById('opsScheduleTimezone')?.value) || timezone(),
+    scheduledLocalDateTime: runAtLocal,
     scheduledLocalTime: localClock,
     nextRunAt: localToIso(runAtLocal),
     destinationId: text(document.getElementById('opsScheduleDestination')?.value),
