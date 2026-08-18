@@ -53,6 +53,7 @@ function summary(body) {
     l9: value.items.filter((item) => n(item.level) >= 9).length,
     rerolled: value.items.filter((item) => n(item.rerollCount) > 0).length,
     abilityAffixes: affixes.filter((affix) => clean(affix?.abilityId)).length,
+    resolvedAbilityAffixes: affixes.filter((affix) => affix?.abilityTextResolved === true && (clean(affix?.abilityName) || clean(affix?.abilityDescription))).length,
     sets,
   };
 }
@@ -94,6 +95,7 @@ function sideCard(body, label, enemy = false, catalog = null) {
       ${metric("Level 9+", stats.l9)}
       ${metric("Rerolled", stats.rerolled)}
       ${metric("Ability affixes", stats.abilityAffixes)}
+      ${metric("Ability text", stats.resolvedAbilityAffixes)}
     </div>
     <div class="gac-datacron-setline">${escapeHtml(setLine(stats.sets, catalog))}</div>
     ${inventoryGrid(body, catalog)}
@@ -112,6 +114,10 @@ function meaningfulTargetLabels(targetRule) {
   return (targetRule.includeLabels || []).filter((label) => label && !ignored.has(label));
 }
 
+function abilityResolved(affix) {
+  return affix?.abilityTextResolved === true && Boolean(clean(affix?.abilityName) || clean(affix?.abilityDescription));
+}
+
 function affixLabel(affix, index, catalog = null) {
   const tier = Number.isInteger(Number(affix?.tier)) ? Number(affix.tier) : index + 1;
   const ability = clean(affix?.abilityId);
@@ -123,7 +129,8 @@ function affixLabel(affix, index, catalog = null) {
 
   if (ability) {
     const scope = eligibility || resolved?.scopeLabel || (target ? target : "eligible units");
-    return `L${tier} · ${scope} · ability ${ability}`;
+    const officialName = abilityResolved(affix) ? clean(affix?.abilityName) : "";
+    return `L${tier} · ${scope} · ${officialName || `ability ${ability}`}`;
   }
   if (resolved?.scopeLabel) {
     return `L${tier} · ${resolved.scopeLabel}${eligibility ? ` · ${eligibility}` : ""}`;
@@ -131,6 +138,25 @@ function affixLabel(affix, index, catalog = null) {
   if (target) return `L${tier} · ${eligibility || target}`;
   if (statType !== null) return `L${tier} · stat ${statType}`;
   return `L${tier} affix`;
+}
+
+function abilityDetail(affix, index, catalog = null) {
+  if (!clean(affix?.abilityId)) return "";
+  const tier = Number.isInteger(Number(affix?.tier)) ? Number(affix.tier) : index + 1;
+  const rawId = clean(affix?.abilityId);
+  if (!abilityResolved(affix)) {
+    return `<div class="gac-datacron-ability-detail is-unresolved"><strong>L${tier} ability text unresolved</strong><p>${escapeHtml(rawId)}</p></div>`;
+  }
+  const resolved = catalog ? resolveAffix(affix, catalog) : null;
+  const targetLabels = meaningfulTargetLabels(resolved?.targetRule);
+  const name = clean(affix?.abilityName) || `Level ${tier} ability`;
+  const description = clean(affix?.abilityDescription);
+  return `<div class="gac-datacron-ability-detail is-resolved">
+    <div class="gac-datacron-ability-title"><strong>L${tier} · ${escapeHtml(name)}</strong><span>CG LOCALIZED</span></div>
+    ${targetLabels.length ? `<small>Targets: ${escapeHtml(targetLabels.join(" · "))}</small>` : ""}
+    ${description ? `<p>${escapeHtml(description)}</p>` : ""}
+    <code title="Raw ability ID retained for audit">${escapeHtml(rawId)}</code>
+  </div>`;
 }
 
 function datacronTitle(item, catalog = null) {
@@ -157,10 +183,17 @@ function inventoryGrid(body, catalog = null) {
     .slice(0, 8);
   return `<div class="gac-datacron-inventory">${strongest.map((item) => {
     const affixes = importantAffixes(item);
+    const details = affixes.map((affix, index) => abilityDetail(affix, index, catalog)).filter(Boolean).join("");
     return `<div class="gac-datacron-card">
       <div class="gac-datacron-card-head"><strong>${escapeHtml(datacronTitle(item, catalog))}</strong><span>${item.locked ? "LOCKED" : "LIVE"}</span></div>
       <small>${escapeHtml(datacronMeta(item, catalog))}</small>
-      ${affixes.length ? `<div class="gac-datacron-affixes">${affixes.map((affix, index) => `<span class="gac-datacron-affix" title="${escapeHtml(catalog ? "Resolved from current public game-data where exact; raw ability ID retained because ability prose is not yet resolved." : "Raw Comlink/game ID; catalog unavailable.")}">${escapeHtml(affixLabel(affix, index, catalog))}</span>`).join("")}</div>` : ""}
+      ${affixes.length ? `<div class="gac-datacron-affixes">${affixes.map((affix, index) => {
+        const title = abilityResolved(affix)
+          ? `${clean(affix?.abilityName)} · raw ${clean(affix?.abilityId)}`
+          : (catalog ? "Resolved from current public game-data where exact; raw ability ID retained." : "Raw Comlink/game ID; catalog unavailable.");
+        return `<span class="gac-datacron-affix" title="${escapeHtml(title)}">${escapeHtml(affixLabel(affix, index, catalog))}</span>`;
+      }).join("")}</div>` : ""}
+      ${details ? `<div class="gac-datacron-ability-details">${details}</div>` : ""}
     </div>`;
   }).join("")}</div>`;
 }
@@ -195,17 +228,18 @@ function render(mine, opponent, catalog = null) {
   const panel = ensurePanel();
   if (!panel) return;
   const known = Array.isArray(mine?.datacrons) && Array.isArray(opponent?.datacrons);
+  const resolvedText = summary(mine).resolvedAbilityAffixes || summary(opponent).resolvedAbilityAffixes || 0;
   panel.innerHTML = `
     <div class="gac-datacron-heading">
-      <div><div class="kicker">DATACRON INTELLIGENCE</div><h4>Owned Datacrons · Level 3 / 6 / 9</h4><p>Live Comlink instances plus shared public game-data. Eligibility and stat scope resolve only when an exact catalog match exists; raw ability IDs remain visible until bonus prose/mechanics are proven.</p></div>
-      <span class="gac-datacron-truth">${known ? "DETAILS VERIFIED" : "PARTIAL EVIDENCE"} · ${escapeHtml(catalogVersionLabel(catalog))}</span>
+      <div><div class="kicker">DATACRON INTELLIGENCE</div><h4>Owned Datacrons · Level 3 / 6 / 9</h4><p>Live Comlink instances plus shared public game-data. Exact ability IDs are localized through CG game-data/localization when available; every raw ID remains visible for audit.</p></div>
+      <span class="gac-datacron-truth">${known ? "DETAILS VERIFIED" : "PARTIAL EVIDENCE"} · ${resolvedText ? "ABILITY TEXT LIVE" : "ABILITY IDS RAW"} · ${escapeHtml(catalogVersionLabel(catalog))}</span>
     </div>
     <div class="gac-datacron-sides">
       ${sideCard(mine, mine?.player?.name || "Your roster", false, catalog)}
       <div class="gac-datacron-vs">VS</div>
       ${sideCard(opponent, opponent?.player?.name || "Opponent", true, catalog)}
     </div>
-    <div class="gac-datacron-footnote">Set metadata, scope icons and target eligibility are resolved from the versioned public game-data catalog when available. No combat-value or counter bonus is assigned from abilityId, targetRule, statValue or rerollIndex yet.</div>`;
+    <div class="gac-datacron-footnote">Set metadata, stat scope and target eligibility are resolved only from exact current game-data matches. Official ability text is displayed only when the live gateway resolves the exact ability ID through CG localization. Counter strength still does not assign a numeric weight to ability prose.</div>`;
 }
 
 function renderError(message) {
@@ -247,7 +281,7 @@ function updateLegacyWarning() {
   const warning = byId("gacCommandCenterPro")?.querySelector(".gac-warning");
   if (!warning || warning.dataset.datacronUpdated === "true") return;
   warning.dataset.datacronUpdated = "true";
-  warning.textContent = "Historical win rates are shown only when imported evidence exists. Roster-fit suggestions remain explicitly labeled as heuristics. Public live datacron instances can be enriched with exact set/stat/eligibility catalog matches, but raw ability IDs are not converted into counter strength until their mechanics are resolved.";
+  warning.textContent = "Historical win rates are shown only when imported evidence exists. Roster-fit suggestions remain explicitly labeled as heuristics. Exact datacron ability text may come from CG game-data/localization, but ability prose is not converted into counter strength until its mechanics are parsed into traceable structured signals.";
 }
 
 function ensureBound() {
@@ -259,4 +293,4 @@ document.addEventListener("DOMContentLoaded", ensureBound, { once: true });
 window.addEventListener("hashchange", () => setTimeout(ensureBound, 0));
 new MutationObserver(ensureBound).observe(document.documentElement, { childList: true, subtree: true });
 
-export { inventory, summary };
+export { abilityResolved, inventory, summary };
