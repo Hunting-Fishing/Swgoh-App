@@ -68,7 +68,7 @@ function renderBracket() {
     return;
   }
   const opponents = Array.isArray(bracket.opponents) ? bracket.opponents : [];
-  meta.textContent = `${bracket.league || "GAC"} · bracket ${Number(bracket.bracketIndex ?? 0)} · ${opponents.length} possible opponents · ${bracket.lookup?.method === "rank-hint" ? "fast rank lookup" : "live bracket scan"}`;
+  meta.textContent = `${bracket.league || "GAC"} · bracket ${Number(bracket.bracketIndex ?? 0)} · ${opponents.length} other bracket players · ${bracket.lookup?.method === "rank-hint" ? "fast rank lookup" : "live bracket scan"}`;
   if (!opponents.length) {
     output.innerHTML = `<div class="workspace-note">Your bracket was found, but no opponent profiles were returned.</div>`;
     return;
