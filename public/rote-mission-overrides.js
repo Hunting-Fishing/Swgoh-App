@@ -3,6 +3,10 @@ import {
   ROTE_TACTICAL_P1_P2_SOURCE,
   roteTacticalP1P2Override,
 } from "./rote-tactical-p1-p2-data.js";
+import {
+  ROTE_TACTICAL_P3_SOURCE,
+  roteTacticalP3Override,
+} from "./rote-tactical-p3-data.js";
 
 const CANONICAL_BASE_IDS = Object.freeze({
   BOKATANMANDALORE: "MANDALORBOKATAN",
@@ -50,19 +54,52 @@ function normalizeEntry(entry = {}) {
   };
 }
 
-const TATOOINE_UNLOCK_RECOMMENDATION = Object.freeze({
-  id: "rote-tatooine-mandalore-unlock-ig12",
-  name: "Bo-Katan + Beskar Mando + IG-12",
-  confidence: "community",
-  verifiedLegal: true,
-  members: [
-    { name: "Bo-Katan (Mand'alor)", baseId: "MANDALORBOKATAN" },
-    { name: "The Mandalorian (Beskar Armor)", baseId: "THEMANDALORIANBESKARARMOR" },
-    { name: "IG-12 & Grogu", baseId: "IG12" },
-  ],
-  sourceIds: ["cg-mandalore-zone", "starwarsfans-mandalore-unlock"],
-  lastVerified: "2026-08-15",
-});
+const TATOOINE_UNLOCK_RECOMMENDATIONS = Object.freeze([
+  Object.freeze({
+    id: "rote-tatooine-mandalore-unlock-ig12",
+    name: "ROTE-P3-TAT-MANDALORE-IG12",
+    confidence: "community",
+    verifiedLegal: true,
+    members: [
+      { name: "Bo-Katan (Mand'alor)", baseId: "MANDALORBOKATAN" },
+      { name: "The Mandalorian (Beskar Armor)", baseId: "THEMANDALORIANBESKARARMOR" },
+      { name: "IG-12 & Grogu", baseId: "IG12" },
+    ],
+    sourceIds: ["cg-mandalore-zone", "starwarsfans-mandalore-unlock", "genskaar-rote"],
+    lastVerified: "2026-08-19",
+  }),
+  Object.freeze({
+    id: "rote-tatooine-mandalore-unlock-paz",
+    name: "ROTE-P3-TAT-MANDALORE-PAZ",
+    confidence: "community",
+    verifiedLegal: true,
+    members: [
+      { name: "Bo-Katan (Mand'alor)", baseId: "MANDALORBOKATAN" },
+      { name: "The Mandalorian (Beskar Armor)", baseId: "THEMANDALORIANBESKARARMOR" },
+      { name: "Paz Vizsla", baseId: "PAZVIZSLA" },
+    ],
+    sourceIds: ["cg-mandalore-zone", "starwarsfans-mandalore-unlock", "genskaar-rote"],
+    lastVerified: "2026-08-19",
+  }),
+]);
+
+function applyTacticalOverride(next, tacticalOverride, source) {
+  if (!tacticalOverride) return next;
+  next.name = tacticalOverride.name;
+  next.enemies = [...tacticalOverride.enemies];
+  next.recommendations = tacticalOverride.recommendations.map(normalizeRecommendation);
+  if (tacticalOverride.missionType) next.missionType = tacticalOverride.missionType;
+  next.sources = [...new Set([...(next.sources || []), source.sourceId])];
+  next.tactical = {
+    encounter: tacticalOverride.name,
+    commandTag: tacticalOverride.commandTag,
+    presetPrefix: tacticalOverride.presetPrefix,
+    sourceId: source.sourceId,
+    sourceRevision: source.sourceRevision,
+    lastVerified: source.lastVerified,
+  };
+  return next;
+}
 
 export function normalizeRoteMission(mission = {}) {
   const next = {
@@ -94,25 +131,11 @@ export function normalizeRoteMission(mission = {}) {
     next.lastVerified = fleetAudit.lastVerified;
   }
 
-  const tacticalOverride = roteTacticalP1P2Override(next.id);
-  if (tacticalOverride) {
-    next.name = tacticalOverride.name;
-    next.enemies = [...tacticalOverride.enemies];
-    next.recommendations = tacticalOverride.recommendations.map(normalizeRecommendation);
-    if (tacticalOverride.missionType) next.missionType = tacticalOverride.missionType;
-    next.sources = [...new Set([...(next.sources || []), ROTE_TACTICAL_P1_P2_SOURCE.sourceId])];
-    next.tactical = {
-      encounter: tacticalOverride.name,
-      commandTag: tacticalOverride.commandTag,
-      presetPrefix: tacticalOverride.presetPrefix,
-      sourceId: ROTE_TACTICAL_P1_P2_SOURCE.sourceId,
-      sourceRevision: ROTE_TACTICAL_P1_P2_SOURCE.sourceRevision,
-      lastVerified: ROTE_TACTICAL_P1_P2_SOURCE.lastVerified,
-    };
-  }
+  applyTacticalOverride(next, roteTacticalP1P2Override(next.id), ROTE_TACTICAL_P1_P2_SOURCE);
+  applyTacticalOverride(next, roteTacticalP3Override(next.id), ROTE_TACTICAL_P3_SOURCE);
 
   if (next.id === "tatooine-mandalore-unlock") {
-    next.name = "Krayt Dragon Special Mission — Unlock Mandalore";
+    next.name = "Unlock Mandalore · Krayt Dragon";
     next.entry = {
       ...next.entry,
       verified: true,
@@ -132,9 +155,18 @@ export function normalizeRoteMission(mission = {}) {
       ],
       notes: "Official unlock mission: Bo-Katan (Mand'alor) R7 + The Mandalorian (Beskar Armor) R7 + one additional Mandalorian R7. Twenty-five guild clears unlock Mandalore for that Territory Battle instance.",
     };
-    next.recommendations = [TATOOINE_UNLOCK_RECOMMENDATION];
+    next.enemies = ["Krayt Dragon"];
+    next.recommendations = TATOOINE_UNLOCK_RECOMMENDATIONS.map(normalizeRecommendation);
     next.rewards = ["50 Mk II Guild Event Tokens per clear", "25 guild clears unlock Mandalore"];
-    next.sources = [...new Set([...(next.sources || []), "cg-mandalore-zone", "starwarsfans-mandalore-unlock"])];
+    next.sources = [...new Set([...(next.sources || []), "cg-mandalore-zone", "starwarsfans-mandalore-unlock", ROTE_TACTICAL_P3_SOURCE.sourceId])];
+    next.tactical = {
+      encounter: "Unlock Mandalore · Krayt Dragon",
+      commandTag: "MANDALORE UNLOCK | BKM + BAM + 1 MANDO",
+      presetPrefix: "ROTE-P3-TAT-MANDALORE",
+      sourceId: ROTE_TACTICAL_P3_SOURCE.sourceId,
+      sourceRevision: ROTE_TACTICAL_P3_SOURCE.sourceRevision,
+      lastVerified: ROTE_TACTICAL_P3_SOURCE.lastVerified,
+    };
   }
 
   if (next.id === "mandalore-bkm") {
