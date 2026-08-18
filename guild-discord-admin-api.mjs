@@ -1,6 +1,7 @@
 import { guildDiscordAdminService } from './guild-discord-admin-service.mjs';
 import { guildDiscordLinkAdminService } from './guild-discord-link-admin-service.mjs';
 import { guildIntegrationReportService } from './guild-integration-report-service.mjs';
+import { guildMemberOperationsService } from './guild-member-operations-service.mjs';
 import { supabaseAuthSession } from './supabase-auth-session.mjs';
 
 const text = (value) => String(value ?? '').trim();
@@ -27,11 +28,26 @@ export function createGuildDiscordAdminApi(options = {}) {
   const service = options.service || guildDiscordAdminService;
   const integration = options.integration || guildIntegrationReportService;
   const links = options.links || guildDiscordLinkAdminService;
+  const members = options.members || guildMemberOperationsService;
   async function handle(request, response, url) {
     if (!url.pathname.startsWith('/api/account/guild-discord-admin/')) return false;
     try {
       const user = await session.currentUser(request);
       if (!user?.id) throw httpError('A signed-in Command Center session is required.', 401, 'AUTH_REQUIRED');
+
+      const memberDirectory = url.pathname.match(/^\/api\/account\/guild-discord-admin\/(\d{9})\/member-operations$/);
+      if (memberDirectory) {
+        if (request.method !== 'GET') throw httpError('Member Operations directory is read-only.', 405, 'METHOD_NOT_ALLOWED');
+        writeJson(response, 200, await members.directory(user.id, memberDirectory[1]));
+        return true;
+      }
+      const memberDetail = url.pathname.match(/^\/api\/account\/guild-discord-admin\/(\d{9})\/member-operations\/([0-9a-f-]{36})$/i);
+      if (memberDetail) {
+        if (request.method !== 'GET') throw httpError('Member Operations detail is read-only.', 405, 'METHOD_NOT_ALLOWED');
+        writeJson(response, 200, await members.member(user.id, memberDetail[1], memberDetail[2]));
+        return true;
+      }
+
       const match = url.pathname.match(/^\/api\/account\/guild-discord-admin\/(\d{9})(?:\/(status|integration-report|links|link-member|unlink-member|verify-channel|unverify-channel|match-guildmates))?$/);
       if (!match) throw httpError('A valid Guild lookup Ally Code is required.', 400, 'INVALID_ALLY_CODE');
       const code = match[1]; const action = match[2] || 'status';
