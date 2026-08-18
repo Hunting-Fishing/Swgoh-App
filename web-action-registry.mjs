@@ -22,7 +22,7 @@ export const WEB_ACTION_REGISTRY = Object.freeze([
     commandAliases: Object.freeze(['/tb farms', '/tb farm']),
     category: 'Territory Battles',
     scope: 'player-in-guild',
-    description: 'Build your personal ROTE farm queue from the current canonical Guild roster, rank Guild-impact upgrades, and show which farms also advance Journey Guide, Galactic Legend, or fleet prerequisites.',
+    description: 'Build your personal ROTE farm queue from the current canonical Guild roster, prioritize farms that advance your tracked Journey goals, and show Guild + Journey double-use value.',
     execution: 'website-native',
     discordRequired: false,
     implemented: true,
@@ -31,10 +31,11 @@ export const WEB_ACTION_REGISTRY = Object.freeze([
     shareTargets: Object.freeze(['player-page', 'guild-page', 'discord']),
     inputs: Object.freeze([
       Object.freeze({
-        key: 'priorityMode', label: 'Prioritize by', type: 'select', default: 'guild-impact',
+        key: 'priorityMode', label: 'Prioritize by', type: 'select', default: 'my-goals',
         options: Object.freeze([
+          Object.freeze({ value: 'my-goals', label: 'My tracked Journey goals' }),
           Object.freeze({ value: 'guild-impact', label: 'Guild TB impact' }),
-          Object.freeze({ value: 'journey-overlap', label: 'Journey overlap' }),
+          Object.freeze({ value: 'journey-overlap', label: 'Any Journey overlap' }),
           Object.freeze({ value: 'closest-upgrade', label: 'Closest upgrade' }),
         ]),
       }),
