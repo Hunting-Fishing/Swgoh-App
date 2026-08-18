@@ -121,24 +121,35 @@ export function createGacBracketIndexService(options = {}) {
     }
 
     const capturedAt = now().toISOString();
+    const existingEvent = await selectOne("gac_events", {
+      select: "id,event_instance_id,season_id,instance_id,format,status,starts_at,ends_at,source,source_ref,metadata",
+      event_instance_id: `eq.${eventInstanceId}`,
+    }).catch(() => null);
+    const liveFormat = ["3v3", "5v5"].includes(clean(bracket.format).toLowerCase()) ? clean(bracket.format).toLowerCase() : "";
     const eventRow = {
       event_instance_id: eventInstanceId,
-      season_id: clean(event.id || event.seasonId || eventInstanceId.split(":")[0] || eventInstanceId),
-      instance_id: clean(event.instanceId) || null,
-      format: ["3v3", "5v5"].includes(clean(bracket.format).toLowerCase()) ? clean(bracket.format).toLowerCase() : null,
-      status: clean(event.status) || null,
-      starts_at: timestamp(event.startTime || event.displayStartTime),
-      ends_at: timestamp(event.rewardTime || event.displayEndTime),
+      season_id: clean(event.id || event.seasonId || existingEvent?.season_id || eventInstanceId.split(":")[0] || eventInstanceId),
+      instance_id: clean(event.instanceId || existingEvent?.instance_id) || null,
+      format: liveFormat || clean(existingEvent?.format) || null,
+      status: clean(event.status || existingEvent?.status) || null,
+      starts_at: timestamp(event.startTime || event.displayStartTime) || clean(existingEvent?.starts_at) || null,
+      ends_at: timestamp(event.rewardTime || event.displayEndTime) || clean(existingEvent?.ends_at) || null,
       source: "comlink",
       source_ref: clean(options.sourceRef || "/v1/gac/bracket/by-player"),
       captured_at: capturedAt,
       metadata: {
-        lookupMethod: clean(bracket.lookup?.method),
-        playerCount: asArray(bracket.players).length,
+        ...(existingEvent?.metadata && typeof existingEvent.metadata === "object" ? existingEvent.metadata : {}),
+        liveBracketIndex: {
+          lookupMethod: clean(bracket.lookup?.method),
+          playerCount: asArray(bracket.players).length,
+          league,
+          bracketIndex,
+          capturedAt,
+        },
       },
     };
     const eventUpsert = asArray(await store.upsert("gac_events", [eventRow], { onConflict: "event_instance_id" }));
-    const persistedEvent = eventUpsert[0] || await selectOne("gac_events", {
+    const persistedEvent = eventUpsert[0] || existingEvent || await selectOne("gac_events", {
       select: "id,event_instance_id",
       event_instance_id: `eq.${eventInstanceId}`,
     });
