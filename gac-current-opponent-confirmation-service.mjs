@@ -62,6 +62,62 @@ export function createGacCurrentOpponentConfirmationService(options = {}) {
     return player;
   }
 
+  async function findLatestConfirmed(allyCodeInput, eventInstanceIdInput, roundInput = null) {
+    const allyCode = normalizeAllyCode(allyCodeInput);
+    const eventInstanceId = clean(eventInstanceIdInput);
+    const round = validRound(roundInput);
+    if (!allyCode || !eventInstanceId) return null;
+
+    const [player, event] = await Promise.all([
+      selectOne("players", {
+        select: "id,ally_code,swgoh_player_id,name",
+        ally_code: `eq.${allyCode}`,
+      }),
+      selectOne("gac_events", {
+        select: "id,event_instance_id",
+        event_instance_id: `eq.${eventInstanceId}`,
+      }),
+    ]);
+    if (!player?.id || !event?.id) return null;
+
+    const query = {
+      select: "round_number,opponent_swgoh_player_id,opponent_ally_code,opponent_name,source,source_ref,confidence,verified,recorded_at,metadata",
+      event_id: `eq.${event.id}`,
+      player_id: `eq.${player.id}`,
+      source: "eq.user-confirmed-current-bracket",
+      verified: "eq.true",
+      order: "recorded_at.desc",
+      limit: 5,
+    };
+    if (round) query.round_number = `eq.${round}`;
+    const rows = asArray(await store.select("gac_rounds", query));
+    const row = rows.find((candidate) => {
+      const code = normalizeAllyCode(candidate?.opponent_ally_code);
+      return code && candidate?.verified === true && Number(candidate?.confidence) >= 0.99;
+    });
+    if (!row) return null;
+
+    return Object.freeze({
+      opponent: Object.freeze({
+        allyCode: normalizeAllyCode(row.opponent_ally_code),
+        playerId: clean(row.opponent_swgoh_player_id),
+        name: clean(row.opponent_name),
+      }),
+      resolution: Object.freeze({
+        exact: true,
+        method: "verified-user-confirmed-current-bracket",
+        eventInstanceId,
+        round: validRound(row.round_number),
+        source: clean(row.source),
+        sourceRef: clean(row.source_ref),
+        confidence: Number(row.confidence),
+        verified: true,
+        recordedAt: clean(row.recorded_at),
+        roundSource: clean(row?.metadata?.roundSource),
+      }),
+    });
+  }
+
   async function confirm(userIdInput, input = {}) {
     const allyCode = normalizeAllyCode(input.allyCode);
     const opponentAllyCode = normalizeAllyCode(input.opponentAllyCode);
@@ -161,6 +217,7 @@ export function createGacCurrentOpponentConfirmationService(options = {}) {
 
   return Object.freeze({
     assertVerifiedOwnership,
+    findLatestConfirmed,
     confirm,
   });
 }
