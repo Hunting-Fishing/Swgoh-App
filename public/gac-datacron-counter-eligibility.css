@@ -1,0 +1,31 @@
+.gac-datacron-counter-fit {
+  margin-top: .48rem;
+  padding: .48rem .55rem;
+  border: 1px solid rgba(170, 117, 255, .22);
+  border-radius: .55rem;
+  background: rgba(84, 46, 126, .12);
+  color: #b8a4d7;
+  font-size: .64rem;
+  line-height: 1.45;
+}
+.gac-datacron-counter-fit strong { color: #e0c8ff; }
+.gac-datacron-counter-fit.is-full {
+  border-color: rgba(107, 224, 157, .3);
+  background: rgba(34, 111, 74, .12);
+  color: #99d9b7;
+}
+.gac-datacron-counter-fit.is-partial {
+  border-color: rgba(255, 197, 86, .28);
+  background: rgba(128, 89, 22, .11);
+  color: #d8bc7d;
+}
+.gac-datacron-counter-fit.is-unknown {
+  border-style: dashed;
+  color: #80899d;
+}
+.gac-datacron-counter-fit small {
+  display: block;
+  margin-top: .18rem;
+  color: #737d91;
+  font-size: .57rem;
+}
