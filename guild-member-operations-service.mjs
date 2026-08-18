@@ -230,7 +230,11 @@ export function createGuildMemberOperationsService(options = {}) {
       : null;
     const discordLink = linkForPlayer(guildState, player);
 
-    let reserveState = { available: false, reason: binding?.discordGuildId ? 'hard-reservation-state-unavailable' : 'discord-guild-not-bound', rows: [] };
+    let reserveState = {
+      available: false,
+      reason: !binding?.discordGuildId ? 'discord-guild-not-bound' : !discordLink.linked ? 'discord-player-not-linked' : 'hard-reservation-state-unavailable',
+      rows: [],
+    };
     if (binding?.discordGuildId && discordLink.linked) {
       try {
         const result = await hardReservations({ discordGuildId: binding.discordGuildId, discordUserId: discordLink.discordUserId });
