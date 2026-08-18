@@ -53,6 +53,7 @@ test("phase-scoped Discord plan view fixes protection totals and surfaces HELP a
   assert.deepEqual(shaped.safety.protections.map((row) => row.baseId), ["C"]);
   assert.equal(shaped.plan.assignments[0].baseId, "RISK");
   assert.equal(shaped.plan.assignments[0].safety.help, true);
+  assert.match(shaped.plan.assignments[0].safety.status, /last resort/i);
   assert.equal(shaped.plan.assignments[1].baseId, "SAFE");
 });
 
