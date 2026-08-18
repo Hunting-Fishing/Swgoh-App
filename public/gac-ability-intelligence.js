@@ -89,7 +89,7 @@ function unitAbilityReadiness(unit) {
   const premiumCoverage = abilities.reduce((sum, ability) => {
     return sum + (ability?.zeta ? 1.5 : 0) + (ability?.omicron ? 2 : 0) + (ability?.omega ? 0.35 : 0);
   }, 0);
-  const score = Math.max(0, Math.min(100, Math.round(normalizedTier * 88 + Math.min(12, premiumCoverage))));
+  const score = Math.max(0, Math.min(100, Math.round(normalizedTier * 96 + Math.min(4, premiumCoverage))));
 
   return Object.freeze({
     known: true,
