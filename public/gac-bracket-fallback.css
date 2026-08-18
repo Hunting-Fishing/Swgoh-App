@@ -33,6 +33,43 @@
 }
 .gac-bracket-heading h4 { margin: .15rem 0 .2rem; font-size: 1.05rem; }
 .gac-bracket-heading p { margin: 0; color: #8e9db5; font-size: .8rem; }
+.gac-bracket-controls {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  gap: .55rem;
+  flex-wrap: wrap;
+}
+.gac-bracket-round-control {
+  display: grid;
+  gap: .2rem;
+  min-width: 150px;
+  border: 1px solid rgba(105, 206, 255, .18);
+  border-radius: .65rem;
+  padding: .45rem .52rem;
+  background: rgba(4, 12, 25, .68);
+}
+.gac-bracket-round-control > span {
+  color: #7f91ad;
+  font-size: .57rem;
+  font-weight: 900;
+  letter-spacing: .08em;
+}
+.gac-bracket-round-control select {
+  min-width: 0;
+  border: 1px solid rgba(105, 206, 255, .28);
+  border-radius: .45rem;
+  background: rgba(9, 20, 37, .96);
+  color: #dff5ff;
+  padding: .38rem .45rem;
+  font-weight: 800;
+}
+.gac-bracket-round-control select:disabled { opacity: .68; }
+.gac-bracket-round-control small {
+  color: #6fccec;
+  font-size: .52rem;
+  letter-spacing: .06em;
+}
 .gac-bracket-truth {
   border: 1px solid rgba(106, 222, 170, .25);
   border-radius: 999px;
@@ -128,6 +165,8 @@
 @media (max-width: 760px) {
   .gac-matchup-form:has(.gac-bracket-find) { grid-template-columns: 1fr; }
   .gac-bracket-heading { flex-direction: column; }
+  .gac-bracket-controls { width: 100%; justify-content: flex-start; }
+  .gac-bracket-round-control { width: min(100%, 220px); }
   .gac-bracket-grid { grid-template-columns: 1fr; }
   .gac-bracket-opponent { grid-template-columns: 30px minmax(0, 1fr); }
   .gac-bracket-opponent-score { text-align: left; grid-column: 2; }
