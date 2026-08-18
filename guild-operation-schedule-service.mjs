@@ -45,6 +45,56 @@ function localTime(value) {
   return normalized.length === 5 ? `${normalized}:00` : normalized;
 }
 
+function zonedParts(date, timeZone) {
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    hour12: false,
+    hourCycle: 'h23',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+  });
+  const map = Object.fromEntries(formatter.formatToParts(date)
+    .filter((part) => part.type !== 'literal')
+    .map((part) => [part.type, Number(part.value)]));
+  return {
+    year: map.year,
+    month: map.month,
+    day: map.day,
+    hour: map.hour,
+    minute: map.minute,
+    second: map.second,
+  };
+}
+
+function zoneOffsetMs(date, timeZone) {
+  const parts = zonedParts(date, timeZone);
+  return Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second) - date.getTime();
+}
+
+export function zonedLocalToIso(value, timeZoneInput, now = () => new Date()) {
+  const normalized = text(value);
+  const match = normalized.match(/^(\d{4})-(\d{2})-(\d{2})T([01]\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?$/);
+  if (!match) throw httpError('scheduledLocalDateTime must use YYYY-MM-DDTHH:MM.', 400, 'INVALID_LOCAL_DATETIME');
+  const timeZone = validTimezone(timeZoneInput);
+  const desired = {
+    year: Number(match[1]), month: Number(match[2]), day: Number(match[3]),
+    hour: Number(match[4]), minute: Number(match[5]), second: Number(match[6] || 0),
+  };
+  const desiredAsUtc = Date.UTC(desired.year, desired.month - 1, desired.day, desired.hour, desired.minute, desired.second);
+  let candidate = desiredAsUtc;
+  for (let i = 0; i < 4; i += 1) {
+    candidate = desiredAsUtc - zoneOffsetMs(new Date(candidate), timeZone);
+  }
+  const date = new Date(candidate);
+  const roundTrip = zonedParts(date, timeZone);
+  const same = Object.keys(desired).every((key) => desired[key] === roundTrip[key]);
+  if (!same) {
+    throw httpError('That local schedule time does not exist in the selected timezone, likely because of a daylight-saving transition.', 400, 'NONEXISTENT_LOCAL_TIME');
+  }
+  if (date.getTime() < now().getTime() - 30_000) throw httpError('Scheduled local date/time cannot be in the past.', 400, 'SCHEDULE_IN_PAST');
+  return date.toISOString();
+}
+
 function sanitize(row) {
   if (!row) return null;
   return Object.freeze({
@@ -128,7 +178,13 @@ export function createGuildOperationScheduleService(options = {}) {
     const recurrenceKind = ['once','daily','weekly'].includes(text(input.recurrenceKind))
       ? text(input.recurrenceKind) : text(before?.recurrence_kind || 'once');
     const timezone = validTimezone(input.scheduledTimezone || before?.scheduled_timezone || 'UTC');
-    const runAt = isoFuture(input.nextRunAt || before?.next_run_at, now);
+    const localDateTimeInput = text(input.scheduledLocalDateTime);
+    const scheduledClock = localDateTimeInput
+      ? localTime(localDateTimeInput.split('T')[1])
+      : localTime(input.scheduledLocalTime || before?.scheduled_local_time || '00:00:00');
+    const runAt = localDateTimeInput
+      ? zonedLocalToIso(localDateTimeInput, timezone, now)
+      : isoFuture(input.nextRunAt || before?.next_run_at, now);
     const weekday = input.scheduledWeekday == null || input.scheduledWeekday === ''
       ? (before?.scheduled_weekday ?? null) : Number(input.scheduledWeekday);
     if (weekday != null && (!Number.isInteger(weekday) || weekday < 0 || weekday > 6)) {
@@ -146,7 +202,7 @@ export function createGuildOperationScheduleService(options = {}) {
       status: ['active','paused'].includes(text(input.status)) ? text(input.status) : text(before?.status || 'active'),
       recurrence_kind: recurrenceKind,
       scheduled_timezone: timezone,
-      scheduled_local_time: localTime(input.scheduledLocalTime || before?.scheduled_local_time || '00:00:00'),
+      scheduled_local_time: scheduledClock,
       scheduled_weekday: recurrenceKind === 'weekly' ? weekday : null,
       next_run_at: runAt,
       destination_id: destinationId ? uuid(destinationId, 'Destination ID') : null,
