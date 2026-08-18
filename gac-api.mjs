@@ -1,4 +1,5 @@
 import { gacBracketIndexService } from "./gac-bracket-index-service.mjs";
+import { createGacCurrentOpponentConfirmationApi } from "./gac-current-opponent-confirmation-api.mjs";
 import { gacHistoryImportService } from "./gac-history-import-service.mjs";
 import { gacHistoryService } from "./gac-history-service.mjs";
 import { createGacMatchupService } from "./gac-matchup-service.mjs";
@@ -64,6 +65,7 @@ export function createGacApi({
   if (typeof requestGateway !== "function") throw new TypeError("requestGateway is required");
   if (typeof writeJson !== "function") throw new TypeError("writeJson is required");
   const matchup = createGacMatchupService({ requestGateway, history });
+  const confirmationApi = createGacCurrentOpponentConfirmationApi({ requestGateway, writeJson, bracketIndex });
   const importPromises = new Map();
   const importCache = new Map();
 
@@ -236,6 +238,7 @@ export function createGacApi({
 
   return Object.freeze({
     async handle(request, response, url) {
+      if (await confirmationApi.handle(request, response, url)) return true;
       if (request.method !== "GET") return false;
 
       const matchupMatch = url.pathname.match(/^\/api\/gac\/matchup\/(\d{9})$/);
