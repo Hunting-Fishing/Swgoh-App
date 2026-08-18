@@ -49,15 +49,23 @@ function canonicalFixture() {
   };
 }
 
-test('TB Farm Plan executes and persists for an active verified Guild member without calling Discord', async () => {
+test('TB Farm Plan executes privately and reads tracked goals from the verified server identity, not client input', async () => {
   const store=storeFixture();
   const canonical=canonicalFixture();
   let discordCalls=0;
-  const service=createWebActionService({store,canonical,env:{},fetch:async()=>{discordCalls+=1;throw new Error('Discord must not run during website execution');},now:()=>new Date('2026-08-19T00:10:00Z')});
-  const result=await service.execute('user-1','tb-farm-plan',{priorityMode:'journey-overlap',maxRecommendations:5});
+  const goalReads=[];
+  const journeyGoals={async listForPlayer(userId,requestedPlayerId){goalReads.push([userId,requestedPlayerId]);return ['JOURNEY_JEDIMASTERKENOBI'];}};
+  const service=createWebActionService({store,canonical,journeyGoals,env:{},fetch:async()=>{discordCalls+=1;throw new Error('Discord must not run during website execution');},now:()=>new Date('2026-08-19T00:10:00Z')});
+  const result=await service.execute('user-1','tb-farm-plan',{
+    priorityMode:'my-goals',
+    maxRecommendations:5,
+    trackedGoalIds:['JOURNEY_GLAHSOKATANO'],
+  });
   assert.equal(result.result.action,'tb-farm-plan');
   assert.equal(result.result.player.allyCode,allyCode);
-  assert.equal(result.result.input.priorityMode,'journey-overlap');
+  assert.equal(result.result.input.priorityMode,'my-goals');
+  assert.deepEqual(goalReads,[['user-1',playerId]]);
+  assert.deepEqual(result.result.personalization.trackedGoals.map((goal)=>goal.id),['JOURNEY_JEDIMASTERKENOBI']);
   assert.ok(result.result.recommendations.length<=5);
   assert.equal(canonical.unitReads,1,'all current Guild units should be hydrated through one bounded paged read');
   assert.equal(discordCalls,0);
