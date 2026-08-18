@@ -228,6 +228,18 @@ const commands = [
         ],
       },
       { type: 1, name: "donation-report", description: "Show Guild-wide GIVE/KEEP donation preference counts by member" },
+      {
+        type: 1,
+        name: "unregister",
+        description: "Safely unbind this Discord server from the SWGOH Guild integration",
+        options: [{
+          type: 3,
+          name: "confirm",
+          description: "Explicit confirmation required; canonical Guild history is preserved",
+          required: true,
+          choices: [{ name: "UNREGISTER GUILD INTEGRATION", value: "UNREGISTER" }],
+        }],
+      },
       { type: 1, name: "sync", description: "Force-refresh the bound Guild from the live SWGOH gateway" },
       { type: 1, name: "platoon-report", description: "Show current ROTE Operations assignment coverage and shortages" },
     ],

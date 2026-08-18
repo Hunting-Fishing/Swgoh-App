@@ -82,6 +82,11 @@ export async function resolveDiscordGuildAllyCode({ allyCode, interaction = {}, 
   if (durableAllyCode) {
     return Object.freeze({ allyCode: durableAllyCode, source: "durable-guild-binding", discordGuildId });
   }
+  if (guild) {
+    const unbound = new Error("This Discord server has durable Command Center state but is not bound to a SWGOH Guild. Run /tb setup to bind a Guild again.");
+    unbound.code = "DISCORD_GUILD_EXPLICITLY_UNBOUND";
+    throw unbound;
+  }
   if (!fallback) throw new Error("This Discord server has no durable SWGOH guild binding and no fallback Ally Code is configured.");
   return Object.freeze({ allyCode: fallback, source: "explicit-fallback", discordGuildId });
 }

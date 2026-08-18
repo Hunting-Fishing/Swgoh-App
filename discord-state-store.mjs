@@ -300,6 +300,35 @@ export function createDiscordStateStore(env = process.env, options = {}) {
         return guild;
       });
     },
+    async unbindGuild({ discordGuildId, actorDiscordUserId = "" }) {
+      const guildId = snowflake(discordGuildId, "Discord guild ID");
+      return mutate({
+        discordGuildId: guildId,
+        actorDiscordUserId,
+        action: "guild-unbound",
+        details: { destructiveScope: "discord-integration-only" },
+      }, (guild, _state, timestamp) => {
+        const previous = {
+          discordGuildId: guildId,
+          swgohAllyCode: clean(guild.swgohAllyCode),
+          commandChannelId: clean(guild.commandChannelId),
+          officerRoleIds: [...(Array.isArray(guild.officerRoleIds) ? guild.officerRoleIds : [])],
+          linkedPlayers: Object.keys(guild.userLinks || {}).length,
+          donationPreferences: Object.keys(guild.memberPreferences || {}).length,
+          unavailableMembers: Object.keys(guild.memberAvailability || {}).length,
+          planVersions: Array.isArray(guild.planVersions) ? guild.planVersions.length : 0,
+          unboundAt: timestamp,
+        };
+        guild.swgohAllyCode = "";
+        guild.commandChannelId = "";
+        guild.officerRoleIds = [];
+        guild.userLinks = {};
+        guild.memberPreferences = {};
+        guild.memberAvailability = {};
+        guild.planVersions = [];
+        return previous;
+      });
+    },
     async setOfficerRoleIds({ discordGuildId, roleIds = [], actorDiscordUserId = "" }) {
       const guildId = snowflake(discordGuildId, "Discord guild ID");
       const normalized = normalizeRoleIds(roleIds);
