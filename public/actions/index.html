@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#050914">
+  <title>Action Center · SWGOH Command Center</title>
+  <link rel="stylesheet" href="/web-actions.css?v=20260818a">
+</head>
+<body>
+  <header class="action-topbar">
+    <a class="action-brand" href="/">SWGOH <span>Command Center</span></a>
+    <nav aria-label="Command Center">
+      <a href="/">Player</a>
+      <a href="/guild">Guild</a>
+      <a class="active" href="/actions">Actions</a>
+      <button type="button" data-signout>Sign out</button>
+    </nav>
+  </header>
+
+  <main class="action-shell">
+    <section class="action-hero">
+      <div class="action-kicker">WEB-FIRST COMMAND OPERATIONS</div>
+      <h1>Run the tools. <span>Discord optional.</span></h1>
+      <p>Command-style SWGOH operations run directly from your verified website account and canonical roster. Save the result first, then decide whether to keep it private or publish it to your Player Page, Guild Page, or a verified Discord destination.</p>
+      <div class="action-identity" data-action-identity>Loading verified command identity…</div>
+    </section>
+
+    <div class="action-message" data-action-message role="status" aria-live="polite"></div>
+
+    <section class="action-grid" data-action-catalog>
+      <article class="action-card loading"><h2>Loading actions…</h2></article>
+    </section>
+
+    <section class="action-result-panel hidden" data-action-result-panel>
+      <div class="section-head"><div><div class="action-kicker">SAVED ACTION RESULT</div><h2 data-result-title>Raid Max</h2></div><span class="run-id" data-run-id></span></div>
+      <div data-action-result></div>
+      <div class="share-panel">
+        <h3>Publish this saved result</h3>
+        <p>Publishing is optional. Running the action never posts automatically.</p>
+        <div class="share-actions">
+          <button type="button" data-share-player>Share to My Player Page</button>
+          <button type="button" data-share-guild>Share to Guild Page</button>
+          <label class="discord-share"><span>Discord destination</span><select data-discord-destination></select></label>
+          <button type="button" data-share-discord>Share to Discord</button>
+        </div>
+        <div class="action-inline" data-share-message></div>
+      </div>
+    </section>
+
+    <section class="recent-panel">
+      <div class="section-head"><div><div class="action-kicker">YOUR COMMAND HISTORY</div><h2>Recent website actions</h2></div><button type="button" class="secondary" data-refresh-recent>Refresh</button></div>
+      <div data-recent-actions><div class="empty-state">Loading recent actions…</div></div>
+    </section>
+  </main>
+
+  <script type="module" src="/web-actions.js?v=20260818a"></script>
+</body>
+</html>
