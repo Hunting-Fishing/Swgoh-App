@@ -20,7 +20,7 @@ function unit(baseId, relic, { zetas = 0, omicrons = 0, power = 30_000, ultimate
   return { baseId, name: baseId, unitType: "CHARACTER", relic, zetas, omicrons, power, ultimateUnlocked };
 }
 
-test("round 3 matchup resolves opponent, computes deltas, detects defense, and excludes committed counters", async () => {
+test("round 3 live matchup resolves opponent, computes deltas, detects defense, and excludes committed counters", async () => {
   const myAllyCode = "111111111";
   const opponentAllyCode = "222222222";
   const currentEvent = {
@@ -110,13 +110,19 @@ test("round 3 matchup resolves opponent, computes deltas, detects defense, and e
       };
     },
   };
+  const confirmedOpponent = {
+    async findLatestConfirmed() {
+      throw new Error("saved pairing should not be read when live opponent is usable");
+    },
+  };
 
-  const service = createGacMatchupService({ requestGateway, history });
+  const service = createGacMatchupService({ requestGateway, history, confirmedOpponent });
   const result = await service.analyze(myAllyCode, { enemyLeaderBaseId: "ENEMY_LEAD" });
 
   assert.equal(result.event.round, 3);
   assert.equal(result.event.status, "ATTACK");
   assert.equal(result.format, "5v5");
+  assert.equal(result.opponentResolution.method, "live-event-payload");
   assert.equal(result.matchup.me.name, "Warmbacon");
   assert.equal(result.matchup.opponent.name, "Navygators");
   assert.equal(result.matchup.delta.galacticPower, 300_000);
@@ -126,4 +132,80 @@ test("round 3 matchup resolves opponent, computes deltas, detects defense, and e
   assert.equal(result.recommendedCounters.length, 1);
   assert.equal(result.recommendedCounters[0].leaderBaseId, "COUNTER_LEAD");
   assert.equal(result.recommendedCounters[0].sourceRef, "available-counter");
+});
+
+test("verified saved pairing supplies current opponent when public live event has no usable opponent", async () => {
+  const myAllyCode = "732764286";
+  const opponentAllyCode = "123456789";
+  const currentEvent = {
+    source: "comlink-live",
+    active: true,
+    event: {
+      id: "GAC-SEASON-81",
+      eventInstanceId: "GAC:CURRENT",
+      status: "ATTACK",
+    },
+  };
+  const playerContext = {
+    source: "comlink-live",
+    player: { allyCode: myAllyCode, playerId: "PLAYER_1", name: "Warm Bacon" },
+    event: { eventInstanceId: "GAC:CURRENT" },
+    seasonStatus: [],
+  };
+  const myRoster = player(myAllyCode, "Warm Bacon", 10_000_000, [
+    unit("MY_LEAD", 9, { zetas: 3, omicrons: 1 }),
+    unit("MY_2", 8), unit("MY_3", 8), unit("MY_4", 7), unit("MY_5", 7),
+  ]);
+  const opponentRoster = player(opponentAllyCode, "Navygators", 9_800_000, [
+    unit("NAVY_LEAD", 9, { zetas: 3, omicrons: 1 }),
+    unit("NAVY_2", 8), unit("NAVY_3", 8), unit("NAVY_4", 7), unit("NAVY_5", 7),
+  ]);
+  const responses = new Map([
+    ["/v1/gac/current-event", currentEvent],
+    [`/v1/gac/player/${myAllyCode}`, playerContext],
+    [`/v1/player/${myAllyCode}`, myRoster],
+    [`/v1/player/${opponentAllyCode}`, opponentRoster],
+  ]);
+  const gatewayCalls = [];
+  const requestGateway = async (path) => {
+    gatewayCalls.push(path);
+    assert.ok(responses.has(path), `unexpected gateway path ${path}`);
+    return structuredClone(responses.get(path));
+  };
+  const confirmedCalls = [];
+  const confirmedOpponent = {
+    async findLatestConfirmed(code, eventId, round) {
+      confirmedCalls.push({ code, eventId, round });
+      return {
+        opponent: { allyCode: opponentAllyCode, playerId: "PLAYER_2", name: "Navygators" },
+        resolution: {
+          exact: true,
+          method: "verified-user-confirmed-current-bracket",
+          eventInstanceId: "GAC:CURRENT",
+          round: 3,
+          source: "user-confirmed-current-bracket",
+          confidence: 1,
+          verified: true,
+          recordedAt: "2026-08-19T01:30:00+08:00",
+          roundSource: "verified-user-confirmed",
+        },
+      };
+    },
+  };
+
+  const service = createGacMatchupService({ requestGateway, history: null, confirmedOpponent });
+  const result = await service.analyze(myAllyCode);
+
+  assert.deepEqual(confirmedCalls, [{ code: myAllyCode, eventId: "GAC:CURRENT", round: null }]);
+  assert.ok(gatewayCalls.includes(`/v1/player/${opponentAllyCode}`));
+  assert.equal(result.opponentResolution.source, "user-confirmed-current-bracket");
+  assert.equal(result.opponentResolution.verified, true);
+  assert.equal(result.event.eventInstanceId, "GAC:CURRENT");
+  assert.equal(result.event.round, 3);
+  assert.equal(result.event.status, "ATTACK");
+  assert.equal(result.matchup.me.name, "Warm Bacon");
+  assert.equal(result.matchup.opponent.name, "Navygators");
+  assert.equal(result.matchup.opponent.allyCode, opponentAllyCode);
+  assert.equal(result.matchup.delta.galacticPower, 200_000);
+  assert.match(result.notes[1], /verified owner confirmation/);
 });
