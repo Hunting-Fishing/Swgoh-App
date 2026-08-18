@@ -122,6 +122,9 @@ async function loadLinks({ announce = false } = {}) {
     setMessage(error.message, true);
   } finally { state.loading = false; }
 }
+function refreshIntegrationIntelligence() {
+  document.getElementById('opsIntegrationRefresh')?.click();
+}
 async function manualLink() {
   const discordUserId = digits(document.getElementById('opsManualDiscordUserId')?.value);
   const swgohAllyCode = digits(document.getElementById('opsManualSwgohAllyCode')?.value);
@@ -138,6 +141,7 @@ async function manualLink() {
     await loadLinks();
     setMessage(`${result.playerName || displayAlly(result.swgohAllyCode)} linked to Discord user ${result.discordDisplayName || result.discordUserId}.`);
     window.dispatchEvent(new CustomEvent('swgoh:guild-discord-links-changed'));
+    refreshIntegrationIntelligence();
   } catch (error) { setMessage(error.message, true); }
 }
 async function manualUnlink(discordUserId, label) {
@@ -152,6 +156,7 @@ async function manualUnlink(discordUserId, label) {
     await loadLinks();
     setMessage(`${label || discordUserId} was unlinked. Canonical Guild history was not deleted.`);
     window.dispatchEvent(new CustomEvent('swgoh:guild-discord-links-changed'));
+    refreshIntegrationIntelligence();
   } catch (error) { setMessage(error.message, true); }
 }
 function bind() {
