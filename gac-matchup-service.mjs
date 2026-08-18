@@ -13,6 +13,12 @@ function finite(value, fallback = 0) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function nullableFinite(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 function normalizeAllyCode(value) {
   const allyCode = clean(value).replace(/\D/g, "");
   if (!/^\d{9}$/.test(allyCode)) {
@@ -168,6 +174,111 @@ function rosterUnits(body = {}) {
   return [...index.values()];
 }
 
+function normalizeDatacronAffix(value = {}, index = 0) {
+  if (!value || typeof value !== "object") return null;
+  return Object.freeze({
+    tier: Number.isInteger(Number(value.tier)) && Number(value.tier) > 0 ? Number(value.tier) : index + 1,
+    kind: clean(value.kind),
+    tags: Object.freeze(asArray(value.tags || value.tag).map(clean).filter(Boolean)),
+    targetRule: clean(value.targetRule || value.target_rule),
+    abilityId: clean(value.abilityId || value.ability_id),
+    statType: nullableFinite(value.statType ?? value.stat_type),
+    statValue: nullableFinite(value.statValue ?? value.stat_value),
+    requiredUnitTier: nullableFinite(value.requiredUnitTier ?? value.required_unit_tier),
+    requiredRelicTier: nullableFinite(value.requiredRelicTier ?? value.required_relic_tier),
+  });
+}
+
+function datacronInventory(body = {}) {
+  const collection = Array.isArray(body.datacrons)
+    ? body.datacrons
+    : Array.isArray(body.datacron)
+      ? body.datacron
+      : null;
+  if (collection === null) return Object.freeze({ known: false, items: Object.freeze([]) });
+
+  const items = collection.map((value) => {
+    if (!value || typeof value !== "object") return null;
+    const affixes = asArray(value.affixes || value.affix)
+      .map((affix, index) => normalizeDatacronAffix(affix, index))
+      .filter(Boolean);
+    return Object.freeze({
+      id: clean(value.id),
+      setId: value.setId ?? value.set_id ?? null,
+      templateId: clean(value.templateId || value.template_id),
+      tags: Object.freeze(asArray(value.tags || value.tag).map(clean).filter(Boolean)),
+      level: Number.isInteger(Number(value.level)) ? Number(value.level) : affixes.length,
+      locked: value.locked === true ? true : value.locked === false ? false : null,
+      rerollIndex: nullableFinite(value.rerollIndex ?? value.reroll_index),
+      rerollCount: nullableFinite(value.rerollCount ?? value.reroll_count),
+      affixes: Object.freeze(affixes),
+    });
+  }).filter(Boolean);
+
+  return Object.freeze({ known: true, items: Object.freeze(items) });
+}
+
+function summarizeDatacronInventory(body = {}) {
+  const inventory = datacronInventory(body);
+  if (!inventory.known) {
+    return Object.freeze({
+      known: false,
+      count: null,
+      maxLevel: null,
+      level3Plus: null,
+      level6Plus: null,
+      level9Plus: null,
+      locked: null,
+      rerolled: null,
+      abilityAffixes: null,
+      statAffixes: null,
+      sets: Object.freeze({}),
+    });
+  }
+
+  const affixes = inventory.items.flatMap((datacron) => datacron.affixes);
+  const sets = {};
+  for (const datacron of inventory.items) {
+    const key = clean(datacron.setId);
+    if (key) sets[key] = (sets[key] || 0) + 1;
+  }
+  return Object.freeze({
+    known: true,
+    count: inventory.items.length,
+    maxLevel: inventory.items.reduce((max, datacron) => Math.max(max, finite(datacron.level)), 0),
+    level3Plus: inventory.items.filter((datacron) => finite(datacron.level) >= 3).length,
+    level6Plus: inventory.items.filter((datacron) => finite(datacron.level) >= 6).length,
+    level9Plus: inventory.items.filter((datacron) => finite(datacron.level) >= 9).length,
+    locked: inventory.items.filter((datacron) => datacron.locked === true).length,
+    rerolled: inventory.items.filter((datacron) => finite(datacron.rerollCount) > 0).length,
+    abilityAffixes: affixes.filter((affix) => Boolean(affix.abilityId)).length,
+    statAffixes: affixes.filter((affix) => affix.statType !== null).length,
+    sets: Object.freeze(sets),
+  });
+}
+
+function datacronDelta(left = {}, right = {}) {
+  const a = left?.datacrons || left;
+  const b = right?.datacrons || right;
+  if (a?.known !== true || b?.known !== true) {
+    return Object.freeze({
+      known: false,
+      count: null,
+      maxLevel: null,
+      level3Plus: null,
+      level6Plus: null,
+      level9Plus: null,
+      abilityAffixes: null,
+      statAffixes: null,
+    });
+  }
+  const fields = ["count", "maxLevel", "level3Plus", "level6Plus", "level9Plus", "abilityAffixes", "statAffixes"];
+  return Object.freeze({
+    known: true,
+    ...Object.fromEntries(fields.map((field) => [field, finite(a[field]) - finite(b[field])])),
+  });
+}
+
 function rosterSummary(body = {}) {
   const units = rosterUnits(body);
   const characters = units.filter((unit) => !/ship|2/i.test(unit.unitType));
@@ -190,6 +301,7 @@ function rosterSummary(body = {}) {
     omicrons: units.reduce((sum, unit) => sum + unit.omicrons, 0),
     ultimates: units.filter((unit) => unit.ultimateUnlocked).length,
     relics: Object.freeze(relics),
+    datacrons: summarizeDatacronInventory(body),
   });
 }
 
@@ -327,6 +439,8 @@ export function createGacMatchupService(options = {}) {
     const myDefense = extractDefenseSquads(currentEvent, allyCode);
     const committed = new Set(myDefense.flatMap((squad) => squad.members));
     const rosterIndex = new Map(rosterUnits(myRoster).map((unit) => [unit.baseId, unit]));
+    const myDatacrons = datacronInventory(myRoster);
+    const opponentDatacrons = datacronInventory(opponentRoster);
 
     const targetLeader = normalizeBaseId(analyzeOptions.enemyLeaderBaseId);
     let counters = [];
@@ -352,7 +466,19 @@ export function createGacMatchupService(options = {}) {
         status: clean(currentEvent?.status || currentEvent?.phase || currentEvent?.event?.status || playerContext?.status || playerContext?.phase),
       }),
       opponentResolution: opponentResolution || Object.freeze({ exact: false, method: "unresolved" }),
-      matchup: Object.freeze({ me, opponent: rival, delta: delta(me, rival) }),
+      matchup: Object.freeze({
+        me,
+        opponent: rival,
+        delta: delta(me, rival),
+        datacronDelta: datacronDelta(me, rival),
+      }),
+      datacronIntelligence: Object.freeze({
+        detailsKnown: myDatacrons.known && opponentDatacrons.known,
+        me: myDatacrons,
+        opponent: opponentDatacrons,
+        comparison: datacronDelta(me, rival),
+        compatibilityScoring: "pending-game-data-target-rule-and-ability-enrichment",
+      }),
       defense: Object.freeze({
         mine: myDefense,
         opponent: opponentDefense,
@@ -365,6 +491,9 @@ export function createGacMatchupService(options = {}) {
         opponentResolution?.source === "user-confirmed-current-bracket"
           ? "Opponent identity came from a verified owner confirmation bound to this GAC event."
           : "Opponent identity came from the live GAC payload.",
+        myDatacrons.known && opponentDatacrons.known
+          ? "Datacron inventory, unlocked tiers, rerolls, raw target-rule IDs, ability IDs and stat values came from the two live Comlink player payloads; bonus compatibility is not scored until game-data definitions are resolved."
+          : "Detailed datacron inventory was not exposed for both players, so no datacron advantage was inferred.",
         opponentDefense.length ? "Opponent defense squads were present in the live event payload." : "Opponent defense squads were not present in the live event payload; counter selection can still be requested by enemy leader.",
         counters.length ? "Counter ranking uses persisted battle evidence and removes squads that require units detected on your defense." : "No counter ranking was requested or no owned evidence-backed counter was available.",
       ]),
@@ -382,6 +511,8 @@ function validResolutionRound(value) {
 export {
   counterScore,
   currentRoundFrom,
+  datacronDelta,
+  datacronInventory,
   delta,
   eventInstanceIdFrom,
   extractDefenseSquads,
@@ -389,4 +520,5 @@ export {
   resolveOpponent,
   rosterSummary,
   rosterUnits,
+  summarizeDatacronInventory,
 };
