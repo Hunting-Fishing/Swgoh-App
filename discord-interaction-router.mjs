@@ -25,6 +25,7 @@ import {
   buildDiscordMemberControlsSummary,
   formatDiscordMemberControlsSummary,
 } from "./discord-member-controls-summary.mjs";
+import { executeDiscordGuildCommand } from "./discord-guild-operations-command.mjs";
 import { autocompleteSwgohUnits } from "./discord-unit-autocomplete.mjs";
 
 const EPHEMERAL_FLAG = 1 << 6;
@@ -244,6 +245,16 @@ function scheduleReservesResponse(interaction, config, services) {
     });
 }
 
+function scheduleGuildCommandResponse(interaction, config, services) {
+  Promise.resolve()
+    .then(() => executeDiscordGuildCommand(interaction, config, services))
+    .catch((error) => safeError("Guild Operations", error))
+    .then((content) => editDiscordOriginalResponse(interaction, config, content, services?.fetch || fetch))
+    .catch((error) => {
+      console.error("Discord Guild Operations response failed:", error?.message || error);
+    });
+}
+
 export async function handleDiscordInteractionRequest(request, response, env = process.env, services = {}) {
   let rawBody;
   try {
@@ -262,29 +273,31 @@ export async function handleDiscordInteractionRequest(request, response, env = p
 
   const autocomplete = autocompleteContext(interaction);
   const subcommand = discordTbSubcommand(interaction);
+  const command = String(interaction?.data?.name || "").toLowerCase();
+  const isGuildCommand = Number(interaction?.type) === DISCORD_INTERACTION_TYPES.APPLICATION_COMMAND && command === "guild";
   const isActivity = Number(interaction?.type) === DISCORD_INTERACTION_TYPES.APPLICATION_COMMAND
-    && String(interaction?.data?.name || "").toLowerCase() === "tb"
+    && command === "tb"
     && subcommand === "activity";
   const isControls = Number(interaction?.type) === DISCORD_INTERACTION_TYPES.APPLICATION_COMMAND
-    && String(interaction?.data?.name || "").toLowerCase() === "tb"
+    && command === "tb"
     && subcommand === "controls";
   const isReserve = Number(interaction?.type) === DISCORD_INTERACTION_TYPES.APPLICATION_COMMAND
-    && String(interaction?.data?.name || "").toLowerCase() === "tb"
+    && command === "tb"
     && subcommand === "reserve";
   const isReserves = Number(interaction?.type) === DISCORD_INTERACTION_TYPES.APPLICATION_COMMAND
-    && String(interaction?.data?.name || "").toLowerCase() === "tb"
+    && command === "tb"
     && subcommand === "reserves";
-  if (!autocomplete && !isActivity && !isControls && !isReserve && !isReserves) {
+  if (!autocomplete && !isGuildCommand && !isActivity && !isControls && !isReserve && !isReserves) {
     return handleCoreDiscordInteractionRequest(replayRequest(request, rawBody), response, env, services);
   }
 
   const config = discordTbConfig(env);
   if (!config.interactionsEnabled) {
-    jsonResponse(response, 503, { error: "Discord TB interactions are disabled." });
+    jsonResponse(response, 503, { error: "Discord interactions are disabled." });
     return true;
   }
   if (!config.configured) {
-    jsonResponse(response, 503, { error: "Discord TB interactions are not configured." });
+    jsonResponse(response, 503, { error: "Discord interactions are not configured." });
     return true;
   }
 
@@ -304,7 +317,7 @@ export async function handleDiscordInteractionRequest(request, response, env = p
     return true;
   }
   if (config.pilotGuildId && String(interaction?.guild_id || "") !== config.pilotGuildId) {
-    jsonResponse(response, 200, autocomplete ? autocompleteResult([]) : ephemeral("This TB command is currently restricted to the configured pilot Discord server."));
+    jsonResponse(response, 200, autocomplete ? autocompleteResult([]) : ephemeral("This command is currently restricted to the configured pilot Discord server."));
     return true;
   }
 
@@ -328,12 +341,14 @@ export async function handleDiscordInteractionRequest(request, response, env = p
     officerAuthorized = await discordTbMemberHasConfiguredOfficerRole(interaction, stateStore);
   }
   if (!officerAuthorized) {
-    jsonResponse(response, 200, ephemeral(`Officer permission required. \`/tb ${subcommand}\` requires Manage Server (Manage Guild), Administrator, or a durably configured officer role.`));
+    const label = isGuildCommand ? `/guild ${subcommand}` : `/tb ${subcommand}`;
+    jsonResponse(response, 200, ephemeral(`Officer permission required. \`${label}\` requires Manage Server (Manage Guild), Administrator, or a durably configured officer role.`));
     return true;
   }
 
   jsonResponse(response, 200, deferredEphemeral());
-  if (isControls) scheduleControlsResponse(interaction, config, { ...services, stateStore });
+  if (isGuildCommand) scheduleGuildCommandResponse(interaction, config, { ...services, stateStore, env });
+  else if (isControls) scheduleControlsResponse(interaction, config, { ...services, stateStore });
   else if (isReserve) scheduleReserveResponse(interaction, config, { ...services, stateStore });
   else if (isReserves) scheduleReservesResponse(interaction, config, { ...services, stateStore });
   else scheduleActivityResponse(interaction, config, { ...services, stateStore });
