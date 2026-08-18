@@ -6,6 +6,7 @@ import { discordHardReservationStore } from "./discord-hard-reservation-store.mj
 import { createGuildRosterService, guildRosterService } from "./guild-roster-service.mjs";
 import { aggregateRoteOperations } from "./rote-operations.mjs";
 import { supabaseCoreStore } from "./supabase-core-store.mjs";
+import { shapeDiscordPlanningSnapshot } from "./discord-tb-stage8-view.mjs";
 import { buildGuildRoteOperationSafety } from "./public/guild-rote-operation-safety.js";
 import { planGuildRoteSafeAssignments } from "./public/guild-rote-safe-planner.js";
 import { buildGuildTbPhaseCommand } from "./public/guild-tb-phase-command-model.js";
@@ -381,7 +382,7 @@ export function createDiscordTbLiveServices(env = process.env, options = {}) {
     },
     async buildPlan(args = {}) {
       const { binding, controls } = await resolvePlanningRequest(args);
-      return buildPlanningSnapshot({
+      const snapshot = await buildPlanningSnapshot({
         allyCode: binding.allyCode,
         redundancyTarget: args.redundancyTarget ?? 2,
         guildBindingSource: binding.source,
@@ -389,6 +390,7 @@ export function createDiscordTbLiveServices(env = process.env, options = {}) {
         ignoredMembers: controls.ignoredMembers,
         reservations: controls.reservations,
       }, config, fetchImpl, sharedGuildService);
+      return shapeDiscordPlanningSnapshot(snapshot, args.phase);
     },
     async buildPhaseCommand(args = {}) {
       const { binding, controls } = await resolvePlanningRequest(args);
