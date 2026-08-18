@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { ROTE_MISSIONS_BY_PLANET } from "../public/rote-mission-data.js";
+import { normalizedRoteMissionsForPlanet } from "../public/rote-mission-node-eligibility.js";
 import {
   ROTE_MANDALORE_MISSION_MAP,
   ROTE_MANDALORE_MISSION_MAP_SOURCE,
@@ -28,6 +28,20 @@ test("Mandalore source node positions and mission types remain valid", () => {
   }
 });
 
+test("all four Mandalore playable nodes link to tactical recommendations", () => {
+  const missions = new Map(normalizedRoteMissionsForPlanet("mandalore").map((mission) => [mission.id, mission]));
+  const linked = ROTE_MANDALORE_MISSION_MAP.nodes.filter((node) => node.missionId || node.teamId);
+  assert.equal(linked.length, 4);
+  for (const node of linked) {
+    assert.ok(node.missionId && node.teamId, `${node.id} links must be all-or-nothing`);
+    const mission = missions.get(node.missionId);
+    assert.ok(mission, `missing mission ${node.missionId}`);
+    assert.ok(mission.recommendations.some((recommendation) => recommendation.id === node.teamId), `missing recommendation ${node.teamId}`);
+    assert.ok(mission.tactical?.commandTag);
+    assert.ok(mission.recommendations.every((recommendation) => recommendation.name.startsWith("ROTE-MANDO-")));
+  }
+});
+
 test("Bo-Katan Mand'alor keeps the explicit R9 exception and high-value reward", () => {
   const bkm = ROTE_MANDALORE_MISSION_MAP.nodes.find((node) => node.id === "c3");
   assert.ok(bkm);
@@ -37,7 +51,7 @@ test("Bo-Katan Mand'alor keeps the explicit R9 exception and high-value reward",
   assert.doesNotMatch(bkm.requirement, /Relic 8/);
   assert.equal(bkm.reward, "658,125 → 1,480,782 TP");
   assert.equal(bkm.missionId, "mandalore-bkm");
-  assert.equal(bkm.teamId, "rote-bkm");
+  assert.equal(bkm.teamId, "rote-mando-bkm");
   assert.match(bkm.note, /explicit R9 exception/);
 });
 
@@ -48,9 +62,18 @@ test("DTMG, generic combat and Operations retain the R8 Mandalore baseline", () 
   assert.match(dtmg.requirement, /Relic 8\+/);
   assert.match(dtmg.requirement, /Dark Trooper Moff Gideon/);
   assert.equal(dtmg.missionId, "mandalore-dtmg");
-  assert.equal(dtmg.teamId, "rote-dtmg");
+  assert.equal(dtmg.teamId, "rote-mando-dtmg");
   assert.match(generic.requirement, /Relic 8\+/);
+  assert.equal(generic.missionId, "mandalore-generic-1");
   assert.match(operations.requirement, /Relic 8/);
+});
+
+test("Mandalore tactical labels expose Negotiator, Veers, Gideon, Maul and Bo-Katan", () => {
+  const missions = new Map(normalizedRoteMissionsForPlanet("mandalore").map((mission) => [mission.id, mission]));
+  assert.match(missions.get("mandalore-fleet")?.name || "", /Negotiator/);
+  assert.match(missions.get("mandalore-generic-1")?.name || "", /Veers.*Moff Gideon/);
+  assert.match(missions.get("mandalore-bkm")?.name || "", /Veers.*DTMG/);
+  assert.match(missions.get("mandalore-dtmg")?.name || "", /Maul.*Bo-Katan/);
 });
 
 test("Mandalore fleet and deployment preserve current gates and bonus thresholds", () => {
@@ -62,21 +85,6 @@ test("Mandalore fleet and deployment preserve current gates and bonus thresholds
   assert.match(deployment.reward, /Tier 1: 197,748,650/);
   assert.match(deployment.reward, /Tier 2: 316,397,840/);
   assert.match(deployment.reward, /1★: 396,497,300/);
-});
-
-test("only BKM and DTMG are linked to existing live-preparation recommendations", () => {
-  const linked = ROTE_MANDALORE_MISSION_MAP.nodes.filter((node) => node.missionId || node.teamId);
-  assert.equal(linked.length, 2);
-  const missions = new Map((ROTE_MISSIONS_BY_PLANET.mandalore || []).map((mission) => [mission.id, mission]));
-  for (const node of linked) {
-    assert.ok(node.missionId && node.teamId);
-    const mission = missions.get(node.missionId);
-    assert.ok(mission, `missing mission ${node.missionId}`);
-    assert.ok(
-      mission.recommendations.some((recommendation) => recommendation.id === node.teamId),
-      `missing recommendation ${node.teamId}`,
-    );
-  }
 });
 
 test("Mandalore source provenance and source filename typo are pinned explicitly", () => {
