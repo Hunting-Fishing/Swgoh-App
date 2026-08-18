@@ -59,14 +59,17 @@ test("manual registration still fails closed when credentials are absent", () =>
   assert.match(result.stderr, /Discord command registration requires/);
 });
 
-test("startup-registered schema contains Stage 7 additions, autocomplete, bounded retries and receipt publishing", async () => {
+test("startup schema contains Stage 8 hard reserves, shared autocomplete, bounded retries and receipt publishing", async () => {
   const source = await text("scripts/register-discord-tb-commands.mjs");
   const receiptSource = await text("discord-command-registration-receipt.mjs");
   assert.match(source, /SCHEMA_VERSION = DISCORD_TB_COMMAND_SCHEMA_VERSION/);
-  assert.match(receiptSource, /DISCORD_TB_COMMAND_SCHEMA_VERSION = "2026-08-18-stage7-controls-v1"/);
+  assert.match(receiptSource, /DISCORD_TB_COMMAND_SCHEMA_VERSION = "2026-08-18-stage8-hard-reserve-v1"/);
   assert.match(source, /REGISTRATION_TIMEOUT_MS = 15_000/);
   assert.match(source, /name: "activity"/);
   assert.match(source, /name: "controls"/);
+  assert.match(source, /name: "reserve"/);
+  assert.match(source, /name: "reserves"/);
+  assert.match(source, /absolute ROTE Operation donor reservation/);
   assert.match(source, /name: "unit"[\s\S]*autocomplete: true/);
   assert.match(source, /for \(let attempt = 1; attempt <= 3; attempt \+= 1\)/);
   assert.match(source, /retryableStatus\(response\.status\)/);

@@ -20,6 +20,10 @@ const availabilityChoices = [
   { name: "AVAILABLE — include in normal ROTE planning", value: "available" },
   { name: "UNAVAILABLE — exclude from Operation donor candidates", value: "unavailable" },
 ];
+const reservationChoices = [
+  { name: "RESERVE — absolute Operation donor exclusion", value: "reserve" },
+  { name: "CLEAR — remove the hard reservation", value: "clear" },
+];
 
 const optionalPhaseOption = {
   type: 3,
@@ -270,6 +274,50 @@ const commands = [
             description: "Optional linked member scope",
             required: false,
           },
+        ],
+      },
+      {
+        type: 1,
+        name: "reserve",
+        description: "Officer-set an absolute ROTE Operation donor reservation",
+        options: [
+          {
+            type: 6,
+            name: "member",
+            description: "Linked Discord member whose unit should be reserved",
+            required: true,
+          },
+          {
+            type: 3,
+            name: "unit",
+            description: "Search SWGOH unit name or Base ID",
+            required: true,
+            autocomplete: true,
+            min_length: 1,
+            max_length: 80,
+          },
+          requiredPhaseOption,
+          {
+            type: 3,
+            name: "state",
+            description: "Set or clear the hard reservation",
+            required: true,
+            choices: reservationChoices,
+          },
+        ],
+      },
+      {
+        type: 1,
+        name: "reserves",
+        description: "Officer-read active hard Operation donor reservations",
+        options: [
+          {
+            type: 6,
+            name: "member",
+            description: "Optional linked-member scope",
+            required: false,
+          },
+          optionalPhaseOption,
         ],
       },
       {
