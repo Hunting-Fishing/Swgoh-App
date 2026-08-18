@@ -1,11 +1,18 @@
+import { gacHistoryService } from "./gac-history-service.mjs";
+
 function writeError(writeJson, response, error, fallback) {
   const status = [400, 401, 404, 429, 503].includes(error?.status) ? error.status : 502;
   writeJson(response, status, {
-    error: error?.name === "AbortError" ? "The live GAC request timed out." : error?.message || fallback,
+    error: error?.name === "AbortError" ? "The GAC request timed out." : error?.message || fallback,
   });
 }
 
-export function createGacApi({ requestGateway, writeJson }) {
+function positiveLimit(value, fallback, max) {
+  const parsed = Math.floor(Number(value));
+  return Number.isFinite(parsed) && parsed > 0 ? Math.min(max, parsed) : fallback;
+}
+
+export function createGacApi({ requestGateway, writeJson, history = gacHistoryService }) {
   if (typeof requestGateway !== "function") throw new TypeError("requestGateway is required");
   if (typeof writeJson !== "function") throw new TypeError("writeJson is required");
 
@@ -19,6 +26,33 @@ export function createGacApi({ requestGateway, writeJson }) {
           writeJson(response, 200, body, { "X-GAC-Source": body?.source || "comlink-live" });
         } catch (error) {
           writeError(writeJson, response, error, "The current GAC event is unavailable.");
+        }
+        return true;
+      }
+
+      const historyMatch = url.pathname.match(/^\/api\/gac\/history\/(\d{9})$/);
+      if (historyMatch) {
+        try {
+          const body = await history.getPlayerHistory(historyMatch[1], {
+            limit: positiveLimit(url.searchParams.get("limit"), 30, 100),
+          });
+          writeJson(response, 200, body, { "X-GAC-Source": "persisted-history" });
+        } catch (error) {
+          writeError(writeJson, response, error, "Persisted GAC history is unavailable.");
+        }
+        return true;
+      }
+
+      if (url.pathname === "/api/gac/counters") {
+        try {
+          const body = await history.getCounterEvidence({
+            format: url.searchParams.get("format"),
+            enemyLeaderBaseId: url.searchParams.get("enemyLeader"),
+            limit: positiveLimit(url.searchParams.get("limit"), 100, 500),
+          });
+          writeJson(response, 200, body, { "X-GAC-Source": "persisted-counter-evidence" });
+        } catch (error) {
+          writeError(writeJson, response, error, "GAC counter evidence is unavailable.");
         }
         return true;
       }
