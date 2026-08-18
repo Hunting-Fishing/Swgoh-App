@@ -4,6 +4,11 @@ import {
   rankRosterFitSquads,
   unitDeltaRows,
 } from "./gac-counter-engine.js";
+import {
+  abilityGapSummary,
+  abilityTierDelta,
+  abilityTierTotal,
+} from "./gac-ability-intelligence.js";
 
 const number = new Intl.NumberFormat("en-US");
 const state = {
@@ -81,23 +86,28 @@ function renderComparison() {
 
 function unitCell(unit) {
   if (!unit) return `<span class="gac-neutral">—</span>`;
-  return `<strong>R${n(unit.relic)}</strong> · ${number.format(n(unit.speed))} spd · Z${n(unit.zetas)} · O${n(unit.omicrons)}`;
+  return `<strong>R${n(unit.relic)}</strong> · ${number.format(n(unit.speed))} spd · Z${n(unit.zetas)} · O${n(unit.omicrons)} · A${abilityTierTotal(unit)}`;
 }
 
 function renderUnitDeltas() {
   const output = byId("gacUnitDeltaBody");
   if (!output || !state.mine || !state.opponent) return;
   const rows = unitDeltaRows(state.mine, state.opponent).slice(0, 90);
-  output.innerHTML = rows.map((row) => `
-    <tr>
-      <td><div class="gac-unit-name">${image(row.theirs || row.mine)}<strong>${escapeHtml(row.name)}</strong></div></td>
-      <td>${unitCell(row.mine)}</td>
-      <td>${unitCell(row.theirs)}</td>
-      <td class="${signedClass(row.relicDelta)}">${formatSigned(row.relicDelta)}</td>
-      <td class="${signedClass(row.speedDelta)}">${formatSigned(row.speedDelta)}</td>
-      <td class="${signedClass(row.zetaDelta)}">${formatSigned(row.zetaDelta)}</td>
-      <td class="${signedClass(row.omicronDelta)}">${formatSigned(row.omicronDelta)}</td>
-    </tr>`).join("");
+  output.innerHTML = rows.map((row) => {
+    const abilityDelta = abilityTierDelta(row.mine, row.theirs);
+    return `
+      <tr>
+        <td><div class="gac-unit-name">${image(row.theirs || row.mine)}<strong>${escapeHtml(row.name)}</strong></div></td>
+        <td>${unitCell(row.mine)}</td>
+        <td>${unitCell(row.theirs)}</td>
+        <td class="${signedClass(row.relicDelta)}">${formatSigned(row.relicDelta)}</td>
+        <td class="${signedClass(row.speedDelta)}">${formatSigned(row.speedDelta)}</td>
+        <td class="${signedClass(row.zetaDelta)}">${formatSigned(row.zetaDelta)}</td>
+        <td class="${signedClass(row.omicronDelta)}">${formatSigned(row.omicronDelta)}</td>
+        <td class="${signedClass(abilityDelta)}">${formatSigned(abilityDelta)}</td>
+        <td>${escapeHtml(abilityGapSummary(row.mine, row.theirs))}</td>
+      </tr>`;
+  }).join("");
 }
 
 function opponentCharacters() {
@@ -116,7 +126,7 @@ function renderDefensePicker() {
     return `<label class="gac-defense-unit" data-name="${escapeAttr(String(unit.name || "").toLowerCase())}">
       <input type="checkbox" value="${escapeAttr(unit.baseId)}" ${checked}>
       ${image(unit)}
-      <span><strong>${escapeHtml(unit.name)}</strong><small>R${n(unit.relic)} · ${number.format(n(unit.speed))} spd · Z${n(unit.zetas)} · O${n(unit.omicrons)}</small></span>
+      <span><strong>${escapeHtml(unit.name)}</strong><small>R${n(unit.relic)} · ${number.format(n(unit.speed))} spd · Z${n(unit.zetas)} · O${n(unit.omicrons)} · A${abilityTierTotal(unit)}</small></span>
     </label>`;
   }).join("");
   output.querySelectorAll("input[type=checkbox]").forEach((input) => input.addEventListener("change", () => {
@@ -246,10 +256,10 @@ function mountMarkup(host) {
     <div id="gacComparison"><div class="workspace-note">Enter the current opponent's Ally Code to open the matchup cockpit.</div></div>
 
     <section class="gac-section">
-      <div class="gac-section-heading"><div><h4>Character-by-character delta</h4><p>Your relic, speed, zeta and omicron investment against the opponent's same units.</p></div></div>
+      <div class="gac-section-heading"><div><h4>Character-by-character delta</h4><p>Your relic, speed, zeta, omicron and exact ability-tier investment against the opponent's same units.</p></div></div>
       <div class="gac-table-wrap"><table class="gac-table">
-        <thead><tr><th>Character</th><th>You</th><th>Opponent</th><th>Relic Δ</th><th>Speed Δ</th><th>Zeta Δ</th><th>Omicron Δ</th></tr></thead>
-        <tbody id="gacUnitDeltaBody"><tr><td colspan="7">Load a matchup to compare units.</td></tr></tbody>
+        <thead><tr><th>Character</th><th>You</th><th>Opponent</th><th>Relic Δ</th><th>Speed Δ</th><th>Zeta Δ</th><th>Omicron Δ</th><th>Ability Δ</th><th>Ability gaps</th></tr></thead>
+        <tbody id="gacUnitDeltaBody"><tr><td colspan="9">Load a matchup to compare units.</td></tr></tbody>
       </table></div>
     </section>
 
