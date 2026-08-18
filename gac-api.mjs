@@ -1,3 +1,4 @@
+import { gacBracketIndexService } from "./gac-bracket-index-service.mjs";
 import { gacHistoryImportService } from "./gac-history-import-service.mjs";
 import { gacHistoryService } from "./gac-history-service.mjs";
 import { createGacMatchupService } from "./gac-matchup-service.mjs";
@@ -37,11 +38,25 @@ function scoutingHasEvidence(body) {
   );
 }
 
+function eventInstanceId(...values) {
+  for (const value of values) {
+    const id = String(value?.eventInstanceId || value?.event?.eventInstanceId || "").trim();
+    if (id) return id;
+  }
+  return "";
+}
+
+function allyCode(value) {
+  const normalized = String(value || "").replace(/\D/g, "");
+  return /^\d{9}$/.test(normalized) ? normalized : "";
+}
+
 export function createGacApi({
   requestGateway,
   writeJson,
   history = gacHistoryService,
   historyImport = gacHistoryImportService,
+  bracketIndex = gacBracketIndexService,
   scouting = gacScoutingService,
   now = Date.now,
   importCooldownMs = 30 * 60 * 1000,
@@ -52,13 +67,13 @@ export function createGacApi({
   const importPromises = new Map();
   const importCache = new Map();
 
-  async function importHistoryOnce(allyCode, { force = false } = {}) {
-    const cached = importCache.get(allyCode);
+  async function importHistoryOnce(code, { force = false } = {}) {
+    const cached = importCache.get(code);
     if (!force && cached && cached.expiresAt > now()) return cached.value;
-    if (importPromises.has(allyCode)) return importPromises.get(allyCode);
+    if (importPromises.has(code)) return importPromises.get(code);
 
     const promise = Promise.resolve()
-      .then(() => historyImport.importPlayer(allyCode))
+      .then(() => historyImport.importPlayer(code))
       .then((result) => Object.freeze({
         status: "complete",
         source: result?.source || "c3po-gahistory",
@@ -74,20 +89,20 @@ export function createGacApi({
         errorStatus: Number(error?.status || 0) || null,
       }))
       .then((value) => {
-        importCache.set(allyCode, { value, expiresAt: now() + Math.max(60_000, Number(importCooldownMs) || 0) });
+        importCache.set(code, { value, expiresAt: now() + Math.max(60_000, Number(importCooldownMs) || 0) });
         return value;
       })
-      .finally(() => importPromises.delete(allyCode));
+      .finally(() => importPromises.delete(code));
 
-    importPromises.set(allyCode, promise);
+    importPromises.set(code, promise);
     return promise;
   }
 
-  async function playerHistoryWithLazyImport(allyCode, options = {}) {
+  async function playerHistoryWithLazyImport(code, options = {}) {
     let body = null;
     let initialError = null;
     try {
-      body = await history.getPlayerHistory(allyCode, { limit: options.limit });
+      body = await history.getPlayerHistory(code, { limit: options.limit });
     } catch (error) {
       initialError = error;
       if (error?.status !== 404) throw error;
@@ -98,7 +113,7 @@ export function createGacApi({
       throw initialError;
     }
 
-    const autoImport = await importHistoryOnce(allyCode, { force: options.forceImport === true });
+    const autoImport = await importHistoryOnce(code, { force: options.forceImport === true });
     if (autoImport.status === "failed" && !body && [404, 409].includes(autoImport.errorStatus)) {
       const error = new Error(autoImport.error);
       error.status = autoImport.errorStatus;
@@ -107,24 +122,116 @@ export function createGacApi({
 
     if (autoImport.status === "complete" && (autoImport.imported > 0 || autoImport.importedRounds > 0)) {
       try {
-        body = await history.getPlayerHistory(allyCode, { limit: options.limit });
+        body = await history.getPlayerHistory(code, { limit: options.limit });
       } catch (error) {
         if (error?.status !== 404) throw error;
       }
     }
 
-    return { body: body || emptyHistoryBody(allyCode), autoImport };
+    return { body: body || emptyHistoryBody(code), autoImport };
   }
 
-  async function scoutingWithLazyImport(allyCode, options = {}) {
-    let body = await scouting.getScoutingReport(allyCode, { limit: options.limit });
+  async function scoutingWithLazyImport(code, options = {}) {
+    let body = await scouting.getScoutingReport(code, { limit: options.limit });
     if (scoutingHasEvidence(body) || options.import === false) return { body, autoImport: null };
 
-    const autoImport = await importHistoryOnce(allyCode, { force: options.forceImport === true });
+    const autoImport = await importHistoryOnce(code, { force: options.forceImport === true });
     if (autoImport.status === "complete" && autoImport.imported > 0) {
-      body = await scouting.getScoutingReport(allyCode, { limit: options.limit });
+      body = await scouting.getScoutingReport(code, { limit: options.limit });
     }
     return { body, autoImport };
+  }
+
+  async function attachOpponentResolution(code, bracket, currentEvent, playerContext) {
+    const id = eventInstanceId(currentEvent, bracket, playerContext);
+    const round = bracketIndex?.currentRoundFrom?.(playerContext, currentEvent) ?? null;
+    if (!id || !round || !bracketIndex?.findExactOpponent) {
+      return {
+        ...bracket,
+        currentOpponent: null,
+        opponentResolution: {
+          exact: false,
+          method: "public-bracket-only",
+          eventInstanceId: id,
+          round,
+          reason: !round ? "current-round-not-exposed" : "exact-opponent-evidence-unavailable",
+        },
+      };
+    }
+
+    let exact = await bracketIndex.findExactOpponent(code, id, round).catch(() => null);
+    let autoImport = null;
+    if (!exact) {
+      autoImport = await importHistoryOnce(code);
+      if (autoImport.status === "complete" && (autoImport.imported > 0 || autoImport.importedRounds > 0)) {
+        exact = await bracketIndex.findExactOpponent(code, id, round).catch(() => null);
+      }
+    }
+
+    if (exact) {
+      const exactAllyCode = allyCode(exact?.opponent?.allyCode);
+      const belongsToBracket = Array.isArray(bracket?.players)
+        && bracket.players.some((entry) => allyCode(entry?.allyCode) === exactAllyCode);
+      if (exactAllyCode && belongsToBracket) {
+        return {
+          ...bracket,
+          currentOpponent: exact.opponent,
+          opponentResolution: exact.resolution,
+          ...(autoImport ? { opponentHistoryImport: autoImport } : {}),
+        };
+      }
+    }
+
+    return {
+      ...bracket,
+      currentOpponent: null,
+      opponentResolution: {
+        exact: false,
+        method: "public-bracket-only",
+        eventInstanceId: id,
+        round,
+        reason: exact ? "historical-opponent-not-in-live-bracket" : "matching-event-round-evidence-not-found",
+      },
+      ...(autoImport ? { opponentHistoryImport: autoImport } : {}),
+    };
+  }
+
+  async function loadBracketByPlayer(code, options = {}) {
+    const [currentEvent, playerContext] = await Promise.all([
+      requestGateway("/v1/gac/current-event", true),
+      requestGateway(`/v1/gac/player/${code}`, true).catch(() => ({})),
+    ]);
+    const id = eventInstanceId(currentEvent, playerContext);
+    let bracket = null;
+    let cache = "miss";
+
+    if (!options.refresh && id && bracketIndex?.findIndexedBracket) {
+      bracket = await bracketIndex.findIndexedBracket(code, id).catch(() => null);
+      if (bracket) cache = "hit";
+    }
+
+    if (!bracket) {
+      bracket = await requestGateway(`/v1/gac/bracket/by-player/${code}`, true);
+      if (bracketIndex?.persistBracket) {
+        try {
+          const indexStatus = await bracketIndex.persistBracket(bracket, {
+            sourceRef: `/v1/gac/bracket/by-player/${code}`,
+          });
+          bracket = { ...bracket, indexStatus };
+        } catch (error) {
+          bracket = {
+            ...bracket,
+            indexStatus: {
+              indexed: false,
+              error: String(error?.message || error).slice(0, 180),
+            },
+          };
+        }
+      }
+    }
+
+    const resolved = await attachOpponentResolution(code, bracket, currentEvent, playerContext);
+    return { body: resolved, cache };
   }
 
   return Object.freeze({
@@ -220,8 +327,13 @@ export function createGacApi({
       const bracketByPlayerMatch = url.pathname.match(/^\/api\/gac\/bracket\/by-player\/(\d{9})$/);
       if (bracketByPlayerMatch) {
         try {
-          const body = await requestGateway(`/v1/gac/bracket/by-player/${bracketByPlayerMatch[1]}`, true);
-          writeJson(response, 200, body, { "X-GAC-Source": body?.source || "comlink-live" });
+          const result = await loadBracketByPlayer(bracketByPlayerMatch[1], {
+            refresh: url.searchParams.get("refresh") === "1",
+          });
+          writeJson(response, 200, result.body, {
+            "X-GAC-Source": result.body?.source || "comlink-live",
+            "X-GAC-Bracket-Cache": result.cache,
+          });
         } catch (error) {
           writeError(writeJson, response, error, "The player's live GAC bracket is unavailable.");
         }
@@ -231,9 +343,21 @@ export function createGacApi({
       const bracketMatch = url.pathname.match(/^\/api\/gac\/bracket\/(KYBER|AURODIUM|CHROMIUM|BRONZIUM|CARBONITE)\/(\d+)$/i);
       if (bracketMatch) {
         const league = bracketMatch[1].toUpperCase();
-        const bracketIndex = Number(bracketMatch[2]);
+        const bracketNumber = Number(bracketMatch[2]);
         try {
-          const body = await requestGateway(`/v1/gac/bracket/${league}/${bracketIndex}`, true);
+          let body = await requestGateway(`/v1/gac/bracket/${league}/${bracketNumber}`, true);
+          if (bracketIndex?.persistBracket) {
+            try {
+              body = {
+                ...body,
+                indexStatus: await bracketIndex.persistBracket(body, {
+                  sourceRef: `/v1/gac/bracket/${league}/${bracketNumber}`,
+                }),
+              };
+            } catch {
+              // Direct bracket reads remain available even if persistence is temporarily unavailable.
+            }
+          }
           writeJson(response, 200, body, { "X-GAC-Source": body?.source || "comlink-live" });
         } catch (error) {
           writeError(writeJson, response, error, "The requested GAC bracket is unavailable.");
