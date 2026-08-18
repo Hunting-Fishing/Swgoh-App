@@ -27,12 +27,12 @@ export const ROTE_ZEFFO_MISSION_MAP = Object.freeze({
   id: "zeffo",
   background: `${RAW}/media/planets/zeffo.png`,
   nodes: Object.freeze([
-    node("c1", "fleet", 72, 50, "Fleet · Negotiator", "7★ Light Side ships including Negotiator", "682,500 TP"),
-    node("c2", "combat", 38, 49, "Unaligned Force Users", "5x Light Side Unaligned Force Users at Relic 7+", "162,500 → 341,250 TP"),
-    node("c3", "special", 58, 21, "Clone Troopers", "5x Clone Troopers at Relic 7+", "50 Mk II Guild Event Tokens", { missionId: "zeffo-clones", teamId: "rote-clones", note: "Tomb Guardians cannot be defeated unless stunned; the existing app strategy layer carries the verified control guidance for this mission." }),
-    node("c6", "combat", 58, 43, "Combat Mission", "5x Light Side characters at Relic 7+", "162,500 → 341,250 TP"),
+    node("c1", "fleet", 72, 50, "Fleet · Negotiator", "7★ Light Side ships including Negotiator", "682,500 TP", { missionId: "zeffo-fleet", teamId: "rote-zeffo-fleet-marauder" }),
+    node("c2", "combat", 38, 49, "Unaligned Force Users", "5x Light Side Unaligned Force Users at Relic 7+", "162,500 → 341,250 TP", { missionId: "zeffo-ufu", teamId: "rote-zeffo-ufu-rey" }),
+    node("c3", "special", 58, 21, "Clone Troopers", "5x Clone Troopers at Relic 7+", "50 Mk II Guild Event Tokens", { missionId: "zeffo-clones", teamId: "rote-zeffo-clones-crex", note: "Tomb Guardians cannot be defeated unless stunned; the existing app strategy layer carries the verified control guidance for this mission." }),
+    node("c6", "combat", 58, 43, "Combat Mission", "5x Light Side characters at Relic 7+", "162,500 → 341,250 TP", { missionId: "zeffo-generic-1", teamId: "rote-zeffo-generic-leia" }),
     node("c7", "deployment", 34, 26, "Deployment", "Unlocked Zeffo territory deployment", "Tier 1: 143,589,583 · Tier 2: 229,743,333 · 1★: 287,179,167"),
-    node("c8", "combat", 71, 32, "Jedi Knight Cal Kestis", "5x Light Side characters at Relic 7+ including Jedi Knight Cal Kestis", "487,500 → 1,023,750 TP", { note: "This high-value mission has verified entry and mechanics data but no explicit roster recommendation object, so it remains source-only rather than receiving a guessed team." }),
+    node("c8", "combat", 71, 32, "Jedi Knight Cal Kestis", "5x Light Side characters at Relic 7+ including Jedi Knight Cal Kestis", "487,500 → 1,023,750 TP", { missionId: "zeffo-jkck", teamId: "rote-zeffo-jkck" }),
     node("m2", "operations", 34, 38, "Operations", "Characters Relic 7 · Ships 7★", "Supports Zeffo Operations"),
   ]),
 });
