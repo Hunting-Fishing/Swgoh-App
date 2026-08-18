@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { canonicalRosterService } from './canonical-roster-service.mjs';
 import { listDiscordHardReservations } from './discord-hard-reservation-service.mjs';
+import { guildOperationsDiscordDelivery } from './guild-operations-discord-delivery.mjs';
 import { guildOperationsService } from './guild-operations-service.mjs';
 import { resolveGuildPlanningOverlay } from './guild-planning-overlay.mjs';
 import { aggregateRoteOperations } from './rote-operations.mjs';
@@ -19,7 +20,6 @@ const cache = { catalog: null, operations: null, operationsAt: 0 };
 
 const array = (value) => Array.isArray(value) ? value : [];
 const text = (value) => String(value ?? '').trim();
-const object = (value) => value && typeof value === 'object' && !Array.isArray(value) ? value : {};
 
 function httpError(message, status, code) {
   const error = new Error(message);
@@ -138,8 +138,6 @@ async function loadHardReservations(guildBody) {
       source: 'durable-discord-hard-reserve',
     })).filter((row) => row.memberId && row.phase && row.baseId);
   } catch (error) {
-    // If the durable hard-reserve subsystem is configured, planner safety must
-    // fail closed rather than silently ignoring state that may protect missions.
     if (guildBody?.members?.length) {
       throw httpError(`Hard-reservation state is unavailable: ${error?.message || 'unknown error'}`, 503, 'HARD_RESERVATION_STATE_UNAVAILABLE');
     }
@@ -147,7 +145,7 @@ async function loadHardReservations(guildBody) {
   }
 }
 
-async function buildTbPreview(userId, allyCode, planId, service, canonical, fetchImpl) {
+async function buildTbPreview(userId, allyCode, planId, service, canonical, fetchImpl, delivery) {
   const context = await service.requireOfficer(userId, allyCode);
   const [detail, guildBody, operations, catalog, workspace] = await Promise.all([
     service.getTbPlanDetail(userId, allyCode, planId),
@@ -178,6 +176,7 @@ async function buildTbPreview(userId, allyCode, planId, service, canonical, fetc
     protections: safety.protections,
     maxPerTerritory: 10,
   });
+  const guildFreshness = { lastSyncedAt: text(context.guild.last_synced_at) };
   const input = {
     guildId: context.guild.id,
     guildSyncedAt: context.guild.last_synced_at,
@@ -202,21 +201,26 @@ async function buildTbPreview(userId, allyCode, planId, service, canonical, fetc
       safety: safety.summary,
       phases: preview.phases,
       summary: preview.summary,
+      guildFreshness,
     },
     delivery: { mode: 'preview', published: false },
   });
+  const deliveryConfig = delivery.config();
   return Object.freeze({
     source: 'server-generated-guild-operations-preview',
     runId: text(run?.id),
     inputFingerprint,
-    guildFreshness: { lastSyncedAt: text(context.guild.last_synced_at) },
+    guildFreshness,
     plan: preview,
     safety: safety.summary,
-    publishing: { enabled: false, reason: 'Outbound Discord publishing remains safety-gated until verified-destination delivery receipts are enabled.' },
+    publishing: {
+      enabled: deliveryConfig.deliveryEnabled,
+      reason: deliveryConfig.deliveryEnabled ? '' : 'Set DISCORD_TB_DELIVERY_ENABLED=true after verifying the Discord Guild destination.',
+    },
   });
 }
 
-async function buildTwPreview(userId, allyCode, planId, service, canonical) {
+async function buildTwPreview(userId, allyCode, planId, service, canonical, delivery) {
   const context = await service.requireOfficer(userId, allyCode);
   const workspace = await service.getWorkspace(userId, allyCode);
   const plan = workspace.twPlans.find((row) => row.id === planId);
@@ -224,6 +228,7 @@ async function buildTwPreview(userId, allyCode, planId, service, canonical) {
   const guildBody = await canonical.getGuildRosterByPlayer(allyCode);
   const ignoredMembers = currentIgnoredControls(workspace);
   const preview = planGuildTwDefenseAssignments(guildBody, plan.strategy, { ignoredMembers });
+  const guildFreshness = { lastSyncedAt: text(context.guild.last_synced_at) };
   const inputFingerprint = fingerprint({ guildId: context.guild.id, guildSyncedAt: context.guild.last_synced_at, plan, ignoredMembers });
   const run = await service.persistTwRun(context, {
     planId,
@@ -231,16 +236,25 @@ async function buildTwPreview(userId, allyCode, planId, service, canonical) {
     inputFingerprint,
     assignments: preview.assignments,
     unfilled: preview.unfilled,
-    diagnostics: preview.diagnostics,
+    diagnostics: {
+      ...preview.diagnostics,
+      strategyValid: preview.strategyValid,
+      publishReady: preview.publishReady,
+      guildFreshness,
+    },
     delivery: { mode: 'preview', published: false },
   });
+  const deliveryConfig = delivery.config();
   return Object.freeze({
     source: 'server-generated-tw-defense-preview',
     runId: text(run?.id),
     inputFingerprint,
-    guildFreshness: { lastSyncedAt: text(context.guild.last_synced_at) },
+    guildFreshness,
     plan: preview,
-    publishing: { enabled: false, reason: 'Outbound Discord publishing remains safety-gated until verified-destination delivery receipts are enabled.' },
+    publishing: {
+      enabled: deliveryConfig.deliveryEnabled,
+      reason: deliveryConfig.deliveryEnabled ? '' : 'Set DISCORD_TB_DELIVERY_ENABLED=true after verifying the Discord Guild destination.',
+    },
   });
 }
 
@@ -248,12 +262,45 @@ export function createGuildOperationsApi(options = {}) {
   const session = options.session || supabaseAuthSession;
   const service = options.service || guildOperationsService;
   const canonical = options.canonical || canonicalRosterService;
+  const delivery = options.delivery || guildOperationsDiscordDelivery;
   const fetchImpl = options.fetch || fetch;
 
   async function requireUser(request) {
     const user = await session.currentUser(request);
     if (!user?.id) throw httpError('A signed-in Command Center session is required.', 401, 'AUTH_REQUIRED');
     return user;
+  }
+
+  async function getWorkspace(userId, code) {
+    const context = await service.requireOfficer(userId, code);
+    const synced = await delivery.syncVerifiedDestinations(context.guild.id);
+    const workspace = await service.getWorkspace(userId, code);
+    const config = delivery.config();
+    return Object.freeze({
+      ...workspace,
+      discordBinding: synced.binding ? {
+        verified: true,
+        discordGuildId: synced.binding.discordGuildId,
+        commandChannelConfigured: Boolean(synced.binding.guildState?.commandChannelId),
+      } : { verified: false },
+      publishing: {
+        enabled: config.deliveryEnabled,
+        botTokenConfigured: Boolean(config.botToken),
+        webhookConfigured: Boolean(config.webhookUrl),
+        previewMaxAgeMs: config.previewMaxAgeMs,
+      },
+    });
+  }
+
+  async function publishRun(userId, code, runType, runId, body = {}) {
+    const context = await service.requireOfficer(userId, code);
+    return delivery.publish(context, {
+      runType,
+      runId,
+      destinationId: body.destinationId,
+      includeMentions: body.includeMentions === true,
+      sendDms: body.sendDms === true,
+    });
   }
 
   async function handle(request, response, url) {
@@ -266,7 +313,7 @@ export function createGuildOperationsApi(options = {}) {
       const suffix = base[2] || '';
 
       if (request.method === 'GET' && suffix === '/workspace') {
-        writeJson(response, 200, await service.getWorkspace(user.id, code));
+        writeJson(response, 200, await getWorkspace(user.id, code));
         return true;
       }
 
@@ -308,7 +355,12 @@ export function createGuildOperationsApi(options = {}) {
       }
       const tbPreview = suffix.match(/^\/tb\/plans\/([0-9a-f-]{36})\/preview$/i);
       if (tbPreview) {
-        writeJson(response, 201, await buildTbPreview(user.id, code, tbPreview[1], service, canonical, fetchImpl));
+        writeJson(response, 201, await buildTbPreview(user.id, code, tbPreview[1], service, canonical, fetchImpl, delivery));
+        return true;
+      }
+      const tbPublish = suffix.match(/^\/tb\/runs\/([0-9a-f-]{36})\/publish$/i);
+      if (tbPublish) {
+        writeJson(response, 200, await publishRun(user.id, code, 'tb', tbPublish[1], body));
         return true;
       }
       if (suffix === '/tw/plans') {
@@ -317,11 +369,13 @@ export function createGuildOperationsApi(options = {}) {
       }
       const twPreview = suffix.match(/^\/tw\/plans\/([0-9a-f-]{36})\/preview$/i);
       if (twPreview) {
-        writeJson(response, 201, await buildTwPreview(user.id, code, twPreview[1], service, canonical));
+        writeJson(response, 201, await buildTwPreview(user.id, code, twPreview[1], service, canonical, delivery));
         return true;
       }
-      if (suffix.endsWith('/publish')) {
-        throw httpError('Publishing is intentionally safety-gated. Generate a preview first; verified-destination queue delivery is the next activation gate.', 409, 'PUBLISHING_SAFETY_GATED');
+      const twPublish = suffix.match(/^\/tw\/runs\/([0-9a-f-]{36})\/publish$/i);
+      if (twPublish) {
+        writeJson(response, 200, await publishRun(user.id, code, 'tw', twPublish[1], body));
+        return true;
       }
 
       throw httpError('Guild Operations route not found.', 404, 'OPERATIONS_ROUTE_NOT_FOUND');
