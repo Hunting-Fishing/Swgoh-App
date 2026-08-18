@@ -26,14 +26,14 @@ function context() {
     },
     targeting: {
       version: "V",
-      data: [{ id: "target_sith", unitClass: [1], category: { category: [{ categoryId: "affiliation_sith", exclude: false }, { categoryId: "summoned_unit", exclude: true }] } }],
+      data: [{ id: "target_sith", unitClass: [6], category: { category: [{ categoryId: "affiliation_sith", exclude: false }, { categoryId: "summoned_unit", exclude: true }] } }],
     },
   });
   return { catalogBody, unitIndex: buildUnitIndex(catalogBody), datacronCatalog };
 }
 
 test("target category entries act as allowed targets while exclusions still block", () => {
-  const rule = { includeCategories: ["affiliation_sith", "role_support"], excludeCategories: ["summoned_unit"], forceAlignments: [], unitClasses: [1] };
+  const rule = { includeCategories: ["affiliation_sith", "role_support"], excludeCategories: ["summoned_unit"], forceAlignments: [], unitClasses: [6] };
   const vader = { baseId: "DARTHVADER", combatType: 1, alignment: "Dark", categories: ["alignment_dark", "affiliation_sith", "role_attacker"] };
   const result = ruleMatch({ relic: 7 }, vader, rule);
   assert.equal(result.eligible, true);
@@ -42,6 +42,15 @@ test("target category entries act as allowed targets while exclusions still bloc
   const excluded = ruleMatch({ relic: 7 }, summoned, rule);
   assert.equal(excluded.eligible, false);
   assert.ok(excluded.reasons.includes("excluded:summoned_unit"));
+});
+
+test("CG targeting unitClass is not incorrectly compared with roster combatType", () => {
+  const rule = { includeCategories: ["affiliation_sith"], excludeCategories: [], forceAlignments: [], unitClasses: [6] };
+  const vader = { baseId: "DARTHVADER", combatType: 1, alignment: "Dark", categories: ["affiliation_sith"] };
+  const result = ruleMatch({ relic: 8 }, vader, rule);
+  assert.equal(result.eligible, true);
+  assert.equal(result.known, true);
+  assert.equal(result.reasons.includes("combat-type-mismatch"), false);
 });
 
 test("relic gate is enforced on an otherwise eligible ability target", () => {
