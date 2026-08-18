@@ -60,6 +60,8 @@ function matchMetadata(match = {}) {
   const round = integer(match?.roundNumber ?? match?.round ?? match?.matchRound, 0);
   return {
     roundNumber: round >= 1 && round <= 3 ? round : null,
+    roundDerivation: round >= 1 && round <= 3 ? "explicit-source-field" : "unavailable",
+    roundConfidence: round >= 1 && round <= 3 ? 1 : 0,
     matchId: clean(match?.matchId || match?.id || match?.tournamentMatchId),
     opponentPlayerId: clean(
       match?.opponentPlayerId ||
@@ -72,6 +74,17 @@ function matchMetadata(match = {}) {
   };
 }
 
+function chronologicalRoundMetadata(metadata, matchIndex, matchCount) {
+  if (metadata?.roundNumber) return metadata;
+  if (matchCount !== 3 || matchIndex < 0 || matchIndex > 2) return metadata;
+  return {
+    ...metadata,
+    roundNumber: matchIndex + 1,
+    roundDerivation: "three-match-result-order",
+    roundConfidence: 0.65,
+  };
+}
+
 function normalizePlayerBattles(doc, context = {}) {
   const mode = normalizeMode(context.mode);
   const playerId = normalizePlayerId(context.playerId);
@@ -79,9 +92,10 @@ function normalizePlayerBattles(doc, context = {}) {
   const season = clean(context.season);
   const allyCode = clean(context.allyCode).replace(/\D/g, "").slice(0, 9);
   const battles = [];
+  const matches = asArray(doc?.matchResult);
 
-  asArray(doc?.matchResult).forEach((match, matchIndex) => {
-    const metadata = matchMetadata(match);
+  matches.forEach((match, matchIndex) => {
+    const metadata = chronologicalRoundMetadata(matchMetadata(match), matchIndex, matches.length);
     asArray(match?.attackResult).forEach((attackGroup, attackGroupIndex) => {
       asArray(attackGroup?.duelResult).forEach((duel, duelIndex) => {
         const attackerUnits = asArray(duel?.attackerUnit);
@@ -102,6 +116,8 @@ function normalizePlayerBattles(doc, context = {}) {
           attackGroupIndex,
           duelIndex,
           roundNumber: metadata.roundNumber,
+          roundDerivation: metadata.roundDerivation,
+          roundConfidence: metadata.roundConfidence,
           matchId: metadata.matchId,
           opponentPlayerId: metadata.opponentPlayerId,
           opponentAllyCode: /^\d{9}$/.test(metadata.opponentAllyCode) ? metadata.opponentAllyCode : "",
@@ -201,6 +217,7 @@ export {
   DEFAULT_LEAGUES,
   baseId,
   battleOutcome,
+  chronologicalRoundMetadata,
   matchMetadata,
   normalizeMode,
   normalizePlayerBattles,
