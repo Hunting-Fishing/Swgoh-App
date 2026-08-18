@@ -1,5 +1,5 @@
 const ALLY_STORAGE_KEY = 'swgoh:guild-route-ally-code';
-const state = { timer: 0, lastKey: '' };
+const state = { timer: 0, lastKey: '', accountAllyCode: '' };
 const text = (value) => String(value ?? '').trim();
 const digits = (value) => text(value).replace(/\D/g, '').slice(0,9);
 const escapeHtml = (value) => String(value ?? '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#039;');
@@ -14,12 +14,22 @@ function currentAlly() {
   const query = digits(new URLSearchParams(location.search).get('allyCode'));
   const input = digits(document.getElementById('allyCode')?.value);
   let stored = ''; try { stored = digits(localStorage.getItem(ALLY_STORAGE_KEY)); } catch {}
-  return [query,input,stored].find((code) => code.length === 9) || '';
+  return [query,input,stored,state.accountAllyCode].find((code) => code.length === 9) || '';
 }
 async function requestJson(path) {
   const response = await fetch(path,{credentials:'same-origin',cache:'no-store',headers:{Accept:'application/json'}});
   let body={}; try{body=await response.json();}catch{}
   if(!response.ok){const error=new Error(body?.error||`Feed request failed (${response.status}).`);error.status=response.status;throw error;} return body;
+}
+async function resolveAccountAlly() {
+  if (state.accountAllyCode.length === 9) return state.accountAllyCode;
+  try {
+    const body = await requestJson('/api/account/web-actions/catalog');
+    state.accountAllyCode = digits(body?.identity?.allyCode);
+  } catch (error) {
+    if (![401,403,404].includes(error.status)) console.warn('Verified action identity unavailable', error);
+  }
+  return state.accountAllyCode;
 }
 function raidMaxItem(item) {
   const result = item?.run?.result || {};
@@ -36,7 +46,8 @@ function feedHtml(title, subtitle, items) {
 }
 function playerAnchor() {
   const profile = document.getElementById('profile');
-  return profile && !profile.classList.contains('hidden') ? profile : null;
+  if (profile && !profile.classList.contains('hidden')) return profile;
+  return document.querySelector('main > .hero.card') || document.querySelector('.hero.card');
 }
 function guildAnchor() {
   return document.getElementById('guildRouteContent');
@@ -65,10 +76,12 @@ async function renderGuild(code) {
   return true;
 }
 async function render() {
-  const code = currentAlly(); if (code.length !== 9) return;
   const path = location.pathname.replace(/\/+$/,'') || '/';
   const mode = path === '/' ? 'player' : path === '/guild' ? 'guild' : '';
   if (!mode) return;
+  let code = currentAlly();
+  if (code.length !== 9) code = await resolveAccountAlly();
+  if (code.length !== 9) return;
   const key = `${mode}|${code}`;
   if (state.lastKey === key && document.querySelector('[data-web-action-feed]')) return;
   const done = mode === 'player' ? await renderPlayer(code) : await renderGuild(code);
