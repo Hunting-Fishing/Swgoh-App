@@ -87,5 +87,5 @@ async function render() {
   const done = mode === 'player' ? await renderPlayer(code) : await renderGuild(code); if (done) state.lastKey = key;
 }
 function schedule(){clearTimeout(state.timer);state.timer=setTimeout(render,180);}
-function install(){ensureCss();schedule();new MutationObserver(()=>{const path=location.pathname.replace(/\/+$/,'')||='/';if(['/','/guild'].includes(path)&&!document.querySelector('[data-web-action-feed]'))schedule();}).observe(document.body,{childList:true,subtree:true});window.addEventListener('popstate',()=>{state.lastKey='';schedule();});window.addEventListener('swgoh:guild-command-snapshot',()=>{state.lastKey='';schedule();});}
+function install(){ensureCss();schedule();new MutationObserver(()=>{const path=location.pathname.replace(/\/+$/,'')||'/';if(['/','/guild'].includes(path)&&!document.querySelector('[data-web-action-feed]'))schedule();}).observe(document.body,{childList:true,subtree:true});window.addEventListener('popstate',()=>{state.lastKey='';schedule();});window.addEventListener('swgoh:guild-command-snapshot',()=>{state.lastKey='';schedule();});}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install,{once:true});else install();
