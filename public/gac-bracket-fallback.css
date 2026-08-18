@@ -61,6 +61,31 @@
 }
 .gac-bracket-opponent:hover { border-color: rgba(110, 207, 255, .36); }
 .gac-bracket-opponent.is-unresolved { opacity: .58; }
+.gac-bracket-opponent.is-current-opponent {
+  grid-column: 1 / -1;
+  border-color: rgba(107, 231, 166, .58);
+  background:
+    radial-gradient(circle at 10% 10%, rgba(63, 201, 133, .14), transparent 18rem),
+    linear-gradient(135deg, rgba(6, 30, 25, .94), rgba(4, 12, 24, .96));
+  box-shadow: inset 0 0 0 1px rgba(110, 241, 178, .08), 0 0 26px rgba(39, 177, 118, .08);
+}
+.gac-bracket-opponent.is-current-opponent .gac-bracket-opponent-index {
+  border-color: rgba(111, 239, 179, .48);
+  color: #8cf0bd;
+  background: rgba(16, 95, 61, .26);
+}
+.gac-bracket-opponent.is-current-opponent .gac-bracket-opponent-main strong { color: #dfffee; font-size: 1rem; }
+.gac-bracket-opponent.is-current-opponent .gac-bracket-opponent-main small { color: #8ce5b7; }
+.gac-bracket-opponent.is-current-opponent .gac-bracket-opponent-score strong { color: #8ce5b7; }
+.gac-bracket-opponent.is-exact-member { border-color: rgba(106, 222, 170, .32); }
+.gac-bracket-divider {
+  grid-column: 1 / -1;
+  padding: .35rem .15rem .1rem;
+  color: #667894;
+  font-size: .61rem;
+  font-weight: 900;
+  letter-spacing: .09em;
+}
 .gac-bracket-opponent-index {
   display: grid;
   place-items: center;
@@ -107,4 +132,5 @@
   .gac-bracket-opponent { grid-template-columns: 30px minmax(0, 1fr); }
   .gac-bracket-opponent-score { text-align: left; grid-column: 2; }
   .gac-bracket-select { grid-column: 2; justify-self: start; }
+  .gac-bracket-opponent.is-current-opponent { grid-column: auto; }
 }
