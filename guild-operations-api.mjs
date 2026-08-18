@@ -126,8 +126,16 @@ function mergeIgnored(...lists) {
   return [...new Set(lists.flatMap((list) => array(list).map((row) => text(typeof row === 'string' ? row : row?.memberId)).filter(Boolean)))];
 }
 
-async function loadHardReservations(guildBody) {
-  const discordGuildId = text(process.env.DISCORD_DEFAULT_GUILD_ID);
+function requireSafePlanningOverlay(overlay) {
+  const reason = text(overlay?.reason);
+  if (overlay?.durable && ['state-read-failed','ambiguous-discord-guild-bindings'].includes(reason)) {
+    throw httpError(`Durable Discord planning controls are unavailable: ${reason}.`, 503, 'PLANNING_OVERLAY_UNAVAILABLE');
+  }
+  return overlay;
+}
+
+async function loadHardReservations(discordGuildIdInput) {
+  const discordGuildId = text(discordGuildIdInput);
   if (!/^\d{16,22}$/.test(discordGuildId)) return [];
   try {
     const result = await listDiscordHardReservations({ discordGuildId });
@@ -138,26 +146,25 @@ async function loadHardReservations(guildBody) {
       source: 'durable-discord-hard-reserve',
     })).filter((row) => row.memberId && row.phase && row.baseId);
   } catch (error) {
-    if (guildBody?.members?.length) {
-      throw httpError(`Hard-reservation state is unavailable: ${error?.message || 'unknown error'}`, 503, 'HARD_RESERVATION_STATE_UNAVAILABLE');
-    }
-    return [];
+    throw httpError(`Hard-reservation state is unavailable for the verified Discord Guild: ${error?.message || 'unknown error'}`, 503, 'HARD_RESERVATION_STATE_UNAVAILABLE');
   }
 }
 
 async function buildTbPreview(userId, allyCode, planId, service, canonical, fetchImpl, delivery) {
   const context = await service.requireOfficer(userId, allyCode);
-  const [detail, guildBody, operations, catalog, workspace] = await Promise.all([
+  const [detail, guildBody, operations, catalog, workspace, discordBinding] = await Promise.all([
     service.getTbPlanDetail(userId, allyCode, planId),
     canonical.getGuildRosterByPlayer(allyCode),
     loadRoteOperations(fetchImpl),
     loadCatalog(),
     service.getWorkspace(userId, allyCode),
+    delivery.resolveBinding(context.guild.id),
   ]);
-  const [overlay, hardReservations] = await Promise.all([
-    resolveGuildPlanningOverlay(guildBody).catch(() => ({ preferences: [], ignoredMembers: [] })),
-    loadHardReservations(guildBody),
+  const [overlayRaw, hardReservations] = await Promise.all([
+    resolveGuildPlanningOverlay(guildBody),
+    loadHardReservations(discordBinding?.discordGuildId),
   ]);
+  const overlay = requireSafePlanningOverlay(overlayRaw);
   const safety = buildGuildRoteOperationSafety(guildBody, catalog, { redundancyTarget: 2 });
   const preferences = mergePreferences(overlay?.preferences, workspace.donationPreferences);
   const ignoredMembers = mergeIgnored(overlay?.ignoredMembers, currentIgnoredControls(workspace));
@@ -180,6 +187,7 @@ async function buildTbPreview(userId, allyCode, planId, service, canonical, fetc
   const input = {
     guildId: context.guild.id,
     guildSyncedAt: context.guild.last_synced_at,
+    discordGuildId: text(discordBinding?.discordGuildId),
     plan,
     rules: detail.rules,
     preAssignments: detail.preAssignments,
@@ -202,6 +210,7 @@ async function buildTbPreview(userId, allyCode, planId, service, canonical, fetc
       phases: preview.phases,
       summary: preview.summary,
       guildFreshness,
+      discordBinding: discordBinding ? { discordGuildId: discordBinding.discordGuildId } : null,
     },
     delivery: { mode: 'preview', published: false },
   });
