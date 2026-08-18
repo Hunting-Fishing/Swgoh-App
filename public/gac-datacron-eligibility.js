@@ -20,15 +20,6 @@ function alignmentNumber(value) {
   return numeric && [1, 2, 3].includes(numeric) ? numeric : null;
 }
 
-function combatTypeNumber(unit = {}) {
-  const numeric = finite(unit?.combatType);
-  if (numeric && [1, 2].includes(numeric)) return numeric;
-  const text = clean(unit?.unitType).toLowerCase();
-  if (text === "character") return 1;
-  if (text === "ship") return 2;
-  return null;
-}
-
 function unitCategories(staticUnit = {}) {
   return new Set(asArray(staticUnit?.categories || staticUnit?.categoryId).map(clean).filter(Boolean));
 }
@@ -47,6 +38,8 @@ function ruleMatch(liveUnit = {}, staticUnit = {}, targetRule = null) {
   const excluded = exclusions.find((category) => categories.has(category));
   if (excluded) reasons.push(`excluded:${excluded}`);
 
+  // C-3PO's datacron mapper treats each positive category entry as a separate
+  // target family. Do not collapse several entries into one giant AND rule.
   const allowed = asArray(targetRule.includeCategories).filter(Boolean);
   if (allowed.length && !allowed.some((category) => categories.has(category))) reasons.push("target-category-mismatch");
 
@@ -55,11 +48,9 @@ function ruleMatch(liveUnit = {}, staticUnit = {}, targetRule = null) {
   if (alignments.length && alignment !== null && !alignments.includes(alignment)) reasons.push("alignment-mismatch");
   if (alignments.length && alignment === null) reasons.push("alignment-unknown");
 
-  const classes = asArray(targetRule.unitClasses).map(Number).filter(Number.isFinite);
-  const combatType = combatTypeNumber(staticUnit);
-  if (classes.length && combatType !== null && !classes.includes(combatType)) reasons.push("combat-type-mismatch");
-  if (classes.length && combatType === null) reasons.push("combat-type-unknown");
-
+  // CG battleTargetingRule.unitClass uses its own enum (for example 6 on
+  // ordinary ally/self character target rules). It is not roster combatType,
+  // so it is deliberately not evaluated here.
   const unknown = reasons.some((reason) => reason.endsWith("-unknown"));
   const failed = reasons.some((reason) => !reason.endsWith("-unknown"));
   return Object.freeze({
@@ -78,13 +69,9 @@ function gateMatch(liveUnit = {}, affix = {}) {
     else if (relic < requiredRelicTier) reasons.push(`requires-r${requiredRelicTier}`);
   }
 
-  const requiredUnitTier = finite(affix?.requiredUnitTier);
-  const gear = finite(liveUnit?.gear);
-  if (requiredUnitTier !== null && requiredUnitTier > 0 && relic === null) {
-    if (gear === null) reasons.push("gear-unknown");
-    else if (gear < requiredUnitTier) reasons.push(`requires-unit-tier-${requiredUnitTier}`);
-  }
-
+  // requiredUnitTier is preserved in the raw evidence but is not interpreted
+  // as gear tier here; current reference implementations expose the datacron
+  // relic requirement directly and do not equate this field with roster gear.
   const unknown = reasons.some((reason) => reason.endsWith("-unknown"));
   const failed = reasons.some((reason) => !reason.endsWith("-unknown"));
   return Object.freeze({
@@ -233,7 +220,6 @@ export {
   alignmentNumber,
   bestCoverage,
   buildUnitIndex,
-  combatTypeNumber,
   datacronLabel,
   evaluateAffixForUnit,
   gateMatch,
