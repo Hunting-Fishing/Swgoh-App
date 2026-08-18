@@ -14,6 +14,8 @@ const member = Object.freeze({
   name: 'Warm Bacon',
   galacticPower: 12_000_000,
   rosterAvailable: true,
+  characterCount: 2,
+  shipCount: 0,
 });
 
 function guildBaseline(complete = true) {
@@ -27,44 +29,57 @@ function guildBaseline(complete = true) {
   });
 }
 
-function playerRoster() {
-  return Object.freeze({
-    fetchedAt: '2026-08-19T00:00:00Z',
-    player: Object.freeze({ allyCode, name: 'Warm Bacon' }),
-    units: Object.freeze([
-      Object.freeze({ baseId: 'AAYLASECURA', name: 'Aayla Secura', unitType: 'Character', stars: 7, gear: 13, relic: 2, power: 25_000, factions: ['Jedi','Galactic Republic'], tags: ['Jedi','Galactic Republic'] }),
-      Object.freeze({ baseId: 'PLOKOON', name: 'Plo Koon', unitType: 'Character', stars: 7, gear: 13, relic: 3, power: 24_000, factions: ['Jedi','Galactic Republic'], tags: ['Jedi','Galactic Republic'] }),
-    ]),
-    ships: Object.freeze([]),
-  });
-}
+const rawUnitRows = Object.freeze([
+  Object.freeze({ player_id:member.persistentId,base_id:'AAYLASECURA',unit_name:'Aayla Secura',combat_type:1,rarity:7,level:85,gear_level:13,relic_tier:2,galactic_power:25_000,zeta_count:1,omicron_count:0,metadata:{speed:250} }),
+  Object.freeze({ player_id:member.persistentId,base_id:'PLOKOON',unit_name:'Plo Koon',combat_type:1,rarity:7,level:85,gear_level:13,relic_tier:3,galactic_power:24_000,zeta_count:0,omicron_count:0,metadata:{speed:240} }),
+]);
 
 const catalog = Object.freeze([
   Object.freeze({ baseId: 'AAYLASECURA', name: 'Aayla Secura', unitType: 'Character', alignment: 'Light Side', categories: ['Jedi','Galactic Republic'], factions: ['Jedi','Galactic Republic'] }),
   Object.freeze({ baseId: 'PLOKOON', name: 'Plo Koon', unitType: 'Character', alignment: 'Light Side', categories: ['Jedi','Galactic Republic'], factions: ['Jedi','Galactic Republic'] }),
 ]);
 
-test('canonical TB snapshot hydrates current Guild member rosters and static unit definitions without Discord', async () => {
+function hydratedPlayerUnits() {
+  return rawUnitRows.map((row) => ({
+    baseId: row.base_id,
+    name: row.unit_name,
+    unitType: 'Character',
+    stars: row.rarity,
+    gear: row.gear_level,
+    relic: row.relic_tier,
+    power: row.galactic_power,
+    factions: catalog.find((unit) => unit.baseId === row.base_id)?.factions || [],
+    categories: catalog.find((unit) => unit.baseId === row.base_id)?.categories || [],
+  }));
+}
+
+test('canonical TB snapshot uses one batched Guild-unit read plus canonical static definitions without Discord', async () => {
   const calls = [];
   const canonical = {
     async getGuildRosterByPlayer(code) { calls.push(['guild', code]); return guildBaseline(true); },
-    async getPlayerRoster(code) { calls.push(['player', code]); return playerRoster(); },
     async getGameUnitCatalog() { calls.push(['catalog']); return catalog; },
+    async _selectPaged(table, query, options) {
+      calls.push(['units', table, query.player_id, options.maxRows]);
+      assert.equal(table, 'player_units_current');
+      assert.match(query.player_id, /^in\.\(/);
+      return rawUnitRows;
+    },
   };
-  const result = await buildCanonicalGuildTbSnapshot(canonical, allyCode, { concurrency: 2 });
+  const result = await buildCanonicalGuildTbSnapshot(canonical, allyCode);
   assert.equal(result.guildSnapshot.members.length, 1);
   assert.equal(result.guildSnapshot.members[0].rosterAvailable, true);
   assert.equal(result.guildSnapshot.members[0].units.length, 2);
   assert.equal(result.guildSnapshot.members[0].units[0].categories.includes('Jedi'), true);
   assert.equal(result.catalog.length, 2);
-  assert.deepEqual(calls.map((row) => row[0]), ['guild','player','catalog']);
+  assert.deepEqual(calls.map((row) => row[0]), ['guild','catalog','units']);
+  assert.equal(calls.filter((row) => row[0] === 'units').length, 1, 'Guild unit hydration must stay batched rather than one player call per member');
 });
 
 test('personal TB action refuses an incomplete Guild hydration rather than understating redundancy', async () => {
   const canonical = {
     async getGuildRosterByPlayer() { return guildBaseline(false); },
-    async getPlayerRoster() { throw new Error('must not hydrate after incomplete Guild gate'); },
     async getGameUnitCatalog() { return catalog; },
+    async _selectPaged() { throw new Error('must not read units after incomplete Guild gate'); },
   };
   await assert.rejects(
     buildCanonicalGuildTbSnapshot(canonical, allyCode),
@@ -72,10 +87,22 @@ test('personal TB action refuses an incomplete Guild hydration rather than under
   );
 });
 
+test('personal TB action refuses a truncated member unit result', async () => {
+  const canonical = {
+    async getGuildRosterByPlayer() { return guildBaseline(true); },
+    async getGameUnitCatalog() { return catalog; },
+    async _selectPaged() { return rawUnitRows.slice(0, 1); },
+  };
+  await assert.rejects(
+    buildCanonicalGuildTbSnapshot(canonical, allyCode),
+    (error) => error?.code === 'GUILD_MEMBER_ROSTER_INCOMPLETE' && error?.status === 503,
+  );
+});
+
 test('personal TB plan is player-scoped, bounded, explainable and does not invent a universal score', () => {
   const hydratedGuild = {
     ...guildBaseline(true),
-    members: Object.freeze([{ ...member, units: Object.freeze([...playerRoster().units]) }]),
+    members: Object.freeze([{ ...member, units: Object.freeze(hydratedPlayerUnits()) }]),
   };
   const result = buildPersonalTbFarmPlan(hydratedGuild, catalog, allyCode, {
     priorityMode: 'journey-overlap',
