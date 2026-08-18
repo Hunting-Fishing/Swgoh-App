@@ -116,8 +116,17 @@ test('self-service lifecycle rejects Discord users without a durable player link
   assert.equal(f.writes.length, 0);
 });
 
-test('self-service lifecycle rejects a player that no longer belongs to the bound Guild', async () => {
-  const f = fixture({ seedGuildId: '99999999-9999-4999-8999-999999999999' });
-  await assert.rejects(executeDiscordPlayerLifecycleCommand(interaction('unregister'), f), /no longer in the SWGOH Guild bound to this Discord server/);
-  assert.equal(f.unlinks.length, 0);
+test('stale player links cannot change Operations controls but can still self-unregister', async () => {
+  const mismatch = '99999999-9999-4999-8999-999999999999';
+  const ignoreFixture = fixture({ seedGuildId: mismatch });
+  await assert.rejects(
+    executeDiscordPlayerLifecycleCommand(interaction('ignore', [{ type: 4, name: 'days', value: 1 }]), ignoreFixture),
+    /no longer in the SWGOH Guild bound to this Discord server/,
+  );
+  assert.equal(ignoreFixture.writes.length, 0);
+
+  const unregisterFixture = fixture({ seedGuildId: mismatch });
+  const result = await executeDiscordPlayerLifecycleCommand(interaction('unregister'), unregisterFixture);
+  assert.match(result, /Player Unregistered/);
+  assert.equal(unregisterFixture.unlinks.length, 1);
 });
