@@ -1,4 +1,5 @@
 import os from 'node:os';
+import { guildOperationScheduleWorker } from './guild-operation-schedule-worker.mjs';
 import { pagedGuildPersistence } from './guild-paged-persistence.mjs';
 import { supabaseCoreStore } from './supabase-core-store.mjs';
 
@@ -29,6 +30,7 @@ export function createGuildSyncWorker(env = process.env, options = {}) {
   const config = configFromEnv(env);
   const store = options.store || supabaseCoreStore;
   const persistence = options.persistence || pagedGuildPersistence;
+  const operationSchedules = options.scheduleWorker || (store === supabaseCoreStore ? guildOperationScheduleWorker : null);
   const now = typeof options.now === 'function' ? options.now : () => new Date();
   const sleeper = typeof options.sleep === 'function' ? options.sleep : sleep;
   const logger = options.logger || console;
@@ -45,6 +47,7 @@ export function createGuildSyncWorker(env = process.env, options = {}) {
       heartbeatMs: config.heartbeatMs, staleLeaseSeconds: config.staleLeaseSeconds, jobTimeoutMs: config.jobTimeoutMs,
       persistenceConfigured: Boolean(store.status?.().configured),
       persistenceMode: persistence.status?.().mode || 'injected',
+      scheduledGuildOperations: Boolean(operationSchedules?.runOnce),
     });
   }
   async function recoverStale() {
@@ -113,9 +116,6 @@ export function createGuildSyncWorker(env = process.env, options = {}) {
     }
     const stopHeartbeat = startHeartbeat(job);
     try {
-      // Bounded persistence re-resolves VERIFIED ownership/ACTIVE membership, fetches
-      // five rich members at a time, stages each page under this exact job ID, and
-      // only finalizes after the complete tenant roster is present.
       const result = await withHardTimeout(persistence.sync({ id: userId }, { jobId: job.id }));
       if (clean(result?.guild?.id) && clean(job?.guild_id) && clean(result.guild.id) !== clean(job.guild_id)) {
         const mismatch = new Error('The verified user now resolves to a different Guild than the queued tenant.');
@@ -146,19 +146,31 @@ export function createGuildSyncWorker(env = process.env, options = {}) {
     for (const job of jobs) results.push(await processJob(job));
     return Object.freeze({ recovered, claimed: jobs.length, results: Object.freeze(results) });
   }
+  async function runScheduledOperations() {
+    if (!operationSchedules?.runOnce) return Object.freeze({ claimed: 0, results: Object.freeze([]) });
+    return operationSchedules.runOnce();
+  }
   async function runLoop() {
-    logger.log(`[guild-sync-worker] ${config.workerId} starting; mode=${persistence.status?.().mode || 'injected'} batch=${config.batchSize} pollMs=${config.pollMs} heartbeatMs=${config.heartbeatMs} timeoutMs=${config.jobTimeoutMs}`);
+    logger.log(`[guild-sync-worker] ${config.workerId} starting; mode=${persistence.status?.().mode || 'injected'} batch=${config.batchSize} pollMs=${config.pollMs} heartbeatMs=${config.heartbeatMs} timeoutMs=${config.jobTimeoutMs} scheduledOps=${Boolean(operationSchedules?.runOnce)}`);
     while (!stopped) {
       try {
+        // First let due Operation schedules enqueue/reconcile their forced Guild refresh.
+        const beforeOps = await runScheduledOperations();
+        if (beforeOps.claimed) logger.log(`[guild-sync-worker] advanced ${beforeOps.claimed} scheduled Guild Operation(s) before sync cycle`);
+
         const cycle = await runOnce();
         if (cycle.recovered) logger.warn(`[guild-sync-worker] recovered ${cycle.recovered} stale Guild sync lease(s)`);
         if (cycle.claimed) logger.log(`[guild-sync-worker] processed ${cycle.claimed} queued Guild sync job(s)`);
+
+        // A just-completed refresh can now unblock its scheduled preview/publish in the same poll cycle.
+        const afterOps = await runScheduledOperations();
+        if (afterOps.claimed) logger.log(`[guild-sync-worker] advanced ${afterOps.claimed} scheduled Guild Operation(s) after sync cycle`);
       } catch (error) { logger.error(`[guild-sync-worker] ${errorText(error)}`); }
       if (!stopped) await sleeper(config.pollMs);
     }
     logger.log(`[guild-sync-worker] ${config.workerId} stopped`);
   }
-  return Object.freeze({ status, recoverStale, claim, processJob, runOnce, runLoop, stop() { stopped = true; } });
+  return Object.freeze({ status, recoverStale, claim, processJob, runOnce, runScheduledOperations, runLoop, stop() { stopped = true; } });
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
