@@ -4,8 +4,10 @@ import { createGacCurrentOpponentConfirmationService } from "../gac-current-oppo
 
 function harness(options = {}) {
   const writes = [];
+  const reads = [];
   const store = {
     async select(table, query) {
+      reads.push({ table, query });
       if (table === "players" && query.ally_code === "eq.732764286") {
         return [{ id: "PLAYER-ROW-1", ally_code: "732764286", swgoh_player_id: "PLAYER_1", name: "Warm Bacon" }];
       }
@@ -21,6 +23,7 @@ function harness(options = {}) {
         }];
       }
       if (table === "gac_events") return [{ id: "EVENT-ROW-1", event_instance_id: "GAC:CURRENT" }];
+      if (table === "gac_rounds") return options.confirmedRows || [];
       return [];
     },
     async upsert(table, rows, config) {
@@ -50,7 +53,7 @@ function harness(options = {}) {
     bracketIndex,
     now: () => new Date("2026-08-19T01:30:00+08:00"),
   });
-  return { service, writes };
+  return { service, writes, reads };
 }
 
 test("verified owner can persist a same-bracket current opponent as exact user evidence", async () => {
@@ -107,4 +110,47 @@ test("verified owner cannot confirm a player who is not in the indexed live brac
     (error) => error?.status === 409
   );
   assert.equal(writes.length, 0);
+});
+
+test("saved current-opponent evidence is unreadable without an explicit current round", async () => {
+  const { service, reads } = harness({
+    confirmedRows: [{
+      round_number: 2,
+      opponent_swgoh_player_id: "PLAYER_2",
+      opponent_ally_code: "123456789",
+      opponent_name: "Navygators",
+      source: "user-confirmed-current-bracket",
+      source_ref: "gac-command-center",
+      confidence: 1,
+      verified: true,
+      recorded_at: "2026-08-19T01:30:00+08:00",
+      metadata: { roundSource: "verified-user-confirmed" },
+    }],
+  });
+
+  assert.equal(await service.findLatestConfirmed("732764286", "GAC:CURRENT", null), null);
+  assert.equal(reads.some((entry) => entry.table === "gac_rounds"), false);
+});
+
+test("saved current-opponent evidence is filtered to the explicit event round", async () => {
+  const { service, reads } = harness({
+    confirmedRows: [{
+      round_number: 3,
+      opponent_swgoh_player_id: "PLAYER_2",
+      opponent_ally_code: "123456789",
+      opponent_name: "Navygators",
+      source: "user-confirmed-current-bracket",
+      source_ref: "gac-command-center",
+      confidence: 1,
+      verified: true,
+      recorded_at: "2026-08-19T01:30:00+08:00",
+      metadata: { roundSource: "verified-user-confirmed" },
+    }],
+  });
+
+  const exact = await service.findLatestConfirmed("732764286", "GAC:CURRENT", 3);
+  assert.equal(exact.opponent.name, "Navygators");
+  assert.equal(exact.resolution.round, 3);
+  const roundRead = reads.find((entry) => entry.table === "gac_rounds");
+  assert.equal(roundRead.query.round_number, "eq.3");
 });
