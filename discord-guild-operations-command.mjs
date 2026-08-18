@@ -249,6 +249,59 @@ async function ignoreCommand(interaction, _config, services) {
     : `**SWGOH Command Center · Ignore Cleared**\n**${safe(member.name)}** · ${displayAlly(member.allyCode)} is eligible for Operations assignments again.`;
 }
 
+async function donationReportCommand(interaction, _config, services) {
+  const context = await resolveContext(interaction.guild_id, services);
+  const canonical = services.canonical || canonicalRosterService;
+  const roster = await canonical.getGuildRosterByPlayer(context.seedAllyCode);
+  const stored = await context.store.select('guild_unit_donation_preferences', {
+    select: 'player_id,base_id,preference,source,updated_at',
+    guild_id: `eq.${context.guild.id}`,
+    order: 'player_id.asc,base_id.asc',
+    limit: 500,
+  });
+  const byPersistent = new Map(array(roster.members).map((member) => [text(member.persistentId), member]));
+  const byAlly = new Map(array(roster.members).map((member) => [allyCode(member.allyCode), member]).filter(([code]) => code));
+  const rows = new Map();
+  for (const pref of array(stored)) {
+    const member = byPersistent.get(text(pref.player_id));
+    const baseId = text(pref.base_id).toUpperCase();
+    const preference = text(pref.preference).toLowerCase();
+    if (!member || !baseId || !['give','keep'].includes(preference)) continue;
+    rows.set(`${allyCode(member.allyCode)}|${baseId}`, { member, baseId, preference });
+  }
+  for (const pref of Object.values(context.guildState?.memberPreferences && typeof context.guildState.memberPreferences === 'object' ? context.guildState.memberPreferences : {})) {
+    const member = byAlly.get(allyCode(pref?.swgohAllyCode));
+    const baseId = text(pref?.baseId).toUpperCase();
+    const preference = text(pref?.preference).toLowerCase();
+    if (!member || !baseId || !['give','keep'].includes(preference)) continue;
+    const key = `${allyCode(member.allyCode)}|${baseId}`;
+    if (!rows.has(key)) rows.set(key, { member, baseId, preference });
+  }
+  const grouped = new Map();
+  for (const row of rows.values()) {
+    const code = allyCode(row.member.allyCode);
+    if (!grouped.has(code)) grouped.set(code, { member: row.member, give: 0, keep: 0, units: [] });
+    const group = grouped.get(code);
+    group[row.preference] += 1;
+    group.units.push(row);
+  }
+  const groups = [...grouped.values()].sort((a,b) => (b.give + b.keep) - (a.give + a.keep) || safe(a.member.name).localeCompare(safe(b.member.name)));
+  const totalGive = groups.reduce((sum, row) => sum + row.give, 0);
+  const totalKeep = groups.reduce((sum, row) => sum + row.keep, 0);
+  const lines = [
+    `**SWGOH Command Center · ${safe(roster?.guild?.name || context.guild.name)} Donation Preferences**`,
+    `Members with preferences: **${groups.length}** · GIVE: **${totalGive}** · KEEP: **${totalKeep}** · Unit overrides: **${rows.size}**`,
+    '',
+  ];
+  if (!groups.length) lines.push('No explicit GIVE/KEEP preferences are currently stored.');
+  for (const group of groups.slice(0,18)) {
+    lines.push(`• **${safe(group.member.name)}** · ${displayAlly(group.member.allyCode)} · GIVE **${group.give}** · KEEP **${group.keep}**`);
+  }
+  if (groups.length > 18) lines.push(`• +${groups.length - 18} more members in Command Center`);
+  lines.push('', '_Report merges canonical Command Center preferences with durable Discord preferences; duplicate member/unit overrides are counted once._');
+  return truncate(lines.join('\n'));
+}
+
 async function syncCommand(interaction, config, services) {
   const context = await resolveContext(interaction.guild_id, services);
   const live = services.live || createDiscordTbLiveServices(services.env || process.env, { stateStore: context.stateStore, ...(services.fetch ? { fetch: services.fetch } : {}) });
@@ -287,6 +340,7 @@ export async function executeDiscordGuildCommand(interaction, config, services =
   if (subcommand === 'unverify-channel') return unverifyChannelCommand(interaction, config, services);
   if (subcommand === 'register-mates') return registerMatesCommand(interaction, config, services);
   if (subcommand === 'ignore') return ignoreCommand(interaction, config, services);
+  if (subcommand === 'donation-report') return donationReportCommand(interaction, config, services);
   if (subcommand === 'sync') return syncCommand(interaction, config, services);
   if (subcommand === 'platoon-report') return platoonReportCommand(interaction, config, services);
   throw new Error(`Unknown /guild subcommand: ${subcommand}`);
