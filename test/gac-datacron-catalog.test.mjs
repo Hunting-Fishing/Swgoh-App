@@ -120,18 +120,16 @@ test("ability affix resolves exact ability and target eligibility but not abilit
   assert.equal(resolved.abilityDescriptionResolved, false);
 });
 
-test("stat affix requires the actual stat value range before receiving the strongest exact score", () => {
+test("stat affix requires the actual published numeric range before receiving a scope label", () => {
   const catalog = fixtureCatalog();
   const exact = bestAffixMatch({ statType: 55, statValue: 25_000_000 }, catalog);
-  assert.equal(exact.scopeLabel, "Maxhealth");
+  assert.equal(exact.scopeLabel, "Max Health");
 
   const wrongValue = bestAffixMatch({ statType: 55, statValue: 99_000_000 }, catalog);
-  assert.equal(wrongValue.scopeLabel, "Maxhealth");
-  assert.equal(wrongValue.statValueMin, 25_000_000);
-  assert.equal(wrongValue.statValueMax, 25_000_000);
-  // The resolver exposes the catalog candidate, but callers must retain the raw
-  // value because the candidate's numeric range does not contain 99,000,000.
-  assert.equal(99_000_000 >= wrongValue.statValueMin && 99_000_000 <= wrongValue.statValueMax, false);
+  assert.equal(wrongValue, null);
+  const unresolved = resolveAffix({ statType: 55, statValue: 99_000_000 }, catalog);
+  assert.equal(unresolved.scopeLabel, "");
+  assert.equal(unresolved.match, null);
 });
 
 test("catalog version mismatch is surfaced rather than silently treated as aligned", () => {
