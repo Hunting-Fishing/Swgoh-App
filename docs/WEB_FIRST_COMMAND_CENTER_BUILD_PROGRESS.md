@@ -29,6 +29,7 @@ A Discord command must not be the only way to use a feature unless the operation
 - [x] Guild Command Center routes
 - [x] Guild members and individual member Command profiles
 - [x] ROTE/TB mission coverage and mission-impact farming queue
+- [x] TB Farming Guide with Journey / GL / Fleet overlap
 - [x] ROTE Operations assignment tooling
 - [x] Guild member Operations control drawer
 - [x] GIVE / KEEP preferences
@@ -92,8 +93,8 @@ When reproducing functionality from EchoBase, WookieeBot, C-3PO Bot, SWGoHBot, O
 - [x] Mission-impact upgrade queue
 - [x] Operations assignment engine
 - [x] Member availability / ignores / reserves
-- [ ] TB Roster Farming Guide with Journey overlap — **current build**
-- [ ] Member-specific TB farming plan
+- [x] TB Roster Farming Guide with Journey overlap — v1 read-only Guild page
+- [ ] Personal TB Farm Plan in Action Center
 - [ ] Guild-wide farm campaign / officer target list
 - [ ] Farm acknowledgements / member commitments
 - [ ] Phase readiness report
@@ -116,13 +117,55 @@ When reproducing functionality from EchoBase, WookieeBot, C-3PO Bot, SWGoHBot, O
 - [x] Journey presets and Journey Map
 - [x] Player farming tools
 - [ ] Cross-mode Farm Value engine
-- [ ] Journey overlap scoring
-- [ ] TB + Journey overlap
+- [x] Journey overlap classification v1
+- [x] TB + Journey overlap v1
 - [ ] TW + Journey overlap
 - [ ] Raid + Journey overlap
-- [ ] Ship / Fleet Journey overlap
+- [ ] Ship / Fleet cross-mode overlap beyond Journey prerequisites
 - [ ] Multi-goal farm optimizer
 - [ ] Guild-recommended farm campaigns
+
+## Current checkpoint — TB Farming Guide v1
+
+Implemented on the `feat/guild-tb-farming-overlap-guide` build:
+
+- [x] Dedicated `/guild/tb/farming` Guild page
+- [x] Persistent **TB Farming** navigation entry across Guild Command
+- [x] TB Command callout linking to the guide
+- [x] Guild Overview card linking to the guide
+- [x] Uses the existing exact ROTE mission-coverage engine
+- [x] Uses the existing Journey preset requirement graph
+- [x] Joins systems by SWGOH Base ID
+- [x] Member-specific recommendation rows
+- [x] Defaults to the loaded member when that member exists in the Guild roster
+- [x] All-Guild / individual-member filtering
+- [x] Phase filtering
+- [x] Mandatory vs selectable-pool filtering
+- [x] Search by member, unit, mission or Journey target
+- [x] TB-impact sorting
+- [x] Journey-overlap sorting
+- [x] Closest-upgrade sorting
+- [x] **DIRECT DOUBLE-USE** classification
+- [x] **PARTIAL DOUBLE-USE** classification
+- [x] **MULTI-UNLOCK** classification
+- [x] **TB ONLY** classification
+- [x] Already-satisfied Journey prerequisites are shown but do not count as new double-use value
+- [x] Gear/star progress can count as partial progress toward a later relic prerequisite
+- [x] Player Farm-tool deep link
+- [x] Guild Unit Ownership deep link
+- [x] No Discord dependency for reading or using the guide
+- [x] No new database migration
+
+Still future work:
+
+- [ ] Rank overlaps using the member's personally tracked Journey targets
+- [ ] Personal **TB Farm Plan** website action
+- [ ] Save/share a TB Farm Plan to Player Command Feed
+- [ ] Publish member/guild TB farm plans to Guild Command Feed
+- [ ] Optional `/tb farms` Discord adapter using the same model
+- [ ] Officer-created Guild farm campaigns
+- [ ] Member acknowledge / commit / complete workflow
+- [ ] Material-cost and ETA estimates only after trustworthy resource-cost evidence is integrated
 
 ## Feature design — TB Roster Farming Guide
 
@@ -196,7 +239,9 @@ A TB farm can be classified as:
 - **DIRECT DOUBLE-USE** — TB target reaches or exceeds a Journey requirement.
 - **PARTIAL DOUBLE-USE** — TB farm advances the unit toward a higher Journey requirement but does not finish it.
 - **MULTI-UNLOCK** — the same unit is required by more than one Journey/GL/Fleet target.
-- **TB ONLY** — no current Journey preset overlap.
+- **TB ONLY** — no current active Journey preset overlap.
+
+An already-satisfied prerequisite may still be displayed as context, but it must not be counted as new double-use value from the proposed TB farm.
 
 Do not imply that a Journey character itself is unlocked only by upgrading one prerequisite. The UI should say the farm **advances** or **satisfies that prerequisite**, not that it automatically unlocks the Journey target.
 
@@ -214,7 +259,8 @@ The Guild TB Farming Guide should provide:
 - sort by TB impact
 - sort by double-use value
 - Journey overlap chips on each row
-- direct links to the existing player Gear/Farm/Journey tools
+- direct links to the existing player Farm/Journey tools
+- direct links to Guild unit ownership
 
 ### Member view
 
@@ -222,13 +268,13 @@ A member should be able to see:
 
 - their own TB farm queue
 - which farm helps the Guild most
-- which farm also advances their Journey goals
+- which farm also advances Journey goals
 - current -> TB target
 - current -> Journey requirement
 - whether the TB target satisfies the Journey prerequisite
-- mission(s) unlocked by the TB upgrade
+- mission(s) affected by the TB upgrade
 
-Future enhancement: combine the member's locally tracked Journey targets with the Guild TB queue so farms for Journeys the player actually tracks rank above unrelated overlaps.
+Future enhancement: combine the member's tracked Journey targets with the Guild TB queue so farms for Journeys the player actually tracks rank above unrelated overlaps.
 
 ### Officer view
 
@@ -322,31 +368,30 @@ Guild Command
         -> Select My Name
         -> See Guild-impact farms
         -> See Journey overlap
-        -> Open Farm / Gear Plan
-        -> optionally Share to Guild / Player / Discord
+        -> Open Farm tools / Guild unit ownership
+        -> optionally Share to Guild / Player / Discord (future)
 ```
 
 ## Near-term build order
 
-1. [ ] TB Farming Guide read-only Guild page using existing TB farms + Journey presets.
-2. [ ] Member filter and loaded-player focus.
-3. [ ] Direct/partial/multi-unlock overlap classification.
-4. [ ] Deep links to Gear Planner / Journey Map.
+1. [x] TB Farming Guide read-only Guild page using existing TB farms + Journey presets.
+2. [x] Member filter and loaded-player focus.
+3. [x] Direct/partial/multi-unlock overlap classification.
+4. [x] Deep links to Player Farm tools and Guild Unit Ownership.
 5. [ ] Add website Action Center entry for personal TB Farm Plan.
 6. [ ] Add Guild Command Feed publication.
 7. [ ] Add optional Discord `/tb farms` adapter using the same model.
 8. [ ] Add officer farm campaigns/assignments only after the read model is stable.
 
-## Completion definition for the current TB Farming Guide milestone
+## Completion definition for the TB Farming Guide v1 milestone
 
-The milestone is complete when:
-
-- Guild Command exposes a visible TB Farming Guide entry.
-- The guide uses current Guild roster data.
-- TB farm recommendations come from the existing exact mission-coverage engine.
-- Journey overlaps come from the existing Journey preset graph.
-- Rows are member-specific.
-- Users can filter to a specific member.
-- Users can identify direct vs partial Journey overlap.
-- No Discord account is required to read/use the website guide.
-- No separate mock/manual recommendation list exists.
+- [x] Guild Command exposes a visible TB Farming Guide entry.
+- [x] The guide uses current Guild roster data.
+- [x] TB farm recommendations come from the existing exact mission-coverage engine.
+- [x] Journey overlaps come from the existing Journey preset graph.
+- [x] Rows are member-specific.
+- [x] Users can filter to a specific member.
+- [x] Users can identify direct vs partial Journey overlap.
+- [x] Multi-unlock overlap is visible.
+- [x] No Discord account is required to read/use the website guide.
+- [x] No separate mock/manual recommendation list exists.
