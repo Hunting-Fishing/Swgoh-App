@@ -121,12 +121,21 @@ export function createGuildDiscordLinkAdminService(options = {}) {
   }
 
   async function currentPlayers(context) {
-    return array(await store.select('players', {
-      select: 'id,ally_code,swgoh_player_id,name,current_guild_id',
-      current_guild_id: `eq.${context.guild.id}`,
-      order: 'name.asc',
-      limit: 100,
-    }));
+    const [players, memberships] = await Promise.all([
+      store.select('players', {
+        select: 'id,ally_code,swgoh_player_id,name,current_guild_id',
+        current_guild_id: `eq.${context.guild.id}`,
+        order: 'name.asc',
+        limit: 100,
+      }),
+      store.select('guild_members_current', {
+        select: 'player_id',
+        guild_id: `eq.${context.guild.id}`,
+        limit: 100,
+      }),
+    ]);
+    const currentIds = new Set(array(memberships).map((row) => text(row.player_id)).filter(Boolean));
+    return array(players).filter((player) => currentIds.has(text(player.id)));
   }
 
   function playerMaps(players) {
@@ -194,18 +203,26 @@ export function createGuildDiscordLinkAdminService(options = {}) {
     return player;
   }
 
-  async function audit(context, action, discordUserId, beforeState, afterState) {
-    await store.insert('guild_operations_audit_log', [{
-      guild_id: context.guild.id,
-      actor_user_id: context.userId,
-      action,
-      entity_type: 'discord_player_link',
-      entity_id: discordUserId,
-      before_state: beforeState,
-      after_state: afterState,
-      metadata: { source: 'command-center-web-manual-link-admin' },
-      occurred_at: now().toISOString(),
-    }], { returning: false });
+  async function mirrorAudit(context, action, discordUserId, beforeState, afterState) {
+    try {
+      await store.insert('guild_operations_audit_log', [{
+        guild_id: context.guild.id,
+        actor_user_id: context.userId,
+        action,
+        entity_type: 'discord_player_link',
+        entity_id: discordUserId,
+        before_state: beforeState,
+        after_state: afterState,
+        metadata: { source: 'command-center-web-manual-link-admin', mirror: true },
+        occurred_at: now().toISOString(),
+      }], { returning: false });
+      return true;
+    } catch {
+      // The durable Discord state mutation itself has already written its atomic audit
+      // record. Never report that mutation as failed merely because this secondary
+      // Supabase officer-audit mirror is temporarily unavailable.
+      return false;
+    }
   }
 
   async function link(userId, lookupAllyCode, input = {}) {
@@ -228,8 +245,8 @@ export function createGuildDiscordLinkAdminService(options = {}) {
       actorDiscordUserId: '',
     });
     const result = safeLink(stored, player, member, true);
-    await audit(context, 'discord-player-link.manual', discordUserId, before, result);
-    return result;
+    const auditRecorded = await mirrorAudit(context, 'discord-player-link.manual', discordUserId, before, result);
+    return Object.freeze({ ...result, auditRecorded, durableAuditRecorded: true });
   }
 
   async function unlink(userId, lookupAllyCode, input = {}) {
@@ -244,12 +261,14 @@ export function createGuildDiscordLinkAdminService(options = {}) {
       discordUserId,
       actorDiscordUserId: '',
     });
-    await audit(context, 'discord-player-link.manual-unlink', discordUserId, before, null);
+    const auditRecorded = await mirrorAudit(context, 'discord-player-link.manual-unlink', discordUserId, before, null);
     return Object.freeze({
       removed: true,
       discordUserId,
       swgohAllyCode: normalizeAlly(removed?.swgohAllyCode),
       playerId: text(removed?.playerId),
+      auditRecorded,
+      durableAuditRecorded: true,
     });
   }
 
