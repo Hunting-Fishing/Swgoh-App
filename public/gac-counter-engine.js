@@ -162,7 +162,9 @@ function uniqueSquads(squads) {
 
 function rankRosterFitSquads(ownBody, enemyUnits, options = {}) {
   const size = Number(options.size) === 3 ? 3 : 5;
+  const excluded = new Set((options.excludeBaseIds || []).map((value) => String(value || "")));
   const roster = characters(ownBody)
+    .filter((unit) => !excluded.has(String(unit?.baseId || "")))
     .filter((unit) => n(unit.stars) >= 7 && (n(unit.relic) > 0 || n(unit.gear) >= 12))
     .sort((a, b) => combatValue(b) - combatValue(a));
   if (!roster.length || !enemyUnits?.length) return [];
@@ -204,6 +206,62 @@ function rankRosterFitSquads(ownBody, enemyUnits, options = {}) {
   }).sort((a, b) => b.score - a.score).slice(0, 12);
 }
 
+function normalizeDefenseSquad(squad, opponentBody) {
+  const index = new Map(characters(opponentBody).map((unit) => [String(unit?.baseId || ""), unit]));
+  const ids = Array.isArray(squad?.members) ? squad.members : [];
+  const units = ids.map((id) => index.get(String(id || ""))).filter(Boolean);
+  if (!units.length) return null;
+  const leaderId = String(squad?.leaderBaseId || ids[0] || "");
+  const leader = units.find((unit) => unit.baseId === leaderId);
+  return {
+    ...squad,
+    units: leader ? [leader, ...units.filter((unit) => unit.baseId !== leaderId)] : units,
+  };
+}
+
+function planBoardCounters(ownBody, opponentBody, defenseSquads, options = {}) {
+  const size = Number(options.size) === 3 ? 3 : 5;
+  const baseExcluded = new Set((options.excludeBaseIds || []).map((value) => String(value || "")));
+  const defenses = (Array.isArray(defenseSquads) ? defenseSquads : [])
+    .map((squad, index) => ({ index, defense: normalizeDefenseSquad(squad, opponentBody) }))
+    .filter((item) => item.defense?.units?.length)
+    .map((item) => {
+      const candidates = rankRosterFitSquads(ownBody, item.defense.units, { size, excludeBaseIds: [...baseExcluded] });
+      return {
+        ...item,
+        candidates,
+        threat: item.defense.units.reduce((sum, unit) => sum + combatValue(unit), 0),
+        playable: candidates.filter((candidate) => candidate.score >= 105).length,
+      };
+    })
+    .sort((a, b) => a.playable - b.playable || b.threat - a.threat);
+
+  const used = new Set(baseExcluded);
+  const assignments = [];
+  for (const item of defenses) {
+    const available = item.candidates
+      .filter((candidate) => candidate.squad.every((unit) => !used.has(String(unit?.baseId || ""))))
+      .map((candidate) => {
+        const overkillPenalty = Math.max(0, candidate.strengthRatio - 1.28) * 28;
+        const efficiencyScore = candidate.score - overkillPenalty;
+        return { candidate, efficiencyScore };
+      })
+      .sort((a, b) => b.efficiencyScore - a.efficiencyScore || b.candidate.score - a.candidate.score);
+    const selected = available[0]?.candidate || null;
+    if (selected) {
+      for (const unit of selected.squad) used.add(String(unit?.baseId || ""));
+    }
+    assignments.push({
+      defenseIndex: item.index,
+      defense: item.defense,
+      recommendation: selected,
+      alternativesRemaining: Math.max(0, available.length - 1),
+    });
+  }
+
+  return assignments.sort((a, b) => a.defenseIndex - b.defenseIndex);
+}
+
 function formatSigned(value) {
   const number = n(value);
   if (!number) return "0";
@@ -215,7 +273,17 @@ export {
   compareRosters,
   formatSigned,
   hasLeaderAbility,
+  planBoardCounters,
   rankRosterFitSquads,
   rosterSummary,
   unitDeltaRows,
 };
+
+if (typeof window !== "undefined" && typeof document !== "undefined") {
+  import("./gac-live-matchup-enhancer.js").catch((error) => {
+    console.warn("GAC live matchup enhancer failed to load", error);
+  });
+  import("./gac-bracket-fallback.js").catch((error) => {
+    console.warn("GAC live bracket fallback failed to load", error);
+  });
+}
