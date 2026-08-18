@@ -1,7 +1,8 @@
 import { gacHistoryService } from "./gac-history-service.mjs";
+import { createGacMatchupService } from "./gac-matchup-service.mjs";
 
 function writeError(writeJson, response, error, fallback) {
-  const status = [400, 401, 404, 429, 503].includes(error?.status) ? error.status : 502;
+  const status = [400, 401, 404, 409, 429, 503].includes(error?.status) ? error.status : 502;
   writeJson(response, status, {
     error: error?.name === "AbortError" ? "The GAC request timed out." : error?.message || fallback,
   });
@@ -15,10 +16,24 @@ function positiveLimit(value, fallback, max) {
 export function createGacApi({ requestGateway, writeJson, history = gacHistoryService }) {
   if (typeof requestGateway !== "function") throw new TypeError("requestGateway is required");
   if (typeof writeJson !== "function") throw new TypeError("writeJson is required");
+  const matchup = createGacMatchupService({ requestGateway, history });
 
   return Object.freeze({
     async handle(request, response, url) {
       if (request.method !== "GET") return false;
+
+      const matchupMatch = url.pathname.match(/^\/api\/gac\/matchup\/(\d{9})$/);
+      if (matchupMatch) {
+        try {
+          const body = await matchup.analyze(matchupMatch[1], {
+            enemyLeaderBaseId: url.searchParams.get("enemyLeader"),
+          });
+          writeJson(response, 200, body, { "X-GAC-Source": body?.source || "live-gac-matchup-intelligence" });
+        } catch (error) {
+          writeError(writeJson, response, error, "The live GAC matchup could not be analyzed.");
+        }
+        return true;
+      }
 
       if (url.pathname === "/api/gac/current-event") {
         try {
