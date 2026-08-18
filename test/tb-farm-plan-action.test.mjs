@@ -53,6 +53,13 @@ function hydratedPlayerUnits() {
   }));
 }
 
+function hydratedGuild() {
+  return {
+    ...guildBaseline(true),
+    members: Object.freeze([{ ...member, units: Object.freeze(hydratedPlayerUnits()) }]),
+  };
+}
+
 test('canonical TB snapshot uses one batched Guild-unit read plus canonical static definitions without Discord', async () => {
   const calls = [];
   const canonical = {
@@ -100,11 +107,7 @@ test('personal TB action refuses a truncated member unit result', async () => {
 });
 
 test('personal TB plan is player-scoped, bounded, explainable and does not invent a universal score', () => {
-  const hydratedGuild = {
-    ...guildBaseline(true),
-    members: Object.freeze([{ ...member, units: Object.freeze(hydratedPlayerUnits()) }]),
-  };
-  const result = buildPersonalTbFarmPlan(hydratedGuild, catalog, allyCode, {
+  const result = buildPersonalTbFarmPlan(hydratedGuild(), catalog, allyCode, {
     priorityMode: 'journey-overlap',
     maxRecommendations: 5,
   });
@@ -120,4 +123,52 @@ test('personal TB plan is player-scoped, bounded, explainable and does not inven
     assert.equal(Array.isArray(row.journey.targets), true);
     assert.equal('compositeScore' in row, false);
   }
+});
+
+test('MY GOALS mode promotes a farm that advances the player tracked Journey target', () => {
+  const result = buildPersonalTbFarmPlan(hydratedGuild(), catalog, allyCode, {
+    priorityMode: 'my-goals',
+    trackedGoalIds: ['JOURNEY_JEDIMASTERKENOBI'],
+    maxRecommendations: 10,
+  });
+  assert.equal(result.personalization.trackedGoalCount, 1);
+  assert.equal(result.personalization.fallbackUsed, false);
+  assert.equal(result.summary.priorityMode, 'my-goals');
+  const aayla = result.recommendations.find((row) => row.baseId === 'AAYLASECURA');
+  assert.ok(aayla, 'Aayla should appear in the personal ROTE farm queue fixture');
+  assert.equal(aayla.personal.matchesTrackedGoal, true);
+  assert.ok(aayla.personal.targets.some((target) => target.eventId === 'JOURNEY_JEDIMASTERKENOBI'));
+  const unrelated = result.recommendations.find((row) => row.baseId === 'PLOKOON');
+  if (unrelated) assert.ok(aayla.rank < unrelated.rank, 'tracked JMK overlap should rank before unrelated Journey overlap');
+});
+
+test('MY GOALS ranking exposes direct tracked prerequisite completion ahead of partial tracked progress when both exist', () => {
+  const result = buildPersonalTbFarmPlan(hydratedGuild(), catalog, allyCode, {
+    priorityMode: 'my-goals',
+    trackedGoalIds: ['JOURNEY_JEDIMASTERKENOBI','JOURNEY_GLAHSOKATANO'],
+    maxRecommendations: 10,
+  });
+  const tracked = result.recommendations.filter((row) => row.personal.matchesTrackedGoal);
+  assert.ok(tracked.length > 0);
+  for (const row of tracked) {
+    assert.equal(row.personal.trackedOverlapCount, row.personal.targets.length);
+    assert.equal('compositeScore' in row.personal, false);
+  }
+  const firstDirect = tracked.findIndex((row) => row.personal.trackedDirectCount > 0);
+  const firstPartial = tracked.findIndex((row) => row.personal.trackedDirectCount === 0 && row.personal.trackedPartialCount > 0);
+  if (firstDirect >= 0 && firstPartial >= 0) assert.ok(firstDirect < firstPartial);
+});
+
+test('MY GOALS mode transparently falls back to Guild impact when no durable goals exist', () => {
+  const result = buildPersonalTbFarmPlan(hydratedGuild(), catalog, allyCode, {
+    priorityMode: 'my-goals',
+    trackedGoalIds: [],
+    maxRecommendations: 5,
+  });
+  assert.equal(result.personalization.trackedGoalCount, 0);
+  assert.equal(result.personalization.fallbackUsed, true);
+  assert.equal(result.personalization.requestedPriorityMode, 'my-goals');
+  assert.equal(result.personalization.effectivePriorityMode, 'guild-impact');
+  assert.equal(result.summary.priorityMode, 'guild-impact');
+  assert.match(result.evidence.personalization, /falls back to Guild TB impact/i);
 });
