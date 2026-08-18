@@ -1,7 +1,19 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { planBoardCounters, rankRosterFitSquads } from "../public/gac-counter-engine.js";
+import {
+  futureScarcityPenalty,
+  planBoardCounters,
+  rankRosterFitSquads,
+} from "../public/gac-counter-engine.js";
+
+function abilitySet(leader = false, tier = 8) {
+  return [
+    { id: "basic", type: "Basic", displayTier: tier, omega: tier >= 8 },
+    { id: leader ? "leader_test" : "special", type: leader ? "Leader" : "Special", displayTier: tier, zeta: tier >= 7 },
+    { id: "unique", type: "Unique", displayTier: tier, zeta: tier >= 7 },
+  ];
+}
 
 function unit(baseId, faction, power, relic = 7, options = {}) {
   return {
@@ -16,7 +28,14 @@ function unit(baseId, faction, power, relic = 7, options = {}) {
     zetas: options.zetas ?? 2,
     omicrons: options.omicrons ?? 0,
     factions: [faction],
-    abilities: options.leader ? [{ id: `leader_${baseId}`, type: "Leader" }] : [],
+    abilities: abilitySet(Boolean(options.leader), options.abilityTier || 8),
+  };
+}
+
+function candidate(ids, score = 120) {
+  return {
+    score,
+    squad: ids.map((id) => ({ baseId: id })),
   };
 }
 
@@ -46,6 +65,23 @@ test("rankRosterFitSquads honors excluded attackers", () => {
   const ranked = rankRosterFitSquads(mine, enemy, { size: 5, excludeBaseIds: ["A_LEAD"] });
   assert.ok(ranked.length > 0);
   assert.ok(ranked.every((result) => result.squad.every((member) => member.baseId !== "A_LEAD")));
+});
+
+test("future scarcity penalty detects when spending a squad destroys the only later counter", () => {
+  const chosen = candidate(["A", "B", "C"], 130);
+  const future = [{
+    candidates: [
+      candidate(["A", "D", "E"], 125),
+      candidate(["B", "F", "G"], 122),
+    ],
+  }];
+  const result = futureScarcityPenalty(chosen, future, new Set());
+  assert.equal(result.endangered, 1);
+  assert.ok(result.penalty >= 36);
+
+  const safe = futureScarcityPenalty(candidate(["X", "Y", "Z"], 118), future, new Set());
+  assert.equal(safe.endangered, 0);
+  assert.equal(safe.penalty, 0);
 });
 
 test("whole-board planner never assigns the same attacker twice and excludes defense commitments", () => {
@@ -93,4 +129,47 @@ test("whole-board planner never assigns the same attacker twice and excludes def
   const assigned = plan.flatMap((item) => item.recommendation?.squad || []).map((member) => member.baseId);
   assert.equal(assigned.includes("LOCKED"), false);
   assert.equal(new Set(assigned).size, assigned.length, "an attacker was reused across board assignments");
+  assert.ok(plan.every((assignment) => typeof assignment.allocationReason === "string"));
+  assert.ok(plan.every((assignment) => Number.isFinite(assignment.allocationScore)));
+});
+
+test("whole-board planner penalizes strategic reserve usage while keeping it available as a fallback", () => {
+  const mine = {
+    units: [
+      unit("RESERVE_LEAD", "Reserve", 47000, 9, { leader: true, speed: 345 }),
+      unit("R2", "Reserve", 43000, 9),
+      unit("R3", "Reserve", 42000, 9),
+      unit("R4", "Reserve", 41000, 9),
+      unit("R5", "Reserve", 40000, 9),
+      unit("NORMAL_LEAD", "Normal", 42000, 8, { leader: true, speed: 330 }),
+      unit("N2", "Normal", 39000, 8),
+      unit("N3", "Normal", 38000, 8),
+      unit("N4", "Normal", 37000, 8),
+      unit("N5", "Normal", 36000, 8),
+    ],
+  };
+  const opponent = {
+    units: [
+      unit("E_LEAD", "Enemy", 35000, 7, { leader: true, speed: 290 }),
+      unit("E2", "Enemy", 33000, 7),
+      unit("E3", "Enemy", 32000, 7),
+      unit("E4", "Enemy", 31000, 7),
+      unit("E5", "Enemy", 30000, 7),
+    ],
+  };
+  const defenses = [{
+    leaderBaseId: "E_LEAD",
+    members: ["E_LEAD", "E2", "E3", "E4", "E5"],
+    zone: "FRONT",
+    slot: 0,
+  }];
+
+  const plan = planBoardCounters(mine, opponent, defenses, {
+    size: 5,
+    reserveBaseIds: ["RESERVE_LEAD"],
+    reservePenaltyPerUnit: 45,
+  });
+  assert.equal(plan.length, 1);
+  assert.ok(plan[0].recommendation);
+  assert.equal(plan[0].recommendation.reserveUses.includes("RESERVE_LEAD"), false);
 });

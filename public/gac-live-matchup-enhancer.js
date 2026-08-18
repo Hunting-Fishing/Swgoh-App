@@ -102,6 +102,12 @@ function defenseUnits(squad) {
   return (squad?.members || []).map((id) => index.get(String(id || ""))).filter(Boolean);
 }
 
+function abilityReadinessLabel(recommendation) {
+  const readiness = recommendation?.abilityReadiness;
+  if (!readiness?.known) return "Ability data incomplete";
+  return `Ability ${number.format(n(readiness.score))}%`;
+}
+
 function renderBoardPlanner() {
   const output = byId("gacBoardPlannerGrid");
   if (!output) return;
@@ -126,6 +132,7 @@ function renderBoardPlanner() {
     const attackerUnits = recommendation?.squad?.length
       ? recommendation.squad.map((unit) => unitPortrait(unit)).join("")
       : `<div class="gac-board-no-counter">No non-overlapping roster-fit squad available.</div>`;
+    const strategy = escapeHtml(assignment.allocationReason || "Board-wide allocation unavailable.");
     return `
       <article class="gac-board-card">
         <div class="gac-board-card-head">
@@ -135,9 +142,22 @@ function renderBoardPlanner() {
         <div class="gac-board-lane">
           <div><span class="gac-board-caption">ENEMY</span><div class="gac-board-units">${enemyUnits}</div></div>
           <div class="gac-board-arrow">→</div>
-          <div><span class="gac-board-caption">RESERVED COUNTER</span><div class="gac-board-units">${attackerUnits}</div></div>
+          <div><span class="gac-board-caption">STRATEGIC COUNTER</span><div class="gac-board-units">${attackerUnits}</div></div>
         </div>
-        ${recommendation ? `<div class="gac-board-metrics"><strong>${escapeHtml(recommendation.confidence)}</strong><span>Fit ${number.format(recommendation.score)}</span><span>Relic Δ ${signed(recommendation.relicDelta)}</span><span>Speed ${signed(recommendation.speedEdge)}</span><span>${number.format(assignment.alternativesRemaining)} alternates</span></div>` : ""}
+        ${recommendation ? `
+          <div class="gac-board-metrics">
+            <strong>${escapeHtml(recommendation.confidence)}</strong>
+            <span>Fit ${number.format(recommendation.score)}</span>
+            <span>Allocation ${number.format(Math.round(n(assignment.allocationScore)))}</span>
+            <span>Relic Δ ${signed(recommendation.relicDelta)}</span>
+            <span>Fastest ${signed(recommendation.speedEdge)}</span>
+            <span>${escapeHtml(recommendation.speedProfile?.label || "Speed N/A")}</span>
+            <span>${escapeHtml(abilityReadinessLabel(recommendation))}</span>
+            <span>Scarcity −${number.format(Math.round(n(assignment.scarcityPenalty)))}</span>
+            <span>Overkill −${number.format(Math.round(n(assignment.overkillPenalty)))}</span>
+            <span>${number.format(assignment.alternativesRemaining)} alternates</span>
+          </div>
+          <div class="gac-board-strategy"><span>COMMAND CENTER LOGIC</span><strong>${strategy}</strong></div>` : `<div class="gac-board-strategy gac-board-strategy-risk"><span>COMMAND CENTER LOGIC</span><strong>${strategy}</strong></div>`}
       </article>`;
   }).join("");
   output.querySelectorAll(".gac-board-analyze").forEach((button) => {
@@ -247,7 +267,7 @@ function injectStylesheet() {
   if (document.querySelector('link[data-gac-live-matchup="true"]')) return;
   const link = document.createElement("link");
   link.rel = "stylesheet";
-  link.href = "/gac-live-matchup-enhancer.css?v=20260818-gac-live1";
+  link.href = "/gac-live-matchup-enhancer.css?v=20260819-gac-counter2";
   link.dataset.gacLiveMatchup = "true";
   document.head.append(link);
 }
@@ -272,7 +292,7 @@ function mountEnhancer() {
     <div id="gacLiveMatchupError" class="gac-error gac-hidden"></div>
     <div id="gacLiveMatchupSummary"></div>
     <div class="gac-live-board-heading">
-      <div><div class="kicker">WHOLE-BOARD ATTACK PLAN</div><h4>Reserve the cheapest viable counter across every visible defense</h4><p>Characters placed on your defense are excluded. Counter assignments cannot reuse the same attacker twice.</p></div>
+      <div><div class="kicker">WHOLE-BOARD ATTACK PLAN</div><h4>Allocate counters across the board without burning scarce squads</h4><p>Characters placed on your defense are excluded. The planner evaluates speed risk, ability readiness, overkill and future counter scarcity; attackers cannot be reused.</p></div>
     </div>
     <div id="gacBoardPlannerGrid" class="gac-board-planner-grid"><div class="workspace-note">Detect the current matchup to build the board plan.</div></div>`;
   comparison.insertAdjacentElement("beforebegin", live);

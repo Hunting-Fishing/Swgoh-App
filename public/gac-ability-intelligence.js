@@ -63,10 +63,83 @@ function abilityTierDelta(mine, theirs) {
   return abilityTierTotal(mine) - abilityTierTotal(theirs);
 }
 
+// This is deliberately a readiness heuristic, not a claim that a specific
+// counter requires a particular zeta/omicron. The live roster tells us which
+// ability tiers/upgrades are purchased, but not an authoritative per-counter
+// minimum requirement. Tier 8 is used only as a normalization ceiling.
+function unitAbilityReadiness(unit) {
+  const abilities = Array.isArray(unit?.abilities) ? unit.abilities : [];
+  if (!abilities.length) {
+    return Object.freeze({
+      known: false,
+      score: null,
+      averageTier: null,
+      lowTierAbilities: 0,
+      zetas: n(unit?.zetas),
+      omegas: n(unit?.omegas),
+      omicrons: n(unit?.omicrons),
+      abilityCount: 0,
+    });
+  }
+
+  const tiers = abilities.map(abilityTier);
+  const averageTier = tiers.reduce((sum, tier) => sum + tier, 0) / tiers.length;
+  const lowTierAbilities = tiers.filter((tier) => tier > 0 && tier < 6).length;
+  const normalizedTier = tiers.reduce((sum, tier) => sum + Math.min(8, tier) / 8, 0) / tiers.length;
+  const premiumCoverage = abilities.reduce((sum, ability) => {
+    return sum + (ability?.zeta ? 1.5 : 0) + (ability?.omicron ? 2 : 0) + (ability?.omega ? 0.35 : 0);
+  }, 0);
+  const score = Math.max(0, Math.min(100, Math.round(normalizedTier * 96 + Math.min(4, premiumCoverage))));
+
+  return Object.freeze({
+    known: true,
+    score,
+    averageTier: Math.round(averageTier * 10) / 10,
+    lowTierAbilities,
+    zetas: abilities.filter((ability) => ability?.zeta).length,
+    omegas: abilities.filter((ability) => ability?.omega).length,
+    omicrons: abilities.filter((ability) => ability?.omicron).length,
+    abilityCount: abilities.length,
+  });
+}
+
+function squadAbilityReadiness(squad) {
+  const profiles = (Array.isArray(squad) ? squad : []).map(unitAbilityReadiness);
+  const known = profiles.filter((profile) => profile.known);
+  if (!known.length) {
+    return Object.freeze({
+      known: false,
+      score: null,
+      coverage: 0,
+      lowTierAbilities: 0,
+      zetas: 0,
+      omegas: 0,
+      omicrons: 0,
+      unitsKnown: 0,
+      units: profiles.length,
+    });
+  }
+
+  const score = known.reduce((sum, profile) => sum + n(profile.score), 0) / known.length;
+  return Object.freeze({
+    known: true,
+    score: Math.round(score),
+    coverage: profiles.length ? known.length / profiles.length : 0,
+    lowTierAbilities: known.reduce((sum, profile) => sum + profile.lowTierAbilities, 0),
+    zetas: known.reduce((sum, profile) => sum + profile.zetas, 0),
+    omegas: known.reduce((sum, profile) => sum + profile.omegas, 0),
+    omicrons: known.reduce((sum, profile) => sum + profile.omicrons, 0),
+    unitsKnown: known.length,
+    units: profiles.length,
+  });
+}
+
 export {
   abilityGapSummary,
   abilityGaps,
   abilityTier,
   abilityTierDelta,
   abilityTierTotal,
+  squadAbilityReadiness,
+  unitAbilityReadiness,
 };
