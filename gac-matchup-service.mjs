@@ -1,3 +1,5 @@
+import { gacCurrentOpponentConfirmationService } from "./gac-current-opponent-confirmation-service.mjs";
+
 function clean(value) {
   return String(value ?? "").trim();
 }
@@ -278,7 +280,7 @@ function counterScore(observation, rosterIndex) {
 export function createGacMatchupService(options = {}) {
   const requestGateway = options.requestGateway;
   const history = options.history;
-  const confirmedOpponent = options.confirmedOpponent;
+  const confirmedOpponent = options.confirmedOpponent || gacCurrentOpponentConfirmationService;
   if (typeof requestGateway !== "function") throw new TypeError("requestGateway is required");
 
   async function analyze(allyCodeInput, analyzeOptions = {}) {
