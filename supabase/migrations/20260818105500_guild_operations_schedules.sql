@@ -59,13 +59,15 @@ begin
   with candidates as (
     select s.id
     from public.guild_operation_schedules s
+    left join public.guild_sync_jobs j on j.id=s.sync_job_id
     where s.status='active'
       and (
         (s.stage='idle' and s.next_run_at<=now())
+        or (s.stage='syncing' and j.status in ('completed','failed'))
         or (s.stage in ('syncing','planning','publishing') and (s.locked_at is null or s.locked_at<now()-make_interval(secs=>greatest(60,p_stale_seconds))))
       )
     order by s.next_run_at asc,s.created_at asc
-    for update skip locked
+    for update of s skip locked
     limit greatest(1,least(coalesce(p_limit,2),10))
   )
   update public.guild_operation_schedules s
@@ -87,15 +89,19 @@ language plpgsql
 security definer
 set search_path=pg_catalog,public
 as $$
-declare v_row public.guild_operation_schedules%rowtype; v_next timestamptz;
+declare
+  v_row public.guild_operation_schedules%rowtype;
+  v_local_date date;
+  v_next timestamptz;
 begin
   select * into v_row from public.guild_operation_schedules where id=p_schedule_id for update;
   if not found then raise exception 'Guild Operation schedule not found'; end if;
 
   if p_success then
+    v_local_date := (v_row.next_run_at at time zone v_row.scheduled_timezone)::date;
     v_next := case v_row.recurrence_kind
-      when 'daily' then v_row.next_run_at + interval '1 day'
-      when 'weekly' then v_row.next_run_at + interval '7 days'
+      when 'daily' then ((v_local_date + 1)::date + v_row.scheduled_local_time) at time zone v_row.scheduled_timezone
+      when 'weekly' then ((v_local_date + 7)::date + v_row.scheduled_local_time) at time zone v_row.scheduled_timezone
       else null
     end;
     update public.guild_operation_schedules
