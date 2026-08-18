@@ -98,9 +98,11 @@ function directoryCard() {
   </section>`;
 }
 function setDirectoryRows() {
-  const query = text(document.getElementById('opsMemberDirectorySearch')?.value).toLowerCase().replace(/\D/g, '') || text(document.getElementById('opsMemberDirectorySearch')?.value).toLowerCase();
   const raw = text(document.getElementById('opsMemberDirectorySearch')?.value).toLowerCase();
-  const filtered = !raw ? state.directory : state.directory.filter((row) => row.name.toLowerCase().includes(raw) || digits(row.allyCode).includes(digits(raw)));
+  const codeQuery = digits(raw);
+  const filtered = !raw ? state.directory : state.directory.filter((row) =>
+    row.name.toLowerCase().includes(raw) || Boolean(codeQuery && digits(row.allyCode).includes(codeQuery))
+  );
   const target = document.getElementById('opsMemberDirectoryRows');
   if (target) target.innerHTML = directoryRows(filtered);
   bindMemberButtons();
@@ -176,9 +178,21 @@ function drawerHtml(detail) {
 function ensureDrawer() {
   let backdrop = document.querySelector('.guild-member-ops-backdrop');
   let drawer = document.querySelector('.guild-member-ops-drawer');
-  if (!backdrop) { backdrop = document.createElement('div'); backdrop.className = 'guild-member-ops-backdrop'; backdrop.setAttribute('aria-hidden', 'true'); document.body.appendChild(backdrop); }
-  if (!drawer) { drawer = document.createElement('aside'); drawer.className = 'guild-member-ops-drawer'; drawer.setAttribute('role', 'dialog'); drawer.setAttribute('aria-modal', 'true'); drawer.setAttribute('aria-label', 'Guild Member Operations Control'); document.body.appendChild(drawer); }
-  backdrop.addEventListener('click', closeDrawer);
+  if (!backdrop) {
+    backdrop = document.createElement('div');
+    backdrop.className = 'guild-member-ops-backdrop';
+    backdrop.setAttribute('aria-hidden', 'true');
+    backdrop.addEventListener('click', closeDrawer);
+    document.body.appendChild(backdrop);
+  }
+  if (!drawer) {
+    drawer = document.createElement('aside');
+    drawer.className = 'guild-member-ops-drawer';
+    drawer.setAttribute('role', 'dialog');
+    drawer.setAttribute('aria-modal', 'true');
+    drawer.setAttribute('aria-label', 'Guild Member Operations Control');
+    document.body.appendChild(drawer);
+  }
   return { backdrop, drawer };
 }
 function closeDrawer() {
@@ -216,6 +230,7 @@ async function reloadOpenMember() {
   const drawer = document.querySelector('.guild-member-ops-drawer');
   if (drawer?.classList.contains('open')) { drawer.innerHTML = drawerHtml(state.detail); bindDrawer(); populateCatalog(); }
   window.dispatchEvent(new CustomEvent('swgoh:guild-operations-member-changed', { detail: { playerId } }));
+  document.getElementById('opsIntegrationRefresh')?.click();
 }
 function setInline(id, message, error = false) {
   const target = document.getElementById(id); if (!target) return;
@@ -265,7 +280,7 @@ function bindDirectory() {
   document.getElementById('opsMemberDirectoryRefresh')?.addEventListener('click', () => loadDirectory(true));
   bindMemberButtons();
 }
-async function loadDirectory(announce = false) {
+async function loadDirectory() {
   if (state.loading || allyCode().length !== 9) return;
   state.loading = true;
   try {
