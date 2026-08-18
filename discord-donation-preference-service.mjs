@@ -66,7 +66,7 @@ function unitBaseId(unit = {}) {
 export async function setDiscordDonationPreference({
   discordGuildId,
   discordUserId,
-  unitBaseId,
+  unitBaseId: requestedUnitBaseId,
   donationPreference,
   actorDiscordUserId,
   fallbackGuildAllyCode = "",
@@ -77,7 +77,7 @@ export async function setDiscordDonationPreference({
   const guildId = snowflake(discordGuildId, "Discord guild ID");
   const userId = snowflake(discordUserId, "Discord user ID");
   const actorId = snowflake(actorDiscordUserId, "Discord actor user ID");
-  const normalizedBaseId = baseId(unitBaseId);
+  const normalizedBaseId = baseId(requestedUnitBaseId);
   const normalizedPreference = preference(donationPreference);
 
   if (typeof stateStore?.readGuild !== "function" || typeof stateStore?.setDonationPreference !== "function") {
