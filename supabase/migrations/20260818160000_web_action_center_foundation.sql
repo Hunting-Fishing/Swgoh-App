@@ -31,10 +31,10 @@ create table if not exists public.web_action_publications (
   metadata jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
   removed_at timestamptz,
-  check (
+  constraint web_action_publications_target_shape_check check (
     (target_kind = 'player_page' and target_player_id is not null and target_guild_id is null and discord_destination_id is null)
     or (target_kind = 'guild_page' and target_guild_id is not null and target_player_id is null and discord_destination_id is null)
-    or (target_kind = 'discord' and target_guild_id is not null and discord_destination_id is not null and target_player_id is null)
+    or (target_kind = 'discord' and target_guild_id is not null and target_player_id is null)
   )
 );
 
@@ -51,4 +51,4 @@ grant all on table public.web_action_runs to service_role;
 grant all on table public.web_action_publications to service_role;
 
 comment on table public.web_action_runs is 'Durable results from authenticated website-native Command Center actions. Discord is never required to execute these actions.';
-comment on table public.web_action_publications is 'Optional publication targets for a saved web action result: player page, Guild page, or verified Discord destination.';
+comment on table public.web_action_publications is 'Optional publication targets for a saved web action result: player page, Guild page, or verified Discord destination. Discord destination references may become null after destination removal while the historical publication record remains.';
