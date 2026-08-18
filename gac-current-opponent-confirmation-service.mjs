@@ -66,7 +66,7 @@ export function createGacCurrentOpponentConfirmationService(options = {}) {
     const allyCode = normalizeAllyCode(allyCodeInput);
     const eventInstanceId = clean(eventInstanceIdInput);
     const round = validRound(roundInput);
-    if (!allyCode || !eventInstanceId) return null;
+    if (!allyCode || !eventInstanceId || !round) return null;
 
     const [player, event] = await Promise.all([
       selectOne("players", {
@@ -80,17 +80,16 @@ export function createGacCurrentOpponentConfirmationService(options = {}) {
     ]);
     if (!player?.id || !event?.id) return null;
 
-    const query = {
+    const rows = asArray(await store.select("gac_rounds", {
       select: "round_number,opponent_swgoh_player_id,opponent_ally_code,opponent_name,source,source_ref,confidence,verified,recorded_at,metadata",
       event_id: `eq.${event.id}`,
       player_id: `eq.${player.id}`,
+      round_number: `eq.${round}`,
       source: "eq.user-confirmed-current-bracket",
       verified: "eq.true",
       order: "recorded_at.desc",
       limit: 5,
-    };
-    if (round) query.round_number = `eq.${round}`;
-    const rows = asArray(await store.select("gac_rounds", query));
+    }));
     const row = rows.find((candidate) => {
       const code = normalizeAllyCode(candidate?.opponent_ally_code);
       return code && candidate?.verified === true && Number(candidate?.confidence) >= 0.99;
