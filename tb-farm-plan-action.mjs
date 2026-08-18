@@ -6,6 +6,7 @@ const asArray = (value) => Array.isArray(value) ? value : [];
 const text = (value) => String(value ?? '').trim();
 const finite = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
 const digits = (value) => text(value).replace(/\D/g, '').slice(0, 9);
+const object = (value) => value && typeof value === 'object' && !Array.isArray(value) ? value : {};
 
 function actionError(message, status = 503, code = 'TB_FARM_PLAN_UNAVAILABLE') {
   const error = new Error(message);
@@ -14,31 +15,31 @@ function actionError(message, status = 503, code = 'TB_FARM_PLAN_UNAVAILABLE') {
   return error;
 }
 
-async function mapConcurrent(values, concurrency, mapper) {
-  const source = asArray(values);
-  const results = new Array(source.length);
-  let cursor = 0;
-  async function worker() {
-    while (cursor < source.length) {
-      const index = cursor++;
-      results[index] = await mapper(source[index], index);
-    }
-  }
-  const workers = Array.from({ length: Math.min(Math.max(1, concurrency), Math.max(1, source.length)) }, () => worker());
-  await Promise.all(workers);
-  return results;
-}
-
-function normalizeRosterUnit(unit = {}) {
+function normalizedOwnedUnit(row = {}, catalog = {}) {
+  const metadata = object(row.metadata);
+  const unitType = String(row.combat_type ?? catalog.combatType ?? catalog.unitType ?? '').toLowerCase() === '2' || String(catalog.unitType || '').toLowerCase() === 'ship' ? 'Ship' : 'Character';
   return Object.freeze({
-    ...unit,
-    categories: Object.freeze(asArray(unit.categories).length ? asArray(unit.categories) : asArray(unit.tags)),
-    factions: Object.freeze(asArray(unit.factions)),
+    baseId: text(row.base_id || catalog.baseId),
+    name: text(row.unit_name || catalog.name || row.base_id),
+    unitType,
+    combatType: unitType === 'Ship' ? 2 : 1,
+    alignment: text(catalog.alignment || 'Unknown'),
+    factions: Object.freeze(asArray(catalog.factions)),
+    categories: Object.freeze(asArray(catalog.categories)),
+    image: text(catalog.image),
+    stars: finite(row.rarity),
+    level: finite(row.level),
+    gear: finite(row.gear_level),
+    relic: finite(row.relic_tier),
+    power: finite(row.galactic_power),
+    speed: finite(metadata.speed),
+    zetas: finite(row.zeta_count),
+    omicrons: finite(row.omicron_count),
   });
 }
 
-export async function buildCanonicalGuildTbSnapshot(canonical, allyCodeInput, options = {}) {
-  if (!canonical?.getGuildRosterByPlayer || !canonical?.getPlayerRoster || !canonical?.getGameUnitCatalog) {
+export async function buildCanonicalGuildTbSnapshot(canonical, allyCodeInput) {
+  if (!canonical?.getGuildRosterByPlayer || !canonical?.getGameUnitCatalog || !canonical?._selectPaged) {
     throw actionError('Canonical Guild roster capabilities are unavailable for TB Farm Plan.', 503, 'CANONICAL_TB_CAPABILITY_MISSING');
   }
   const allyCode = digits(allyCodeInput);
@@ -52,32 +53,38 @@ export async function buildCanonicalGuildTbSnapshot(canonical, allyCodeInput, op
   if (!members.some((member) => digits(member?.allyCode) === allyCode)) {
     throw actionError('The verified player is not in the current canonical Guild roster.', 409, 'VERIFIED_PLAYER_NOT_IN_GUILD');
   }
-
-  const failures = [];
-  const hydratedMembers = await mapConcurrent(members, finite(options.concurrency, 6), async (member) => {
-    const code = digits(member?.allyCode);
-    if (code.length !== 9) {
-      failures.push(text(member?.name || member?.id || 'Unknown member'));
-      return { ...member, rosterAvailable: false, units: [] };
-    }
-    try {
-      const roster = await canonical.getPlayerRoster(code);
-      return Object.freeze({
-        ...member,
-        rosterAvailable: true,
-        units: Object.freeze([...asArray(roster?.units), ...asArray(roster?.ships)].map(normalizeRosterUnit)),
-      });
-    } catch {
-      failures.push(text(member?.name || code));
-      return { ...member, rosterAvailable: false, units: [] };
-    }
-  });
-  if (failures.length) {
-    throw actionError(`Guild roster hydration failed for ${failures.length} current member(s); refusing to calculate an incomplete Guild-impact farm plan.`, 503, 'GUILD_MEMBER_ROSTER_HYDRATION_FAILED');
+  const memberIds = members.map((member) => text(member?.persistentId)).filter(Boolean);
+  if (memberIds.length !== members.length || !memberIds.length) {
+    throw actionError('One or more current Guild members are missing canonical persistent identity.', 503, 'GUILD_MEMBER_IDENTITY_INCOMPLETE');
   }
 
-  const catalog = await canonical.getGameUnitCatalog();
+  const [catalog, unitRows] = await Promise.all([
+    canonical.getGameUnitCatalog(),
+    canonical._selectPaged('player_units_current', {
+      select: 'player_id,base_id,unit_name,combat_type,rarity,level,gear_level,relic_tier,galactic_power,zeta_count,omicron_count,last_synced_at,metadata',
+      player_id: `in.(${memberIds.join(',')})`,
+      order: 'player_id.asc,galactic_power.desc,base_id.asc',
+    }, { maxRows: 25_000 }),
+  ]);
   if (!asArray(catalog).length) throw actionError('Canonical game unit definitions are unavailable.', 503, 'GAME_CATALOG_UNAVAILABLE');
+
+  const catalogById = new Map(asArray(catalog).map((unit) => [text(unit?.baseId), unit]).filter(([id]) => id));
+  const rowsByPlayer = new Map(memberIds.map((id) => [id, []]));
+  for (const row of asArray(unitRows)) {
+    const playerId = text(row?.player_id);
+    if (rowsByPlayer.has(playerId)) rowsByPlayer.get(playerId).push(row);
+  }
+
+  const hydratedMembers = members.map((member) => {
+    const playerId = text(member.persistentId);
+    const rows = rowsByPlayer.get(playerId) || [];
+    const expectedOwnedUnits = finite(member.characterCount) + finite(member.shipCount);
+    if (expectedOwnedUnits > 0 && rows.length !== expectedOwnedUnits) {
+      throw actionError(`Canonical Guild member ${text(member.name) || digits(member.allyCode)} expected ${expectedOwnedUnits} owned units but loaded ${rows.length}; refusing incomplete Guild-impact planning.`, 503, 'GUILD_MEMBER_ROSTER_INCOMPLETE');
+    }
+    const units = rows.map((row) => normalizedOwnedUnit(row, catalogById.get(text(row.base_id)) || {}));
+    return Object.freeze({ ...member, rosterAvailable: true, units: Object.freeze(units) });
+  });
 
   return Object.freeze({
     guildSnapshot: Object.freeze({ ...guild, members: Object.freeze(hydratedMembers) }),
