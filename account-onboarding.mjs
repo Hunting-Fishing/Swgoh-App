@@ -1,4 +1,5 @@
 import { discordStateStore } from './discord-state-store.mjs';
+import { guildOperationsApi } from './guild-operations-api.mjs';
 import { guildRosterService } from './guild-roster-service.mjs';
 import { playerVerification } from './player-verification.mjs';
 import { supabaseAuthSession } from './supabase-auth-session.mjs';
@@ -321,6 +322,9 @@ export function createAccountOnboarding(options = {}) {
 
   async function handle(request, response, url) {
     if (!url.pathname.startsWith('/api/account/')) return false;
+    if (url.pathname.startsWith('/api/account/guild-operations/')) {
+      return guildOperationsApi.handle(request, response, url);
+    }
     if (url.pathname.startsWith('/api/account/verification')) {
       return playerVerification.handle(request, response, url);
     }
