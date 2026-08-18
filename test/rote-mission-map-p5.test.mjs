@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { ROTE_MISSIONS_BY_PLANET } from "../public/rote-mission-data.js";
+import { normalizedRoteMissionsForPlanet } from "../public/rote-mission-node-eligibility.js";
 import { ROTE_P5_MISSION_MAPS, ROTE_P5_MISSION_MAP_SOURCE } from "../public/rote-mission-map-p5-data.js";
 
 const EXPECTED_PLANETS = ["kafrene", "malachor", "vandor"];
@@ -27,10 +27,10 @@ test("P5 source node positions, types and R9 mission gates remain valid", () => 
   }
 });
 
-test("P5 live-preparation links resolve only to existing recommendation objects", () => {
+test("all P5 playable nodes link to normalized tactical recommendations", () => {
   let linked = 0;
   for (const [planetId, map] of Object.entries(ROTE_P5_MISSION_MAPS)) {
-    const missions = new Map((ROTE_MISSIONS_BY_PLANET[planetId] || []).map((mission) => [mission.id, mission]));
+    const missions = new Map(normalizedRoteMissionsForPlanet(planetId).map((mission) => [mission.id, mission]));
     for (const node of map.nodes) {
       if (!node.missionId && !node.teamId) continue;
       linked += 1;
@@ -38,9 +38,19 @@ test("P5 live-preparation links resolve only to existing recommendation objects"
       const mission = missions.get(node.missionId);
       assert.ok(mission, `${planetId}/${node.id} missing mission ${node.missionId}`);
       assert.ok(mission.recommendations.some((recommendation) => recommendation.id === node.teamId), `${planetId}/${node.id} missing recommendation ${node.teamId}`);
+      assert.ok(mission.tactical?.commandTag, `${planetId}/${node.id} should expose a tactical command tag`);
+      assert.ok(mission.recommendations.every((recommendation) => recommendation.name.startsWith("ROTE-P5-")));
     }
   }
-  assert.equal(linked, 4, "only four P5 nodes have explicit existing recommendations");
+  assert.equal(linked, 14, "all fourteen P5 playable nodes should be linked");
+});
+
+test("P5 infrastructure nodes remain source-only", () => {
+  const sourceOnly = Object.values(ROTE_P5_MISSION_MAPS)
+    .flatMap((map) => map.nodes)
+    .filter((node) => !node.missionId && !node.teamId);
+  assert.equal(sourceOnly.length, 6);
+  assert.ok(sourceOnly.every((node) => node.type === "deployment" || node.type === "operations"));
 });
 
 test("Malachor required Inquisitors remain the single restricted mission and no fleet is invented", () => {
@@ -51,8 +61,22 @@ test("Malachor required Inquisitors remain the single restricted mission and no 
   assert.match(required.requirement, /Seventh Sister/);
   assert.equal(required.reward, "721,744 TP");
   assert.equal(required.missionId, "malachor-inqs");
-  assert.equal(required.teamId, "rote-malachor-inqs");
+  assert.equal(required.teamId, "rote-p5-mal-inqs");
   assert.equal(map.nodes.some((node) => node.type === "fleet"), false);
+});
+
+test("P5 tactical labels expose the major enemy encounters", () => {
+  const malachor = new Map(normalizedRoteMissionsForPlanet("malachor").map((mission) => [mission.id, mission]));
+  const vandor = new Map(normalizedRoteMissionsForPlanet("vandor").map((mission) => [mission.id, mission]));
+  const kafrene = new Map(normalizedRoteMissionsForPlanet("kafrene").map((mission) => [mission.id, mission]));
+
+  assert.match(malachor.get("malachor-generic-1")?.name || "", /Kanan\/Fulcrum/);
+  assert.match(malachor.get("malachor-inqs")?.name || "", /Maul\/Ezra/);
+  assert.match(vandor.get("vandor-generic-1")?.name || "", /Imperial Officer/);
+  assert.match(vandor.get("vandor-generic-2")?.name || "", /Enfys Nest/);
+  assert.match(vandor.get("vandor-yhan")?.name || "", /Snowtroopers/);
+  assert.match(kafrene.get("kafrene-cassian")?.name || "", /Stormtrooper Wall/);
+  assert.match(kafrene.get("kafrene-generic-2")?.name || "", /Mara Jade/);
 });
 
 test("Vandor special and fleets preserve current rewards", () => {
