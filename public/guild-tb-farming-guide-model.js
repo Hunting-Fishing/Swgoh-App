@@ -66,13 +66,24 @@ function progressValue(progress = {}, requirement = {}) {
   return 0;
 }
 
+function advancementValue(progress = {}, requirement = {}) {
+  const type = text(requirement.type).toUpperCase();
+  const stars = Math.min(7, Math.max(0, finite(progress.stars)));
+  const gear = Math.min(13, Math.max(0, finite(progress.gear)));
+  const relic = Math.max(0, finite(progress.relic));
+  if (type === 'RELIC') return stars * 10_000 + gear * 100 + relic;
+  if (type === 'GEAR') return stars * 100 + (relic > 0 ? 13 : gear);
+  if (type === 'STAR') return stars;
+  return 0;
+}
+
 function overlapStatus(current, target, requirement) {
   const required = finite(requirement?.tier);
   const before = progressValue(current, requirement);
   const after = progressValue(target, requirement);
   if (before >= required) return 'already';
   if (after >= required) return 'direct';
-  if (after > before) return 'partial';
+  if (advancementValue(target, requirement) > advancementValue(current, requirement)) return 'partial';
   return 'none';
 }
 
