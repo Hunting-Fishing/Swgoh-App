@@ -13,6 +13,27 @@ function isRiskyAssignment(row = {}) {
   return row?.safety?.help === true || row?.safety?.forced === true || safetyStatus(row) !== "SAFE";
 }
 
+function conciseReason(row = {}) {
+  const reason = array(row?.safety?.reasons)
+    .map((value) => String(value || "").replace(/\s+/g, " ").trim())
+    .find(Boolean) || "";
+  return reason.length > 96 ? `${reason.slice(0, 95).trimEnd()}…` : reason;
+}
+
+function discordAssignmentRow(row = {}) {
+  if (!isRiskyAssignment(row)) return row;
+  const reason = conciseReason(row);
+  if (!reason) return row;
+  const status = String(row?.safety?.status || "HELP").trim() || "HELP";
+  return Object.freeze({
+    ...row,
+    safety: Object.freeze({
+      ...(row.safety || {}),
+      status: `${status} — ${reason}`,
+    }),
+  });
+}
+
 /**
  * Shapes an already-built Discord planning snapshot for a selected phase.
  * This never changes planner decisions. It only makes the officer-facing
@@ -24,7 +45,7 @@ export function shapeDiscordPlanningSnapshot(snapshot = {}, requestedPhase = "")
   const plan = snapshot?.plan || {};
   const sourceAssignments = array(plan.assignments);
 
-  const assignments = sourceAssignments.slice().sort((a, b) => {
+  const assignments = sourceAssignments.map(discordAssignmentRow).sort((a, b) => {
     if (selectedPhase) {
       const aInPhase = String(a?.phase || "").toUpperCase() === selectedPhase;
       const bInPhase = String(b?.phase || "").toUpperCase() === selectedPhase;
