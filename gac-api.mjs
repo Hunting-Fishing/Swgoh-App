@@ -1,5 +1,6 @@
 import { gacHistoryService } from "./gac-history-service.mjs";
 import { createGacMatchupService } from "./gac-matchup-service.mjs";
+import { gacScoutingService } from "./gac-scouting-service.mjs";
 
 function writeError(writeJson, response, error, fallback) {
   const status = [400, 401, 404, 409, 429, 503].includes(error?.status) ? error.status : 502;
@@ -13,7 +14,7 @@ function positiveLimit(value, fallback, max) {
   return Number.isFinite(parsed) && parsed > 0 ? Math.min(max, parsed) : fallback;
 }
 
-export function createGacApi({ requestGateway, writeJson, history = gacHistoryService }) {
+export function createGacApi({ requestGateway, writeJson, history = gacHistoryService, scouting = gacScoutingService }) {
   if (typeof requestGateway !== "function") throw new TypeError("requestGateway is required");
   if (typeof writeJson !== "function") throw new TypeError("writeJson is required");
   const matchup = createGacMatchupService({ requestGateway, history });
@@ -54,6 +55,19 @@ export function createGacApi({ requestGateway, writeJson, history = gacHistorySe
           writeJson(response, 200, body, { "X-GAC-Source": "persisted-history" });
         } catch (error) {
           writeError(writeJson, response, error, "Persisted GAC history is unavailable.");
+        }
+        return true;
+      }
+
+      const scoutingMatch = url.pathname.match(/^\/api\/gac\/scouting\/(\d{9})$/);
+      if (scoutingMatch) {
+        try {
+          const body = await scouting.getScoutingReport(scoutingMatch[1], {
+            limit: positiveLimit(url.searchParams.get("limit"), 2000, 5000),
+          });
+          writeJson(response, 200, body, { "X-GAC-Source": body?.source || "persisted-gac-battle-scouting" });
+        } catch (error) {
+          writeError(writeJson, response, error, "GAC opponent scouting evidence is unavailable.");
         }
         return true;
       }
