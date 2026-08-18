@@ -10,6 +10,7 @@ import { commandCenterHistoryService } from "./command-center-history-service.mj
 import { handleDiscordInteractionRequest } from "./discord-interaction-router.mjs";
 import { discordStateStore } from "./discord-state-store.mjs";
 import { discordTbPublicStatus } from "./discord-tb.mjs";
+import { createGacApi } from "./gac-api.mjs";
 import { resolveGuildPlanningOverlay } from "./guild-planning-overlay.mjs";
 import { guildRosterService } from "./guild-roster-service.mjs";
 import { LiveRosterCache } from "./live-roster-cache.mjs";
@@ -126,6 +127,8 @@ async function requestGateway(pathname, includeKey, timeoutMs = requestTimeoutMs
   }
 }
 
+const gacApi = createGacApi({ requestGateway, writeJson });
+
 async function loadRoteOperations() {
   const now = Date.now();
   if (roteCache.value && roteCache.expiresAt > now) return roteCache.value;
@@ -219,6 +222,7 @@ async function writeCanonicalGuildOrLiveFallback(response, allyCode) {
 }
 
 async function handleApi(request, response, url) {
+  if (await gacApi.handle(request, response, url)) return true;
   if (await commandCenterHistoryApi.handle(request, response, url)) return true;
 
   if (url.pathname === "/api/discord/status") {
