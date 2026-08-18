@@ -5,6 +5,8 @@ import {
   abilityGaps,
   abilityTierDelta,
   abilityTierTotal,
+  squadAbilityReadiness,
+  unitAbilityReadiness,
 } from "../public/gac-ability-intelligence.js";
 
 const mine = {
@@ -36,4 +38,28 @@ test("ability gaps expose exact per-ability tier and omicron differences", () =>
   assert.equal(unique.omicronMine, false);
   assert.equal(unique.omicronTheirs, true);
   assert.match(abilityGapSummary(mine, theirs), /Unique -2/);
+});
+
+test("ability readiness scores purchased tiers without claiming counter-specific requirements", () => {
+  const ready = unitAbilityReadiness(theirs);
+  const partial = unitAbilityReadiness({
+    abilities: [
+      { id: "basic", displayTier: 5 },
+      { id: "leader", displayTier: 4 },
+      { id: "unique", displayTier: 3 },
+    ],
+  });
+  assert.equal(ready.known, true);
+  assert.equal(ready.score, 100);
+  assert.ok(partial.score < ready.score);
+  assert.equal(partial.lowTierAbilities, 3);
+});
+
+test("squad ability readiness reports evidence coverage when some units lack ability data", () => {
+  const summary = squadAbilityReadiness([theirs, mine, { abilities: [] }]);
+  assert.equal(summary.known, true);
+  assert.equal(summary.unitsKnown, 2);
+  assert.equal(summary.units, 3);
+  assert.equal(summary.coverage, 2 / 3);
+  assert.ok(summary.score > 80);
 });
