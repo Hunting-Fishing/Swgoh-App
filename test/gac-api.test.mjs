@@ -13,7 +13,12 @@ function harness() {
   const scouting = {
     async getScoutingReport(code, options) {
       scoutCalls.push({ code, options });
-      return { source: "persisted-gac-battle-scouting", player: { allyCode: code } };
+      return {
+        source: "persisted-gac-battle-scouting",
+        player: { allyCode: code },
+        coverage: { hasDefenseEvidence: false, hasOffenseEvidence: true },
+        offensiveTendencies: [{ leaderBaseId: "TEST_LEAD" }],
+      };
     },
   };
   const writeJson = (_response, status, body, headers = {}) => written.push({ status, body, headers });

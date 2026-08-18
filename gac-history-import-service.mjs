@@ -30,6 +30,10 @@ function chunks(values, size = 200) {
   return output;
 }
 
+function normalizedMembers(values) {
+  return [...new Set(asArray(values).map((value) => clean(value).split(":")[0]).filter(Boolean))].sort();
+}
+
 function battleRow(battle, context) {
   const battleKey = deterministicKey([
     "c3po-gahistory",
@@ -69,6 +73,57 @@ function battleRow(battle, context) {
       rawOutcome: battle.rawOutcome,
     },
   };
+}
+
+function counterRowsFromBattles(battles, context) {
+  const groups = new Map();
+  for (const battle of battles) {
+    if (battle.battleType !== "character") continue;
+    const enemyLeaderBaseId = clean(battle.defenderLeaderBaseId).split(":")[0];
+    const counterLeaderBaseId = clean(battle.attackerLeaderBaseId).split(":")[0];
+    const enemyMembers = normalizedMembers(battle.defenderMembers);
+    const counterMembers = normalizedMembers(battle.attackerMembers);
+    if (!enemyLeaderBaseId || !counterLeaderBaseId || !enemyMembers.length || !counterMembers.length) continue;
+    const observationKey = deterministicKey([
+      "c3po-gahistory",
+      battle.eventInstanceId || battle.seasonId,
+      battle.format,
+      battle.playerId,
+      enemyLeaderBaseId,
+      enemyMembers.join(","),
+      counterLeaderBaseId,
+      counterMembers.join(","),
+    ]);
+    if (!groups.has(observationKey)) {
+      groups.set(observationKey, {
+        observation_key: observationKey,
+        format: battle.format,
+        enemy_leader_base_id: enemyLeaderBaseId,
+        enemy_members: enemyMembers,
+        counter_leader_base_id: counterLeaderBaseId,
+        counter_members: counterMembers,
+        battles: 0,
+        wins: 0,
+        holds: 0,
+        draws: 0,
+        average_banners: null,
+        league: null,
+        season_id: battle.seasonId || null,
+        source: "c3po-gahistory",
+        source_ref: context.sourceRef,
+        source_updated_at: context.sourceUpdatedAt,
+        confidence: 0.95,
+        metadata: { importedPlayerId: battle.playerId },
+        observed_at: context.sourceUpdatedAt,
+      });
+    }
+    const row = groups.get(observationKey);
+    row.battles += 1;
+    if (battle.outcome === "win") row.wins += 1;
+    else if (battle.outcome === "loss") row.holds += 1;
+    else if (battle.outcome === "draw") row.draws += 1;
+  }
+  return [...groups.values()];
 }
 
 function roundRowsFromBattles(battles, context) {
@@ -156,7 +211,7 @@ export function createGacHistoryImportService(options = {}) {
     const info = await source.getInfo(mode);
     const raw = await source.getPlayer(mode, player.swgoh_player_id);
     if (!raw) {
-      return Object.freeze({ mode, eventInstanceId: info.eventInstanceId, season: info.season, imported: 0, available: false });
+      return Object.freeze({ mode, eventInstanceId: info.eventInstanceId, season: info.season, imported: 0, importedCounters: 0, available: false });
     }
     const event = await upsertEvent(info);
     const sourceUpdatedAt = now().toISOString();
@@ -175,6 +230,11 @@ export function createGacHistoryImportService(options = {}) {
     }));
     for (const batch of chunks(rows, 200)) {
       if (batch.length) await store.upsert("gac_battles", batch, { onConflict: "battle_key" });
+    }
+
+    const counterRows = counterRowsFromBattles(battles, { sourceRef, sourceUpdatedAt });
+    for (const batch of chunks(counterRows, 200)) {
+      if (batch.length) await store.upsert("gac_counter_observations", batch, { onConflict: "observation_key" });
     }
 
     let roundRows = [];
@@ -198,6 +258,7 @@ export function createGacHistoryImportService(options = {}) {
       season: info.season,
       imported: rows.length,
       importedRounds: roundRows.length,
+      importedCounters: counterRows.length,
       available: true,
       characterBattles: battles.filter((battle) => battle.battleType === "character").length,
       fleetBattles: battles.filter((battle) => battle.battleType === "fleet").length,
@@ -216,6 +277,7 @@ export function createGacHistoryImportService(options = {}) {
       results: Object.freeze(results),
       imported: results.reduce((sum, result) => sum + result.imported, 0),
       importedRounds: results.reduce((sum, result) => sum + (result.importedRounds || 0), 0),
+      importedCounters: results.reduce((sum, result) => sum + (result.importedCounters || 0), 0),
       importedAt: now().toISOString(),
     });
   }
@@ -224,3 +286,5 @@ export function createGacHistoryImportService(options = {}) {
 }
 
 export const gacHistoryImportService = createGacHistoryImportService();
+
+export { counterRowsFromBattles };
