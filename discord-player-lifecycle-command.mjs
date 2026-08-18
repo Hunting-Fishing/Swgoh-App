@@ -27,7 +27,7 @@ export function playerLifecycleSubcommand(interaction = {}) {
   return ['ignore','unregister'].includes(sub) ? sub : '';
 }
 
-async function resolveSelf(interaction, services = {}) {
+async function resolveSelf(interaction, services = {}, { requireBoundGuild = true } = {}) {
   const stateStore = services.stateStore || discordStateStore;
   const store = services.store || supabaseCoreStore;
   const discordGuildId = snowflake(interaction?.guild_id);
@@ -44,18 +44,27 @@ async function resolveSelf(interaction, services = {}) {
     ally_code: `eq.${code}`,
     limit: 1,
   }));
-  if (!player?.id || !player?.current_guild_id) throw new Error('Your linked SWGOH player is not a current canonical Guild member.');
-  const seedCode = allyCode(guildState?.swgohAllyCode);
-  if (seedCode) {
-    const seed = first(await store.select('players', { select: 'id,current_guild_id', ally_code: `eq.${seedCode}`, limit: 1 }));
-    if (seed?.current_guild_id && text(seed.current_guild_id) !== text(player.current_guild_id)) {
-      throw new Error('Your linked player is no longer in the SWGOH Guild bound to this Discord server.');
+  if (!player?.id) {
+    if (!requireBoundGuild) {
+      return { stateStore, store, guildState, discordGuildId, discordUserId, link, player: { id: '', ally_code: code, name: code, current_guild_id: null } };
+    }
+    throw new Error('Your linked SWGOH player is not available in canonical persistence.');
+  }
+  if (requireBoundGuild) {
+    if (!player.current_guild_id) throw new Error('Your linked SWGOH player is not a current canonical Guild member.');
+    const seedCode = allyCode(guildState?.swgohAllyCode);
+    if (seedCode) {
+      const seed = first(await store.select('players', { select: 'id,current_guild_id', ally_code: `eq.${seedCode}`, limit: 1 }));
+      if (seed?.current_guild_id && text(seed.current_guild_id) !== text(player.current_guild_id)) {
+        throw new Error('Your linked player is no longer in the SWGOH Guild bound to this Discord server.');
+      }
     }
   }
   return { stateStore, store, guildState, discordGuildId, discordUserId, link, player };
 }
 
 async function currentControl(context) {
+  if (!context.player?.id || !context.player?.current_guild_id) return null;
   return first(await context.store.select('guild_member_operation_controls', {
     select: 'guild_id,player_id,available,ignored_until,ignore_reason,source,metadata,updated_at',
     guild_id: `eq.${context.player.current_guild_id}`,
@@ -71,7 +80,7 @@ function activeOfficerControl(control) {
 }
 
 async function ignoreSelf(interaction, services) {
-  const context = await resolveSelf(interaction, services);
+  const context = await resolveSelf(interaction, services, { requireBoundGuild: true });
   const days = Math.max(0, Math.min(365, Math.trunc(Number(option(interaction, 'days') ?? 0))));
   const reason = safe(option(interaction, 'reason'), '').slice(0, 200);
   const existing = await currentControl(context);
@@ -105,7 +114,7 @@ async function ignoreSelf(interaction, services) {
 }
 
 async function unregisterSelf(interaction, services) {
-  const context = await resolveSelf(interaction, services);
+  const context = await resolveSelf(interaction, services, { requireBoundGuild: false });
   const existing = await currentControl(context);
   if (text(existing?.source) === SELF_SOURCE) {
     await context.store.upsert('guild_member_operation_controls', [{
@@ -133,7 +142,7 @@ async function unregisterSelf(interaction, services) {
   const officerNote = activeOfficerControl(existing)
     ? '\nAn officer-managed Operations control for this player remains in force and was not removed.'
     : '';
-  return `**SWGOH Command Center · Player Unregistered**\nYour Discord account is no longer linked to **${safe(context.player.name)}** · ${displayAlly(context.player.ally_code)} in this server.\nDiscord GIVE/KEEP and legacy availability controls tied to this Discord link were cleared. Your self-service timed ignore was cleared if present. Canonical Guild history and your Command Center account data were not deleted.${officerNote}\nPrevious link: ${displayAlly(previous?.swgohAllyCode || context.player.ally_code)}.`;
+  return `**SWGOH Command Center · Player Unregistered**\nYour Discord account is no longer linked to **${safe(context.player.name || context.link?.swgohAllyCode)}** · ${displayAlly(context.player.ally_code || context.link?.swgohAllyCode)} in this server.\nDiscord GIVE/KEEP and legacy availability controls tied to this Discord link were cleared. Your self-service timed ignore was cleared if present. Canonical Guild history and your Command Center account data were not deleted.${officerNote}\nPrevious link: ${displayAlly(previous?.swgohAllyCode || context.player.ally_code || context.link?.swgohAllyCode)}.`;
 }
 
 export async function executeDiscordPlayerLifecycleCommand(interaction, services = {}) {
