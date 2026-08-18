@@ -1,4 +1,5 @@
 import { canonicalRosterService } from './canonical-roster-service.mjs';
+import { unbindDiscordGuildIntegration } from './discord-guild-unbind-service.mjs';
 import { discordStateStore } from './discord-state-store.mjs';
 import { createDiscordTbLiveServices } from './discord-tb-live.mjs';
 import { supabaseCoreStore } from './supabase-core-store.mjs';
@@ -302,6 +303,30 @@ async function donationReportCommand(interaction, _config, services) {
   return truncate(lines.join('\n'));
 }
 
+async function unregisterGuildCommand(interaction, _config, services) {
+  if (text(option(interaction, 'confirm')).toUpperCase() !== 'UNREGISTER') {
+    throw new Error('Guild unregister requires the explicit UNREGISTER confirmation choice.');
+  }
+  const context = await resolveContext(interaction.guild_id, services);
+  const actorDiscordUserId = snowflake(interaction?.member?.user?.id || interaction?.user?.id);
+  const result = await unbindDiscordGuildIntegration(context, {
+    store: context.store,
+    stateStore: context.stateStore,
+    reservationStore: services.reservationStore,
+    actorDiscordUserId,
+  });
+  return truncate([
+    `**SWGOH Command Center · ${safe(result.guildName)} Discord Integration Unregistered**`,
+    `Verified destinations disabled: **${number(result.disabledDestinations)}**`,
+    `Scheduled Operations paused: **${number(result.pausedSchedules)}**`,
+    `Discord player links cleared: **${number(result.clearedDiscordLinks)}**`,
+    `Discord hard reserves cleared: **${number(result.clearedHardReservations)}**`,
+    '',
+    '**Preserved:** canonical Guild Intelligence/history, saved TB/TW plans and assignment runs, delivery receipts, and Operations audit history.',
+    'This Discord server is now fail-closed and cannot use the pilot Guild fallback. Run `/tb setup` to bind a Guild again.',
+  ].join('\n'));
+}
+
 async function syncCommand(interaction, config, services) {
   const context = await resolveContext(interaction.guild_id, services);
   const live = services.live || createDiscordTbLiveServices(services.env || process.env, { stateStore: context.stateStore, ...(services.fetch ? { fetch: services.fetch } : {}) });
@@ -341,6 +366,7 @@ export async function executeDiscordGuildCommand(interaction, config, services =
   if (subcommand === 'register-mates') return registerMatesCommand(interaction, config, services);
   if (subcommand === 'ignore') return ignoreCommand(interaction, config, services);
   if (subcommand === 'donation-report') return donationReportCommand(interaction, config, services);
+  if (subcommand === 'unregister') return unregisterGuildCommand(interaction, config, services);
   if (subcommand === 'sync') return syncCommand(interaction, config, services);
   if (subcommand === 'platoon-report') return platoonReportCommand(interaction, config, services);
   throw new Error(`Unknown /guild subcommand: ${subcommand}`);
