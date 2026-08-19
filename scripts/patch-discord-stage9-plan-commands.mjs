@@ -2,6 +2,7 @@ import { discordTbConfig } from '../discord-tb.mjs';
 import {
   applyDiscordStage9TbCommandSchema,
   DISCORD_STAGE9_PLAN_SCHEMA_VERSION,
+  DISCORD_STAGE9_TB_SUBCOMMANDS,
 } from '../discord-stage9-command-schema.mjs';
 
 const API_VERSION = 'v10';
@@ -67,8 +68,10 @@ async function patchStage9Schema() {
     },
   });
   const options = Array.isArray(updated.body?.options) ? updated.body.options : [];
-  if (!options.some((option) => option?.name === 'plan-status')) {
-    throw new Error('Discord accepted the Stage 9 command update but plan-status was not present in the returned schema.');
+  const present = new Set(options.map((option) => String(option?.name || '').toLowerCase()).filter(Boolean));
+  const missing = DISCORD_STAGE9_TB_SUBCOMMANDS.map((row) => row.name).filter((name) => !present.has(name));
+  if (missing.length) {
+    throw new Error(`Discord accepted the Stage 9 command update but these subcommands were missing from the returned schema: ${missing.join(', ')}.`);
   }
   console.log(`Discord Stage 9 schema ${patch.schemaVersion} patched on attempt ${updated.attempt}: ${patch.added.join(', ')}.`);
 }
