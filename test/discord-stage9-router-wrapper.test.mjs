@@ -13,9 +13,9 @@ test('Stage 9 router wrapper and preserved core router both load as valid module
   assert.equal(typeof coreHandler, 'function');
 });
 
-test('Stage 9 wrapper intercepts only immutable plan safety commands and delegates all others to preserved core', () => {
+test('Stage 9 wrapper intercepts only immutable plan lifecycle commands and delegates all others to preserved core', () => {
   const wrapper = fs.readFileSync(wrapperUrl, 'utf8');
-  assert.match(wrapper, /STAGE9_SUBCOMMANDS\s*=\s*new Set\(\['plan-status', 'plan-diff', 'plan-approve', 'plan-cancel'\]\)/);
+  assert.match(wrapper, /STAGE9_SUBCOMMANDS\s*=\s*new Set\(\['plan-preview', 'plan-status', 'plan-diff', 'plan-approve', 'plan-cancel'\]\)/);
   assert.match(wrapper, /handleCoreDiscordInteractionRequest\(replayRequest\(request, rawBody\)/);
   assert.match(wrapper, /discordTbMemberHasOfficerPermission/);
   assert.match(wrapper, /discordTbMemberHasConfiguredOfficerRole/);
