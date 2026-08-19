@@ -266,9 +266,41 @@ export function createTbAssignmentVersionService(options = {}) {
     });
   }
 
+  async function cancelVersion(context = {}, input = {}) {
+    const guildId = text(context?.guild?.id || context?.guildId);
+    const actorUserId = text(context?.userId);
+    const runId = text(input.runId || input.versionId);
+    const reason = text(input.reason).slice(0, 500);
+
+    if (!guildId) throw serviceError('Guild context is required.', 400, 'GUILD_CONTEXT_REQUIRED');
+    if (!actorUserId) throw serviceError('Officer user context is required.', 401, 'OFFICER_CONTEXT_REQUIRED');
+    if (!runId) throw serviceError('An immutable assignment version ID is required.', 400, 'TB_ASSIGNMENT_VERSION_REQUIRED');
+
+    const raw = await store.rpc('cancel_guild_tb_assignment_version', {
+      p_guild_id: guildId,
+      p_run_id: runId,
+      p_reason: reason || null,
+      p_actor_user_id: actorUserId,
+    });
+    const cancellation = rpcObject(raw, 'cancel_guild_tb_assignment_version');
+
+    const after = await readVersion(guildId, runId);
+    if (!after) throw serviceError('Cancelled assignment version could not be re-read.', 502, 'TB_ASSIGNMENT_VERSION_READBACK_FAILED');
+    if (text(after.status) !== 'cancelled' || !text(after.cancelled_at) || text(after.cancelled_by_user_id) !== actorUserId) {
+      throw serviceError('Assignment cancellation failed post-cancellation verification.', 500, 'TB_ASSIGNMENT_CANCELLATION_VERIFICATION_FAILED');
+    }
+
+    return Object.freeze({
+      version: sanitizeVersion(after),
+      cancellation: Object.freeze(object(cancellation)),
+      hashVerification: verifyTbAssignmentRunHash(after),
+    });
+  }
+
   return Object.freeze({
     createVersion,
     approveVersion,
+    cancelVersion,
     readVersion,
     latestVersionNumber,
   });
