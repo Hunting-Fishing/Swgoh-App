@@ -46,7 +46,7 @@ const operations = {
   },
 };
 
-const canonical = { async getPlayerRoster() { return { units: [], ships: [], player: { lastSyncedAt: '2026-08-19T00:00:00Z' } }; } };
+const canonical = { async getPlayerRoster() { return { fetchedAt: '2026-08-19T00:00:00Z', units: [], ships: [], player: { updatedAt: '2026-08-19T00:00:00Z' } }; } };
 
 test('event snapshot fails closed when no active durable TB event exists', async () => {
   const service = createTbEventStateService({ store: baseStore(), operations, canonical });
@@ -93,7 +93,7 @@ test('Today queue does not invent tasks when active event has no configured terr
   assert.match(result.evidenceBoundary, /durable officer\/canonical event state/i);
 });
 
-test('zone state accepts explicit ROTE officer commands and clamps star targets', async () => {
+test('zone state accepts explicit ROTE officer commands, preload cap and clamps star targets', async () => {
   let saved = null;
   const store = baseStore({
     select: async (table) => table === 'guild_tb_events'
@@ -106,9 +106,51 @@ test('zone state accepts explicit ROTE officer commands and clamps star targets'
     },
   });
   const service = createTbEventStateService({ store, operations, canonical, now: () => new Date('2026-08-19T04:00:00Z') });
-  const result = await service.saveZoneState(USER_ID, { eventId: EVENT_ID, phase: 'P2', planetId: 'geonosis', commandState: 'stop', targetStars: 8, commandMessage: 'Missions only. No deploy.' });
-  assert.equal(saved.command_state, 'stop');
+  const result = await service.saveZoneState(USER_ID, {
+    eventId: EVENT_ID,
+    phase: 'P2',
+    planetId: 'geonosis',
+    commandState: 'preload',
+    currentTp: 120000000,
+    preloadCapTp: 148124999,
+    targetStars: 8,
+    commandMessage: 'Preload only.',
+  });
+  assert.equal(saved.command_state, 'preload');
+  assert.equal(saved.preload_cap_tp, 148124999);
   assert.equal(saved.target_stars, 3);
   assert.equal(result.zone.planetId, 'geonosis');
+  assert.equal(result.zone.preloadCapTp, 148124999);
   assert.match(result.evidenceBoundary, /officer-entered/i);
+});
+
+test('zone state rejects a normal territory outside the active phase', async () => {
+  const store = baseStore({
+    select: async (table) => table === 'guild_tb_events'
+      ? [{ id: EVENT_ID, guild_id: GUILD_ID, tb_key: 'rote', current_phase: 'P2', status: 'active', source_kind: 'officer' }]
+      : [],
+  });
+  const service = createTbEventStateService({ store, operations, canonical });
+  await assert.rejects(
+    () => service.saveZoneState(USER_ID, { eventId: EVENT_ID, phase: 'P2', planetId: 'mustafar', commandState: 'hold' }),
+    (error) => error?.code === 'TB_PLANET_PHASE_MISMATCH',
+  );
+});
+
+test('bonus territory can be explicitly configured in the phase that unlocks it', async () => {
+  let saved = null;
+  const store = baseStore({
+    select: async (table) => table === 'guild_tb_events'
+      ? [{ id: EVENT_ID, guild_id: GUILD_ID, tb_key: 'rote', current_phase: 'P3', status: 'active', source_kind: 'officer' }]
+      : [],
+    upsert: async (_table, rows) => {
+      saved = rows[0];
+      return [{ id: '66666666-6666-4666-8666-666666666666', ...rows[0] }];
+    },
+  });
+  const service = createTbEventStateService({ store, operations, canonical });
+  const result = await service.saveZoneState(USER_ID, { eventId: EVENT_ID, phase: 'P3', planetId: 'zeffo', commandState: 'deploy' });
+  assert.equal(saved.phase, 'P3');
+  assert.equal(saved.planet_id, 'zeffo');
+  assert.equal(result.planet.phase, 'Zeffo');
 });
