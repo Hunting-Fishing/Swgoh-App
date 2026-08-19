@@ -1,5 +1,6 @@
 import { journeyGoalService } from './journey-goal-service.mjs';
 import { supabaseAuthSession } from './supabase-auth-session.mjs';
+import { tbEventStateApi } from './tb-event-state-api.mjs';
 import { webActionService } from './web-action-service.mjs';
 
 const MAX_BODY_BYTES = 128 * 1024;
@@ -48,6 +49,7 @@ export function createWebActionApi(options = {}) {
   const session = options.session || supabaseAuthSession;
   const service = options.service || webActionService;
   const goals = options.journeyGoals || journeyGoalService;
+  const tb = options.tbEventStateApi || tbEventStateApi;
 
   async function requireUser(request) {
     const user = await session.currentUser(request);
@@ -56,6 +58,9 @@ export function createWebActionApi(options = {}) {
   }
 
   async function handle(request, response, url) {
+    if (url.pathname.startsWith('/api/account/web-actions/tb/')) {
+      return tb.handle(request, response, url);
+    }
     if (!url.pathname.startsWith('/api/account/web-actions')) return false;
     try {
       const user = await requireUser(request);
