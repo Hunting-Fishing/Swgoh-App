@@ -42,6 +42,15 @@ const requiredPhaseOption = {
   choices: phaseChoices,
 };
 
+const requiredVersionOption = (name, description) => ({
+  type: 3,
+  name,
+  description,
+  required: true,
+  min_length: 36,
+  max_length: 36,
+});
+
 function assertRequiredOptionsBeforeOptional(options = [], path = "command") {
   let sawOptionalParameter = false;
   for (const option of options) {
@@ -182,6 +191,35 @@ const commands = [
       { type: 1, name: "phase", description: "Show the officer Phase Command Board summary for one ROTE phase", options: [requiredPhaseOption] },
       { type: 1, name: "assignments", description: "Preview the current mission-safe ROTE Operation assignment draft", options: [optionalPhaseOption] },
       { type: 1, name: "farms", description: "Show the highest-impact ROTE mission farms from the live guild roster", options: [optionalPhaseOption] },
+      { type: 1, name: "plan-preview", description: "Create an immutable officer-approval version of the current ROTE draft", options: [requiredPhaseOption] },
+      { type: 1, name: "plan-status", description: "Show immutable ROTE versions, hashes, and approval state", options: [optionalPhaseOption] },
+      {
+        type: 1,
+        name: "plan-approve",
+        description: "Approve one exact immutable ROTE version/hash; does not publish",
+        options: [
+          requiredVersionOption("version", "Immutable assignment version UUID"),
+          { type: 3, name: "hash", description: "Full 64-character SHA-256 plan hash", required: true, min_length: 64, max_length: 64 },
+        ],
+      },
+      {
+        type: 1,
+        name: "plan-cancel",
+        description: "Cancel an immutable ROTE version; does not publish",
+        options: [
+          requiredVersionOption("version", "Immutable assignment version UUID"),
+          { type: 3, name: "reason", description: "Optional officer cancellation note", required: false, max_length: 200 },
+        ],
+      },
+      {
+        type: 1,
+        name: "plan-diff",
+        description: "Compare two immutable ROTE assignment versions",
+        options: [
+          requiredVersionOption("from", "Older immutable assignment version UUID"),
+          requiredVersionOption("to", "Newer immutable assignment version UUID"),
+        ],
+      },
     ],
   },
   {
