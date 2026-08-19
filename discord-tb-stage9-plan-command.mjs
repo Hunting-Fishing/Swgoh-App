@@ -110,7 +110,7 @@ export function createDiscordTbStage9PlanCommand(options = {}) {
 
   async function resolveVersionReference(context, planId, phase, reference, cachedVersions = null) {
     const value = text(reference);
-    if (!value) throw new Error('Both immutable version references are required.');
+    if (!value) throw new Error('An immutable version reference is required.');
     if (!/^\d+$/.test(value)) return value;
     const versions = cachedVersions || array((await versionService.listVersions(context, { planId, rotePhase: phase, limit: 100 })).versions);
     const match = versions.find((entry) => Number(entry?.version?.versionNumber) === Number(value));
@@ -163,14 +163,50 @@ export function createDiscordTbStage9PlanCommand(options = {}) {
     return lines.join('\n').slice(0, 1900);
   }
 
+  async function planApprove(interaction = {}) {
+    const context = await contextResolver.resolve(interaction);
+    const phase = text(optionValue(interaction, 'phase')).toUpperCase();
+    const versionRef = text(optionValue(interaction, 'version'));
+    const hashConfirmation = text(optionValue(interaction, 'hash')).toLowerCase();
+    if (!phase) throw new Error('ROTE phase is required for immutable plan approval.');
+    if (!/^[0-9a-f]{12,64}$/.test(hashConfirmation)) {
+      throw new Error('Confirm at least the first 12 hexadecimal characters of the immutable plan hash shown by /tb plan-status.');
+    }
+
+    const plan = await currentPlan(context.guild.id);
+    if (!plan?.id) throw new Error('No active persisted ROTE plan exists yet.');
+    const runId = await resolveVersionReference(context, plan.id, phase, versionRef);
+    const selected = await versionService.getVersion(context, { runId });
+    const version = selected?.version || {};
+    const storedHash = text(version.planHash).toLowerCase();
+
+    if (text(version.planId) !== text(plan.id)) throw new Error('The selected immutable version does not belong to the current ROTE plan.');
+    if (text(version.rotePhase).toUpperCase() !== phase) throw new Error(`The selected immutable version belongs to ${safe(version.rotePhase)}, not ${phase}.`);
+    if (selected?.verification?.valid !== true) throw new Error('The selected immutable version failed deterministic hash verification and cannot be approved.');
+    if (!storedHash.startsWith(hashConfirmation)) throw new Error('Hash confirmation does not match the selected immutable assignment version.');
+
+    const approved = await versionService.approveVersion(context, { runId, planHash: storedHash });
+    const result = approved?.version || version;
+    return [
+      '**SWGOH Command Center · Immutable ROTE Plan Approved**',
+      `Guild: **${safe(context.guild.name)}** · Plan: **${safe(plan.name, 'ROTE Operations Plan')}** · Phase: **${phase}**`,
+      `Approved: **v${Number(result.versionNumber || 0)}** · hash \`${shortHash(result.planHash)}\` · deterministic hash ✅`,
+      `Artifact: **${array(result.assignments).length} assigned** · **${array(result.unfilled).length} unfilled** · **${helpCount(result)} HELP**`,
+      `Approval actor: linked Command Center **${safe(context.role)}** account`,
+      '',
+      '**Stage 10 delivery remains locked.** Approval does not publish assignments or send DMs.',
+    ].join('\n').slice(0, 1900);
+  }
+
   async function execute(interaction = {}) {
     const subcommand = text(array(interaction?.data?.options).find((row) => Number(row?.type) === 1 || Number(row?.type) === 2)?.name).toLowerCase();
     if (subcommand === 'plan-status') return planStatus(interaction);
     if (subcommand === 'plan-diff') return planDiff(interaction);
+    if (subcommand === 'plan-approve') return planApprove(interaction);
     throw new Error(`Unsupported Stage 9 /tb subcommand: ${subcommand || '(blank)'}`);
   }
 
-  return Object.freeze({ execute, planStatus, planDiff });
+  return Object.freeze({ execute, planStatus, planDiff, planApprove });
 }
 
 export const discordTbStage9PlanCommand = createDiscordTbStage9PlanCommand();
