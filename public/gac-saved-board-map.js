@@ -142,10 +142,9 @@ function render(defenses = []) {
     <h5>${escapeHtml(zone.label.toUpperCase())} · ${number.format(zone.defenses.length)}</h5>
     <div class="gac-saved-board-zone-list">${zone.defenses.length ? zone.defenses.map((defense) => tileHtml(defense, index)).join("") : `<span class="gac-saved-board-empty">No positioned defenses saved.</span>`}</div>
   </article>`).join("");
+  panel.querySelector(".gac-saved-board-unpositioned")?.remove();
   if (model.unpositioned.length) {
     panel.insertAdjacentHTML("beforeend", `<div class="gac-saved-board-unpositioned"><strong>UNPOSITIONED SAVES · ${number.format(model.unpositioned.length)}</strong><div class="gac-saved-board-zone-list">${model.unpositioned.map((defense) => tileHtml(defense, index)).join("")}</div></div>`);
-  } else {
-    panel.querySelector(".gac-saved-board-unpositioned")?.remove();
   }
 }
 
