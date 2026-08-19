@@ -142,19 +142,27 @@ async function runOptionalPreflights(commands = startupPreflightCommands(), opti
 async function startProduction(options = {}) {
   const env = options.env || process.env;
   const commands = options.commands || startupPreflightCommands(env);
+  const strict = strictStartupPreflights(env);
+  const importServer = options.importServer || (() => import("../server.mjs"));
+
+  // Availability-first is the production default: establish the HTTP listener
+  // before optional catalog/Discord network preflights. The preflights execute
+  // in child processes, so import/syntax/config failures cannot terminate the
+  // web process. Strict mode deliberately reverses this order for maintenance.
+  if (!strict) await importServer();
+
   const summary = await runOptionalPreflights(commands, { ...options, env });
   if (!summary.ok) {
     console.error(`[startup] Optional preflights degraded: ${summary.degraded.join(", ")}.`);
-    console.error("[startup] Web/API startup will continue. External Discord writes remain governed by their independent authorization, publishability, receipt, and delivery gates.");
-    if (strictStartupPreflights(env)) {
+    console.error("[startup] Web/API remains available. External Discord writes remain governed by their independent authorization, publishability, receipt, and delivery gates.");
+    if (strict) {
       const error = new Error(`Strict startup preflights failed: ${summary.degraded.join(", ")}.`);
       error.code = "STARTUP_PREFLIGHT_FAILED";
       throw error;
     }
   }
 
-  const importServer = options.importServer || (() => import("../server.mjs"));
-  await importServer();
+  if (strict) await importServer();
   return summary;
 }
 
