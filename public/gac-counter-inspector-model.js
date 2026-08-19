@@ -152,6 +152,7 @@ function primarySourceLabel(evidenceMatch, heuristicMatch) {
   return "AUTHORITATIVE WAR ROOM ALLOCATION";
 }
 function observedPercent(value) {
+  if (value === null || value === undefined || value === "") return null;
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return null;
   return Math.round(Math.max(0, Math.min(1, parsed)) * 1000) / 10;
