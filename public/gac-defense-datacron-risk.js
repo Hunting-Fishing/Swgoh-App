@@ -157,6 +157,10 @@ function threatLabel(assessment = {}) {
   return assessment?.known === true ? "ASSIGNED" : "PARTIAL";
 }
 
+if (typeof document !== "undefined") {
+  void import("./gac-defense-datacron-live.js").catch(() => {});
+}
+
 export {
   assessDefenseDatacron,
   explicitDatacronReference,
