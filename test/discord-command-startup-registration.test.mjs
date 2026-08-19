@@ -16,13 +16,18 @@ function unconfiguredEnv({ interactionsEnabled = false } = {}) {
   };
 }
 
-test("production start registers the current pilot Discord schema before serving HTTP", async () => {
+test("production start fails closed on Discord schema registration/patch before serving HTTP", async () => {
   const pkg = JSON.parse(await text("package.json"));
   const start = String(pkg?.scripts?.start || "");
   const registration = "node scripts/register-discord-tb-commands.mjs --if-configured";
+  const stage9Patch = "node scripts/patch-discord-stage9-plan-commands.mjs --if-configured";
   assert.match(start, /sync-game-unit-catalog-db\.mjs --if-configured --soft-fail/);
   assert.ok(start.includes(registration), "startup Discord schema registration missing");
-  assert.ok(start.indexOf(registration) < start.indexOf("node server.mjs"), "Discord schema must register before server startup");
+  assert.ok(start.includes(stage9Patch), "startup Stage 9 Discord schema patch missing");
+  assert.doesNotMatch(start, /register-discord-tb-commands\.mjs --if-configured --soft-fail/);
+  assert.doesNotMatch(start, /patch-discord-stage9-plan-commands\.mjs --if-configured --soft-fail/);
+  assert.ok(start.indexOf(registration) < start.indexOf(stage9Patch), "base Discord schema must register before Stage 9 patch");
+  assert.ok(start.indexOf(stage9Patch) < start.indexOf("node server.mjs"), "all Discord schema writes must complete before server startup");
 });
 
 test("startup-safe registration skips cleanly only when Discord interactions are disabled", () => {
