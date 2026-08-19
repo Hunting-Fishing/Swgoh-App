@@ -125,6 +125,15 @@ test("save replaces only the same verified current-board source and persists a s
   assert.equal(row.metadata.opponentAllyCode, "123456789");
 });
 
+test("zone without slot still replaces only the same leader instead of every defense in the zone", async () => {
+  const { service, calls } = harness();
+  await service.saveDefense("USER-1", { ...saveInput, slot: null });
+  const deletion = calls.find((call) => call.type === "delete");
+  assert.equal(deletion.query.zone, "eq.FRONT-TOP");
+  assert.equal(deletion.query.leader_base_id, "eq.DEF_LEAD");
+  assert.equal(Object.prototype.hasOwnProperty.call(deletion.query, "squad_slot"), false);
+});
+
 test("save rejects an opponent that differs from the verified current-round pairing", async () => {
   const { service, calls } = harness({ confirmedOpponent: "999999999" });
   await assert.rejects(
@@ -135,12 +144,13 @@ test("save rejects an opponent that differs from the verified current-round pair
   assert.equal(calls.some((call) => call.type === "insert"), false);
 });
 
-test("save rejects an incomplete defense before any board row is written", async () => {
+test("save rejects an incomplete defense before ownership or board persistence work", async () => {
   const { service, calls } = harness();
   await assert.rejects(
     () => service.saveDefense("USER-1", { ...saveInput, members: ["DEF_LEAD", "DEF_2"] }),
-    (error) => error?.status === 400 && /complete 3\/5-character defense/i.test(error.message)
+    (error) => error?.status === 400 && /complete 3-character defense/i.test(error.message)
   );
+  assert.equal(calls.some((call) => call.type === "ownership"), false);
   assert.equal(calls.some((call) => call.type === "delete"), false);
   assert.equal(calls.some((call) => call.type === "insert"), false);
 });
