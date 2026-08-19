@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import {
   batchEvidenceKey,
   consumedBaseIds,
@@ -87,4 +88,9 @@ test("displayed evidence percentage is bounded and labeled as observed data", ()
   assert.equal(evidencePercent(2), 100);
   assert.equal(evidencePercent(-1), 0);
   assert.equal(evidencePercent("bad"), 0);
+});
+
+test("the loaded GAC browser entrypoint mounts the evidence-first War Room planner", async () => {
+  const source = await readFile(new URL("../public/gac-datacron-counter-eligibility.js", import.meta.url), "utf8");
+  assert.match(source, /import\s+["']\.\/gac-evidence-war-room\.js["'];/);
 });
