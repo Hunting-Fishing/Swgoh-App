@@ -74,31 +74,28 @@ export function createGacBoardObservationService(options = {}) {
     return rows[0] || null;
   }
 
-  async function saveDefense(userIdInput, input = {}) {
+  async function resolveRound(userIdInput, input = {}) {
     const userId = clean(userIdInput);
     const allyCode = normalizeAllyCode(input.allyCode);
     const opponentAllyCode = normalizeAllyCode(input.opponentAllyCode);
     const eventInstanceId = clean(input.eventInstanceId);
     const round = validRound(input.round);
-    const size = validSize(input.size);
-    if (!userId || !allyCode || !opponentAllyCode || !eventInstanceId || !round || !size) {
-      const error = new Error("Verified owner, current event, current round, opponent and 3v3/5v5 size are required.");
-      error.status = 400;
-      throw error;
-    }
-
-    const members = normalizedMembers(input.members, size);
-    const leaderBaseId = normalizeBaseId(input.leaderBaseId);
-    if (!leaderBaseId || !members.includes(leaderBaseId)) {
-      const error = new Error("The confirmed defense leader must be one of the selected defenders.");
+    if (!userId || !allyCode || !eventInstanceId || !round) {
+      const error = new Error("Verified owner, current event and current round are required.");
       error.status = 400;
       throw error;
     }
 
     const player = await confirmation.assertVerifiedOwnership(userId, allyCode);
     const confirmed = await confirmation.findLatestConfirmed(allyCode, eventInstanceId, round);
-    if (!confirmed?.opponent?.allyCode || normalizeAllyCode(confirmed.opponent.allyCode) !== opponentAllyCode) {
-      const error = new Error("Confirm this opponent for the current GAC event and round before saving board evidence.");
+    const confirmedOpponent = normalizeAllyCode(confirmed?.opponent?.allyCode);
+    if (!confirmedOpponent) {
+      const error = new Error("Confirm the current opponent for this GAC event and round first.");
+      error.status = 409;
+      throw error;
+    }
+    if (opponentAllyCode && opponentAllyCode !== confirmedOpponent) {
+      const error = new Error("The submitted opponent does not match the verified current-round opponent.");
       error.status = 409;
       throw error;
     }
@@ -127,12 +124,42 @@ export function createGacBoardObservationService(options = {}) {
       throw error;
     }
 
+    return Object.freeze({
+      userId,
+      allyCode,
+      opponentAllyCode: confirmedOpponent,
+      eventInstanceId,
+      round,
+      player,
+      event,
+      roundRow,
+      confirmed,
+    });
+  }
+
+  async function saveDefense(userIdInput, input = {}) {
+    const resolved = await resolveRound(userIdInput, input);
+    const size = validSize(input.size);
+    if (!size) {
+      const error = new Error("GAC defense size must be 3 or 5.");
+      error.status = 400;
+      throw error;
+    }
+
+    const members = normalizedMembers(input.members, size);
+    const leaderBaseId = normalizeBaseId(input.leaderBaseId);
+    if (!leaderBaseId || !members.includes(leaderBaseId)) {
+      const error = new Error("The confirmed defense leader must be one of the selected defenders.");
+      error.status = 400;
+      throw error;
+    }
+
     const zone = clean(input.zone).slice(0, 100) || null;
     const slot = validSlot(input.slot);
     const datacron = sanitizeDatacron(input.datacron);
     const source = "user-confirmed-current-board";
     const deleteQuery = {
-      round_id: `eq.${roundRow.id}`,
+      round_id: `eq.${resolved.roundRow.id}`,
       owner: "eq.opponent",
       side: "eq.defense",
       source: `eq.${source}`,
@@ -143,7 +170,7 @@ export function createGacBoardObservationService(options = {}) {
 
     const observedAt = now().toISOString();
     const inserted = asArray(await store.insert("gac_round_squads", [{
-      round_id: roundRow.id,
+      round_id: resolved.roundRow.id,
       owner: "opponent",
       side: "defense",
       zone,
@@ -160,11 +187,11 @@ export function createGacBoardObservationService(options = {}) {
       observed_at: observedAt,
       metadata: {
         confirmationMethod: "verified-owner-current-board-observation",
-        confirmedByUserId: userId,
-        allyCode,
-        opponentAllyCode,
-        eventInstanceId,
-        round,
+        confirmedByUserId: resolved.userId,
+        allyCode: resolved.allyCode,
+        opponentAllyCode: resolved.opponentAllyCode,
+        eventInstanceId: resolved.eventInstanceId,
+        round: resolved.round,
         size,
         datacronConfirmed: Boolean(datacron?.id),
       },
@@ -173,10 +200,10 @@ export function createGacBoardObservationService(options = {}) {
     return Object.freeze({
       source,
       saved: true,
-      roundId: clean(roundRow.id),
-      eventInstanceId,
-      round,
-      opponentAllyCode,
+      roundId: clean(resolved.roundRow.id),
+      eventInstanceId: resolved.eventInstanceId,
+      round: resolved.round,
+      opponentAllyCode: resolved.opponentAllyCode,
       defense: Object.freeze({
         leaderBaseId,
         members: Object.freeze(members),
@@ -189,7 +216,42 @@ export function createGacBoardObservationService(options = {}) {
     });
   }
 
-  return Object.freeze({ saveDefense });
+  async function getDefenses(userIdInput, input = {}) {
+    const resolved = await resolveRound(userIdInput, input);
+    const rows = asArray(await store.select("gac_round_squads", {
+      select: "id,round_id,owner,side,zone,squad_slot,leader_base_id,members,datacron,source,source_ref,confidence,observed_at,metadata",
+      round_id: `eq.${resolved.roundRow.id}`,
+      owner: "eq.opponent",
+      side: "eq.defense",
+      source: "eq.user-confirmed-current-board",
+      order: "squad_slot.asc.nullslast,observed_at.asc",
+      limit: 50,
+    }));
+
+    return Object.freeze({
+      source: "user-confirmed-current-board",
+      eventInstanceId: resolved.eventInstanceId,
+      round: resolved.round,
+      opponent: Object.freeze({
+        allyCode: resolved.opponentAllyCode,
+        name: clean(resolved.confirmed?.opponent?.name),
+        playerId: clean(resolved.confirmed?.opponent?.playerId),
+      }),
+      defenses: Object.freeze(rows.map((row) => Object.freeze({
+        id: row.id ?? null,
+        leaderBaseId: normalizeBaseId(row.leader_base_id),
+        members: Object.freeze(asArray(row.members).map(normalizeBaseId).filter(Boolean)),
+        zone: clean(row.zone),
+        slot: validSlot(row.squad_slot),
+        datacron: sanitizeDatacron(row.datacron),
+        confidence: Number(row.confidence || 0),
+        observedAt: clean(row.observed_at),
+        source: clean(row.source),
+      }))),
+    });
+  }
+
+  return Object.freeze({ resolveRound, saveDefense, getDefenses });
 }
 
 export const gacBoardObservationService = createGacBoardObservationService();
