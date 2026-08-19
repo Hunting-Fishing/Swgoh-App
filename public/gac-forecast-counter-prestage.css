@@ -14,6 +14,20 @@
 .gac-forecast-counter-status.is-partial { color: #f1ca77; border-color: rgba(237, 184, 77, .3); }
 .gac-forecast-counter-status.is-error { color: #ff9c9c; border-color: rgba(255, 105, 105, .3); }
 
+.gac-scout-prediction-card:has(.gac-scout-forecast-badge[data-tone="observed"])::after {
+  content: "WATCHLIST ONLY · limited historical sighting · no scarce counter squad reserved automatically";
+  display: block;
+  margin-top: .58rem;
+  padding: .38rem .48rem;
+  border: 1px dashed rgba(198, 165, 89, .26);
+  border-radius: .55rem;
+  background: rgba(92, 67, 18, .08);
+  color: #c8aa69;
+  font-size: .56rem;
+  font-weight: 800;
+  letter-spacing: .025em;
+}
+
 .gac-forecast-prestage {
   margin-top: .62rem;
   padding: .58rem;
