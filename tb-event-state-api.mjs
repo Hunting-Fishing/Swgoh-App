@@ -2,6 +2,7 @@ import { supabaseAuthSession } from './supabase-auth-session.mjs';
 import { tbEventStateService } from './tb-event-state-service.mjs';
 import { tbRoutePreviewService } from './tb-route-preview-service.mjs';
 import { tbRouteApplyService } from './tb-route-apply-service.mjs';
+import { tbMissionEvidenceService } from './tb-mission-evidence-service.mjs';
 
 const MAX_BODY_BYTES = 128 * 1024;
 const text = (value) => String(value ?? '').trim();
@@ -45,11 +46,19 @@ function writeJson(response, status, body) {
   response.end(JSON.stringify(body));
 }
 
+function requestedMissionIds(url) {
+  return [...new Set(url.searchParams.getAll('missionId')
+    .flatMap((value) => text(value).split(','))
+    .map(text)
+    .filter(Boolean))];
+}
+
 export function createTbEventStateApi(options = {}) {
   const session = options.session || supabaseAuthSession;
   const service = options.service || tbEventStateService;
   const routePreview = options.routePreview || tbRoutePreviewService;
   const routeApply = options.routeApply || tbRouteApplyService;
+  const missionEvidence = options.missionEvidence || tbMissionEvidenceService;
   const prefix = '/api/account/web-actions/tb';
 
   async function requireUser(request) {
@@ -71,6 +80,10 @@ export function createTbEventStateApi(options = {}) {
         writeJson(response, 200, await service.today(user.id));
         return true;
       }
+      if (request.method === 'GET' && url.pathname === `${prefix}/mission-evidence`) {
+        writeJson(response, 200, await missionEvidence.evidence(user.id, { missionIds: requestedMissionIds(url) }));
+        return true;
+      }
 
       if (!sameOrigin(request)) throw httpError('Cross-origin TB Command Center write rejected.', 403, 'CROSS_ORIGIN_REJECTED');
       if (request.method !== 'POST') throw httpError('Method not allowed for TB Command Center route.', 405, 'METHOD_NOT_ALLOWED');
@@ -82,6 +95,15 @@ export function createTbEventStateApi(options = {}) {
       }
       if (url.pathname === `${prefix}/route/apply`) {
         writeJson(response, 200, await routeApply.apply(user.id, body));
+        return true;
+      }
+      if (url.pathname === `${prefix}/mission-attempt`) {
+        writeJson(response, 201, await missionEvidence.report(user.id, body));
+        return true;
+      }
+      const missionCorrection = url.pathname.match(/^\/api\/account\/web-actions\/tb\/mission-attempt\/([0-9a-f-]{36})\/correct$/i);
+      if (missionCorrection) {
+        writeJson(response, 200, await missionEvidence.correct(user.id, missionCorrection[1], body));
         return true;
       }
       if (url.pathname === `${prefix}/event`) {
