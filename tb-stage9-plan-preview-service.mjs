@@ -60,6 +60,22 @@ function compactReservationState(state = {}) {
   return Object.freeze({ reservations: object(state.reservations) });
 }
 
+function nonEmptyObject(value) {
+  return Object.keys(object(value)).length > 0;
+}
+
+function unsupportedPlanCustomization(plan = {}, rules = [], preassignments = []) {
+  const custom = [];
+  if (nonEmptyObject(plan.phase_layout)) custom.push('phase layout');
+  if (nonEmptyObject(plan.requirement_overrides)) custom.push('requirement overrides');
+  if (array(plan.ignored_missions).length) custom.push('ignored missions');
+  if (array(plan.ignored_platoons).length) custom.push('ignored platoons');
+  if (array(plan.ignored_slots).length) custom.push('ignored slots');
+  if (array(rules).length) custom.push('grouping rules');
+  if (array(preassignments).length) custom.push('preassignments');
+  return Object.freeze(custom);
+}
+
 export function createTbStage9PlanPreviewService(options = {}) {
   const store = options.store || supabaseCoreStore;
   const stateStore = options.stateStore || discordStateStore;
@@ -117,13 +133,36 @@ export function createTbStage9PlanPreviewService(options = {}) {
     const planId = text(planIdInput);
     if (!planId) throw serviceError('A persisted ROTE plan is required.', 400, 'TB_ASSIGNMENT_PLAN_REQUIRED');
     const plan = first(await store.select('guild_tb_plans', {
-      select: 'id,guild_id,tb_key,name,status,updated_at',
+      select: 'id,guild_id,tb_key,name,status,phase_layout,requirement_overrides,ignored_missions,ignored_platoons,ignored_slots,updated_at',
       id: `eq.${planId}`,
       guild_id: `eq.${context.guildId}`,
       limit: 1,
     }));
     if (!plan || text(plan.tb_key || 'rote').toLowerCase() !== 'rote' || text(plan.status).toLowerCase() === 'archived') {
       throw serviceError('The selected persisted ROTE plan is unavailable or archived.', 409, 'TB_ASSIGNMENT_SOURCE_PLAN_STALE');
+    }
+
+    const [rules, preassignments] = await Promise.all([
+      store.select('guild_tb_grouping_rules', {
+        select: 'id,rule_type,priority',
+        plan_id: `eq.${plan.id}`,
+        guild_id: `eq.${context.guildId}`,
+        enabled: 'eq.true',
+        limit: 1,
+      }),
+      store.select('guild_tb_plan_preassignments', {
+        select: 'id,slot_id,player_id',
+        plan_id: `eq.${plan.id}`,
+        limit: 1,
+      }),
+    ]);
+    const unsupported = unsupportedPlanCustomization(plan, rules, preassignments);
+    if (unsupported.length) {
+      throw serviceError(
+        `The persisted ROTE plan contains ${unsupported.join(', ')}. Discord immutable preview cannot safely ignore saved web-plan configuration, so preview creation is blocked until the same planner path materializes those settings.`,
+        409,
+        'TB_ASSIGNMENT_PLAN_CUSTOMIZATION_UNSUPPORTED',
+      );
     }
     return plan;
   }
@@ -166,6 +205,15 @@ export function createTbStage9PlanPreviewService(options = {}) {
       operationRequirementsHash: digest(planner?.operations || {}),
       missionProtectionsHash: digest(array(planner?.safety?.protections)),
       durableControlsHash: controlsBeforeHash,
+      sourcePlanHash: digest({
+        id: plan.id,
+        updatedAt: plan.updated_at,
+        phaseLayout: plan.phase_layout || {},
+        requirementOverrides: plan.requirement_overrides || {},
+        ignoredMissions: array(plan.ignored_missions),
+        ignoredPlatoons: array(plan.ignored_platoons),
+        ignoredSlots: array(plan.ignored_slots),
+      }),
     });
     const inputFingerprint = digest(plannerInputs);
     const diagnostics = Object.freeze({
@@ -220,7 +268,7 @@ export function createTbStage9PlanPreviewService(options = {}) {
     });
   }
 
-  return Object.freeze({ createPreview, readControlSnapshot });
+  return Object.freeze({ createPreview, readControlSnapshot, requirePlan });
 }
 
 export const tbStage9PlanPreviewService = createTbStage9PlanPreviewService();
