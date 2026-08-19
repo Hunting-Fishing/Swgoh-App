@@ -146,7 +146,7 @@ test('member report uses verified identity and active canonical mission phase', 
   assert.match(saved.evidenceBoundary, /member report, not canonical game telemetry/i);
 });
 
-test('member cannot report a mission from a different active phase', async () => {
+test('member cannot report a canonical mission from a different active phase', async () => {
   let rpcCalled = false;
   const service = createTbMissionEvidenceService({
     events: events(),
@@ -154,7 +154,7 @@ test('member cannot report a mission from a different active phase', async () =>
     store: { async rpc() { rpcCalled = true; return {}; } },
   });
   await assert.rejects(
-    () => service.report(USER_ID, { missionId: 'mustafar-cm1', resultCode: '2/2' }),
+    () => service.report(USER_ID, { missionId: 'corellia-jabba', resultCode: '2/2' }),
     (error) => error.status === 409 && error.code === 'TB_MISSION_NOT_ACTIVE_PHASE',
   );
   assert.equal(rpcCalled, false);
