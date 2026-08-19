@@ -79,8 +79,14 @@ assert.equal(unlock.entry.alignment, null);
 assert.deepEqual(unlock.entry.allowedAlignments, []);
 assert.deepEqual(unlock.entry.requiredCategories, ["Mandalorian"]);
 assert.deepEqual(unlock.entry.mandatoryMembers.map((row) => row.baseId), ["MANDALORBOKATAN", "THEMANDALORIANBESKARARMOR"]);
-assert.equal(unlock.recommendations.length, 1, "UI should expose one conservative 3-unit community core, not the generic 5-unit BKM squad");
+assert.equal(unlock.recommendations.length, 2, "UI should expose only conservative three-unit Mandalorian unlock variants");
+for (const recommendation of unlock.recommendations) {
+  assert.equal(recommendation.members.length, 3, `${recommendation.id} must stay a three-unit unlock team`);
+  assert.deepEqual(recommendation.members.slice(0, 2).map((row) => row.baseId), ["MANDALORBOKATAN", "THEMANDALORIANBESKARARMOR"]);
+  assert.equal(recommendation.verifiedLegal, true, `${recommendation.id} must remain verified against the encoded entry contract`);
+}
 assert.deepEqual(unlock.recommendations[0].members.map((row) => row.baseId), ["MANDALORBOKATAN", "THEMANDALORIANBESKARARMOR", "IG12"]);
+assert.deepEqual(unlock.recommendations[1].members.map((row) => row.baseId), ["MANDALORBOKATAN", "THEMANDALORIANBESKARARMOR", "PAZVIZSLA"]);
 
 const neutralMandalorian = {
   baseId: "FUTURENEUTRALMANDO",
