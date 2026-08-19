@@ -60,6 +60,54 @@ test('POST refresh persists the generated Today queue through the service', asyn
   assert.equal(res.payload.durable, true);
 });
 
+test('POST route preview delegates only through the authenticated route preview service', async () => {
+  const body = {
+    remainingGuildDeploymentTp: 60_000_000,
+    remainingTpByPlanet: { geonosis: { remainingMissionTp: 0, remainingOperationTp: 0 } },
+  };
+  let received = null;
+  const routePreview = {
+    async preview(userId, input) {
+      assert.equal(userId, 'user-1');
+      received = input;
+      return { configured: true, persisted: false, plan: { algorithm: 'tb-route-optimizer-v1' } };
+    },
+  };
+  const api = createTbEventStateApi({ session, service: {}, routePreview });
+  const res = response();
+  await api.handle(
+    request('POST', body, { origin: 'https://command.example', 'content-type': 'application/json' }),
+    res,
+    new URL('https://command.example/api/account/web-actions/tb/route/preview'),
+  );
+  assert.equal(res.status, 200);
+  assert.deepEqual(received, body);
+  assert.equal(res.payload.persisted, false);
+  assert.equal(res.payload.plan.algorithm, 'tb-route-optimizer-v1');
+});
+
+test('route preview errors expose structured missing-input details', async () => {
+  const routePreview = {
+    async preview() {
+      const error = new Error('Missing route inputs.');
+      error.status = 400;
+      error.code = 'ROUTE_ZONE_INPUTS_INCOMPLETE';
+      error.details = { missingPlanets: ['bracca'] };
+      throw error;
+    },
+  };
+  const api = createTbEventStateApi({ session, service: {}, routePreview });
+  const res = response();
+  await api.handle(
+    request('POST', {}, { origin: 'https://command.example', 'content-type': 'application/json' }),
+    res,
+    new URL('https://command.example/api/account/web-actions/tb/route/preview'),
+  );
+  assert.equal(res.status, 400);
+  assert.equal(res.payload.code, 'ROUTE_ZONE_INPUTS_INCOMPLETE');
+  assert.deepEqual(res.payload.details.missingPlanets, ['bracca']);
+});
+
 test('POST member action status route extracts the UUID and status', async () => {
   const actionId = '44444444-4444-4444-8444-444444444444';
   const service = {
