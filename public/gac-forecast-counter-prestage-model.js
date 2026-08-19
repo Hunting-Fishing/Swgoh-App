@@ -35,10 +35,8 @@ function visibleForecastRows(report = {}, modeValue = "", limit = 8) {
     .slice(0, max);
 }
 function forecastEligibleForPrestage(prediction = {}) {
-  const evidenceClass = clean(prediction?.evidenceClass).toLowerCase();
   if (Number(prediction?.verifiedHistoricalBoards || 0) >= 1) return true;
-  if (Number(prediction?.battleObservedMatchups || 0) >= 3) return true;
-  return ["verified-zone-recurring", "verified-zone-once", "battle-recurring"].includes(evidenceClass);
+  return Number(prediction?.battleObservedMatchups || 0) >= 3;
 }
 function forecastPrestageReason(prediction = {}, modeValue = "") {
   const size = modeSize(modeValue);
