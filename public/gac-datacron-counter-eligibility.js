@@ -3,6 +3,7 @@ import "./gac-own-defense-reserve.js";
 import "./gac-saved-board-planner.js";
 import "./gac-evidence-war-room.js";
 import "./gac-war-room-matchup-deltas.js";
+import "./gac-auto-current-opponent.js";
 import {
   bestCoverage,
   datacronLabel,
