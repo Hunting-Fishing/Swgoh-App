@@ -140,7 +140,7 @@ async function selectTargetPlayer(store, allyCode) {
 
 async function selectBattleRows(store, query) {
   return asArray(await store.select("gac_battles", {
-    select: "swgoh_player_id,ally_code,season_id,format,round_number,opponent_swgoh_player_id,opponent_ally_code,opponent_name,attacker_leader_base_id,attacker_members,defender_leader_base_id,defender_members,battle_outcome,source,source_ref,source_updated_at,metadata",
+    select: "swgoh_player_id,ally_code,event_instance_id,season_id,format,round_number,match_index,match_id,opponent_swgoh_player_id,opponent_ally_code,opponent_name,attacker_leader_base_id,attacker_members,defender_leader_base_id,defender_members,battle_outcome,source,source_ref,source_updated_at,imported_at,metadata",
     order: "source_updated_at.desc",
     ...query,
   }));
@@ -173,7 +173,11 @@ export function createGacScoutingService(options = {}) {
     const observedByPlayers = new Set(defenseRows.map((row) => clean(row.swgoh_player_id)).filter(Boolean)).size;
     let defensePrediction = null;
     try {
-      defensePrediction = await prediction.getDefensePrediction(allyCode, { limit });
+      defensePrediction = await prediction.getDefensePrediction(allyCode, {
+        limit,
+        player,
+        battleRows: defenseRows,
+      });
     } catch (error) {
       defensePrediction = Object.freeze({
         source: "historical-gac-defense-intelligence",
