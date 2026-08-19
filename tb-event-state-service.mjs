@@ -43,6 +43,15 @@ function fingerprint(value) {
   return createHash('sha256').update(JSON.stringify(value)).digest('hex');
 }
 
+function phaseAllowsPlanet(phase, planet) {
+  const currentPhase = cleanPhase(phase);
+  if (!currentPhase || !planet) return false;
+  if (text(planet.phase).toUpperCase() === currentPhase) return true;
+  if (planet.bonus !== true || !planet.unlockFrom) return false;
+  const unlockSource = ROTE_PLANETS.find((candidate) => candidate.id === planet.unlockFrom);
+  return text(unlockSource?.phase).toUpperCase() === currentPhase;
+}
+
 function memberMatchesAssignment(assignment = {}, player = {}) {
   const member = object(assignment.member);
   const assignmentPlayerId = text(member.playerId || member.player_id || assignment.playerId || assignment.player_id);
@@ -98,6 +107,7 @@ function sanitizeZone(row = {}) {
     planetId: text(row.planet_id),
     currentTp: Number(row.current_tp || 0),
     currentStars: Number(row.current_stars || 0),
+    preloadCapTp: row.preload_cap_tp == null ? null : Number(row.preload_cap_tp),
     deploymentTp: Number(row.deployment_tp || 0),
     combatTp: Number(row.combat_tp || 0),
     operationTp: Number(row.operation_tp || 0),
@@ -258,8 +268,14 @@ export function createTbEventStateService(options = {}) {
       eventId: text(event.id),
       eventUpdatedAt: text(event.updated_at || event.updatedAt),
       phase,
-      zones: zones.map((zone) => ({ planet: zone.planet_id || zone.planetId, command: zone.command_state || zone.commandState, updatedAt: zone.updated_at || zone.updatedAt })),
-      rosterSyncedAt: text(rosterBody?.lastSyncedAt || rosterBody?.player?.lastSyncedAt || identity.player.last_synced_at),
+      zones: zones.map((zone) => ({
+        planet: zone.planet_id || zone.planetId,
+        command: zone.command_state || zone.commandState,
+        currentTp: zone.current_tp ?? zone.currentTp,
+        preloadCapTp: zone.preload_cap_tp ?? zone.preloadCapTp,
+        updatedAt: zone.updated_at || zone.updatedAt,
+      })),
+      rosterSyncedAt: text(rosterBody?.fetchedAt || rosterBody?.player?.updatedAt || identity.player.last_synced_at),
       operationRunId: operationsSnapshot.runId,
       operationPublishedAt: operationsSnapshot.publishedAt,
     });
@@ -398,12 +414,15 @@ export function createTbEventStateService(options = {}) {
     if (!event?.id) throw httpError('An active or specified TB event is required before saving zone state.', 409, 'TB_EVENT_REQUIRED');
     const phase = cleanPhase(input.phase || event.current_phase);
     if (!phase) throw httpError('TB zone phase must be P1 through P6.', 400, 'INVALID_TB_PHASE');
+    if (phase !== cleanPhase(event.current_phase)) throw httpError('TB zone state must be saved against the event current phase.', 409, 'TB_ZONE_PHASE_MISMATCH');
     const planetId = text(input.planetId || input.planet_id);
     const planet = ROTE_PLANETS.find((row) => row.id === planetId);
     if (!planet) throw httpError('Unknown ROTE planet ID.', 400, 'INVALID_TB_PLANET');
+    if (!phaseAllowsPlanet(phase, planet)) throw httpError(`${planet.name} is not available in ${phase}.`, 400, 'TB_PLANET_PHASE_MISMATCH');
     const commandState = cleanCommand(input.commandState || input.command_state, 'attack');
     const timestamp = now().toISOString();
     const numeric = (value, fallback = 0) => Number.isFinite(Number(value)) ? Math.max(0, Math.trunc(Number(value))) : fallback;
+    const nullableNumeric = (value) => value === null || value === undefined || value === '' ? null : numeric(value, 0);
     const stars = (value, fallback = 0) => Math.min(3, numeric(value, fallback));
     const row = first(await store.upsert('guild_tb_zone_states', [{
       event_id: event.id,
@@ -411,6 +430,7 @@ export function createTbEventStateService(options = {}) {
       planet_id: planetId,
       current_tp: numeric(input.currentTp ?? input.current_tp),
       current_stars: stars(input.currentStars ?? input.current_stars),
+      preload_cap_tp: nullableNumeric(input.preloadCapTp ?? input.preload_cap_tp),
       deployment_tp: numeric(input.deploymentTp ?? input.deployment_tp),
       combat_tp: numeric(input.combatTp ?? input.combat_tp),
       operation_tp: numeric(input.operationTp ?? input.operation_tp),
