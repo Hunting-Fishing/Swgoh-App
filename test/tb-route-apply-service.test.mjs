@@ -21,11 +21,11 @@ function preview(overrides = {}) {
       thresholdReference: { version: '2026-08-19' },
       zones: [
         {
-          planetId: 'geonosis', command: 'attack', commandLabel: 'ATTACK', explanation: 'Attack first, then deploy safely.',
+          planetId: 'geonosis', priority: 1, command: 'attack', commandLabel: 'ATTACK', explanation: 'Attack first, then deploy safely.',
           remainingMissionTp: 10_000_000, remainingOperationTp: 5_000_000, lockedByOfficer: false, commandSource: 'optimizer',
         },
         {
-          planetId: 'bracca', command: 'stop', commandLabel: 'STOP', explanation: 'Officer lock preserved.',
+          planetId: 'bracca', priority: 2, command: 'stop', commandLabel: 'STOP', explanation: 'Officer lock preserved.',
           remainingMissionTp: 0, remainingOperationTp: 0, lockedByOfficer: true, commandSource: 'officer-lock',
         },
       ],
@@ -39,8 +39,8 @@ function input(overrides = {}) {
     expectedInputFingerprint: FINGERPRINT,
     remainingGuildDeploymentTp: 60_000_000,
     remainingTpByPlanet: {
-      geonosis: { remainingMissionTp: 10_000_000, remainingOperationTp: 5_000_000 },
-      bracca: { remainingMissionTp: 0, remainingOperationTp: 0 },
+      geonosis: { priority: 1, remainingMissionTp: 10_000_000, remainingOperationTp: 5_000_000 },
+      bracca: { priority: 2, remainingMissionTp: 0, remainingOperationTp: 0 },
     },
     ...overrides,
   };
@@ -109,6 +109,7 @@ test('route apply sends only unlocked commands and preserves server zone version
       async preview(userId, body) {
         assert.equal(userId, 'user-1');
         assert.equal(body.remainingGuildDeploymentTp, 60_000_000);
+        assert.equal(body.remainingTpByPlanet.geonosis.priority, 1);
         return preview();
       },
     },
@@ -131,7 +132,7 @@ test('route apply sends only unlocked commands and preserves server zone version
   assert.equal(rpcArgs.p_zone_updates[0].expectedUpdatedAt, '2026-08-19T13:00:00.000Z');
   assert.match(rpcArgs.p_zone_updates[0].commandMessage, /^ATTACK:/);
   assert.equal(rpcArgs.p_zone_state_json.length, 2);
-  assert.deepEqual(rpcArgs.p_projection_inputs_json.remainingTpByPlanet.geonosis, { remainingMissionTp: 10_000_000, remainingOperationTp: 5_000_000 });
+  assert.deepEqual(rpcArgs.p_projection_inputs_json.remainingTpByPlanet.geonosis, { priority: 1, remainingMissionTp: 10_000_000, remainingOperationTp: 5_000_000 });
   assert.equal(result.applied, true);
   assert.equal(result.appliedZoneCount, 1);
   assert.equal(result.lockedZoneCount, 1);
