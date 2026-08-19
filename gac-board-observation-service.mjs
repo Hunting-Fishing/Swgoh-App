@@ -157,9 +157,13 @@ export function createGacBoardObservationService(options = {}) {
     const slot = validSlot(input.slot);
     const datacron = sanitizeDatacron(input.datacron);
     const source = "user-confirmed-current-board";
-    const identityQuery = slot !== null
-      ? { ...(zone ? { zone: `eq.${zone}` } : {}), squad_slot: `eq.${slot}` }
-      : { ...(zone ? { zone: `eq.${zone}` } : {}), leader_base_id: `eq.${leaderBaseId}` };
+    const identityQuery = zone && slot !== null
+      ? { zone: `eq.${zone}`, squad_slot: `eq.${slot}` }
+      : {
+          leader_base_id: `eq.${leaderBaseId}`,
+          ...(zone ? { zone: `eq.${zone}` } : {}),
+          ...(slot !== null ? { squad_slot: `eq.${slot}` } : {}),
+        };
     const deleteQuery = {
       round_id: `eq.${resolved.roundRow.id}`,
       owner: "eq.opponent",
