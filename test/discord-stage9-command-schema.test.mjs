@@ -16,10 +16,10 @@ const base = {
   ],
 };
 
-test('adds Stage 9 plan read commands exactly once without changing existing TB subcommands', () => {
+test('adds Stage 9 plan commands exactly once without changing existing TB subcommands', () => {
   const first = applyDiscordStage9TbCommandSchema(base);
   assert.equal(first.changed, true);
-  assert.deepEqual(first.added, ['plan-status', 'plan-diff']);
+  assert.deepEqual(first.added, ['plan-status', 'plan-diff', 'plan-approve']);
   assert.deepEqual(first.command.options.slice(0, 2), base.options);
 
   const status = first.command.options.find((row) => row.name === 'plan-status');
@@ -32,16 +32,23 @@ test('adds Stage 9 plan read commands exactly once without changing existing TB 
   assert.ok(diff);
   assert.deepEqual(diff.options.map((row) => row.name), ['phase', 'from', 'to']);
   assert.equal(diff.options.every((row) => row.required === true), true);
-  assert.deepEqual(diff.options[0].choices.map((row) => row.value), ['P1', 'P2', 'P3', 'P4', 'P5', 'P6']);
+
+  const approve = first.command.options.find((row) => row.name === 'plan-approve');
+  assert.ok(approve);
+  assert.deepEqual(approve.options.map((row) => row.name), ['phase', 'version', 'hash']);
+  assert.equal(approve.options.every((row) => row.required === true), true);
+  assert.equal(approve.options.find((row) => row.name === 'hash').min_length, 12);
+  assert.equal(approve.options.find((row) => row.name === 'hash').max_length, 64);
 
   const second = applyDiscordStage9TbCommandSchema(first.command);
   assert.equal(second.changed, false);
-  assert.equal(second.command.options.filter((row) => row.name === 'plan-status').length, 1);
-  assert.equal(second.command.options.filter((row) => row.name === 'plan-diff').length, 1);
+  for (const name of ['plan-status', 'plan-diff', 'plan-approve']) {
+    assert.equal(second.command.options.filter((row) => row.name === name).length, 1);
+  }
 });
 
 test('Stage 9 command schema has its own explicit version identifier', () => {
-  assert.match(DISCORD_STAGE9_PLAN_SCHEMA_VERSION, /stage9-plan-diff-v2$/);
+  assert.match(DISCORD_STAGE9_PLAN_SCHEMA_VERSION, /stage9-plan-approve-v3$/);
 });
 
 test('rejects accidental patching of a non-TB Discord command', () => {
