@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node scripts/sync-game-unit-catalog-db.mjs --if-configured --soft-fail && node scripts/register-discord-tb-commands.mjs --if-configured && node scripts/patch-discord-stage9-plan-commands.mjs --if-configured && node server.mjs",
+    "start": "node scripts/sync-game-unit-catalog-db.mjs --if-configured --soft-fail && node scripts/register-discord-tb-commands.mjs --if-configured && node scripts/patch-discord-stage9-plan-commands.mjs --if-configured && node scripts/patch-discord-stage10-delivery-commands.mjs --if-configured && node server.mjs",
     "build": "node --test test/discord-donation-preference.test.mjs test/discord-tb-preference-command.test.mjs && node scripts/build-production-data.mjs",
     "test": "node --test",
     "verify": "node --test",
@@ -15,7 +15,8 @@
     "sync:gamedata": "node scripts/sync-gamedata.mjs --allow-stale && node scripts/repair-catalog.mjs --allow-stale && node scripts/enrich-kit-intelligence.mjs && node scripts/sync-raw-combat-data.mjs --allow-stale && node scripts/build-interaction-index.mjs",
     "sync:catalog-db": "node scripts/sync-game-unit-catalog-db.mjs",
     "discord:register-tb": "node scripts/register-discord-tb-commands.mjs",
-    "discord:patch-stage9": "node scripts/patch-discord-stage9-plan-commands.mjs"
+    "discord:patch-stage9": "node scripts/patch-discord-stage9-plan-commands.mjs",
+    "discord:patch-stage10": "node scripts/patch-discord-stage10-delivery-commands.mjs"
   },
   "engines": {
     "node": ">=20"
