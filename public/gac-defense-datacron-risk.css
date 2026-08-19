@@ -1,0 +1,107 @@
+.gac-defense-datacron-control {
+  display: inline-grid;
+  gap: .18rem;
+  min-width: min(360px, 70vw);
+  vertical-align: middle;
+}
+
+#gacDefenseDatacron {
+  max-width: 100%;
+  min-width: 260px;
+}
+
+#gacDefenseDatacronStatus {
+  display: block;
+  max-width: 360px;
+  color: #7e8799;
+  font-size: .58rem;
+  line-height: 1.35;
+}
+
+.gac-enemy-datacron-risk {
+  margin-top: .5rem;
+  padding: .52rem .58rem;
+  border: 1px solid rgba(235, 83, 83, .26);
+  border-radius: .58rem;
+  background: rgba(112, 36, 36, .11);
+  color: #d9a7a7;
+  font-size: .63rem;
+  line-height: 1.45;
+}
+
+.gac-enemy-datacron-risk.is-full {
+  border-color: rgba(255, 85, 85, .42);
+  background: rgba(133, 29, 29, .17);
+}
+
+.gac-enemy-datacron-risk.is-partial {
+  border-color: rgba(255, 174, 76, .32);
+  background: rgba(122, 77, 23, .12);
+  color: #d6b47f;
+}
+
+.gac-enemy-datacron-risk.is-unknown {
+  border-style: dashed;
+  color: #9098a8;
+}
+
+.gac-enemy-datacron-head {
+  display: flex;
+  gap: .45rem;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: .2rem;
+}
+
+.gac-enemy-datacron-head strong {
+  color: #ffb4b4;
+  letter-spacing: .04em;
+}
+
+.gac-enemy-datacron-head span {
+  padding: .1rem .3rem;
+  border: 1px solid rgba(255, 255, 255, .15);
+  border-radius: 999px;
+  color: #929aac;
+  font-size: .51rem;
+  letter-spacing: .08em;
+}
+
+.gac-enemy-datacron-mechanics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .25rem;
+  margin-top: .3rem;
+}
+
+.gac-enemy-datacron-mechanics b {
+  padding: .12rem .34rem;
+  border: 1px solid rgba(255, 99, 99, .25);
+  border-radius: 999px;
+  background: rgba(120, 40, 40, .16);
+  color: #f0b0b0;
+  font-size: .54rem;
+  font-weight: 700;
+}
+
+.gac-enemy-datacron-risk small {
+  display: block;
+  margin-top: .22rem;
+  color: #7f8797;
+  font-size: .56rem;
+}
+
+@media (max-width: 720px) {
+  .gac-defense-datacron-control {
+    width: 100%;
+    min-width: 0;
+  }
+  #gacDefenseDatacron {
+    width: 100%;
+    min-width: 0;
+  }
+  .gac-enemy-datacron-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
