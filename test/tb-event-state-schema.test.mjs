@@ -13,10 +13,12 @@ test('TB event foundation creates the three v1 durable tables', () => {
   }
 });
 
-test('TB event schema keeps source provenance and one active ROTE event per Guild', () => {
+test('TB event schema keeps source provenance, preload safety and one active ROTE event per Guild', () => {
   assert.match(sql, /guild_tb_events_one_active_idx/);
   assert.match(sql, /where status = 'active'/);
   assert.match(sql, /source_kind text not null default 'officer'/);
+  assert.match(sql, /preload_cap_tp bigint check \(preload_cap_tp is null or preload_cap_tp >= 0\)/);
   assert.match(sql, /command_state in \('attack','preload','hold','deploy','stop'\)/);
+  assert.match(sql, /ally_code ~ '\^\[0-9\]\{9\}\$'/);
   assert.match(sql, /unique\(event_id, phase, player_id, action_key\)/);
 });
