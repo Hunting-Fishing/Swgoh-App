@@ -1,3 +1,4 @@
+import { createGacDefensePredictionService } from "./gac-defense-prediction-service.mjs";
 import { supabaseCoreStore } from "./supabase-core-store.mjs";
 
 function clean(value) {
@@ -139,7 +140,7 @@ async function selectTargetPlayer(store, allyCode) {
 
 async function selectBattleRows(store, query) {
   return asArray(await store.select("gac_battles", {
-    select: "swgoh_player_id,ally_code,season_id,format,round_number,opponent_swgoh_player_id,opponent_ally_code,opponent_name,attacker_leader_base_id,attacker_members,defender_leader_base_id,defender_members,battle_outcome,source,source_ref,source_updated_at,metadata",
+    select: "swgoh_player_id,ally_code,event_instance_id,season_id,format,round_number,match_index,match_id,opponent_swgoh_player_id,opponent_ally_code,opponent_name,attacker_leader_base_id,attacker_members,defender_leader_base_id,defender_members,battle_outcome,source,source_ref,source_updated_at,imported_at,metadata",
     order: "source_updated_at.desc",
     ...query,
   }));
@@ -147,6 +148,7 @@ async function selectBattleRows(store, query) {
 
 export function createGacScoutingService(options = {}) {
   const store = options.store || supabaseCoreStore;
+  const prediction = options.prediction || createGacDefensePredictionService({ store, now: options.now });
 
   async function getScoutingReport(allyCodeInput, reportOptions = {}) {
     const allyCode = normalizeAllyCode(allyCodeInput);
@@ -169,6 +171,23 @@ export function createGacScoutingService(options = {}) {
     const defenses = summarizeTeams(defenseRows, "defense");
     const offenses = summarizeTeams(offenseRows, "offense");
     const observedByPlayers = new Set(defenseRows.map((row) => clean(row.swgoh_player_id)).filter(Boolean)).size;
+    let defensePrediction = null;
+    try {
+      defensePrediction = await prediction.getDefensePrediction(allyCode, {
+        limit,
+        player,
+        battleRows: defenseRows,
+      });
+    } catch (error) {
+      defensePrediction = Object.freeze({
+        source: "historical-gac-defense-intelligence",
+        truth: "historical-prediction-not-current-board",
+        unavailable: true,
+        error: clean(error?.message || "Defense prediction evidence is temporarily unavailable.").slice(0, 240),
+        coverage: Object.freeze({ predictions: 0 }),
+        predictions: Object.freeze([]),
+      });
+    }
 
     return Object.freeze({
       source: "persisted-gac-battle-scouting",
@@ -183,12 +202,15 @@ export function createGacScoutingService(options = {}) {
         observedByPlayers,
         hasDefenseEvidence: defenses.length > 0,
         hasOffenseEvidence: offenses.length > 0,
+        hasDefensePrediction: asArray(defensePrediction?.predictions).length > 0,
       }),
+      defensePrediction,
       defensiveTendencies: Object.freeze(defenses.slice(0, 30)),
       offensiveTendencies: Object.freeze(offenses.slice(0, 30)),
       notes: Object.freeze([
         "Defense tendencies are reconstructed from persisted attacks against this player, including sourced history and explicitly owner-confirmed completed battles; they are historical observations, not a claim about the current hidden board.",
         "Offense tendencies come from persisted GAC battle evidence, including sourced imports and explicitly owner-confirmed completed battles.",
+        "Defense prediction is a separate historical-only layer: published history drives recurrence and only completed-event verified boards may contribute named zone/slot tendencies.",
       ]),
     });
   }

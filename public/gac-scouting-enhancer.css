@@ -35,6 +35,73 @@
   color: #9ea9be;
   font-size: .72rem;
 }
+.gac-scout-prediction {
+  margin-top: .85rem;
+  padding: .72rem;
+  border: 1px solid rgba(245, 204, 91, .26);
+  border-radius: .8rem;
+  background:
+    radial-gradient(circle at 0% 0%, rgba(245, 204, 91, .09), transparent 20rem),
+    linear-gradient(135deg, rgba(17, 16, 24, .9), rgba(10, 13, 29, .84));
+  box-shadow: inset 0 0 25px rgba(245, 204, 91, .025);
+}
+.gac-scout-prediction-meta {
+  margin: -.1rem 0 .58rem;
+  color: #8c98ad;
+  font-size: .68rem;
+  line-height: 1.4;
+}
+.gac-scout-prediction-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .58rem;
+}
+.gac-scout-prediction-card {
+  position: relative;
+  border-color: rgba(230, 194, 91, .22);
+  background:
+    linear-gradient(145deg, rgba(41, 34, 20, .16), rgba(5, 8, 19, .77));
+}
+.gac-scout-prediction-card[data-evidence-tone="strong"] {
+  border-color: rgba(255, 216, 101, .44);
+  box-shadow: inset 0 0 22px rgba(255, 216, 101, .04);
+}
+.gac-scout-prediction-card[data-evidence-tone="verified"] { border-color: rgba(115, 200, 255, .34); }
+.gac-scout-prediction-card[data-evidence-tone="recurring"] { border-color: rgba(162, 128, 238, .3); }
+.gac-scout-forecast-badge {
+  display: inline-flex;
+  margin-top: .5rem;
+  border: 1px solid rgba(133, 151, 192, .2);
+  border-radius: 999px;
+  padding: .23rem .43rem;
+  color: #9ba8bd;
+  background: rgba(9, 13, 25, .65);
+  font-size: .56rem;
+  font-weight: 900;
+  letter-spacing: .075em;
+}
+.gac-scout-forecast-badge[data-tone="strong"] {
+  color: #ffe19a;
+  border-color: rgba(255, 216, 101, .38);
+  background: rgba(105, 76, 15, .15);
+}
+.gac-scout-forecast-badge[data-tone="verified"] {
+  color: #9edcff;
+  border-color: rgba(115, 200, 255, .32);
+}
+.gac-scout-forecast-badge[data-tone="recurring"] {
+  color: #c1acef;
+  border-color: rgba(162, 128, 238, .28);
+}
+.gac-scout-prediction-metrics strong { color: #f0ca72; }
+.gac-scout-historical-datacron {
+  margin-top: .46rem;
+  padding: .34rem .45rem;
+  border-left: 2px solid rgba(88, 183, 232, .42);
+  background: rgba(37, 94, 125, .08);
+  color: #88b9d5;
+  font-size: .61rem;
+}
 .gac-scout-columns {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -54,6 +121,7 @@
   letter-spacing: .1em;
   font-weight: 900;
 }
+.gac-scout-prediction .gac-scout-subhead span { color: #e7bd5d; }
 .gac-scout-subhead strong { color: #d9e1ef; font-size: .78rem; }
 .gac-scout-grid { display: grid; gap: .55rem; }
 .gac-scout-card {
@@ -138,10 +206,12 @@
 .gac-scout-caution { margin-top: .45rem; color: #d0ad66; font-size: .62rem; }
 
 @media (max-width: 980px) {
-  .gac-scout-columns { grid-template-columns: 1fr; }
+  .gac-scout-columns,
+  .gac-scout-prediction-grid { grid-template-columns: 1fr; }
 }
 @media (max-width: 680px) {
   .gac-scout-heading,
-  .gac-scout-subhead { flex-direction: column; }
+  .gac-scout-subhead,
+  .gac-scout-card-head { flex-direction: column; align-items: stretch; }
   .gac-scout-status { white-space: normal; }
 }
