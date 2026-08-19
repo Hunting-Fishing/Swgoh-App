@@ -58,3 +58,14 @@ test('unconfigured territories are not inferred as active live tasks', () => {
   const tasks = buildTbMemberTasks({ event, zones: [], rosterBody, operationAssignments: [] });
   assert.deepEqual(tasks, []);
 });
+
+test('an explicitly configured bonus territory participates in its live unlock phase', () => {
+  const tasks = buildTbMemberTasks({
+    event: { id: 'event-2', current_phase: 'P3' },
+    zones: [{ phase: 'P3', planet_id: 'zeffo', command_state: 'deploy', command_message: 'Zeffo open.' }],
+    rosterBody: { units: [], ships: [] },
+    operationAssignments: [],
+  });
+  assert.ok(tasks.some((task) => task.actionType === 'deploy' && task.planetId === 'zeffo'));
+  assert.equal(tasks.find((task) => task.planetId === 'zeffo' && task.actionType === 'deploy')?.explanation, 'Zeffo open.');
+});
