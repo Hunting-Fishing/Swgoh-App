@@ -1,6 +1,7 @@
 import { supabaseAuthSession } from './supabase-auth-session.mjs';
 import { tbEventStateService } from './tb-event-state-service.mjs';
 import { tbRoutePreviewService } from './tb-route-preview-service.mjs';
+import { tbRouteApplyService } from './tb-route-apply-service.mjs';
 
 const MAX_BODY_BYTES = 128 * 1024;
 const text = (value) => String(value ?? '').trim();
@@ -48,6 +49,7 @@ export function createTbEventStateApi(options = {}) {
   const session = options.session || supabaseAuthSession;
   const service = options.service || tbEventStateService;
   const routePreview = options.routePreview || tbRoutePreviewService;
+  const routeApply = options.routeApply || tbRouteApplyService;
   const prefix = '/api/account/web-actions/tb';
 
   async function requireUser(request) {
@@ -76,6 +78,10 @@ export function createTbEventStateApi(options = {}) {
 
       if (url.pathname === `${prefix}/route/preview`) {
         writeJson(response, 200, await routePreview.preview(user.id, body));
+        return true;
+      }
+      if (url.pathname === `${prefix}/route/apply`) {
+        writeJson(response, 200, await routeApply.apply(user.id, body));
         return true;
       }
       if (url.pathname === `${prefix}/event`) {
