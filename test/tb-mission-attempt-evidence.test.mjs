@@ -43,6 +43,34 @@ test('normalizes explicit wave results and wave-count fallbacks without inventin
   assert.equal(normalizeTbMissionAttemptOutcome({}), TB_ATTEMPT_OUTCOME.UNKNOWN);
 });
 
+test('technical interruptions and missing reports never normalize as battle FAILED or intentional SKIPPED', () => {
+  const technical = [
+    'failure',
+    'not_attempted',
+    'technical_interruption',
+    'railway_restart',
+    'railway_deploy',
+    'deployment_restart',
+    'deployment_failure',
+    'server_error',
+    'service_unavailable',
+    'api_timeout',
+    'request_timeout',
+    'network_error',
+    'transport_failure',
+    'save_failed',
+  ];
+  for (const result of technical) {
+    assert.equal(normalizeTbMissionAttemptOutcome({ result }), TB_ATTEMPT_OUTCOME.UNKNOWN, result);
+  }
+  assert.equal(
+    normalizeTbMissionAttemptOutcome({ result: 'failed', technicalInterruption: true }),
+    TB_ATTEMPT_OUTCOME.UNKNOWN,
+  );
+  assert.equal(normalizeTbMissionAttemptOutcome({ result: 'intentional_skip' }), TB_ATTEMPT_OUTCOME.SKIPPED);
+  assert.equal(normalizeTbMissionAttemptOutcome({ result: 'failed' }), TB_ATTEMPT_OUTCOME.FAILED);
+});
+
 test('squad signature keeps the leader identity while normalizing non-leader member order', () => {
   const original = team('GRANDINQUISITOR', 'NINTHSISTER');
   const reordered = [original[0], original[3], original[1], original[4], original[2]];
@@ -116,7 +144,7 @@ test('adequate-for-display sample produces an explicitly observed completion rat
   assert.match(result.evidenceBoundary, /not a predicted win probability/i);
 });
 
-test('skipped and unknown records never dilute the observed completion denominator', () => {
+test('skipped, unknown and technical interruption records never dilute the observed completion denominator', () => {
   const rows = [
     attempt('2_of_2'),
     attempt('2_of_2'),
@@ -125,13 +153,16 @@ test('skipped and unknown records never dilute the observed completion denominat
     attempt('0_of_2'),
     attempt('skipped'),
     attempt(''),
+    attempt('railway_restart'),
+    attempt('api_timeout'),
+    attempt('not_attempted'),
   ];
   const result = aggregateTbMissionAttempts(rows, { minimumRateSample: 5 });
 
-  assert.equal(result.recorded, 7);
+  assert.equal(result.recorded, 10);
   assert.equal(result.attempts, 5);
   assert.equal(result.skipped, 1);
-  assert.equal(result.unknown, 1);
+  assert.equal(result.unknown, 4);
   assert.equal(result.observedCompletionRate, 80);
 });
 
