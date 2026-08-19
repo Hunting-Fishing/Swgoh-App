@@ -30,7 +30,7 @@ test("production start fails closed on Discord schema registration/patch before 
   assert.doesNotMatch(start, /patch-discord-stage9-plan-commands\.mjs --if-configured --soft-fail/);
   assert.doesNotMatch(start, /patch-discord-stage10-delivery-commands\.mjs --if-configured --soft-fail/);
   assert.ok(start.indexOf(registration) < start.indexOf(stage9Patch), "base Discord schema must register before Stage 9 patch");
-  assert.ok(start.indexOf(stage9Patch) < start.indexOf(stage10Patch), "Stage 9 schema must patch before Stage 10 uses the final two /tb slots");
+  assert.ok(start.indexOf(stage9Patch) < start.indexOf(stage10Patch), "Stage 9 schema must patch before Stage 10 uses the final /tb subcommand slot");
   assert.ok(start.indexOf(stage10Patch) < start.indexOf("node server.mjs"), "all Discord schema writes must complete before server startup");
 });
 
