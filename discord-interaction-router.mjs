@@ -28,6 +28,10 @@ import {
 import { executeDiscordGuildCommand } from "./discord-guild-operations-command.mjs";
 import { executeDiscordPlayerLifecycleCommand } from "./discord-player-lifecycle-command.mjs";
 import { autocompleteSwgohUnits } from "./discord-unit-autocomplete.mjs";
+import {
+  executeDiscordTbStage9Command,
+  isDiscordTbStage9Subcommand,
+} from "./discord-tb-stage9-command.mjs";
 
 const EPHEMERAL_FLAG = 1 << 6;
 const APPLICATION_COMMAND_AUTOCOMPLETE_TYPE = 4;
@@ -266,6 +270,16 @@ function schedulePlayerLifecycleResponse(interaction, config, services) {
     });
 }
 
+function scheduleStage9Response(interaction, config, services) {
+  Promise.resolve()
+    .then(() => executeDiscordTbStage9Command(interaction, config, { ...services, authorizedAsOfficer: true }))
+    .catch((error) => safeError("Immutable ROTE Plan", error))
+    .then((content) => editDiscordOriginalResponse(interaction, config, content, services?.fetch || fetch))
+    .catch((error) => {
+      console.error("Discord Stage 9 immutable plan response failed:", error?.message || error);
+    });
+}
+
 export async function handleDiscordInteractionRequest(request, response, env = process.env, services = {}) {
   let rawBody;
   try {
@@ -301,7 +315,10 @@ export async function handleDiscordInteractionRequest(request, response, env = p
   const isReserves = Number(interaction?.type) === DISCORD_INTERACTION_TYPES.APPLICATION_COMMAND
     && command === "tb"
     && subcommand === "reserves";
-  if (!autocomplete && !isGuildCommand && !isPlayerLifecycle && !isActivity && !isControls && !isReserve && !isReserves) {
+  const isStage9 = Number(interaction?.type) === DISCORD_INTERACTION_TYPES.APPLICATION_COMMAND
+    && command === "tb"
+    && isDiscordTbStage9Subcommand(subcommand);
+  if (!autocomplete && !isGuildCommand && !isPlayerLifecycle && !isActivity && !isControls && !isReserve && !isReserves && !isStage9) {
     return handleCoreDiscordInteractionRequest(replayRequest(request, rawBody), response, env, services);
   }
 
@@ -372,6 +389,7 @@ export async function handleDiscordInteractionRequest(request, response, env = p
   else if (isControls) scheduleControlsResponse(interaction, config, { ...services, stateStore });
   else if (isReserve) scheduleReserveResponse(interaction, config, { ...services, stateStore });
   else if (isReserves) scheduleReservesResponse(interaction, config, { ...services, stateStore });
+  else if (isStage9) scheduleStage9Response(interaction, config, { ...services, stateStore, env });
   else scheduleActivityResponse(interaction, config, { ...services, stateStore });
   return true;
 }
