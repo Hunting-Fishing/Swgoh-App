@@ -8,6 +8,7 @@ import { recommendationRosterFit } from './public/tb-mission-intelligence.js';
 const array = (value) => Array.isArray(value) ? value : [];
 const text = (value) => String(value ?? '').trim();
 const lower = (value) => text(value).toLowerCase();
+const formatted = (value) => new Intl.NumberFormat('en-US').format(Number(value || 0));
 
 const TYPE_PRIORITY = Object.freeze({
   acknowledge: 5,
@@ -85,7 +86,61 @@ function commandTask(zone, phase) {
   });
 }
 
-function missionTask({ mission, planet, zone, rosterBody, phase }) {
+function preloadSafetyTask(zone, planet, phase) {
+  const currentTp = Number(zone?.current_tp ?? zone?.currentTp ?? 0);
+  const capRaw = zone?.preload_cap_tp ?? zone?.preloadCapTp;
+  const cap = Number(capRaw);
+  const hasCap = capRaw !== null && capRaw !== undefined && capRaw !== '' && Number.isFinite(cap) && cap > 0;
+  const message = text(zone?.command_message || zone?.commandMessage);
+  if (!hasCap) {
+    return Object.freeze({
+      actionKey: actionKey('preload-cap-required', phase, planet.id),
+      actionType: 'acknowledge',
+      phase,
+      planetId: planet.id,
+      missionId: '',
+      operationSlotId: '',
+      priority: TYPE_PRIORITY.acknowledge,
+      recommendedTeamId: '',
+      deploymentTargetTp: null,
+      title: `PRELOAD HOLD · ${planet.name}`,
+      explanation: message || 'PRELOAD is selected, but no officer TP cap is recorded. Do not deploy until a preload cap is published.',
+      payload: Object.freeze({ commandState: 'preload', currentTp: Number.isFinite(currentTp) ? currentTp : 0, preloadCapTp: null, capMissing: true }),
+    });
+  }
+  if (Number.isFinite(currentTp) && currentTp >= cap) {
+    return Object.freeze({
+      actionKey: actionKey('preload-cap-reached', phase, planet.id),
+      actionType: 'acknowledge',
+      phase,
+      planetId: planet.id,
+      missionId: '',
+      operationSlotId: '',
+      priority: TYPE_PRIORITY.acknowledge,
+      recommendedTeamId: '',
+      deploymentTargetTp: null,
+      title: `PRELOAD CAP REACHED · ${planet.name}`,
+      explanation: message || `${planet.name} is at ${formatted(currentTp)} TP with an officer preload cap of ${formatted(cap)} TP. Do not deploy here.`,
+      payload: Object.freeze({ commandState: 'preload', currentTp, preloadCapTp: cap, capReached: true }),
+    });
+  }
+  return Object.freeze({
+    actionKey: actionKey('preload', phase, planet.id),
+    actionType: 'deploy',
+    phase,
+    planetId: planet.id,
+    missionId: '',
+    operationSlotId: '',
+    priority: TYPE_PRIORITY.deploy,
+    recommendedTeamId: '',
+    deploymentTargetTp: null,
+    title: `Preload · ${planet.name}`,
+    explanation: message || `Preload ${planet.name} carefully. Current zone TP: ${formatted(currentTp)}. Officer cap: ${formatted(cap)} TP. Do not cross the cap.`,
+    payload: Object.freeze({ commandState: 'preload', currentTp: Number.isFinite(currentTp) ? currentTp : 0, preloadCapTp: cap, capReached: false }),
+  });
+}
+
+function missionTask({ mission, planet, rosterBody, phase }) {
   const eligibility = missionRosterEligibility(rosterBody, mission);
   if (!eligibility.loaded || !eligibility.ready) return null;
   const recommendation = recommendationForRoster(rosterBody, mission);
@@ -123,6 +178,7 @@ function missionTask({ mission, planet, zone, rosterBody, phase }) {
 
 function deploymentTask(zone, planet, phase) {
   const state = lower(zone?.command_state || zone?.commandState);
+  if (state === 'preload') return preloadSafetyTask(zone, planet, phase);
   if (!['attack', 'deploy'].includes(state)) return null;
   const message = text(zone?.command_message || zone?.commandMessage);
   const target = Number(zone?.deployment_target_tp ?? zone?.deploymentTargetTp);
@@ -175,11 +231,11 @@ export function buildTbMemberTasks(input = {}) {
     if (command === 'stop') continue;
 
     for (const mission of normalizedRoteMissionsForPlanet(planet.id)) {
-      const task = missionTask({ mission, planet, zone, rosterBody, phase });
+      const task = missionTask({ mission, planet, rosterBody, phase });
       if (task) tasks.push(task);
     }
 
-    if (command !== 'hold' && command !== 'preload') {
+    if (command !== 'hold') {
       const deploy = deploymentTask(zone, planet, phase);
       if (deploy) tasks.push(deploy);
     }
