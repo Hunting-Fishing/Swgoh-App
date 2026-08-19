@@ -62,24 +62,24 @@ Officers must be able to compare two assignment versions and see at minimum:
 - newly unfilled slots
 - change in HELP/risk count
 
-## Planned persistence changes
+## Persistence implementation
 
-Harden `guild_tb_assignment_runs` with:
+The authoritative Stage 9 artifact is `guild_tb_assignment_runs`, hardened with:
 
 - `rote_phase`
 - `version_number`
 - `plan_hash`
 - `supersedes_run_id`
 - `superseded_by_run_id`
-- approval/cancellation metadata as appropriate
+- approval/cancellation metadata
 
-Add an append-only approval/decision history table so approval history is not overwritten.
+`guild_tb_assignment_decisions` provides append-only lifecycle history. Database triggers reject in-place mutation of immutable assignment payload fields and mutation/truncation of decision history.
 
-Add a database trigger that rejects mutation of immutable assignment payload columns after insert.
+Production RPCs provide atomic version creation, exact-hash approval and cancellation. Public/client roles cannot invoke those service-role-only RPCs.
 
-## Planned service surface
+## Service surface
 
-A Stage 9 service should provide:
+Stage 9 provides:
 
 - create immutable TB assignment version
 - read/list versions
@@ -89,7 +89,7 @@ A Stage 9 service should provide:
 - compare version deltas
 - assert a version is publishable
 
-`assert publishable` must reject:
+`assert publishable` rejects:
 
 - missing approval
 - approval hash mismatch
@@ -101,27 +101,74 @@ A Stage 9 service should provide:
 
 ## Discord acceptance surface
 
-Stage 9 should add officer-only, read/approval commands without enabling delivery. Recommended command shape:
+Officer-only commands are designed around:
 
 ```text
 /tb plan-preview phase:P1..P6
 /tb plan-status [phase:P1..P6]
-/tb plan-approve version:<id> hash:<short confirmation>
-/tb plan-cancel version:<id>
-/tb plan-diff from:<id> to:<id>
+/tb plan-approve phase:P1..P6 version:<version> hash:<hash confirmation>
+/tb plan-cancel phase:P1..P6 version:<version> [reason]
+/tb plan-diff phase:P1..P6 from:<version> to:<version>
 ```
 
-Exact command naming may be adjusted to fit Discord schema limits, but approval must always identify an immutable version and hash.
+There is deliberately no Stage 9 publish command.
 
-## Acceptance sequence
+## Persisted-plan parity guard
 
-1. Generate a P6 immutable preview from the current mission-safe planner.
-2. Verify version number, SHA-256 hash, assigned/unfilled totals and HELP count.
-3. Approve that exact version/hash.
-4. Verify approval audit history.
-5. Change a planning input in a reversible test (for example a hard reserve or availability exclusion) and generate a new version.
-6. Verify the older approval does not authorize the new version.
-7. Verify the old version is superseded / non-publishable.
-8. Compare the two versions and surface the assignment delta.
-9. Restore test state and create/approve a clean final version if needed.
+An immutable Discord preview must never reference a persisted web ROTE plan while silently ignoring that plan's configuration.
+
+Until the Discord preview path materializes the same web-plan configuration, preview creation fails closed when the active persisted plan contains any of:
+
+- non-empty phase layout
+- requirement overrides
+- ignored missions
+- ignored platoons
+- ignored slots
+- enabled grouping rules
+- preassignments
+
+The baseline/default persisted plan with empty customization remains supported by the verified Stage 8 mission-safe planner path. This defect was tracked as #174 and fixed by PR #175.
+
+## Production checkpoint — 2026-08-19
+
+Verified production baseline plan for Ludus Venatus:
+
+```text
+Plan ID: 1881ad2f-1394-4209-9409-bb8498e09138
+Name: Ludus Venatus ROTE Operations Plan
+Status: draft
+Phase layout: empty
+Requirement overrides: empty
+Ignored missions/platoons/slots: 0
+Enabled grouping rules: 0
+Preassignments: 0
+Delivery: preview only; published=false; memberDms=false
+```
+
+The baseline plan has a durable Guild Operations audit row and is owned by an active Command Center officer account linked to Warm Bacon.
+
+Production Stage 9 migrations/RPCs are applied. A transaction/rollback database acceptance exercised:
+
+1. create immutable P6 assignment version;
+2. reject an attempted in-place assignment payload mutation;
+3. approve the exact stored hash;
+4. reject attempted mutation of assignment decision history;
+5. cancel the immutable version;
+6. roll the entire test transaction back.
+
+No test version remained persisted after rollback.
+
+PR #175 GitHub Actions jobs again terminated before executing any job steps (`steps: null`). This is recorded as CI infrastructure failure, not as a test pass or code-test failure.
+
+## Remaining signed live acceptance
+
+1. Run `/tb plan-preview phase:P6` after the current Stage 9 deployment/schema patch reaches the pilot Discord server.
+2. Verify immutable version number/hash and approximately the previously accepted P6 assignment/unfilled/HELP totals if the roster has not changed.
+3. Run `/tb plan-status phase:P6` and verify the unapproved immutable version is visible.
+4. Approve the exact displayed hash/version.
+5. Verify approval state and the fail-closed Stage 10 publishability assertion, while delivery remains disabled.
+6. Make one reversible planning-input change, create a newer immutable version, and verify the earlier approval does not transfer.
+7. Verify the prior version becomes superseded/non-publishable.
+8. Compare the two versions with `/tb plan-diff` and verify donor/fill/HELP deltas.
+9. Restore the test control and create a clean final version if needed.
 10. Keep public publishing and DMs disabled; Stage 10 remains the delivery gate.
