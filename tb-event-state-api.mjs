@@ -1,5 +1,6 @@
 import { supabaseAuthSession } from './supabase-auth-session.mjs';
 import { tbEventStateService } from './tb-event-state-service.mjs';
+import { tbRoutePreviewService } from './tb-route-preview-service.mjs';
 
 const MAX_BODY_BYTES = 128 * 1024;
 const text = (value) => String(value ?? '').trim();
@@ -46,6 +47,7 @@ function writeJson(response, status, body) {
 export function createTbEventStateApi(options = {}) {
   const session = options.session || supabaseAuthSession;
   const service = options.service || tbEventStateService;
+  const routePreview = options.routePreview || tbRoutePreviewService;
   const prefix = '/api/account/web-actions/tb';
 
   async function requireUser(request) {
@@ -72,6 +74,10 @@ export function createTbEventStateApi(options = {}) {
       if (request.method !== 'POST') throw httpError('Method not allowed for TB Command Center route.', 405, 'METHOD_NOT_ALLOWED');
       const body = await readJsonBody(request);
 
+      if (url.pathname === `${prefix}/route/preview`) {
+        writeJson(response, 200, await routePreview.preview(user.id, body));
+        return true;
+      }
       if (url.pathname === `${prefix}/event`) {
         writeJson(response, body?.id ? 200 : 201, await service.saveEvent(user.id, body));
         return true;
@@ -96,6 +102,7 @@ export function createTbEventStateApi(options = {}) {
       writeJson(response, Number(error?.status) || 500, {
         error: error?.message || 'TB Command Center request failed.',
         code: error?.code || 'TB_COMMAND_CENTER_FAILED',
+        ...(error?.details ? { details: error.details } : {}),
       });
       return true;
     }
