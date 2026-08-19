@@ -27,7 +27,7 @@ function validSlot(value) {
 function normalizedMembers(values, size) {
   const members = [...new Set(asArray(values).map(normalizeBaseId).filter(Boolean))];
   if (!size || members.length !== size) {
-    const error = new Error(`A complete ${size || 3}/5-character defense is required before saving board evidence.`);
+    const error = new Error(`A complete ${size || 3}-character defense is required before saving board evidence.`);
     error.status = 400;
     throw error;
   }
@@ -138,14 +138,12 @@ export function createGacBoardObservationService(options = {}) {
   }
 
   async function saveDefense(userIdInput, input = {}) {
-    const resolved = await resolveRound(userIdInput, input);
     const size = validSize(input.size);
     if (!size) {
       const error = new Error("GAC defense size must be 3 or 5.");
       error.status = 400;
       throw error;
     }
-
     const members = normalizedMembers(input.members, size);
     const leaderBaseId = normalizeBaseId(input.leaderBaseId);
     if (!leaderBaseId || !members.includes(leaderBaseId)) {
@@ -154,17 +152,20 @@ export function createGacBoardObservationService(options = {}) {
       throw error;
     }
 
+    const resolved = await resolveRound(userIdInput, input);
     const zone = clean(input.zone).slice(0, 100) || null;
     const slot = validSlot(input.slot);
     const datacron = sanitizeDatacron(input.datacron);
     const source = "user-confirmed-current-board";
+    const identityQuery = slot !== null
+      ? { ...(zone ? { zone: `eq.${zone}` } : {}), squad_slot: `eq.${slot}` }
+      : { ...(zone ? { zone: `eq.${zone}` } : {}), leader_base_id: `eq.${leaderBaseId}` };
     const deleteQuery = {
       round_id: `eq.${resolved.roundRow.id}`,
       owner: "eq.opponent",
       side: "eq.defense",
       source: `eq.${source}`,
-      ...(zone ? { zone: `eq.${zone}` } : { leader_base_id: `eq.${leaderBaseId}` }),
-      ...(slot !== null ? { squad_slot: `eq.${slot}` } : {}),
+      ...identityQuery,
     };
     await store.delete("gac_round_squads", deleteQuery);
 
