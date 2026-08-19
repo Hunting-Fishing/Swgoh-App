@@ -1,0 +1,5 @@
+.route-zone-input{grid-template-columns:minmax(180px,1.1fr) minmax(105px,.45fr) minmax(140px,.7fr) minmax(140px,.7fr)}
+.route-zone-input label.priority input{text-align:center;font-weight:900;color:var(--gold)}
+.route-zone-input label.priority span{color:#d7c27b}
+@media(max-width:900px){.route-zone-input{grid-template-columns:1fr 1fr}.route-zone-meta{grid-column:1/-1}}
+@media(max-width:620px){.route-zone-input{grid-template-columns:1fr}.route-zone-meta{grid-column:auto}}
