@@ -7,11 +7,13 @@ function boardEvidenceDetail(input = {}) {
   const owner = clean(input.owner).toLowerCase() === "player" ? "player" : "opponent";
   const action = clean(input.action).toLowerCase();
   const defenseId = Number(input.defenseId);
+  const defenseCount = Number(input.defenseCount);
   return Object.freeze({
     owner,
     round: validRound(input.round),
     action: new Set(["saved", "deleted", "loaded"]).has(action) ? action : "updated",
     defenseId: Number.isInteger(defenseId) && defenseId > 0 ? defenseId : null,
+    defenseCount: Number.isInteger(defenseCount) && defenseCount >= 0 ? defenseCount : null,
   });
 }
 function dispatchBoardEvidenceUpdated(input = {}) {
