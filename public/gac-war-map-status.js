@@ -61,6 +61,22 @@ function injectStyles() {
   document.head.append(style);
 }
 
+function defenseIdsFromMap() {
+  return [...new Set([...document.querySelectorAll("#gacSavedBoardMap [data-saved-defense-id]")]
+    .map((tile) => Number(tile.dataset.savedDefenseId))
+    .filter((id) => Number.isInteger(id) && id > 0))];
+}
+
+function publishState(assignments = [], round = null) {
+  window.dispatchEvent(new CustomEvent("gac-war-map-state", {
+    detail: {
+      round: validRound(round),
+      defenseIds: defenseIdsFromMap(),
+      assignments: Array.isArray(assignments) ? assignments : [],
+    },
+  }));
+}
+
 function decorate(assignments = []) {
   injectStyles();
   const index = assignmentByDefense(assignments);
@@ -92,16 +108,20 @@ async function refresh() {
   const round = validRound(byId("gacBracketRound")?.value);
   if (!/^\d{9}$/.test(mine) || !round) {
     decorate([]);
+    publishState([], round);
     return;
   }
   const requestId = ++state.requestId;
   try {
     const body = await fetchJson(`/api/gac/attack-plan/${mine}?round=${round}`);
     if (requestId !== state.requestId) return;
-    decorate(Array.isArray(body?.assignments) ? body.assignments : []);
+    const assignments = Array.isArray(body?.assignments) ? body.assignments : [];
+    decorate(assignments);
+    publishState(assignments, round);
   } catch (error) {
     if (requestId !== state.requestId) return;
     decorate([]);
+    publishState([], round);
     if (![401, 409].includes(Number(error?.status))) console.warn("GAC War Map status unavailable", error);
   }
 }
@@ -146,4 +166,4 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
   }).observe(document.documentElement, { childList: true, subtree: true });
 }
 
-export { addedBoardContent, assignmentByDefense, validStatus, warMapStatus };
+export { addedBoardContent, assignmentByDefense, defenseIdsFromMap, validStatus, warMapStatus };
