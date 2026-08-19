@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { assignmentByDefense, warMapStatus } from "../public/gac-war-map-status.js";
+import { addedBoardContent, assignmentByDefense, warMapStatus } from "../public/gac-war-map-status.js";
 
 test("war map indexes assignments by verified defense id", () => {
   const index = assignmentByDefense([
@@ -51,4 +51,27 @@ test("win, loss, and abandoned remain distinct", () => {
   const abandoned = warMapStatus({ status: "abandoned", attemptCount: 0, attemptLog: [] });
   assert.equal(abandoned.label, "PLAN RELEASED");
   assert.equal(abandoned.tone, "neutral");
+});
+
+test("observer refreshes for newly rendered board tiles but ignores its own status badges", () => {
+  const PreviousElement = global.Element;
+  class FakeElement {
+    constructor({ id = "", matchesTile = false, containsTile = false } = {}) {
+      this.id = id;
+      this.matchesTile = matchesTile;
+      this.containsTile = containsTile;
+    }
+    matches(selector) { return selector === "[data-saved-defense-id]" && this.matchesTile; }
+    querySelector(selector) { return selector === "[data-saved-defense-id]" && this.containsTile ? {} : null; }
+  }
+  global.Element = FakeElement;
+  try {
+    assert.equal(addedBoardContent([{ addedNodes: [new FakeElement({ id: "gacSavedBoardMap" })] }]), true);
+    assert.equal(addedBoardContent([{ addedNodes: [new FakeElement({ matchesTile: true })] }]), true);
+    assert.equal(addedBoardContent([{ addedNodes: [new FakeElement({ containsTile: true })] }]), true);
+    assert.equal(addedBoardContent([{ addedNodes: [new FakeElement()] }]), false);
+  } finally {
+    if (PreviousElement === undefined) delete global.Element;
+    else global.Element = PreviousElement;
+  }
 });
