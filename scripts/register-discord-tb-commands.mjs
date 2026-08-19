@@ -11,7 +11,8 @@ const REGISTRATION_TIMEOUT_MS = 15_000;
 const config = discordTbConfig(process.env);
 const ifConfigured = process.argv.includes("--if-configured");
 const softFail = process.argv.includes("--soft-fail");
-const phaseChoices = ["P1", "P2", "P3", "P4", "P5", "P6"].map((phase) => ({ name: phase, value: phase }));
+
+const phaseChoices = ["P1", "P2", "P3", "P4", "P5", "P6"].map((value) => ({ name: value, value }));
 const preferenceChoices = [
   { name: "GIVE — favor this member as a donor", value: "give" },
   { name: "DEFAULT — clear the explicit override", value: "default" },
@@ -26,21 +27,9 @@ const reservationChoices = [
   { name: "CLEAR — remove the hard reservation", value: "clear" },
 ];
 
-const optionalPhaseOption = {
-  type: 3,
-  name: "phase",
-  description: "Optional ROTE phase scope",
-  required: false,
-  choices: phaseChoices,
-};
-
-const requiredPhaseOption = {
-  type: 3,
-  name: "phase",
-  description: "ROTE phase to inspect",
-  required: true,
-  choices: phaseChoices,
-};
+const optionalPhaseOption = { type: 3, name: "phase", description: "Optional ROTE phase scope", required: false, choices: phaseChoices };
+const requiredPhaseOption = { type: 3, name: "phase", description: "ROTE phase to inspect", required: true, choices: phaseChoices };
+const versionOption = (name, description) => ({ type: 3, name, description, required: true, min_length: 36, max_length: 36 });
 
 function assertRequiredOptionsBeforeOptional(options = [], path = "command") {
   let sawOptionalParameter = false;
@@ -48,9 +37,7 @@ function assertRequiredOptionsBeforeOptional(options = [], path = "command") {
     const isSubcommand = option?.type === 1 || option?.type === 2;
     if (!isSubcommand) {
       if (option?.required === true) {
-        if (sawOptionalParameter) {
-          throw new Error(`Invalid Discord command schema at ${path}: required option '${option.name}' appears after an optional option.`);
-        }
+        if (sawOptionalParameter) throw new Error(`Invalid Discord command schema at ${path}: required option '${option.name}' appears after an optional option.`);
       } else sawOptionalParameter = true;
     }
     if (Array.isArray(option?.options)) assertRequiredOptionsBeforeOptional(option.options, `${path} ${option.name}`);
@@ -75,9 +62,9 @@ async function registerCommands(commands) {
         body: JSON.stringify(commands),
         signal: AbortSignal.timeout(REGISTRATION_TIMEOUT_MS),
       });
-      const text = await response.text();
+      const responseText = await response.text();
       let body;
-      try { body = text ? JSON.parse(text) : null; } catch { body = text; }
+      try { body = responseText ? JSON.parse(responseText) : null; } catch { body = responseText; }
       if (response.ok) return { body, attempt };
       lastFailure = { status: response.status, body, message: `Discord command registration failed with HTTP ${response.status}.` };
       if (!retryableStatus(response.status) || attempt === 3) break;
@@ -85,7 +72,9 @@ async function registerCommands(commands) {
       lastFailure = {
         status: 0,
         body: null,
-        message: error?.name === "TimeoutError" ? `Discord command registration timed out after ${REGISTRATION_TIMEOUT_MS}ms.` : error?.message || "Discord command registration request failed.",
+        message: error?.name === "TimeoutError"
+          ? `Discord command registration timed out after ${REGISTRATION_TIMEOUT_MS}ms.`
+          : error?.message || "Discord command registration request failed.",
       };
       if (attempt === 3) break;
     }
@@ -182,6 +171,36 @@ const commands = [
       { type: 1, name: "phase", description: "Show the officer Phase Command Board summary for one ROTE phase", options: [requiredPhaseOption] },
       { type: 1, name: "assignments", description: "Preview the current mission-safe ROTE Operation assignment draft", options: [optionalPhaseOption] },
       { type: 1, name: "farms", description: "Show the highest-impact ROTE mission farms from the live guild roster", options: [optionalPhaseOption] },
+      { type: 1, name: "plan-preview", description: "Create or reuse an immutable Stage 9 ROTE assignment version", options: [requiredPhaseOption] },
+      { type: 1, name: "plan-status", description: "Show immutable ROTE assignment versions and approval state", options: [optionalPhaseOption] },
+      {
+        type: 1,
+        name: "plan-approve",
+        description: "Approve one exact immutable ROTE version/hash; does not publish",
+        options: [
+          versionOption("version", "Immutable assignment version UUID"),
+          { type: 3, name: "hash", description: "First 12+ hex characters of the displayed plan hash", required: true, min_length: 12, max_length: 64 },
+          { type: 3, name: "reason", description: "Optional officer approval note", required: false, max_length: 200 },
+        ],
+      },
+      {
+        type: 1,
+        name: "plan-cancel",
+        description: "Cancel an immutable ROTE assignment version; does not publish",
+        options: [
+          versionOption("version", "Immutable assignment version UUID"),
+          { type: 3, name: "reason", description: "Optional cancellation reason", required: false, max_length: 200 },
+        ],
+      },
+      {
+        type: 1,
+        name: "plan-diff",
+        description: "Compare two immutable ROTE assignment versions",
+        options: [
+          versionOption("from", "Older immutable assignment version UUID"),
+          versionOption("to", "Newer immutable assignment version UUID"),
+        ],
+      },
     ],
   },
   {
@@ -190,18 +209,8 @@ const commands = [
     description: "Officer Guild operations, registration, Discord delivery, and ROTE readiness",
     options: [
       { type: 1, name: "status", description: "Show Guild registration, ignored members, verified channels, and roster status" },
-      {
-        type: 1,
-        name: "verify-channel",
-        description: "Verify a Discord channel for Guild assignment delivery",
-        options: [{ type: 7, name: "channel", description: "Channel to verify; defaults to the current channel", required: false }],
-      },
-      {
-        type: 1,
-        name: "unverify-channel",
-        description: "Remove a Discord channel from Guild assignment delivery",
-        options: [{ type: 7, name: "channel", description: "Channel to unverify; defaults to the current channel", required: false }],
-      },
+      { type: 1, name: "verify-channel", description: "Verify a Discord channel for Guild assignment delivery", options: [{ type: 7, name: "channel", description: "Channel to verify; defaults to the current channel", required: false }] },
+      { type: 1, name: "unverify-channel", description: "Remove a Discord channel from Guild assignment delivery", options: [{ type: 7, name: "channel", description: "Channel to unverify; defaults to the current channel", required: false }] },
       {
         type: 1,
         name: "register-mates",
@@ -259,7 +268,12 @@ if (!config.commandRegistrationConfigured) {
   try {
     const result = await registerCommands(commands);
     const registered = Array.isArray(result.body) ? result.body : [];
-    const receipt = await writeDiscordCommandRegistrationReceipt({ guildId: config.pilotGuildId, applicationId: config.applicationId, attempt: result.attempt, commands: registered });
+    const receipt = await writeDiscordCommandRegistrationReceipt({
+      guildId: config.pilotGuildId,
+      applicationId: config.applicationId,
+      attempt: result.attempt,
+      commands: registered,
+    });
     let publicReceipt = { written: false };
     if (ifConfigured) publicReceipt = await writePublicDiscordCommandRegistrationReceipt(receipt.receipt);
     console.log(`Discord schema ${SCHEMA_VERSION} registered in ${config.pilotGuildId} on attempt ${result.attempt}.`);
