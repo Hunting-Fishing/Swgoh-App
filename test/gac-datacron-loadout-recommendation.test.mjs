@@ -7,9 +7,11 @@ function installBrowserStubs() {
     querySelector() { return null; },
     querySelectorAll() { return []; },
     addEventListener() {},
+    createElement() { return { dataset: {}, append() {}, addEventListener() {} }; },
+    head: { append() {} },
     documentElement: {},
   };
-  globalThis.window = { addEventListener() {} };
+  globalThis.window = { addEventListener() {}, dispatchEvent() {} };
   globalThis.MutationObserver = class MutationObserver {
     observe() {}
   };
