@@ -49,11 +49,11 @@ test("manual registration still fails closed when credentials are absent", () =>
   assert.match(result.stderr, /Discord command registration requires/);
 });
 
-test("startup schema contains TB self-service plus safe Guild unbind and receipts", async () => {
+test("startup schema contains TB self-service, immutable Stage 9 approval, safe Guild unbind and receipts", async () => {
   const source = await text("scripts/register-discord-tb-commands.mjs");
   const receiptSource = await text("discord-command-registration-receipt.mjs");
   assert.match(source, /SCHEMA_VERSION = DISCORD_TB_COMMAND_SCHEMA_VERSION/);
-  assert.match(receiptSource, /DISCORD_TB_COMMAND_SCHEMA_VERSION = "2026-08-18-guild-unbind-v4"/);
+  assert.match(receiptSource, /DISCORD_TB_COMMAND_SCHEMA_VERSION = "2026-08-19-stage9-immutable-plan-v1"/);
   assert.match(source, /REGISTRATION_TIMEOUT_MS = 15_000/);
   assert.match(source, /name: "activity"/);
   assert.match(source, /name: "controls"/);
@@ -62,6 +62,13 @@ test("startup schema contains TB self-service plus safe Guild unbind and receipt
   assert.match(source, /absolute ROTE Operation donor reservation/);
   assert.match(source, /name: "unit"[\s\S]*autocomplete: true/);
   assert.match(source, /name: "ignore"[\s\S]*Self-service timed Operations ignore/);
+  assert.match(source, /name: "plan-preview"/);
+  assert.match(source, /name: "plan-status"/);
+  assert.match(source, /name: "plan-approve"[\s\S]*First 12\+ hex characters/);
+  assert.match(source, /name: "plan-cancel"/);
+  assert.match(source, /name: "plan-diff"/);
+  assert.equal((source.match(/name: "plan-(?:preview|status|approve|cancel|diff)"/g) || []).length, 5);
+  assert.doesNotMatch(source, /name: "plan-publish"/);
   assert.match(source, /name: "guild"/);
   assert.match(source, /name: "verify-channel"/);
   assert.match(source, /name: "unverify-channel"/);
