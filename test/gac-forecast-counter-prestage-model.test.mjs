@@ -55,7 +55,7 @@ function prediction(format, leaderBaseId, members, overrides = {}) {
   };
 }
 
-test("forecast entries preserve displayed priority while filtering wrong format, duplicates and malformed squad sizes", () => {
+test("forecast entries preserve original displayed card positions while filtering malformed and duplicate rows", () => {
   const report = {
     predictions: [
       prediction("3v3", "FIRST", ["FIRST", "A", "B"], { evidenceClass: "verified-zone-recurring" }),
@@ -68,9 +68,18 @@ test("forecast entries preserve displayed priority while filtering wrong format,
 
   const entries = forecastEntries(report, "3", 8);
   assert.deepEqual(entries.map((entry) => entry.defense.leaderBaseId), ["FIRST", "SECOND"]);
-  assert.deepEqual(entries.map((entry) => entry.defenseId), [900001, 900002]);
-  assert.deepEqual(entries.map((entry) => entry.forecastIndex), [0, 1]);
+  assert.deepEqual(entries.map((entry) => entry.forecastIndex), [0, 2]);
+  assert.deepEqual(entries.map((entry) => entry.planIndex), [0, 1]);
+  assert.deepEqual(entries.map((entry) => entry.defenseId), [900001, 900003]);
   assert.equal(entries[0].prediction.evidenceClass, "verified-zone-recurring");
+
+  const mapped = allocationByForecastIndex({ assignments: [
+    { defenseId: 900001, sourceIndex: 0, recommendation: { id: "A" } },
+    { defenseId: 900003, sourceIndex: 1, recommendation: { id: "B" } },
+  ] });
+  assert.equal(mapped.get(0).recommendation.id, "A");
+  assert.equal(mapped.get(2).recommendation.id, "B");
+  assert.equal(mapped.has(1), false);
 });
 
 test("planning exclusions protect own defense plus attempted and planned attack resources", () => {
