@@ -26,7 +26,8 @@ create index if not exists guild_tb_phase_snapshots_event_phase_idx
 
 alter table public.guild_tb_phase_snapshots enable row level security;
 revoke all on table public.guild_tb_phase_snapshots from anon, authenticated;
-grant all on table public.guild_tb_phase_snapshots to service_role;
+revoke update, delete, truncate on table public.guild_tb_phase_snapshots from service_role;
+grant select, insert on table public.guild_tb_phase_snapshots to service_role;
 
 comment on table public.guild_tb_phase_snapshots is 'Immutable TB phase/optimizer evidence snapshots. Route applications preserve the exact server event state, explicit optimizer inputs, deterministic result and SHA-256 input fingerprint used to issue officer commands.';
 
@@ -48,6 +49,7 @@ as $$
 declare
   v_snapshot_id uuid;
   v_requested integer := 0;
+  v_distinct_planets integer := 0;
   v_matched integer := 0;
   v_applied integer := 0;
   v_now timestamptz := now();
@@ -73,8 +75,13 @@ begin
     raise exception 'TB_ROUTE_EVENT_STALE';
   end if;
 
-  select count(*) into v_requested
-  from jsonb_array_elements(coalesce(p_zone_updates, '[]'::jsonb));
+  select count(*), count(distinct u->>'planetId')
+    into v_requested, v_distinct_planets
+  from jsonb_array_elements(coalesce(p_zone_updates, '[]'::jsonb)) u;
+
+  if v_requested <> v_distinct_planets then
+    raise exception 'TB_ROUTE_DUPLICATE_ZONE_UPDATE';
+  end if;
 
   if exists (
     select 1
