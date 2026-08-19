@@ -7,8 +7,11 @@ alter table public.guild_tb_assignment_runs
   add column if not exists plan_hash text,
   add column if not exists supersedes_run_id uuid references public.guild_tb_assignment_runs(id) on delete set null,
   add column if not exists superseded_by_run_id uuid references public.guild_tb_assignment_runs(id) on delete set null,
+  add column if not exists created_by_discord_user_id text,
   add column if not exists cancelled_at timestamptz,
-  add column if not exists cancelled_by_user_id uuid;
+  add column if not exists cancelled_by_user_id uuid,
+  add column if not exists cancelled_by_discord_user_id text,
+  add column if not exists cancel_reason text;
 
 alter table public.guild_tb_assignment_runs
   drop constraint if exists guild_tb_assignment_runs_rote_phase_check;
@@ -27,6 +30,18 @@ alter table public.guild_tb_assignment_runs
 alter table public.guild_tb_assignment_runs
   add constraint guild_tb_assignment_runs_plan_hash_check
   check (plan_hash is null or plan_hash ~ '^[0-9a-f]{64}$');
+
+alter table public.guild_tb_assignment_runs
+  drop constraint if exists guild_tb_assignment_runs_created_discord_check;
+alter table public.guild_tb_assignment_runs
+  add constraint guild_tb_assignment_runs_created_discord_check
+  check (created_by_discord_user_id is null or created_by_discord_user_id ~ '^[0-9]{16,22}$');
+
+alter table public.guild_tb_assignment_runs
+  drop constraint if exists guild_tb_assignment_runs_cancelled_discord_check;
+alter table public.guild_tb_assignment_runs
+  add constraint guild_tb_assignment_runs_cancelled_discord_check
+  check (cancelled_by_discord_user_id is null or cancelled_by_discord_user_id ~ '^[0-9]{16,22}$');
 
 create unique index if not exists guild_tb_assignment_runs_version_scope_uidx
   on public.guild_tb_assignment_runs(
@@ -47,6 +62,7 @@ create table if not exists public.guild_tb_assignment_run_approvals (
   plan_hash text not null check (plan_hash ~ '^[0-9a-f]{64}$'),
   decision text not null check (decision in ('approved','revoked')),
   actor_user_id uuid,
+  actor_discord_user_id text check (actor_discord_user_id is null or actor_discord_user_id ~ '^[0-9]{16,22}$'),
   reason text,
   metadata jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now()
@@ -81,6 +97,7 @@ begin
      or new.unfilled is distinct from old.unfilled
      or new.diagnostics is distinct from old.diagnostics
      or new.created_by_user_id is distinct from old.created_by_user_id
+     or new.created_by_discord_user_id is distinct from old.created_by_discord_user_id
      or new.created_at is distinct from old.created_at
      or new.supersedes_run_id is distinct from old.supersedes_run_id then
     raise exception 'immutable TB assignment version payload cannot be changed in place'
@@ -117,6 +134,8 @@ for each row execute function public.guard_append_only_tb_assignment_approval();
 -- Atomically allocate a version number, insert the immutable payload, and mark
 -- the immediately previous version superseded. The advisory transaction lock
 -- prevents two officers/workers from claiming the same version concurrently.
+-- Re-previewing an identical latest payload is idempotent and preserves any
+-- exact-hash approval already attached to that version.
 create or replace function public.create_guild_tb_assignment_version(
   p_guild_id uuid,
   p_plan_id uuid,
@@ -126,7 +145,8 @@ create or replace function public.create_guild_tb_assignment_version(
   p_assignments jsonb,
   p_unfilled jsonb,
   p_diagnostics jsonb,
-  p_created_by_user_id uuid
+  p_created_by_user_id uuid,
+  p_created_by_discord_user_id text
 )
 returns public.guild_tb_assignment_runs
 language plpgsql
@@ -145,6 +165,9 @@ begin
   if p_plan_hash is null or p_plan_hash !~ '^[0-9a-f]{64}$' then
     raise exception 'plan hash must be a lowercase SHA-256 digest' using errcode = '22023';
   end if;
+  if p_created_by_discord_user_id is not null and p_created_by_discord_user_id !~ '^[0-9]{16,22}$' then
+    raise exception 'Discord actor must be a valid snowflake' using errcode = '22023';
+  end if;
 
   v_scope := p_guild_id::text || ':' || coalesce(p_plan_id::text, 'adhoc') || ':' || p_rote_phase;
   perform pg_advisory_xact_lock(hashtextextended(v_scope, 0));
@@ -158,6 +181,13 @@ begin
   order by version_number desc, created_at desc
   limit 1
   for update;
+
+  if v_previous.id is not null
+     and v_previous.plan_hash = p_plan_hash
+     and v_previous.cancelled_at is null
+     and v_previous.superseded_by_run_id is null then
+    return v_previous;
+  end if;
 
   v_next_version := coalesce(v_previous.version_number, 0) + 1;
 
@@ -174,6 +204,7 @@ begin
     diagnostics,
     delivery,
     created_by_user_id,
+    created_by_discord_user_id,
     supersedes_run_id
   ) values (
     p_guild_id,
@@ -188,6 +219,7 @@ begin
     coalesce(p_diagnostics, '{}'::jsonb),
     '{}'::jsonb,
     p_created_by_user_id,
+    p_created_by_discord_user_id,
     v_previous.id
   ) returning * into v_created;
 
@@ -203,5 +235,5 @@ begin
 end;
 $$;
 
-revoke all on function public.create_guild_tb_assignment_version(uuid,uuid,text,text,text,jsonb,jsonb,jsonb,uuid) from public,anon,authenticated;
-grant execute on function public.create_guild_tb_assignment_version(uuid,uuid,text,text,text,jsonb,jsonb,jsonb,uuid) to service_role;
+revoke all on function public.create_guild_tb_assignment_version(uuid,uuid,text,text,text,jsonb,jsonb,jsonb,uuid,text) from public,anon,authenticated;
+grant execute on function public.create_guild_tb_assignment_version(uuid,uuid,text,text,text,jsonb,jsonb,jsonb,uuid,text) to service_role;
