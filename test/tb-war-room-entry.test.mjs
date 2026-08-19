@@ -36,13 +36,15 @@ test('War Room summary fails closed when no durable event is configured', () => 
   assert.equal(result.phaseTime, 'No active TB event');
 });
 
-test('Guild route enhancer loads the War Room module and the module self-loads its CSS', () => {
+test('Guild route enhancer loads the War Room module and primary Star Route action', () => {
   const router = fs.readFileSync(new URL('../public/guild-unit-matrix-router.js', import.meta.url), 'utf8');
   const js = fs.readFileSync(new URL('../public/tb-war-room-entry.js', import.meta.url), 'utf8');
   const css = fs.readFileSync(new URL('../public/tb-war-room-entry.css', import.meta.url), 'utf8');
   const today = fs.readFileSync(new URL('../public/guild/tb/today/index.html', import.meta.url), 'utf8');
   assert.match(router, /^import "\.\/tb-war-room-entry\.js";/);
   assert.match(js, /\/api\/account\/web-actions\/tb/);
+  assert.match(js, /Open Star Route Optimizer/);
+  assert.match(js, /href="\/guild\/tb\/route"/);
   assert.match(js, /Open Today in TB/);
   assert.match(js, /\/guild\/tb\/today#officer-controls/);
   assert.match(js, /tb-war-room-entry\.css/);
