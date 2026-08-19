@@ -21,13 +21,17 @@ test("production start fails closed on Discord schema registration/patch before 
   const start = String(pkg?.scripts?.start || "");
   const registration = "node scripts/register-discord-tb-commands.mjs --if-configured";
   const stage9Patch = "node scripts/patch-discord-stage9-plan-commands.mjs --if-configured";
+  const stage10Patch = "node scripts/patch-discord-stage10-delivery-commands.mjs --if-configured";
   assert.match(start, /sync-game-unit-catalog-db\.mjs --if-configured --soft-fail/);
   assert.ok(start.includes(registration), "startup Discord schema registration missing");
   assert.ok(start.includes(stage9Patch), "startup Stage 9 Discord schema patch missing");
+  assert.ok(start.includes(stage10Patch), "startup Stage 10 Discord schema patch missing");
   assert.doesNotMatch(start, /register-discord-tb-commands\.mjs --if-configured --soft-fail/);
   assert.doesNotMatch(start, /patch-discord-stage9-plan-commands\.mjs --if-configured --soft-fail/);
+  assert.doesNotMatch(start, /patch-discord-stage10-delivery-commands\.mjs --if-configured --soft-fail/);
   assert.ok(start.indexOf(registration) < start.indexOf(stage9Patch), "base Discord schema must register before Stage 9 patch");
-  assert.ok(start.indexOf(stage9Patch) < start.indexOf("node server.mjs"), "all Discord schema writes must complete before server startup");
+  assert.ok(start.indexOf(stage9Patch) < start.indexOf(stage10Patch), "Stage 9 schema must patch before Stage 10 uses the final two /tb slots");
+  assert.ok(start.indexOf(stage10Patch) < start.indexOf("node server.mjs"), "all Discord schema writes must complete before server startup");
 });
 
 test("startup-safe registration skips cleanly only when Discord interactions are disabled", () => {
