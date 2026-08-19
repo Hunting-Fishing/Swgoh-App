@@ -123,6 +123,16 @@ function bind() {
   window.addEventListener("hashchange", () => schedule(180));
 }
 
+function addedBoardContent(mutations) {
+  for (const mutation of mutations) {
+    for (const node of mutation.addedNodes || []) {
+      if (!(node instanceof Element)) continue;
+      if (node.id === "gacSavedBoardMap" || node.matches?.("[data-saved-defense-id]") || node.querySelector?.("[data-saved-defense-id]")) return true;
+    }
+  }
+  return false;
+}
+
 function ensureMounted() {
   bind();
   schedule(120);
@@ -131,9 +141,9 @@ function ensureMounted() {
 if (typeof window !== "undefined" && typeof document !== "undefined") {
   ensureMounted();
   document.addEventListener("DOMContentLoaded", ensureMounted, { once: true });
-  new MutationObserver(() => {
-    if (byId("gacSavedBoardMap")) schedule(80);
+  new MutationObserver((mutations) => {
+    if (addedBoardContent(mutations)) schedule(80);
   }).observe(document.documentElement, { childList: true, subtree: true });
 }
 
-export { assignmentByDefense, validStatus, warMapStatus };
+export { addedBoardContent, assignmentByDefense, validStatus, warMapStatus };
