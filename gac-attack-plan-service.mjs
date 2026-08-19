@@ -21,6 +21,15 @@ function validStatus(value) {
   return new Set(["planned", "attempted", "win", "loss", "abandoned"]).has(status) ? status : "";
 }
 function completedStatus(status) { return ["win", "loss", "abandoned"].includes(status); }
+function transitionAllowed(previousInput, nextInput) {
+  const previous = validStatus(previousInput) || "planned";
+  const next = validStatus(nextInput);
+  if (!next) return false;
+  if (previous === next) return true;
+  if (previous === "planned") return ["attempted", "win", "loss", "abandoned"].includes(next);
+  if (previous === "attempted") return ["win", "loss"].includes(next);
+  return false;
+}
 function sanitizeDatacron(value) {
   if (!value || typeof value !== "object" || !clean(value.id)) return null;
   return Object.freeze({
@@ -134,6 +143,17 @@ export function createGacAttackPlanService(options = {}) {
       round_id: `eq.${resolved.roundRow.id}`,
       defense_squad_id: `eq.${defense.id}`,
     });
+    const existingStatus = validStatus(existing?.status);
+    if (existingStatus === "attempted") {
+      const error = new Error("This defense already has an attempt in progress. Record the win or loss before replanning it.");
+      error.status = 409;
+      throw error;
+    }
+    if (existingStatus === "win") {
+      const error = new Error("This defense is already cleared in the current War Room and cannot be replanned.");
+      error.status = 409;
+      throw error;
+    }
     await assertNoUsedOverlap(resolved, defense.id, members, existing?.id || null);
 
     const timestamp = now().toISOString();
@@ -188,7 +208,7 @@ export function createGacAttackPlanService(options = {}) {
       throw error;
     }
     const assignment = await selectOne("gac_attack_plan_assignments", {
-      select: "id,round_id,defense_squad_id,attacker_leader_base_id,attacker_members,datacron,status,attempt_count,attempt_log,banners,planned_at",
+      select: "id,round_id,defense_squad_id,attacker_leader_base_id,attacker_members,datacron,status,attempt_count,attempt_log,banners,planned_at,completed_at",
       id: `eq.${assignmentId}`,
       round_id: `eq.${resolved.roundRow.id}`,
     });
@@ -198,6 +218,12 @@ export function createGacAttackPlanService(options = {}) {
       throw error;
     }
     const previousStatus = validStatus(assignment.status) || "planned";
+    if (!transitionAllowed(previousStatus, status)) {
+      const error = new Error(`Invalid War Room transition: ${previousStatus} → ${status}. Replan completed/released defenses through a new counter lock instead.`);
+      error.status = 409;
+      throw error;
+    }
+
     const timestamp = now().toISOString();
     const startsAttempt = status === "attempted" && previousStatus === "planned";
     const directResult = ["win", "loss"].includes(status) && previousStatus === "planned";
@@ -217,13 +243,16 @@ export function createGacAttackPlanService(options = {}) {
         at: timestamp,
       }));
     }
+    const completedAt = completedStatus(status)
+      ? clean(assignment.completed_at) || timestamp
+      : null;
     const updated = asArray(await store.update("gac_attack_plan_assignments", {
       status,
       attempt_count: Math.max(nextAttempts, attemptLog.length),
       attempt_log: attemptLog.slice(-20),
       banners,
       updated_at: timestamp,
-      completed_at: completedStatus(status) ? timestamp : null,
+      completed_at: completedAt,
     }, {
       id: `eq.${assignmentId}`,
       round_id: `eq.${resolved.roundRow.id}`,
@@ -241,7 +270,7 @@ export function createGacAttackPlanService(options = {}) {
         attempt_log: attemptLog,
         banners,
         updated_at: timestamp,
-        completed_at: completedStatus(status) ? timestamp : null,
+        completed_at: completedAt,
       }, defense),
     });
   }
@@ -312,5 +341,6 @@ export {
   sanitizeAttempt,
   sanitizeAttemptLog,
   sanitizeDatacron,
+  transitionAllowed,
   validStatus,
 };
