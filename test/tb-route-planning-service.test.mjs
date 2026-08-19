@@ -6,6 +6,7 @@ function zone(overrides = {}) {
   return {
     phase: 'P2',
     planet_id: 'geonosis',
+    priority: 1,
     current_tp: 120_000_000,
     current_stars: 0,
     target_stars: 1,
@@ -23,9 +24,38 @@ test('planner decorates active ROTE zone with versioned thresholds and optimizes
   assert.equal(plan.planner, 'rote-route-planning-service-v1');
   assert.match(plan.inputFingerprint, /^[0-9a-f]{64}$/);
   assert.equal(plan.thresholdReference.sourceKind, 'community-reference');
+  assert.equal(plan.zones[0].priority, 1);
   assert.equal(plan.zones[0].targetThresholdTp, 148_125_000);
   assert.equal(plan.zones[0].recommendedDeploymentTp, 28_125_000);
   assert.equal(plan.rejectedThresholdZones.length, 0);
+});
+
+test('planner refuses a hidden array-order fallback when route priority is missing', () => {
+  assert.throws(
+    () => buildRoteRoutePlan({
+      remainingGuildDeploymentTp: 40_000_000,
+      zones: [zone({ priority: undefined })],
+    }),
+    (error) => error.status === 400
+      && error.code === 'ROUTE_PRIORITY_REQUIRED'
+      && error.details.missingPlanets.includes('geonosis'),
+  );
+});
+
+test('planner refuses duplicate route priorities before allocating shared deployment', () => {
+  assert.throws(
+    () => buildRoteRoutePlan({
+      remainingGuildDeploymentTp: 40_000_000,
+      zones: [
+        zone({ planet_id: 'geonosis', priority: 1 }),
+        zone({ planet_id: 'bracca', priority: 1, current_tp: 100_000_000 }),
+      ],
+    }),
+    (error) => error.status === 400
+      && error.code === 'ROUTE_PRIORITY_DUPLICATE'
+      && error.details.duplicatePriorities[0].planets.includes('geonosis')
+      && error.details.duplicatePriorities[0].planets.includes('bracca'),
+  );
 });
 
 test('input fingerprint is deterministic for equivalent inputs and changes with route state', () => {
@@ -33,15 +63,33 @@ test('input fingerprint is deterministic for equivalent inputs and changes with 
     remainingGuildDeploymentTp: 40_000_000,
     riskMode: 'safe',
     zones: [
-      zone({ planet_id: 'geonosis' }),
-      zone({ planet_id: 'bracca', current_tp: 100_000_000 }),
+      zone({ planet_id: 'geonosis', priority: 1 }),
+      zone({ planet_id: 'bracca', priority: 2, current_tp: 100_000_000 }),
     ],
   };
   const first = buildRoteRoutePlan(input);
   const reordered = buildRoteRoutePlan({ ...input, zones: [...input.zones].reverse() });
-  const changed = buildRoteRoutePlan({ ...input, zones: [zone({ planet_id: 'geonosis', current_tp: 120_000_001 }), input.zones[1]] });
+  const changed = buildRoteRoutePlan({ ...input, zones: [zone({ planet_id: 'geonosis', priority: 1, current_tp: 120_000_001 }), input.zones[1]] });
   assert.equal(first.inputFingerprint, reordered.inputFingerprint);
   assert.notEqual(first.inputFingerprint, changed.inputFingerprint);
+});
+
+test('priority is part of the optimizer fingerprint', () => {
+  const first = buildRoteRoutePlan({
+    remainingGuildDeploymentTp: 40_000_000,
+    zones: [
+      zone({ planet_id: 'geonosis', priority: 1 }),
+      zone({ planet_id: 'bracca', priority: 2, current_tp: 100_000_000 }),
+    ],
+  });
+  const reversedPriority = buildRoteRoutePlan({
+    remainingGuildDeploymentTp: 40_000_000,
+    zones: [
+      zone({ planet_id: 'geonosis', priority: 2 }),
+      zone({ planet_id: 'bracca', priority: 1, current_tp: 100_000_000 }),
+    ],
+  });
+  assert.notEqual(first.inputFingerprint, reversedPriority.inputFingerprint);
 });
 
 test('officer command and lock state participate in the optimizer fingerprint', () => {
