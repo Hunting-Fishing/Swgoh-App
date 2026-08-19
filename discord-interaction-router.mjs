@@ -28,6 +28,10 @@ import {
 import { executeDiscordGuildCommand } from "./discord-guild-operations-command.mjs";
 import { executeDiscordPlayerLifecycleCommand } from "./discord-player-lifecycle-command.mjs";
 import { autocompleteSwgohUnits } from "./discord-unit-autocomplete.mjs";
+import {
+  discordTbStage9PlanCommand,
+  isDiscordTbStage9PlanSubcommand,
+} from "./discord-tb-stage9-plan-command.mjs";
 
 const EPHEMERAL_FLAG = 1 << 6;
 const APPLICATION_COMMAND_AUTOCOMPLETE_TYPE = 4;
@@ -80,7 +84,7 @@ function safeError(title, error) {
     .replace(/[\r\n]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
-  return `**SWGOH Command Center · ${title} failed**\n${message}\nNo guild state was changed and no DMs were sent.`;
+  return `**SWGOH Command Center · ${title} failed**\n${message}\nNo guild state was changed, no assignments were published, and no DMs were sent.`;
 }
 
 function safeText(value, fallback = "—") {
@@ -266,6 +270,17 @@ function schedulePlayerLifecycleResponse(interaction, config, services) {
     });
 }
 
+function scheduleStage9PlanResponse(interaction, config, services) {
+  const command = services?.stage9PlanCommand || discordTbStage9PlanCommand;
+  Promise.resolve()
+    .then(() => command.execute(interaction))
+    .catch((error) => safeError("Immutable ROTE Plan", error))
+    .then((content) => editDiscordOriginalResponse(interaction, config, content, services?.fetch || fetch))
+    .catch((error) => {
+      console.error("Discord immutable ROTE plan response failed:", error?.message || error);
+    });
+}
+
 export async function handleDiscordInteractionRequest(request, response, env = process.env, services = {}) {
   let rawBody;
   try {
@@ -301,7 +316,10 @@ export async function handleDiscordInteractionRequest(request, response, env = p
   const isReserves = Number(interaction?.type) === DISCORD_INTERACTION_TYPES.APPLICATION_COMMAND
     && command === "tb"
     && subcommand === "reserves";
-  if (!autocomplete && !isGuildCommand && !isPlayerLifecycle && !isActivity && !isControls && !isReserve && !isReserves) {
+  const isStage9Plan = Number(interaction?.type) === DISCORD_INTERACTION_TYPES.APPLICATION_COMMAND
+    && command === "tb"
+    && isDiscordTbStage9PlanSubcommand(subcommand);
+  if (!autocomplete && !isGuildCommand && !isPlayerLifecycle && !isActivity && !isControls && !isReserve && !isReserves && !isStage9Plan) {
     return handleCoreDiscordInteractionRequest(replayRequest(request, rawBody), response, env, services);
   }
 
@@ -372,6 +390,7 @@ export async function handleDiscordInteractionRequest(request, response, env = p
   else if (isControls) scheduleControlsResponse(interaction, config, { ...services, stateStore });
   else if (isReserve) scheduleReserveResponse(interaction, config, { ...services, stateStore });
   else if (isReserves) scheduleReservesResponse(interaction, config, { ...services, stateStore });
+  else if (isStage9Plan) scheduleStage9PlanResponse(interaction, config, { ...services, stateStore, env });
   else scheduleActivityResponse(interaction, config, { ...services, stateStore });
   return true;
 }
