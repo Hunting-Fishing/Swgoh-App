@@ -137,10 +137,22 @@ function verifiedPlacementRows(rows = [], roundsById = new Map(), eventsById = n
   }
   return Object.freeze({ included: Object.freeze(included), withheld: Object.freeze(withheld) });
 }
+function boardSetsByFormat(rows = []) {
+  const index = new Map();
+  for (const row of asArray(rows)) {
+    const format = clean(row?.format).toLowerCase();
+    if (!format || !row?.boardKey) continue;
+    if (!index.has(format)) index.set(format, new Set());
+    index.get(format).add(row.boardKey);
+  }
+  return index;
+}
 function summarizePredictionPlacements(battlePlacements = [], verifiedPlacements = []) {
   const groups = new Map();
   const battleBoards = new Set(asArray(battlePlacements).map((row) => row.boardKey));
   const verifiedBoards = new Set(asArray(verifiedPlacements).map((row) => row.boardKey));
+  const battleBoardsByFormat = boardSetsByFormat(battlePlacements);
+  const verifiedBoardsByFormat = boardSetsByFormat(verifiedPlacements);
 
   function ensure(row) {
     if (!groups.has(row.signature)) {
@@ -192,6 +204,8 @@ function summarizePredictionPlacements(battlePlacements = [], verifiedPlacements
   const predictions = [...groups.values()].map((group) => {
     const verifiedCount = group.verifiedBoards.size;
     const battleCount = group.battleBoards.size;
+    const formatBattleBoards = battleBoardsByFormat.get(group.format)?.size || 0;
+    const formatVerifiedBoards = verifiedBoardsByFormat.get(group.format)?.size || 0;
     const zoneTendencies = [...group.zones.entries()].map(([zone, boards]) => Object.freeze({
       zone,
       verifiedBoards: boards.size,
@@ -219,9 +233,13 @@ function summarizePredictionPlacements(battlePlacements = [], verifiedPlacements
       members: Object.freeze([...group.members]),
       evidenceClass,
       verifiedHistoricalBoards: verifiedCount,
-      verifiedBoardAppearanceRate: verifiedBoards.size ? verifiedCount / verifiedBoards.size : null,
+      verifiedBoardAppearanceRate: formatVerifiedBoards ? verifiedCount / formatVerifiedBoards : null,
       battleObservedMatchups: battleCount,
-      battleObservedAppearanceRate: battleBoards.size ? battleCount / battleBoards.size : null,
+      battleObservedAppearanceRate: formatBattleBoards ? battleCount / formatBattleBoards : null,
+      formatCoverage: Object.freeze({
+        battleObservedMatchups: formatBattleBoards,
+        verifiedHistoricalBoards: formatVerifiedBoards,
+      }),
       observedByPlayers: group.observers.size,
       seasons: group.seasons.size,
       lastSeenAt: group.lastSeenAt,
@@ -240,9 +258,18 @@ function summarizePredictionPlacements(battlePlacements = [], verifiedPlacements
     a.leaderBaseId.localeCompare(b.leaderBaseId)
   );
 
+  const byFormat = {};
+  for (const format of new Set([...battleBoardsByFormat.keys(), ...verifiedBoardsByFormat.keys()])) {
+    byFormat[format] = Object.freeze({
+      battleObservedMatchups: battleBoardsByFormat.get(format)?.size || 0,
+      verifiedHistoricalBoards: verifiedBoardsByFormat.get(format)?.size || 0,
+    });
+  }
+
   return Object.freeze({
     battleBoardsObserved: battleBoards.size,
     verifiedHistoricalBoards: verifiedBoards.size,
+    byFormat: Object.freeze(byFormat),
     predictions: Object.freeze(predictions.map((entry, index) => Object.freeze({ ...entry, priorityRank: index + 1 }))),
   });
 }
@@ -334,6 +361,7 @@ export function createGacDefensePredictionService(options = {}) {
         verifiedHistoricalBoardRows: verified.included.length,
         verifiedHistoricalBoards: summary.verifiedHistoricalBoards,
         withheldCurrentOrUnresolvedBoardRows: verified.withheld.length,
+        byFormat: summary.byFormat,
         predictions: summary.predictions.length,
       }),
       predictions: Object.freeze(summary.predictions.slice(0, 30)),
@@ -356,6 +384,7 @@ export const gacDefensePredictionService = createGacDefensePredictionService();
 export {
   battleBoardKey,
   battlePlacementRows,
+  boardSetsByFormat,
   historicalEvent,
   summarizePredictionPlacements,
   teamSignature,
