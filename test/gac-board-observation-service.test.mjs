@@ -23,7 +23,7 @@ function harness(options = {}) {
         return options.savedRows || [{
           id: 44,
           round_id: "ROUND-ROW",
-          owner: "opponent",
+          owner: query?.owner === "eq.player" ? "player" : "opponent",
           side: "defense",
           zone: "FRONT-TOP",
           squad_slot: 0,
@@ -101,6 +101,7 @@ test("save replaces only the same verified current-board source and persists a s
   const result = await service.saveDefense("USER-1", saveInput);
   assert.equal(result.saved, true);
   assert.equal(result.source, "user-confirmed-current-board");
+  assert.equal(result.owner, "opponent");
   assert.equal(result.defense.datacron.id, "DC-9");
 
   const deletion = calls.find((call) => call.type === "delete");
@@ -116,6 +117,7 @@ test("save replaces only the same verified current-board source and persists a s
   const insertion = calls.find((call) => call.type === "insert");
   const row = insertion.rows[0];
   assert.equal(row.round_id, "ROUND-ROW");
+  assert.equal(row.owner, "opponent");
   assert.equal(row.confidence, 1);
   assert.equal(row.source, "user-confirmed-current-board");
   assert.deepEqual(row.members, ["DEF_LEAD", "DEF_2", "DEF_3"]);
@@ -123,6 +125,7 @@ test("save replaces only the same verified current-board source and persists a s
   assert.equal(row.datacron.affixes[0].abilityName, "Return to Battle");
   assert.equal(row.metadata.datacronConfirmed, true);
   assert.equal(row.metadata.opponentAllyCode, "123456789");
+  assert.equal(row.metadata.boardOwner, "opponent");
 });
 
 test("zone without slot still replaces only the same leader instead of every defense in the zone", async () => {
@@ -132,6 +135,18 @@ test("zone without slot still replaces only the same leader instead of every def
   assert.equal(deletion.query.zone, "eq.FRONT-TOP");
   assert.equal(deletion.query.leader_base_id, "eq.DEF_LEAD");
   assert.equal(Object.prototype.hasOwnProperty.call(deletion.query, "squad_slot"), false);
+});
+
+test("own-board save writes owner=player while preserving the same verified round boundary", async () => {
+  const { service, calls } = harness();
+  const result = await service.savePlayerDefense("USER-1", saveInput);
+  assert.equal(result.owner, "player");
+  const deletion = calls.find((call) => call.type === "delete");
+  const insertion = calls.find((call) => call.type === "insert");
+  assert.equal(deletion.query.owner, "eq.player");
+  assert.equal(insertion.rows[0].owner, "player");
+  assert.equal(insertion.rows[0].metadata.boardOwner, "player");
+  assert.equal(insertion.rows[0].source, "user-confirmed-current-board");
 });
 
 test("save rejects an opponent that differs from the verified current-round pairing", async () => {
@@ -155,21 +170,48 @@ test("save rejects an incomplete defense before ownership or board persistence w
   assert.equal(calls.some((call) => call.type === "insert"), false);
 });
 
-test("verified owner can read only current-board opponent defense observations for the confirmed round", async () => {
-  const { service, calls } = harness();
-  const result = await service.getDefenses("USER-1", {
+test("verified owner can read opponent and player current-board rows separately", async () => {
+  const opponentHarness = harness();
+  const opponentResult = await opponentHarness.service.getDefenses("USER-1", {
     allyCode: "732764286",
     opponentAllyCode: "123456789",
     eventInstanceId: "GAC:CURRENT",
     round: 3,
   });
-  assert.equal(result.round, 3);
-  assert.equal(result.opponent.allyCode, "123456789");
-  assert.equal(result.defenses.length, 1);
-  assert.equal(result.defenses[0].leaderBaseId, "DEF_LEAD");
-  assert.equal(result.defenses[0].datacron.id, "DC-9");
-  const read = calls.find((call) => call.type === "select" && call.table === "gac_round_squads");
-  assert.equal(read.query.owner, "eq.opponent");
-  assert.equal(read.query.side, "eq.defense");
-  assert.equal(read.query.source, "eq.user-confirmed-current-board");
+  assert.equal(opponentResult.owner, "opponent");
+  const opponentRead = opponentHarness.calls.find((call) => call.type === "select" && call.table === "gac_round_squads");
+  assert.equal(opponentRead.query.owner, "eq.opponent");
+
+  const playerHarness = harness();
+  const playerResult = await playerHarness.service.getPlayerDefenses("USER-1", {
+    allyCode: "732764286",
+    opponentAllyCode: "123456789",
+    eventInstanceId: "GAC:CURRENT",
+    round: 3,
+  });
+  assert.equal(playerResult.owner, "player");
+  assert.equal(playerResult.defenses.length, 1);
+  const playerRead = playerHarness.calls.find((call) => call.type === "select" && call.table === "gac_round_squads");
+  assert.equal(playerRead.query.owner, "eq.player");
+  assert.equal(playerRead.query.source, "eq.user-confirmed-current-board");
+});
+
+test("exact player-board delete verifies the row owner/source before deleting", async () => {
+  const { service, calls } = harness();
+  const result = await service.deletePlayerDefense("USER-1", {
+    allyCode: "732764286",
+    opponentAllyCode: "123456789",
+    eventInstanceId: "GAC:CURRENT",
+    round: 3,
+    id: 44,
+  });
+  assert.equal(result.deleted, true);
+  assert.equal(result.owner, "player");
+  const rowCheck = calls.find((call) => call.type === "select" && call.table === "gac_round_squads" && call.query.id === "eq.44");
+  assert.equal(rowCheck.query.owner, "eq.player");
+  assert.equal(rowCheck.query.source, "eq.user-confirmed-current-board");
+  const deletion = calls.find((call) => call.type === "delete");
+  assert.equal(deletion.query.id, "eq.44");
+  assert.equal(deletion.query.owner, "eq.player");
+  assert.equal(deletion.query.source, "eq.user-confirmed-current-board");
 });
