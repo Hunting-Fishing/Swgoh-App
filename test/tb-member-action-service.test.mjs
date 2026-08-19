@@ -21,9 +21,22 @@ const geos = [
   categories: ['Geonosian'],
 }));
 
-const rosterBody = { units: geos, ships: [] };
+const vader = {
+  baseId: 'VADER',
+  name: 'Darth Vader',
+  unitType: 'Character',
+  alignment: 'Dark',
+  stars: 7,
+  relic: 6,
+  gear: 13,
+  power: 35000,
+  factions: ['Empire', 'Sith'],
+  categories: ['Empire', 'Sith'],
+};
+
+const rosterBody = { units: [...geos, vader], ships: [] };
 const event = { id: 'event-1', current_phase: 'P2' };
-const operationAssignments = [{ phase: 'P2', slotId: 'geo-op-1', baseId: 'GEONOSIANSPY', unitName: 'Geonosian Spy', planetId: 'geonosis' }];
+const operationAssignments = [{ phase: 'P2', slotId: 'geo-op-1', baseId: 'VADER', unitName: 'Darth Vader', planetId: 'geonosis' }];
 
 function zone(commandState, overrides = {}) {
   return [{ phase: 'P2', planet_id: 'geonosis', command_state: commandState, command_message: commandState === 'stop' ? 'No actions here.' : '', ...overrides }];
@@ -36,10 +49,20 @@ test('Today queue puts Operations before playable missions and deployment', () =
   assert.ok(tasks.some((task) => task.actionType === 'combat'));
   assert.equal(tasks.at(-1).actionType, 'deploy');
   assert.deepEqual(tasks.map((task) => task.order), Array.from({ length: tasks.length }, (_, index) => index + 1));
+  assert.ok(tasks.filter((task) => ['special', 'combat', 'fleet'].includes(task.actionType)).every((task) => task.payload.operationsReservedCount === 1));
   const summary = todayTaskSummary(tasks);
   assert.equal(summary.hasOperations, true);
   assert.equal(summary.hasDeployment, true);
   assert.ok(summary.missionTasks > 0);
+});
+
+test('Operations-assigned units are removed before mission readiness is calculated', () => {
+  const spyAssignment = [{ phase: 'P2', slotId: 'geo-op-spy', baseId: 'GEONOSIANSPY', unitName: 'Geonosian Spy', planetId: 'geonosis' }];
+  const tasks = buildTbMemberTasks({ event, zones: zone('attack'), rosterBody, operationAssignments: spyAssignment });
+  assert.equal(tasks[0].actionType, 'operation');
+  const geonosianMission = tasks.find((task) => /Geonosians/i.test(String(task.payload?.missionName || '')));
+  assert.equal(geonosianMission, undefined, 'The five-Geonosian mission must not be offered after Geonosian Spy is reserved for Operations');
+  assert.ok(tasks.some((task) => task.actionType === 'combat'), 'Other legal Dark Side mission work may remain available');
 });
 
 test('STOP command suppresses missions and deployment while keeping the Operation assignment visible', () => {
@@ -89,7 +112,7 @@ test('unconfigured territories are not inferred as active live tasks', () => {
   assert.deepEqual(tasks, []);
 });
 
-test('an explicitly configured bonus territory participates in its live unlock phase', () => {
+test('an explicitly configured bonus territory participates in its playable next phase', () => {
   const tasks = buildTbMemberTasks({
     event: { id: 'event-2', current_phase: 'P3' },
     zones: [{ phase: 'P3', planet_id: 'zeffo', command_state: 'deploy', command_message: 'Zeffo open.' }],
