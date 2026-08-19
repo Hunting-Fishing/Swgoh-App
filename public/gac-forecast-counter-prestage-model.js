@@ -102,7 +102,13 @@ function defenderUnits(entry = {}, opponentRoster = {}) {
 }
 function allocationByForecastIndex(plan = {}) {
   return new Map((Array.isArray(plan?.assignments) ? plan.assignments : [])
-    .map((assignment) => [Number(assignment?.sourceIndex), assignment])
+    .map((assignment) => {
+      const defenseId = Number(assignment?.defenseId || 0);
+      const forecastIndex = defenseId >= 900_001 && defenseId <= 900_999
+        ? defenseId - 900_001
+        : Number(assignment?.sourceIndex);
+      return [forecastIndex, assignment];
+    })
     .filter(([index]) => Number.isInteger(index) && index >= 0));
 }
 function planningContextLabel(context = {}) {
