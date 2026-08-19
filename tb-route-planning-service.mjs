@@ -9,6 +9,14 @@ import {
 const array = (value) => Array.isArray(value) ? value : [];
 const text = (value) => String(value ?? '').trim();
 
+function routeError(message, code, details = null) {
+  const error = new Error(message);
+  error.status = 400;
+  error.code = code;
+  if (details) error.details = details;
+  return error;
+}
+
 function phase(value) {
   const normalized = text(value).toUpperCase();
   return /^P[1-6]$/.test(normalized) ? normalized : '';
@@ -16,6 +24,11 @@ function phase(value) {
 
 function zonePlanetId(zone = {}) {
   return text(zone.planetId ?? zone.planet_id).toLowerCase();
+}
+
+function routePriority(zone = {}) {
+  const value = Number(zone.priority ?? zone.routePriority ?? zone.route_priority);
+  return Number.isInteger(value) && value >= 1 ? value : null;
 }
 
 function stable(value) {
@@ -31,32 +44,64 @@ function fingerprint(value) {
 function prepareZone(zone = {}) {
   const planetId = zonePlanetId(zone);
   const reference = roteTerritoryThresholdById(planetId);
-  if (!reference) return Object.freeze({ ...zone });
+  const prepared = reference
+    ? (() => {
+        const zonePhase = phase(zone.phase);
+        if (zonePhase && zonePhase !== reference.playablePhase) {
+          return {
+            ...zone,
+            starThresholds: undefined,
+            thresholdRejected: true,
+            thresholdRejectionCode: 'ROTE_PHASE_MISMATCH',
+            thresholdRejectionExplanation: `${reference.name} threshold reference belongs to ${reference.playablePhase}, but the supplied zone state is ${zonePhase}.`,
+          };
+        }
+        return {
+          ...withRoteStarThresholds(zone),
+          thresholdRejected: false,
+          thresholdRejectionCode: '',
+          thresholdRejectionExplanation: '',
+        };
+      })()
+    : { ...zone };
+  const priority = routePriority(prepared);
+  return Object.freeze({ ...prepared, ...(priority == null ? {} : { priority }) });
+}
 
-  const zonePhase = phase(zone.phase);
-  if (zonePhase && zonePhase !== reference.playablePhase) {
-    return Object.freeze({
-      ...zone,
-      starThresholds: undefined,
-      thresholdRejected: true,
-      thresholdRejectionCode: 'ROTE_PHASE_MISMATCH',
-      thresholdRejectionExplanation: `${reference.name} threshold reference belongs to ${reference.playablePhase}, but the supplied zone state is ${zonePhase}.`,
-    });
+function requireExplicitUniquePriorities(zones) {
+  const missingPlanets = zones.filter((zone) => routePriority(zone) == null).map((zone) => zonePlanetId(zone) || '(unknown territory)');
+  if (missingPlanets.length) {
+    throw routeError(
+      `Every route territory requires an explicit positive integer priority: ${missingPlanets.join(', ')}.`,
+      'ROUTE_PRIORITY_REQUIRED',
+      { missingPlanets: Object.freeze([...missingPlanets]) },
+    );
   }
 
-  return Object.freeze({
-    ...withRoteStarThresholds(zone),
-    thresholdRejected: false,
-    thresholdRejectionCode: '',
-    thresholdRejectionExplanation: '',
-  });
+  const byPriority = new Map();
+  for (const zone of zones) {
+    const priority = routePriority(zone);
+    const planets = byPriority.get(priority) || [];
+    planets.push(zonePlanetId(zone) || '(unknown territory)');
+    byPriority.set(priority, planets);
+  }
+  const duplicatePriorities = [...byPriority.entries()]
+    .filter(([, planets]) => planets.length > 1)
+    .map(([priority, planets]) => Object.freeze({ priority, planets: Object.freeze([...planets]) }));
+  if (duplicatePriorities.length) {
+    throw routeError(
+      'Every route territory requires a unique priority so shared deployment capacity follows an explicit officer-defined order.',
+      'ROUTE_PRIORITY_DUPLICATE',
+      { duplicatePriorities: Object.freeze(duplicatePriorities) },
+    );
+  }
 }
 
 function fingerprintZone(zone = {}) {
   return Object.freeze({
     phase: phase(zone.phase),
     planetId: zonePlanetId(zone),
-    priority: Number(zone.priority || 0),
+    priority: routePriority(zone),
     currentTp: Number(zone.currentTp ?? zone.current_tp ?? 0),
     currentStars: Number(zone.currentStars ?? zone.current_stars ?? 0),
     targetStars: Number(zone.targetStars ?? zone.target_stars ?? 0),
@@ -79,6 +124,7 @@ function fingerprintZone(zone = {}) {
 
 export function buildRoteRoutePlan(input = {}) {
   const zones = array(input.zones).map(prepareZone);
+  requireExplicitUniquePriorities(zones);
   const remainingGuildDeploymentTp = input.remainingGuildDeploymentTp ?? input.remaining_guild_deployment_tp;
   const riskMode = input.riskMode ?? input.risk_mode;
   const inputFingerprint = fingerprint({
@@ -108,6 +154,6 @@ export function buildRoteRoutePlan(input = {}) {
     inputFingerprint,
     thresholdReference: ROTE_THRESHOLD_REFERENCE,
     rejectedThresholdZones: Object.freeze(rejectedThresholdZones),
-    sourceBoundary: 'Current TP, stars, remaining capacity and officer commands must come from the active event state. ROTE star thresholds are static versioned reference data only.',
+    sourceBoundary: 'Current TP, stars, remaining capacity and officer commands must come from the active event state. Route priority is explicit officer input. ROTE star thresholds are static versioned reference data only.',
   });
 }
