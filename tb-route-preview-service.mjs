@@ -21,6 +21,13 @@ function nonNegativeInteger(value, label) {
   return Math.trunc(Number(value));
 }
 
+function positiveInteger(value, label) {
+  if (value === '' || value == null || !Number.isFinite(Number(value)) || Number(value) < 1) {
+    throw httpError(`${label} must be an explicit positive integer.`, 400, 'ROUTE_PRIORITY_REQUIRED');
+  }
+  return Math.trunc(Number(value));
+}
+
 function planetId(zone = {}) {
   return text(zone.planetId ?? zone.planet_id).toLowerCase();
 }
@@ -63,9 +70,11 @@ export function createTbRoutePreviewService(options = {}) {
         missing.push(id || '(unknown territory)');
         return { ...zone };
       }
+      let priority;
       let remainingMissionTp;
       let remainingOperationTp;
       try {
+        priority = positiveInteger(values.priority ?? values.routePriority ?? values.route_priority, `${id} route priority`);
         remainingMissionTp = nonNegativeInteger(values.remainingMissionTp ?? values.remaining_mission_tp ?? values.missionTp ?? values.mission_tp, `${id} remaining mission TP`);
         remainingOperationTp = nonNegativeInteger(values.remainingOperationTp ?? values.remaining_operation_tp ?? values.operationTp ?? values.operation_tp, `${id} remaining Operation TP`);
       } catch {
@@ -74,6 +83,7 @@ export function createTbRoutePreviewService(options = {}) {
       }
       return {
         ...zone,
+        priority,
         remainingMissionTp,
         remainingOperationTp,
       };
@@ -81,10 +91,28 @@ export function createTbRoutePreviewService(options = {}) {
 
     if (missing.length) {
       throw httpError(
-        `Route preview requires explicit remaining mission and Operation TP for every configured territory: ${[...new Set(missing)].join(', ')}.`,
+        `Route preview requires an explicit route priority plus remaining mission and Operation TP for every configured territory: ${[...new Set(missing)].join(', ')}.`,
         400,
         'ROUTE_ZONE_INPUTS_INCOMPLETE',
         { missingPlanets: [...new Set(missing)] },
+      );
+    }
+
+    const priorityPlanets = new Map();
+    for (const zone of zones) {
+      const list = priorityPlanets.get(zone.priority) || [];
+      list.push(planetId(zone));
+      priorityPlanets.set(zone.priority, list);
+    }
+    const duplicatePriorities = [...priorityPlanets.entries()]
+      .filter(([, planets]) => planets.length > 1)
+      .map(([priority, planets]) => Object.freeze({ priority, planets: Object.freeze(planets) }));
+    if (duplicatePriorities.length) {
+      throw httpError(
+        'Each configured territory must have a unique route priority so scarce deployment capacity has an explicit officer-defined order.',
+        400,
+        'ROUTE_PRIORITY_DUPLICATE',
+        { duplicatePriorities },
       );
     }
 
@@ -104,7 +132,7 @@ export function createTbRoutePreviewService(options = {}) {
       event: snapshot.event,
       zones: Object.freeze(array(snapshot.zones)),
       plan,
-      evidenceBoundary: 'Current event TP/stars/commands come from the authenticated durable TB event state. Remaining deployable/mission/Operation TP is explicit officer preview input and is not persisted or represented as canonical game state.',
+      evidenceBoundary: 'Current event TP/stars/commands come from authenticated durable TB event state. Route priority and remaining deployable/mission/Operation TP are explicit officer preview inputs and are not represented as canonical game state.',
     });
   }
 
