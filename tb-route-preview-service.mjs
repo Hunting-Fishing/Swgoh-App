@@ -102,6 +102,7 @@ export function createTbRoutePreviewService(options = {}) {
       identity: snapshot.identity,
       officer: Object.freeze({ guildId: text(officer?.guild?.id), guildName: text(officer?.guild?.name) }),
       event: snapshot.event,
+      zones: Object.freeze(array(snapshot.zones)),
       plan,
       evidenceBoundary: 'Current event TP/stars/commands come from the authenticated durable TB event state. Remaining deployable/mission/Operation TP is explicit officer preview input and is not persisted or represented as canonical game state.',
     });
