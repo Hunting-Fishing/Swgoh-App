@@ -83,7 +83,7 @@ grant all on table public.guild_tb_assignment_run_approvals to service_role;
 create or replace function public.guard_immutable_tb_assignment_run_payload()
 returns trigger
 language plpgsql
-security definer
+security invoker
 set search_path = public
 as $$
 begin
@@ -106,6 +106,8 @@ begin
   return new;
 end;
 $$;
+revoke all on function public.guard_immutable_tb_assignment_run_payload() from public,anon,authenticated;
+grant execute on function public.guard_immutable_tb_assignment_run_payload() to service_role;
 
 drop trigger if exists guild_tb_assignment_runs_immutable_payload on public.guild_tb_assignment_runs;
 create trigger guild_tb_assignment_runs_immutable_payload
@@ -117,7 +119,7 @@ for each row execute function public.guard_immutable_tb_assignment_run_payload()
 create or replace function public.guard_append_only_tb_assignment_approval()
 returns trigger
 language plpgsql
-security definer
+security invoker
 set search_path = public
 as $$
 begin
@@ -125,6 +127,8 @@ begin
     using errcode = '23514';
 end;
 $$;
+revoke all on function public.guard_append_only_tb_assignment_approval() from public,anon,authenticated;
+grant execute on function public.guard_append_only_tb_assignment_approval() to service_role;
 
 drop trigger if exists guild_tb_assignment_run_approvals_append_only on public.guild_tb_assignment_run_approvals;
 create trigger guild_tb_assignment_run_approvals_append_only
