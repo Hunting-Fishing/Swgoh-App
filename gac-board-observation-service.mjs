@@ -24,6 +24,10 @@ function validSlot(value) {
   const slot = Number(value);
   return Number.isInteger(slot) && slot >= 0 && slot <= 99 ? slot : null;
 }
+function validOwner(value) {
+  const owner = clean(value).toLowerCase();
+  return owner === "player" || owner === "opponent" ? owner : "";
+}
 function normalizedMembers(values, size) {
   const members = [...new Set(asArray(values).map(normalizeBaseId).filter(Boolean))];
   if (!size || members.length !== size) {
@@ -137,7 +141,9 @@ export function createGacBoardObservationService(options = {}) {
     });
   }
 
-  async function saveDefense(userIdInput, input = {}) {
+  async function saveBoardDefense(userIdInput, input = {}, ownerInput = "opponent") {
+    const owner = validOwner(ownerInput);
+    if (!owner) throw new TypeError("Board owner must be player or opponent.");
     const size = validSize(input.size);
     if (!size) {
       const error = new Error("GAC defense size must be 3 or 5.");
@@ -164,19 +170,18 @@ export function createGacBoardObservationService(options = {}) {
           ...(zone ? { zone: `eq.${zone}` } : {}),
           ...(slot !== null ? { squad_slot: `eq.${slot}` } : {}),
         };
-    const deleteQuery = {
+    await store.delete("gac_round_squads", {
       round_id: `eq.${resolved.roundRow.id}`,
-      owner: "eq.opponent",
+      owner: `eq.${owner}`,
       side: "eq.defense",
       source: `eq.${source}`,
       ...identityQuery,
-    };
-    await store.delete("gac_round_squads", deleteQuery);
+    });
 
     const observedAt = now().toISOString();
     const inserted = asArray(await store.insert("gac_round_squads", [{
       round_id: resolved.roundRow.id,
-      owner: "opponent",
+      owner,
       side: "defense",
       zone,
       squad_slot: slot,
@@ -198,6 +203,7 @@ export function createGacBoardObservationService(options = {}) {
         eventInstanceId: resolved.eventInstanceId,
         round: resolved.round,
         size,
+        boardOwner: owner,
         datacronConfirmed: Boolean(datacron?.id),
       },
     }]));
@@ -205,6 +211,7 @@ export function createGacBoardObservationService(options = {}) {
     return Object.freeze({
       source,
       saved: true,
+      owner,
       roundId: clean(resolved.roundRow.id),
       eventInstanceId: resolved.eventInstanceId,
       round: resolved.round,
@@ -221,12 +228,14 @@ export function createGacBoardObservationService(options = {}) {
     });
   }
 
-  async function getDefenses(userIdInput, input = {}) {
+  async function getBoardDefenses(userIdInput, input = {}, ownerInput = "opponent") {
+    const owner = validOwner(ownerInput);
+    if (!owner) throw new TypeError("Board owner must be player or opponent.");
     const resolved = await resolveRound(userIdInput, input);
     const rows = asArray(await store.select("gac_round_squads", {
       select: "id,round_id,owner,side,zone,squad_slot,leader_base_id,members,datacron,source,source_ref,confidence,observed_at,metadata",
       round_id: `eq.${resolved.roundRow.id}`,
-      owner: "eq.opponent",
+      owner: `eq.${owner}`,
       side: "eq.defense",
       source: "eq.user-confirmed-current-board",
       order: "squad_slot.asc.nullslast,observed_at.asc",
@@ -235,6 +244,7 @@ export function createGacBoardObservationService(options = {}) {
 
     return Object.freeze({
       source: "user-confirmed-current-board",
+      owner,
       eventInstanceId: resolved.eventInstanceId,
       round: resolved.round,
       opponent: Object.freeze({
@@ -256,9 +266,60 @@ export function createGacBoardObservationService(options = {}) {
     });
   }
 
-  return Object.freeze({ resolveRound, saveDefense, getDefenses });
+  async function deleteBoardDefense(userIdInput, input = {}, ownerInput = "opponent") {
+    const owner = validOwner(ownerInput);
+    if (!owner) throw new TypeError("Board owner must be player or opponent.");
+    const resolved = await resolveRound(userIdInput, input);
+    const id = Number(input.id);
+    if (!Number.isInteger(id) || id <= 0) {
+      const error = new Error("A valid saved defense ID is required.");
+      error.status = 400;
+      throw error;
+    }
+    const existing = await selectOne("gac_round_squads", {
+      select: "id,round_id,owner,side,source",
+      id: `eq.${id}`,
+      round_id: `eq.${resolved.roundRow.id}`,
+      owner: `eq.${owner}`,
+      side: "eq.defense",
+      source: "eq.user-confirmed-current-board",
+    });
+    if (!existing?.id) {
+      const error = new Error("That saved defense does not belong to the verified current board.");
+      error.status = 404;
+      throw error;
+    }
+    await store.delete("gac_round_squads", {
+      id: `eq.${id}`,
+      round_id: `eq.${resolved.roundRow.id}`,
+      owner: `eq.${owner}`,
+      side: "eq.defense",
+      source: "eq.user-confirmed-current-board",
+    });
+    return Object.freeze({ source: "user-confirmed-current-board", deleted: true, owner, id, round: resolved.round });
+  }
+
+  const saveDefense = (userId, input) => saveBoardDefense(userId, input, "opponent");
+  const savePlayerDefense = (userId, input) => saveBoardDefense(userId, input, "player");
+  const getDefenses = (userId, input) => getBoardDefenses(userId, input, "opponent");
+  const getPlayerDefenses = (userId, input) => getBoardDefenses(userId, input, "player");
+  const deleteDefense = (userId, input) => deleteBoardDefense(userId, input, "opponent");
+  const deletePlayerDefense = (userId, input) => deleteBoardDefense(userId, input, "player");
+
+  return Object.freeze({
+    resolveRound,
+    saveBoardDefense,
+    getBoardDefenses,
+    deleteBoardDefense,
+    saveDefense,
+    savePlayerDefense,
+    getDefenses,
+    getPlayerDefenses,
+    deleteDefense,
+    deletePlayerDefense,
+  });
 }
 
 export const gacBoardObservationService = createGacBoardObservationService();
 
-export { normalizeBaseId, normalizedMembers, sanitizeDatacron, validRound, validSize };
+export { normalizeBaseId, normalizedMembers, sanitizeDatacron, validOwner, validRound, validSize };
