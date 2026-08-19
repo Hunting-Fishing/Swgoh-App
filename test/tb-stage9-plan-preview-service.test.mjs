@@ -55,6 +55,23 @@ function planner(overrides = {}) {
   };
 }
 
+function baselinePlan(overrides = {}) {
+  return {
+    id: 'plan-1',
+    guild_id: 'guild-1',
+    tb_key: 'rote',
+    name: 'Live ROTE Plan',
+    status: 'previewed',
+    phase_layout: {},
+    requirement_overrides: {},
+    ignored_missions: [],
+    ignored_platoons: [],
+    ignored_slots: [],
+    updated_at: '2026-08-19T14:00:00Z',
+    ...overrides,
+  };
+}
+
 function fixture(options = {}) {
   let stateReads = 0;
   const calls = [];
@@ -79,7 +96,9 @@ function fixture(options = {}) {
   const store = {
     async select(table, query) {
       calls.push({ table, query });
-      if (table === 'guild_tb_plans') return options.noPlan ? [] : [{ id: 'plan-1', guild_id: 'guild-1', tb_key: 'rote', name: 'Live ROTE Plan', status: 'previewed', updated_at: '2026-08-19T14:00:00Z' }];
+      if (table === 'guild_tb_plans') return options.noPlan ? [] : [baselinePlan(options.planOverrides)];
+      if (table === 'guild_tb_grouping_rules') return options.groupingRule ? [{ id: 'rule-1', rule_type: 'max_member_assignments', priority: 10 }] : [];
+      if (table === 'guild_tb_plan_preassignments') return options.preassignment ? [{ id: 'pre-1', slot_id: 'P6-S1', player_id: 'P1' }] : [];
       if (table === 'guild_member_operation_controls') return [{ guild_id: 'guild-1', player_id: 'P2', available: true, ignored_until: null, source: 'command-center', updated_at: '2026-08-19T13:00:00Z' }];
       if (table === 'guild_unit_donation_preferences') return [{ guild_id: 'guild-1', player_id: 'P1', base_id: 'A', preference: 'give', source: 'command-center', updated_at: '2026-08-19T13:00:00Z' }];
       throw new Error(`Unexpected table: ${table}`);
@@ -175,3 +194,23 @@ test('refuses immutable preview creation for missing/archived source plan', asyn
   );
   assert.equal(calls.some((row) => row.service === 'buildPlan'), false);
 });
+
+for (const scenario of [
+  ['phase layout', { planOverrides: { phase_layout: { includedPhases: ['P6'] } } }],
+  ['requirement overrides', { planOverrides: { requirement_overrides: { 'P6-S1': { baseId: 'B' } } } }],
+  ['ignored missions', { planOverrides: { ignored_missions: ['P6-C1'] } }],
+  ['ignored platoons', { planOverrides: { ignored_platoons: ['P6-PLATOON-1'] } }],
+  ['ignored slots', { planOverrides: { ignored_slots: ['P6-S1'] } }],
+  ['grouping rules', { groupingRule: true }],
+  ['preassignments', { preassignment: true }],
+]) {
+  test(`fails closed before planner/version creation when persisted plan contains ${scenario[0]}`, async () => {
+    const { service, calls } = fixture(scenario[1]);
+    await assert.rejects(
+      () => service.createPreview(context, { planId: 'plan-1', phase: 'P6', interaction: { guild_id: context.discordGuildId } }),
+      (error) => error?.code === 'TB_ASSIGNMENT_PLAN_CUSTOMIZATION_UNSUPPORTED' && new RegExp(scenario[0], 'i').test(error.message),
+    );
+    assert.equal(calls.some((row) => row.service === 'buildPlan'), false);
+    assert.equal(calls.some((row) => row.service === 'createVersion'), false);
+  });
+}
