@@ -6,6 +6,7 @@
   <meta name="theme-color" content="#050b14">
   <title>Star Route Optimizer · SWGOH Command Center</title>
   <link rel="stylesheet" href="/tb-route.css?v=20260819-route2">
+  <link rel="stylesheet" href="/tb-route-apply.css?v=20260819-route1">
 </head>
 <body>
   <main class="route-shell" data-route-root>
@@ -22,7 +23,7 @@
       <div>
         <span class="route-kicker">OFFICER WAR ROOM · MILESTONE D</span>
         <h1>Star Route + Preload Optimizer</h1>
-        <p>Turn durable territory state plus explicit remaining TP into safe <b>ATTACK</b>, <b>PRELOAD</b>, <b>HOLD</b>, <b>DEPLOY</b>, or <b>STOP</b> orders.</p>
+        <p>Turn durable territory state plus explicit officer priorities and remaining TP into safe <b>ATTACK</b>, <b>PRELOAD</b>, <b>HOLD</b>, <b>DEPLOY</b>, or <b>STOP</b> orders.</p>
       </div>
       <div class="route-event" data-route-event>
         <small>ACTIVE EVENT</small>
@@ -38,10 +39,10 @@
     <section class="route-grid">
       <section class="route-input-panel">
         <header>
-          <div><span>LIVE INPUT GATE</span><h2>Confirm remaining TP</h2></div>
+          <div><span>LIVE INPUT GATE</span><h2>Set route order + remaining TP</h2></div>
           <b>NO ASSUMPTIONS</b>
         </header>
-        <p class="route-help">Current zone TP, stars, target stars, commands, locks, and preload caps come from the saved event state. Enter only the remaining values the server cannot yet derive canonically.</p>
+        <p class="route-help">Current zone TP, stars, target stars, commands, locks, and preload caps come from the saved event state. Give each territory a unique officer route priority (1 = highest), then enter only the remaining TP values the server cannot yet derive canonically.</p>
 
         <form data-route-form>
           <label class="route-total-input">
@@ -67,6 +68,7 @@
         <h2>Fail closed</h2>
         <ul>
           <li>Static star thresholds never replace current event TP.</li>
+          <li>Every active territory needs a unique explicit route priority.</li>
           <li>Every active territory needs explicit remaining mission + Operation TP.</li>
           <li>PRELOAD reserves known mission/Operation TP before allocating deployment.</li>
           <li>Officer locks remain visible and are never overwritten by route apply.</li>
@@ -91,6 +93,6 @@
       <footer class="route-source" data-route-source></footer>
     </section>
   </main>
-  <script type="module" src="/tb-route.js?v=20260819-route2"></script>
+  <script type="module" src="/tb-route.js?v=20260819-route3"></script>
 </body>
 </html>
