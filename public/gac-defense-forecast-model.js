@@ -97,3 +97,9 @@ export {
   predictionZoneSummary,
   visiblePredictions,
 };
+
+if (typeof window !== "undefined" && typeof document !== "undefined") {
+  import("./gac-forecast-counter-prestage.js").catch((error) => {
+    console.warn("GAC forecast counter pre-stage failed to load", error);
+  });
+}
