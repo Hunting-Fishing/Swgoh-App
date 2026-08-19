@@ -39,6 +39,21 @@ function sanitizeDatacron(value) {
     }))),
   });
 }
+function sanitizeAttempt(value = {}) {
+  const status = validStatus(value?.status);
+  if (!["win", "loss"].includes(status)) return null;
+  return Object.freeze({
+    members: Object.freeze(asArray(value?.members).map(normalizeBaseId).filter(Boolean)),
+    leaderBaseId: normalizeBaseId(value?.leaderBaseId),
+    datacronId: clean(value?.datacronId),
+    status,
+    banners: value?.banners == null ? null : Math.max(0, Math.floor(Number(value.banners) || 0)),
+    at: clean(value?.at),
+  });
+}
+function sanitizeAttemptLog(value) {
+  return Object.freeze(asArray(value).map(sanitizeAttempt).filter(Boolean).slice(-20));
+}
 
 export function createGacAttackPlanService(options = {}) {
   const store = options.store || supabaseCoreStore;
@@ -77,22 +92,27 @@ export function createGacAttackPlanService(options = {}) {
     return defense;
   }
 
-  async function assertNoActiveOverlap(resolved, defenseId, members, excludeAssignmentId = null) {
-    const active = asArray(await store.select("gac_attack_plan_assignments", {
-      select: "id,defense_squad_id,attacker_members,status",
+  async function assertNoUsedOverlap(resolved, defenseId, members, existingAssignmentId = null) {
+    const assignments = asArray(await store.select("gac_attack_plan_assignments", {
+      select: "id,defense_squad_id,attacker_members,status,attempt_log",
       round_id: `eq.${resolved.roundRow.id}`,
-      status: "in.(planned,attempted)",
       limit: 100,
     }));
     const requested = new Set(members);
-    const conflict = active.find((assignment) => {
-      if (excludeAssignmentId && Number(assignment.id) === Number(excludeAssignmentId)) return false;
-      if (Number(assignment.defense_squad_id) === Number(defenseId)) return false;
-      return asArray(assignment.attacker_members).some((id) => requested.has(normalizeBaseId(id)));
-    });
-    if (conflict) {
-      const overlap = asArray(conflict.attacker_members).map(normalizeBaseId).filter((id) => requested.has(id));
-      const error = new Error(`Those attackers are already reserved in another active war-room plan: ${overlap.join(", ")}.`);
+    const used = new Set();
+    for (const assignment of assignments) {
+      for (const attempt of sanitizeAttemptLog(assignment.attempt_log)) {
+        for (const id of attempt.members) used.add(id);
+      }
+      const isCurrent = existingAssignmentId && Number(assignment.id) === Number(existingAssignmentId);
+      if (!isCurrent && ["planned", "attempted"].includes(validStatus(assignment.status))) {
+        for (const id of asArray(assignment.attacker_members).map(normalizeBaseId).filter(Boolean)) used.add(id);
+      }
+      if (!isCurrent && Number(assignment.defense_squad_id) === Number(defenseId)) continue;
+    }
+    const overlap = [...requested].filter((id) => used.has(id));
+    if (overlap.length) {
+      const error = new Error(`Those attackers are already reserved or consumed in this round: ${overlap.join(", ")}.`);
       error.status = 409;
       throw error;
     }
@@ -110,11 +130,11 @@ export function createGacAttackPlanService(options = {}) {
       throw error;
     }
     const existing = await selectOne("gac_attack_plan_assignments", {
-      select: "id,round_id,defense_squad_id,status",
+      select: "id,round_id,defense_squad_id,status,attempt_count,attempt_log,planned_at",
       round_id: `eq.${resolved.roundRow.id}`,
       defense_squad_id: `eq.${defense.id}`,
     });
-    await assertNoActiveOverlap(resolved, defense.id, members, existing?.id || null);
+    await assertNoUsedOverlap(resolved, defense.id, members, existing?.id || null);
 
     const timestamp = now().toISOString();
     const row = {
@@ -124,11 +144,12 @@ export function createGacAttackPlanService(options = {}) {
       attacker_members: members,
       datacron: sanitizeDatacron(input.datacron),
       status: "planned",
-      attempt_count: 0,
+      attempt_count: Number(existing?.attempt_count || 0),
+      attempt_log: sanitizeAttemptLog(existing?.attempt_log),
       banners: null,
       source: "verified-owner-war-room",
       source_ref: clean(input.sourceRef || "gac-command-center-war-room"),
-      planned_at: existing?.id ? undefined : timestamp,
+      planned_at: clean(existing?.planned_at) || timestamp,
       updated_at: timestamp,
       completed_at: null,
       metadata: {
@@ -140,7 +161,6 @@ export function createGacAttackPlanService(options = {}) {
         verificationMethod: "verified-owner-saved-board-plan",
       },
     };
-    Object.keys(row).forEach((key) => row[key] === undefined && delete row[key]);
     const saved = asArray(await store.upsert("gac_attack_plan_assignments", [row], {
       onConflict: "round_id,defense_squad_id",
     }));
@@ -168,7 +188,7 @@ export function createGacAttackPlanService(options = {}) {
       throw error;
     }
     const assignment = await selectOne("gac_attack_plan_assignments", {
-      select: "id,round_id,defense_squad_id,attacker_members,status,attempt_count",
+      select: "id,round_id,defense_squad_id,attacker_leader_base_id,attacker_members,datacron,status,attempt_count,attempt_log,banners,planned_at",
       id: `eq.${assignmentId}`,
       round_id: `eq.${resolved.roundRow.id}`,
     });
@@ -177,16 +197,30 @@ export function createGacAttackPlanService(options = {}) {
       error.status = 404;
       throw error;
     }
+    const previousStatus = validStatus(assignment.status) || "planned";
     const timestamp = now().toISOString();
-    const nextAttempts = status === "attempted" || status === "win" || status === "loss"
-      ? Math.max(Number(assignment.attempt_count || 0) + (assignment.status === "planned" || assignment.status === "attempted" ? 1 : 0), 1)
-      : Number(assignment.attempt_count || 0);
+    const startsAttempt = status === "attempted" && previousStatus === "planned";
+    const directResult = ["win", "loss"].includes(status) && previousStatus === "planned";
+    const nextAttempts = Number(assignment.attempt_count || 0) + (startsAttempt || directResult ? 1 : 0);
     const banners = input.banners === null || input.banners === undefined || input.banners === ""
       ? null
       : Math.max(0, Math.floor(Number(input.banners) || 0));
+    const attemptLog = [...sanitizeAttemptLog(assignment.attempt_log)];
+    const closesAttempt = ["win", "loss"].includes(status) && !["win", "loss"].includes(previousStatus);
+    if (closesAttempt) {
+      attemptLog.push(Object.freeze({
+        members: Object.freeze(asArray(assignment.attacker_members).map(normalizeBaseId).filter(Boolean)),
+        leaderBaseId: normalizeBaseId(assignment.attacker_leader_base_id),
+        datacronId: clean(assignment?.datacron?.id),
+        status,
+        banners,
+        at: timestamp,
+      }));
+    }
     const updated = asArray(await store.update("gac_attack_plan_assignments", {
       status,
-      attempt_count: nextAttempts,
+      attempt_count: Math.max(nextAttempts, attemptLog.length),
+      attempt_log: attemptLog.slice(-20),
       banners,
       updated_at: timestamp,
       completed_at: completedStatus(status) ? timestamp : null,
@@ -200,14 +234,22 @@ export function createGacAttackPlanService(options = {}) {
       updated: true,
       eventInstanceId: resolved.eventInstanceId,
       round: resolved.round,
-      assignment: normalizeAssignment(updated[0] || { ...assignment, status, attempt_count: nextAttempts, banners, updated_at: timestamp }, defense),
+      assignment: normalizeAssignment(updated[0] || {
+        ...assignment,
+        status,
+        attempt_count: Math.max(nextAttempts, attemptLog.length),
+        attempt_log: attemptLog,
+        banners,
+        updated_at: timestamp,
+        completed_at: completedStatus(status) ? timestamp : null,
+      }, defense),
     });
   }
 
   async function getAssignments(userId, input = {}) {
     const resolved = await resolvedRound(userId, input);
     const rows = asArray(await store.select("gac_attack_plan_assignments", {
-      select: "id,round_id,defense_squad_id,attacker_leader_base_id,attacker_members,datacron,status,attempt_count,banners,source,source_ref,planned_at,updated_at,completed_at,metadata",
+      select: "id,round_id,defense_squad_id,attacker_leader_base_id,attacker_members,datacron,status,attempt_count,attempt_log,banners,source,source_ref,planned_at,updated_at,completed_at,metadata",
       round_id: `eq.${resolved.roundRow.id}`,
       order: "updated_at.asc",
       limit: 100,
@@ -243,6 +285,7 @@ export function createGacAttackPlanService(options = {}) {
       datacron: sanitizeDatacron(row.datacron),
       status: validStatus(row.status) || "planned",
       attemptCount: Number(row.attempt_count || 0),
+      attemptLog: sanitizeAttemptLog(row.attempt_log),
       banners: row.banners == null ? null : Number(row.banners),
       plannedAt: clean(row.planned_at),
       updatedAt: clean(row.updated_at),
@@ -253,7 +296,7 @@ export function createGacAttackPlanService(options = {}) {
 
   return Object.freeze({
     assertDefense,
-    assertNoActiveOverlap,
+    assertNoUsedOverlap,
     getAssignments,
     saveAssignment,
     updateStatus,
@@ -262,4 +305,12 @@ export function createGacAttackPlanService(options = {}) {
 
 export const gacAttackPlanService = createGacAttackPlanService();
 
-export { completedStatus, normalizeBaseId, normalizedMembers, sanitizeDatacron, validStatus };
+export {
+  completedStatus,
+  normalizeBaseId,
+  normalizedMembers,
+  sanitizeAttempt,
+  sanitizeAttemptLog,
+  sanitizeDatacron,
+  validStatus,
+};
