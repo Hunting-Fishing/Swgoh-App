@@ -1,6 +1,7 @@
 import { buildRoteTacticalPlanetModel } from './rote-tactical-node-model.js';
 import { hydrateRoteTacticalNodeButtons } from './rote-tactical-node-renderer.js';
 import { roteTacticalReadinessMarkup } from './rote-tactical-readiness-ui.js';
+import './guild-rote-tactical-readiness-matrix-ui.js';
 
 let catalogPromise = null;
 let scheduled = false;
