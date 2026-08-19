@@ -39,7 +39,6 @@ function forecastEntries(report = {}, modeValue = "", limit = 8) {
       seen.add(key);
       return true;
     })
-    .sort((a, b) => forecastPriorityValue(b) - forecastPriorityValue(a))
     .slice(0, Math.max(1, Number(limit) || 8))
     .map((prediction, index) => Object.freeze({
       forecastIndex: index,
