@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   aggregateTbMissionAttempts,
   aggregateTbMissionAttemptsBySquad,
+  normalizeTbMissionAttempt,
   normalizeTbMissionAttemptOutcome,
   normalizedTbSquadSignature,
   TB_ATTEMPT_OUTCOME,
@@ -17,14 +18,16 @@ const team = (leader = 'LEADER', fifth = 'FIFTH') => [
   { slot: 4, baseId: fifth, relic: 7 },
 ];
 
+let attemptSequence = 0;
 function attempt(result, overrides = {}) {
+  attemptSequence += 1;
   return {
     guildId: 'guild-1',
     eventId: 'event-1',
     phase: 'P3',
     planetId: 'tatooine',
     missionId: 'tatooine-reva',
-    playerId: `player-${Math.random()}`,
+    playerId: `player-${attemptSequence}`,
     team: team(),
     result,
     ...overrides,
@@ -41,12 +44,43 @@ test('normalizes explicit wave results and wave-count fallbacks without inventin
 });
 
 test('squad signature keeps the leader identity while normalizing non-leader member order', () => {
-  const first = normalizedTbSquadSignature(team('GRANDINQUISITOR', 'NINTHSISTER'));
-  const reordered = [team('GRANDINQUISITOR', 'NINTHSISTER')[0], team()[3], team()[1], team()[4], team()[2]];
-  const second = normalizedTbSquadSignature(reordered);
+  const original = team('GRANDINQUISITOR', 'NINTHSISTER');
+  const reordered = [original[0], original[3], original[1], original[4], original[2]];
 
-  assert.equal(first, 'GRANDINQUISITOR|A|B|C|NINTHSISTER');
-  assert.equal(second, 'GRANDINQUISITOR|A|B|C|FIFTH');
+  assert.equal(normalizedTbSquadSignature(original), 'GRANDINQUISITOR|A|B|C|NINTHSISTER');
+  assert.equal(normalizedTbSquadSignature(reordered), 'GRANDINQUISITOR|A|B|C|NINTHSISTER');
+});
+
+test('attempt snapshot preserves exact ability, Zeta, Omicron and combat-stat evidence when known', () => {
+  const source = attempt('2_of_2', {
+    team: [{
+      slot: 0,
+      baseId: 'GRANDINQUISITOR',
+      level: 85,
+      stars: 7,
+      gear: 13,
+      relic: 7,
+      zetaCount: 3,
+      omicronCount: 1,
+      stats: { speed: 331, health: 102000, potency: 1.18 },
+      abilities: [
+        { id: 'leader01', name: 'Leader', tier: 8, hasZeta: true, hasOmicron: false },
+        { id: 'unique01', name: 'Unique', displayTier: 9, hasZeta: true, hasOmicron: true, omicronMode: 5 },
+      ],
+    }],
+  });
+  const normalized = normalizeTbMissionAttempt(source);
+  const leader = normalized.team[0];
+
+  assert.equal(leader.slot, 0);
+  assert.equal(leader.level, 85);
+  assert.equal(leader.relic, 7);
+  assert.equal(leader.stats.speed, 331);
+  assert.equal(leader.stats.health, 102000);
+  assert.equal(leader.stats.potency, 1.18);
+  assert.equal(leader.abilities[0].hasZeta, true);
+  assert.equal(leader.abilities[1].hasOmicron, true);
+  assert.equal(leader.abilities[1].omicronMode, 5);
 });
 
 test('small samples expose raw attempts but withhold an observed completion percentage', () => {
