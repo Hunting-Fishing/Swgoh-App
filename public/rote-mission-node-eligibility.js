@@ -99,6 +99,18 @@ function nodeMissionScore(node, mission) {
   return score;
 }
 
+function tacticalNodeNote(node, mission) {
+  const existing = String(node?.note || "").trim();
+  const commandTag = String(mission?.tactical?.commandTag || "").trim();
+  const presetPrefix = String(mission?.tactical?.presetPrefix || "").trim();
+  if (!commandTag && !presetPrefix) return existing;
+  const tactical = [
+    commandTag ? `TACTICAL: ${commandTag}` : "",
+    presetPrefix ? `SQUAD PRESET: ${presetPrefix}` : "",
+  ].filter(Boolean).join(" · ");
+  return [existing, tactical].filter(Boolean).join(" · ");
+}
+
 export function resolveRoteMissionNodes(planetId, map) {
   const missions = normalizedRoteMissionsForPlanet(planetId);
   const usedMissionIds = new Set();
@@ -133,6 +145,7 @@ export function resolveRoteMissionNodes(planetId, map) {
     return Object.freeze({
       ...node,
       missionId: mission?.id || node.missionId || "",
+      note: tacticalNodeNote(node, mission),
       mission,
     });
   });
