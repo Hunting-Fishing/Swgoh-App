@@ -3,18 +3,20 @@ import assert from "node:assert/strict";
 import { boardEvidenceDetail, dispatchBoardEvidenceUpdated } from "../public/gac-board-evidence-events.js";
 import { savedDefenseCount } from "../public/gac-board-save-refresh.js";
 
-test("board evidence event detail normalizes owner, round, action, and defense id", () => {
-  assert.deepEqual(boardEvidenceDetail({ owner: "opponent", round: 3, action: "saved", defenseId: 44 }), {
+test("board evidence event detail normalizes owner, round, action, defense id, and count", () => {
+  assert.deepEqual(boardEvidenceDetail({ owner: "opponent", round: 3, action: "saved", defenseId: 44, defenseCount: 6 }), {
     owner: "opponent",
     round: 3,
     action: "saved",
     defenseId: 44,
+    defenseCount: 6,
   });
-  assert.deepEqual(boardEvidenceDetail({ owner: "PLAYER", round: 9, action: "unknown", defenseId: 0 }), {
+  assert.deepEqual(boardEvidenceDetail({ owner: "PLAYER", round: 9, action: "unknown", defenseId: 0, defenseCount: -1 }), {
     owner: "player",
     round: null,
     action: "updated",
     defenseId: null,
+    defenseCount: null,
   });
 });
 
@@ -31,10 +33,10 @@ test("dispatch publishes the shared board-evidence event with normalized detail"
   global.CustomEvent = FakeCustomEvent;
   global.window = { dispatchEvent(event) { captured = event; } };
   try {
-    const detail = dispatchBoardEvidenceUpdated({ owner: "opponent", round: 2, action: "loaded" });
+    const detail = dispatchBoardEvidenceUpdated({ owner: "opponent", round: 2, action: "loaded", defenseCount: 4 });
     assert.equal(captured.type, "gac-board-evidence-updated");
     assert.deepEqual(captured.detail, detail);
-    assert.deepEqual(detail, { owner: "opponent", round: 2, action: "loaded", defenseId: null });
+    assert.deepEqual(detail, { owner: "opponent", round: 2, action: "loaded", defenseId: null, defenseCount: 4 });
   } finally {
     if (previousWindow === undefined) delete global.window;
     else global.window = previousWindow;
