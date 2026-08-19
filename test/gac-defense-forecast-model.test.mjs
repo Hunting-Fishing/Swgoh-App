@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   historicalDatacronSummary,
   predictionBroadSummary,
+  predictionCoverageForMode,
   predictionEvidenceLabel,
   predictionEvidenceTone,
   predictionFormatForMode,
@@ -49,10 +50,10 @@ test("forecast evidence classes render explicit historical-strength labels", () 
   assert.equal(predictionEvidenceTone("battle-recurring"), "recurring");
 });
 
-test("zone summaries use verified historical placements only", () => {
+test("zone summaries distinguish zone recurrence from slot recurrence", () => {
   assert.equal(
     predictionZoneSummary(prediction()),
-    "FRONT_TOP · slot 1 · 2/2 verified appearances",
+    "FRONT_TOP · 2/2 verified appearances · slot 1 seen 1/2",
   );
   assert.equal(
     predictionZoneSummary(prediction({ zoneTendencies: [], slotTendencies: [] })),
@@ -60,11 +61,24 @@ test("zone summaries use verified historical placements only", () => {
   );
 });
 
-test("broad and verified recurrence summaries keep their denominators separate", () => {
-  const row = prediction({ battleObservedMatchups: 4, verifiedHistoricalBoards: 2 });
-  const coverage = { battleObservedMatchups: 10, verifiedHistoricalBoards: 3 };
-  assert.equal(predictionBroadSummary(row, coverage), "4/10 observed historical matchups");
-  assert.equal(predictionVerifiedSummary(row, coverage), "2/3 completed verified boards");
+test("broad and verified recurrence summaries use the prediction's format-scoped denominator", () => {
+  const row = prediction({
+    battleObservedMatchups: 4,
+    verifiedHistoricalBoards: 2,
+    formatCoverage: { battleObservedMatchups: 6, verifiedHistoricalBoards: 3 },
+  });
+  const allCoverage = {
+    battleObservedMatchups: 10,
+    verifiedHistoricalBoards: 5,
+    byFormat: {
+      "5v5": { battleObservedMatchups: 6, verifiedHistoricalBoards: 3 },
+      "3v3": { battleObservedMatchups: 4, verifiedHistoricalBoards: 2 },
+    },
+  };
+  assert.equal(predictionBroadSummary(row, allCoverage), "4/6 observed historical matchups");
+  assert.equal(predictionVerifiedSummary(row, allCoverage), "2/3 completed verified boards");
+  assert.deepEqual(predictionCoverageForMode(allCoverage, "5"), { battleObservedMatchups: 6, verifiedHistoricalBoards: 3 });
+  assert.deepEqual(predictionCoverageForMode(allCoverage, "3v3"), { battleObservedMatchups: 4, verifiedHistoricalBoards: 2 });
 });
 
 test("historical datacron label cannot be mistaken for a current recommendation", () => {
