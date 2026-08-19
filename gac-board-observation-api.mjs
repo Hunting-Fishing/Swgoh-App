@@ -82,17 +82,17 @@ function rosterUnits(body = {}) {
   }
   return index;
 }
-function datacronById(body = {}, idInput) {
+function datacronById(body = {}, idInput, rosterLabel = "roster") {
   const id = clean(idInput);
   if (!id) return null;
   if (!Array.isArray(body?.datacrons)) {
-    const error = new Error("The opponent live roster did not expose individual datacrons, so this assignment cannot be persisted canonically.");
+    const error = new Error(`The ${rosterLabel} live roster did not expose individual datacrons, so this assignment cannot be persisted canonically.`);
     error.status = 409;
     throw error;
   }
   const found = body.datacrons.find((datacron) => clean(datacron?.id) === id);
   if (!found) {
-    const error = new Error("The selected datacron ID is not present in the opponent's current live datacron inventory.");
+    const error = new Error(`The selected datacron ID is not present in the ${rosterLabel} current live datacron inventory.`);
     error.status = 409;
     throw error;
   }
@@ -144,11 +144,12 @@ export function createGacBoardObservationApi(options = {}) {
 
   return Object.freeze({
     async handle(request, response, url) {
-      const match = url.pathname.match(/^\/api\/gac\/current-board\/(\d{9})\/defense$/);
-      if (!match || !["GET", "POST"].includes(request.method)) return false;
+      const match = url.pathname.match(/^\/api\/gac\/current-board\/(\d{9})\/(defense|my-defense)$/);
+      if (!match || !["GET", "POST", "DELETE"].includes(request.method)) return false;
+      const owner = match[2] === "my-defense" ? "player" : "opponent";
 
       try {
-        if (request.method === "POST") assertSameOrigin(request);
+        if (["POST", "DELETE"].includes(request.method)) assertSameOrigin(request);
         const user = await authSession.currentUser(request);
         if (!user?.id) {
           const error = new Error("Sign in with the verified owner account to save or reload current GAC board evidence.");
@@ -159,27 +160,52 @@ export function createGacBoardObservationApi(options = {}) {
         const code = normalizeAllyCode(match[1]);
         if (request.method === "GET") {
           const context = await currentContext(code, url.searchParams.get("round"));
-          const result = await observations.getDefenses(user.id, {
+          const input = {
             allyCode: code,
             opponentAllyCode: context.confirmed.opponent.allyCode,
             eventInstanceId: context.eventInstanceId,
             round: context.round,
-          });
+          };
+          const result = owner === "player"
+            ? await observations.getPlayerDefenses(user.id, input)
+            : await observations.getDefenses(user.id, input);
           writeJson(response, 200, result, {
             "X-GAC-Source": result.source,
             "X-GAC-Board-Evidence": "verified-user",
+            "X-GAC-Board-Owner": owner,
           });
           return true;
         }
 
         const body = await readJsonBody(request);
         const context = await currentContext(code, body?.round);
-        const opponentAllyCode = normalizeAllyCode(body?.opponentAllyCode);
         const confirmedOpponent = normalizeAllyCode(context.confirmed.opponent.allyCode);
-        if (!opponentAllyCode || opponentAllyCode !== confirmedOpponent) {
-          const error = new Error("The submitted opponent does not match the verified current-round opponent.");
-          error.status = 409;
-          throw error;
+        const commonInput = {
+          allyCode: code,
+          opponentAllyCode: confirmedOpponent,
+          eventInstanceId: context.eventInstanceId,
+          round: context.round,
+        };
+
+        if (request.method === "DELETE") {
+          const result = owner === "player"
+            ? await observations.deletePlayerDefense(user.id, { ...commonInput, id: body?.id })
+            : await observations.deleteDefense(user.id, { ...commonInput, id: body?.id });
+          writeJson(response, 200, result, {
+            "X-GAC-Source": result.source,
+            "X-GAC-Board-Evidence": "verified-user",
+            "X-GAC-Board-Owner": owner,
+          });
+          return true;
+        }
+
+        if (owner === "opponent") {
+          const submittedOpponent = normalizeAllyCode(body?.opponentAllyCode);
+          if (!submittedOpponent || submittedOpponent !== confirmedOpponent) {
+            const error = new Error("The submitted opponent does not match the verified current-round opponent.");
+            error.status = 409;
+            throw error;
+          }
         }
 
         const size = validSize(body?.size);
@@ -201,33 +227,36 @@ export function createGacBoardObservationApi(options = {}) {
           throw error;
         }
 
-        const opponentRoster = await requestGateway(`/v1/player/${confirmedOpponent}`, true);
-        const liveUnits = rosterUnits(opponentRoster);
+        const rosterCode = owner === "player" ? code : confirmedOpponent;
+        const rosterLabel = owner === "player" ? "player" : "opponent";
+        const liveRoster = await requestGateway(`/v1/player/${rosterCode}`, true);
+        const liveUnits = rosterUnits(liveRoster);
         const missing = members.filter((id) => !liveUnits.has(id));
         if (missing.length) {
-          const error = new Error(`The submitted defense contains units not present in the opponent's current live roster: ${missing.join(", ")}.`);
+          const error = new Error(`The submitted defense contains units not present in the ${rosterLabel} current live roster: ${missing.join(", ")}.`);
           error.status = 409;
           throw error;
         }
 
         const datacronId = clean(body?.datacronId);
-        const datacron = datacronId ? datacronById(opponentRoster, datacronId) : null;
-        const result = await observations.saveDefense(user.id, {
-          allyCode: code,
-          opponentAllyCode: confirmedOpponent,
-          eventInstanceId: context.eventInstanceId,
-          round: context.round,
+        const datacron = datacronId ? datacronById(liveRoster, datacronId, rosterLabel) : null;
+        const saveInput = {
+          ...commonInput,
           size,
           leaderBaseId,
           members,
           datacron,
           zone: body?.zone,
           slot: body?.slot,
-          sourceRef: "gac-command-center-current-board",
-        });
+          sourceRef: owner === "player" ? "gac-command-center-my-defense" : "gac-command-center-current-board",
+        };
+        const result = owner === "player"
+          ? await observations.savePlayerDefense(user.id, saveInput)
+          : await observations.saveDefense(user.id, saveInput);
         writeJson(response, 200, result, {
           "X-GAC-Source": result.source,
           "X-GAC-Board-Evidence": "verified-user",
+          "X-GAC-Board-Owner": owner,
         });
       } catch (error) {
         writeJson(response, statusFor(error), { error: error?.message || "The current GAC board observation could not be processed." });
