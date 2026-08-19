@@ -28,8 +28,8 @@ Command Center should reproduce the useful **operation**, not EchoBase branding,
 | Preview only | Implemented | Server-generated preview persisted with SHA-256 input fingerprint. |
 | Publish confirmation | Implemented | Preview and publish are separate actions; explicit confirmation required. |
 | Public Discord assignment post | Implemented | Verified destination only, delivery receipt + idempotency. |
-| @mentions | Implemented | Only linked users; allowed-mention controls. |
-| Per-member DMs | Implemented | Optional; public delivery can survive individual DM failures. |
+| @mentions | Implemented | Stage 10.1 uses durable linked identities plus explicit Discord user allowlists; global/role parsing stays off. |
+| Per-member DMs | Implemented in general delivery layer | Stage 10 immutable ROTE pilot intentionally keeps DMs disabled until a separate acceptance lane. |
 | Keyboard efficiency | Implemented | Ctrl/Cmd+S, Ctrl/Cmd+Enter, Alt+1..5 workflow navigation. |
 | Guild freshness / force refresh | Implemented | Operations page shows canonical sync age and force refresh action. |
 | Platoon readiness / farm report | Implemented elsewhere | Guild Unit Matrix + ROTE coverage/farm queues provide richer roster intelligence. |
@@ -61,15 +61,15 @@ Command Center should reproduce the useful **operation**, not EchoBase branding,
 | Donation preference | `/tb preference` | Implemented |
 | Guild donation preference report | `/tb controls` / Operations workspace | Implemented, web is richer |
 | Force Guild sync | `/tb sync` + web Refresh Guild Now | Implemented |
-| Assignment preview | `/tb assignments` + web preview | Implemented |
+| Assignment preview | `/tb assignments` + immutable `/tb plan-delivery action:PREVIEW` | Implemented |
 | Phase readiness | `/tb phase` | Implemented |
 | Farm/readiness report | `/tb farms` + Unit Matrix | Implemented |
 | Hard reserves | `/tb reserve`, `/tb reserves` | Command Center extension |
 | Server/channel binding | `/tb setup` | Implemented baseline |
-| Multiple verified Discord channels | `guild_discord_destinations` data model supports it | **Next parity lane** — command/UI management must be completed |
-| Verify/unverify commands | No dedicated slash pair yet | **Next parity lane** |
+| Multiple verified Discord channels | `guild_discord_destinations` + Stage 10.1 `channel` selector | Implemented; selected delivery channels must already be verified for the bound Guild/server. |
+| Verify/unverify channels | `/guild verify-channel`, `/guild unverify-channel` | Implemented |
 | Guild registration status matrix | Partial across `/tb status`, links, controls, Operations | **Next parity lane** — consolidate one professional status view |
-| Auto-match/register guild-mates by Discord nickname | No bulk matcher yet | **Next parity lane** |
+| Auto-match/register guild-mates by Discord nickname | `/guild register-mates` exact normalized matcher | Implemented fail-closed for unambiguous exact matches; no fuzzy auto-linking. |
 | Guild/player language preference | Not implemented | **Next parity lane** — localization, not planner correctness |
 | Guild PIN | Intentionally not cloned | Verified account + Ally Code + canonical in-game officer role is stronger authorization. |
 
@@ -103,4 +103,4 @@ This remains a required parity lane before claiming complete operational parity:
 
 ## Definition of "complete EchoBase-class parity"
 
-Do not label the Command Center implementation as complete parity until the **Next parity lane** items above are shipped or explicitly retired with a stronger equivalent. Core TB/TW planning and publish workflows may be released independently as EchoBase-class Operations v1.
+Do not label the Command Center implementation as complete parity until the remaining **Next parity lane** items above are shipped or explicitly retired with a stronger equivalent. Core TB/TW planning and publish workflows may be released independently as EchoBase-class Operations v1.
