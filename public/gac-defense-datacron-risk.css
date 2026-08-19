@@ -6,8 +6,7 @@
 }
 
 #gacDefenseDatacron {
-  max-width: 100%;
-  min-width: 260px;
+  max-width: 100%;n  min-width: 260px;
 }
 
 .gac-board-persistence-controls {
@@ -123,6 +122,43 @@
   color: #f0b0b0;
   font-size: .54rem;
   font-weight: 700;
+}
+
+.gac-enemy-datacron-gates {
+  display: grid;
+  gap: .3rem;
+  margin-top: .42rem;
+}
+
+.gac-enemy-datacron-gates > div {
+  display: grid;
+  gap: .08rem;
+  padding: .34rem .4rem;
+  border-left: 2px solid rgba(255, 184, 77, .42);
+  background: rgba(255, 184, 77, .055);
+}
+
+.gac-enemy-datacron-gates b {
+  color: #ffc975;
+  font-size: .54rem;
+  letter-spacing: .07em;
+}
+
+.gac-enemy-datacron-gates span {
+  color: #d3ad70;
+  font-size: .55rem;
+}
+
+.gac-enemy-datacron-evidence {
+  margin-top: .4rem;
+  padding-top: .34rem;
+  border-top: 1px solid rgba(255,255,255,.08);
+}
+
+.gac-enemy-datacron-evidence strong {
+  color: #aab5c8;
+  font-size: .53rem;
+  letter-spacing: .06em;
 }
 
 .gac-enemy-datacron-risk small {
