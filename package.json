@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node scripts/sync-game-unit-catalog-db.mjs --if-configured --soft-fail && node scripts/register-discord-tb-commands.mjs --if-configured && node scripts/patch-discord-stage9-plan-commands.mjs --if-configured && node scripts/patch-discord-stage10-delivery-commands.mjs --if-configured && node server.mjs",
+    "start": "node scripts/start-production.mjs",
     "build": "node --test test/discord-donation-preference.test.mjs test/discord-tb-preference-command.test.mjs && node scripts/build-production-data.mjs",
     "test": "node --test",
     "verify": "node --test",
