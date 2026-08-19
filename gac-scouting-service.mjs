@@ -187,8 +187,8 @@ export function createGacScoutingService(options = {}) {
       defensiveTendencies: Object.freeze(defenses.slice(0, 30)),
       offensiveTendencies: Object.freeze(offenses.slice(0, 30)),
       notes: Object.freeze([
-        "Defense tendencies are reconstructed from imported opponents' attacks against this player; they are historical observations, not a claim about the current hidden board.",
-        "Offense tendencies come from this player's imported GAHistory attack records.",
+        "Defense tendencies are reconstructed from persisted attacks against this player, including sourced history and explicitly owner-confirmed completed battles; they are historical observations, not a claim about the current hidden board.",
+        "Offense tendencies come from persisted GAC battle evidence, including sourced imports and explicitly owner-confirmed completed battles.",
       ]),
     });
   }
