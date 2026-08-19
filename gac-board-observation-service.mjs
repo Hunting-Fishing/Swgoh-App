@@ -28,6 +28,10 @@ function validOwner(value) {
   const owner = clean(value).toLowerCase();
   return owner === "player" || owner === "opponent" ? owner : "";
 }
+function validPlanStatus(value) {
+  const status = clean(value).toLowerCase();
+  return new Set(["planned", "attempted", "win", "loss", "abandoned"]).has(status) ? status : "";
+}
 function normalizedMembers(values, size) {
   const members = [...new Set(asArray(values).map(normalizeBaseId).filter(Boolean))];
   if (!size || members.length !== size) {
@@ -66,6 +70,23 @@ function sanitizeDatacron(value) {
     rerollCount: Number.isFinite(Number(value?.rerollCount)) ? Number(value.rerollCount) : null,
     affixes: Object.freeze(asArray(value?.affixes).slice(0, 12).map(sanitizeAffix)),
   });
+}
+function boardMutationPolicy(plan) {
+  if (!plan?.id) return Object.freeze({ allowed: true, code: "no-plan", status: "", attempts: 0 });
+  const status = validPlanStatus(plan.status);
+  const loggedAttempts = asArray(plan.attempt_log).length;
+  const attemptCount = Math.max(0, Math.floor(Number(plan.attempt_count || 0)));
+  const attempts = Math.max(loggedAttempts, attemptCount);
+  if (attempts > 0 || ["attempted", "win", "loss"].includes(status)) {
+    return Object.freeze({ allowed: false, code: "history", status, attempts });
+  }
+  if (status === "planned") {
+    return Object.freeze({ allowed: false, code: "locked", status, attempts });
+  }
+  if (status === "abandoned") {
+    return Object.freeze({ allowed: true, code: "released", status, attempts });
+  }
+  return Object.freeze({ allowed: false, code: "unknown", status, attempts });
 }
 
 export function createGacBoardObservationService(options = {}) {
@@ -141,6 +162,28 @@ export function createGacBoardObservationService(options = {}) {
     });
   }
 
+  async function assertBoardMutationSafe(defenseIdInput, ownerInput, operation = "modify") {
+    const owner = validOwner(ownerInput);
+    const defenseId = Number(defenseIdInput);
+    if (owner !== "opponent" || !Number.isInteger(defenseId) || defenseId <= 0) return null;
+    const plan = await selectOne("gac_attack_plan_assignments", {
+      select: "id,defense_squad_id,status,attempt_count,attempt_log",
+      defense_squad_id: `eq.${defenseId}`,
+    });
+    const policy = boardMutationPolicy(plan);
+    if (policy.allowed) return policy;
+    const verb = operation === "replace" ? "replaced" : "deleted";
+    const error = new Error(
+      policy.code === "locked"
+        ? `Release the locked War Room plan before this saved defense can be ${verb}.`
+        : policy.code === "history"
+          ? `This saved defense has War Room attempt history and cannot be ${verb}; preserve the recorded battle evidence.`
+          : `This saved defense has War Room state that is not safe to modify. Resolve or release the plan first.`
+    );
+    error.status = 409;
+    throw error;
+  }
+
   async function saveBoardDefense(userIdInput, input = {}, ownerInput = "opponent") {
     const owner = validOwner(ownerInput);
     if (!owner) throw new TypeError("Board owner must be player or opponent.");
@@ -170,13 +213,24 @@ export function createGacBoardObservationService(options = {}) {
           ...(zone ? { zone: `eq.${zone}` } : {}),
           ...(slot !== null ? { squad_slot: `eq.${slot}` } : {}),
         };
-    await store.delete("gac_round_squads", {
+    const replacementQuery = {
       round_id: `eq.${resolved.roundRow.id}`,
       owner: `eq.${owner}`,
       side: "eq.defense",
       source: `eq.${source}`,
       ...identityQuery,
-    });
+    };
+    if (owner === "opponent") {
+      const existingRows = asArray(await store.select("gac_round_squads", {
+        select: "id",
+        ...replacementQuery,
+        limit: 10,
+      }));
+      for (const existing of existingRows) {
+        await assertBoardMutationSafe(existing.id, owner, "replace");
+      }
+    }
+    await store.delete("gac_round_squads", replacementQuery);
 
     const observedAt = now().toISOString();
     const inserted = asArray(await store.insert("gac_round_squads", [{
@@ -289,6 +343,7 @@ export function createGacBoardObservationService(options = {}) {
       error.status = 404;
       throw error;
     }
+    await assertBoardMutationSafe(existing.id, owner, "delete");
     await store.delete("gac_round_squads", {
       id: `eq.${id}`,
       round_id: `eq.${resolved.roundRow.id}`,
@@ -308,6 +363,7 @@ export function createGacBoardObservationService(options = {}) {
 
   return Object.freeze({
     resolveRound,
+    assertBoardMutationSafe,
     saveBoardDefense,
     getBoardDefenses,
     deleteBoardDefense,
@@ -322,4 +378,4 @@ export function createGacBoardObservationService(options = {}) {
 
 export const gacBoardObservationService = createGacBoardObservationService();
 
-export { normalizeBaseId, normalizedMembers, sanitizeDatacron, validOwner, validRound, validSize };
+export { boardMutationPolicy, normalizeBaseId, normalizedMembers, sanitizeDatacron, validOwner, validPlanStatus, validRound, validSize };
