@@ -55,11 +55,12 @@ function statusClass(status) {
 function zoneMarkup(zone) {
   const command = String(zone.commandState || '').toUpperCase();
   const message = zone.commandMessage || 'No officer note';
+  const preload = zone.preloadCapTp == null ? '' : `<b>PRELOAD CAP ${number(zone.preloadCapTp)} TP</b>`;
   return `<article class="tb-zone command-${escapeHtml(String(zone.commandState || '').toLowerCase())}">
     <span>${escapeHtml(zone.phase)} · ${escapeHtml(zone.planetId)}</span>
     <strong>${escapeHtml(command)}</strong>
     <small>${escapeHtml(message)}</small>
-    <div><b>${number(zone.currentTp)} TP</b><b>${Number(zone.currentStars || 0)}★ → ${Number(zone.targetStars || 0)}★ target</b></div>
+    <div><b>${number(zone.currentTp)} TP</b><b>${Number(zone.currentStars || 0)}★ → ${Number(zone.targetStars || 0)}★ target</b>${preload}</div>
   </article>`;
 }
 
@@ -221,9 +222,16 @@ $('[data-tb-zone-form]')?.addEventListener('submit', async (event) => {
     phase: snapshot.event.currentPhase,
     planetId: form.elements.planetId.value,
     commandState: form.elements.commandState.value,
+    currentTp: Number(form.elements.currentTp.value || 0),
+    currentStars: Number(form.elements.currentStars.value || 0),
+    preloadCapTp: form.elements.preloadCapTp.value === '' ? null : Number(form.elements.preloadCapTp.value),
     targetStars: Number(form.elements.targetStars.value || 0),
     commandMessage: form.elements.commandMessage.value,
   };
+  if (payload.commandState === 'preload' && !(Number.isFinite(payload.preloadCapTp) && payload.preloadCapTp > 0)) {
+    result.textContent = 'PRELOAD requires a positive TP safety cap before it can be saved.';
+    return;
+  }
   result.textContent = 'Saving territory command…';
   try {
     await api('/zone', { method: 'POST', body: JSON.stringify(payload) });
