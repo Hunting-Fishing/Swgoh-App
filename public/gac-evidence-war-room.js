@@ -1,5 +1,6 @@
 import { bestCoverage, loadEligibilityContext } from "./gac-datacron-eligibility.js";
 import { hybridBoardPlan } from "./gac-hybrid-board-plan.js";
+import "./gac-war-room-counter-inspector.js";
 
 const state = {
   requestId: 0,
@@ -268,91 +269,84 @@ async function refresh(options = {}) {
       size: identity.size,
       excludeBaseIds: excluded,
     });
+    if (requestId !== state.requestId) return;
     await applyPlan(context, plan);
-    const banner = byId("gacSavedBoardBanner");
-    if (banner) banner.dataset.evidenceBackedDefenses = String(plan.evidenceDefenseCount || 0);
+    if (requestId !== state.requestId) return;
+    window.dispatchEvent(new CustomEvent("gac-war-room-updated", {
+      detail: {
+        source: "evidence-first-authoritative-planner",
+        evidenceDefenses: Number(plan.evidenceDefenseCount || 0),
+        heuristicDefenses: Number(plan.heuristicDefenseCount || 0),
+        assignmentCount: plan.assignments.length,
+      },
+    }));
+    setTimeout(() => {
+      if (state.applying || requestId !== state.requestId || expectedStateIntact()) return;
+      schedule(40);
+    }, 260);
   } catch (error) {
     if (requestId !== state.requestId) return;
-    if (![401, 409].includes(Number(error?.status))) console.warn("Evidence-first War Room planner unavailable; base War Room remains active", error);
+    if (![401, 409].includes(Number(error?.status))) console.warn("Evidence-first War Room planner failed", error);
   }
 }
-
-function schedule(delay = 220, options = {}) {
+function schedule(delay = 180, options = {}) {
   clearTimeout(state.timer);
   state.timer = setTimeout(() => void refresh(options), Math.max(0, delay));
 }
-function invalidateContext() {
+function resetContext() {
   state.contextKey = "";
   state.context = null;
   state.expected = new Map();
 }
-function invalidateEvidence() {
+function resetEvidence() {
   state.evidenceKey = "";
   state.evidenceByLeader = new Map();
 }
-function mutationTouchesWarRoom(mutations) {
-  for (const mutation of mutations) {
-    const target = mutation.target instanceof Element ? mutation.target : mutation.target?.parentElement;
-    if (target?.closest?.("#gacBoardPlannerGrid .gac-saved-board-card")) return true;
-    for (const node of mutation.addedNodes || []) {
-      if (!(node instanceof Element)) continue;
-      if (node.matches?.(".gac-war-room,.gac-war-room-counter-lane,.gac-war-recommendation") || node.querySelector?.(".gac-war-room,.gac-war-room-counter-lane")) return true;
-    }
-  }
-  return false;
-}
-
 function bind() {
+  if (typeof window === "undefined" || typeof document === "undefined") return;
   if (document.documentElement.dataset.gacEvidenceWarRoomBound === "true") return;
   document.documentElement.dataset.gacEvidenceWarRoomBound = "true";
-  window.addEventListener("gac-saved-board-rendered", () => schedule(260));
-  window.addEventListener("gac-war-room-updated", () => {
-    invalidateContext();
-    schedule(180, { forceContext: true });
-  });
+  window.addEventListener("gac-saved-board-rendered", () => schedule(120));
   window.addEventListener("gac-board-evidence-updated", () => {
-    invalidateContext();
-    invalidateEvidence();
-    schedule(220, { forceContext: true, forceEvidence: true });
+    resetContext();
+    schedule(80, { forceContext: true });
+  });
+  window.addEventListener("gac-current-board-updated", () => {
+    resetContext();
+    schedule(80, { forceContext: true });
+  });
+  window.addEventListener("gac-current-board-cleared", () => {
+    resetContext();
+    schedule(80, { forceContext: true });
   });
   window.addEventListener("gac-verified-battle-archived", () => {
-    invalidateEvidence();
-    schedule(180, { forceEvidence: true });
+    resetContext();
+    resetEvidence();
+    schedule(80, { forceContext: true, forceEvidence: true });
   });
   document.addEventListener("change", (event) => {
-    if (["allyCode", "gacOpponentCode", "gacBracketRound", "gacMode"].includes(event.target?.id)) {
-      invalidateContext();
-      invalidateEvidence();
-      schedule(240, { forceContext: true, forceEvidence: true });
+    if (["allyCode", "gacOpponentCode", "gacMode", "gacBracketRound"].includes(event.target?.id)) {
+      resetContext();
+      resetEvidence();
+      schedule(100, { forceContext: true, forceEvidence: true });
     }
   });
-  window.addEventListener("hashchange", () => {
-    invalidateContext();
-    invalidateEvidence();
-  });
+  window.addEventListener("hashchange", resetContext);
 }
 
 if (typeof window !== "undefined" && typeof document !== "undefined") {
   bind();
-  document.addEventListener("DOMContentLoaded", () => schedule(300), { once: true });
-  schedule(450);
-  new MutationObserver((mutations) => {
-    if (state.applying || !mutationTouchesWarRoom(mutations)) return;
-    queueMicrotask(() => {
-      if (!expectedStateIntact()) schedule(80);
-    });
-  }).observe(document.documentElement, { childList: true, subtree: true, attributes: false });
+  document.addEventListener("DOMContentLoaded", () => schedule(160), { once: true });
+  schedule(220);
 }
 
 export {
   assignmentByDefense,
   batchEvidenceKey,
   consumedBaseIds,
-  contextIdentity,
   defenseReservedIds,
   evidenceMapFromBatch,
   evidencePercent,
   expectedPayload,
   openDefenseEntries,
-  mutationTouchesWarRoom,
 };
