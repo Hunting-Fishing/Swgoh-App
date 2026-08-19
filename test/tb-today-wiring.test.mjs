@@ -31,16 +31,20 @@ test('web action account handler delegates TB namespace to the TB event API', as
   assert.equal(response.status, 200);
 });
 
-test('Today in TB physical route and UI expose member queue plus officer controls', () => {
+test('Today in TB physical route and UI expose member queue plus officer safety controls', () => {
   const html = fs.readFileSync(new URL('../public/guild/tb/today/index.html', import.meta.url), 'utf8');
   const js = fs.readFileSync(new URL('../public/tb-today.js', import.meta.url), 'utf8');
   const css = fs.readFileSync(new URL('../public/tb-today.css', import.meta.url), 'utf8');
   assert.match(html, /Today in TB/);
   assert.match(html, /YOUR ORDERS/);
   assert.match(html, /Officer Event Controls/);
+  assert.match(html, /name="preloadCapTp"/);
+  assert.match(html, /name="currentTp"/);
   assert.match(js, /\/today\/refresh/);
   assert.match(js, /\/action\/\$\{actionId\}\/status/);
-  assert.match(js, /ROTE_PLANETS/);
+  assert.match(js, /planet\.bonus === true/);
+  assert.match(js, /sourcePhaseById\.get\(planet\.unlockFrom\)/);
+  assert.match(js, /PRELOAD requires a positive TP safety cap/);
   assert.match(css, /\.tb-task-panel/);
   assert.match(css, /@media\(max-width:620px\)/);
 });
