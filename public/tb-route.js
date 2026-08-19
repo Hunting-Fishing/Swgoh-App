@@ -10,8 +10,12 @@ const summary = document.querySelector('[data-route-summary]');
 const commandList = document.querySelector('[data-route-command-list]');
 const source = document.querySelector('[data-route-source]');
 const recalculate = document.querySelector('[data-route-recalculate]');
+const applyButton = document.querySelector('[data-route-apply]');
+const applyStatus = document.querySelector('[data-route-apply-status]');
 
 let snapshot = null;
+let lastPreviewInput = null;
+let lastPreviewBody = null;
 
 const text = (value) => String(value ?? '').trim();
 const array = (value) => Array.isArray(value) ? value : [];
@@ -74,6 +78,19 @@ async function api(path, options = {}) {
   return body;
 }
 
+function resetApplyState() {
+  lastPreviewInput = null;
+  lastPreviewBody = null;
+  if (applyButton) {
+    applyButton.disabled = true;
+    applyButton.textContent = 'Apply Safe Orders';
+  }
+  if (applyStatus) {
+    applyStatus.className = 'route-apply-status';
+    applyStatus.textContent = '';
+  }
+}
+
 function renderEvent(body) {
   snapshot = body;
   if (!body?.configured || !body?.event) {
@@ -108,6 +125,7 @@ function renderZoneInputs(zones) {
         <b>${tp(zone.currentTp)} TP · ${escapeHtml(stars(zone.currentStars))} → ${escapeHtml(stars(zone.targetStars))}</b>
         <span>${escapeHtml(cap)}${zone.lockedByOfficer ? ' · OFFICER LOCK' : ''}</span>
       </div>
+      <label class="priority"><span>Route priority</span><input data-route-priority type="number" min="1" step="1" inputmode="numeric" placeholder="1 = highest" required></label>
       <label><span>Remaining mission / fleet TP</span><input data-route-mission type="number" min="0" step="1" inputmode="numeric" placeholder="Enter 0 if complete" required></label>
       <label><span>Remaining Operations TP</span><input data-route-operation type="number" min="0" step="1" inputmode="numeric" placeholder="Enter 0 if complete" required></label>
     </article>`;
@@ -121,15 +139,26 @@ function collectPreviewInput() {
     throw new Error('Enter the current remaining Guild deployable TP.');
   }
   const remainingTpByPlanet = {};
+  const usedPriorities = new Map();
   for (const row of document.querySelectorAll('[data-route-zone]')) {
     const planetId = text(row.dataset.routeZone);
+    const priorityValue = row.querySelector('[data-route-priority]')?.value ?? '';
     const mission = row.querySelector('[data-route-mission]')?.value ?? '';
     const operation = row.querySelector('[data-route-operation]')?.value ?? '';
+    if (priorityValue === '' || !Number.isFinite(Number(priorityValue)) || Number(priorityValue) < 1 || !Number.isInteger(Number(priorityValue))) {
+      throw new Error(`Enter a positive whole-number route priority for ${planetId}. Priority 1 is highest.`);
+    }
+    const priority = Number(priorityValue);
+    if (usedPriorities.has(priority)) {
+      throw new Error(`Route priority ${priority} is assigned to both ${usedPriorities.get(priority)} and ${planetId}. Every territory needs a unique priority.`);
+    }
+    usedPriorities.set(priority, planetId);
     if (mission === '' || operation === '') throw new Error(`Enter both remaining TP values for ${planetId}. Use 0 only when that source is complete.`);
     if (Number(mission) < 0 || Number(operation) < 0 || !Number.isFinite(Number(mission)) || !Number.isFinite(Number(operation))) {
       throw new Error(`${planetId} remaining TP must be non-negative numbers.`);
     }
     remainingTpByPlanet[planetId] = {
+      priority,
       remainingMissionTp: Math.trunc(Number(mission)),
       remainingOperationTp: Math.trunc(Number(operation)),
     };
@@ -154,10 +183,13 @@ function renderPlan(body) {
   if (!plan) throw new Error('The server did not return a route plan.');
   results.hidden = false;
   const reference = plan.thresholdReference || {};
+  const previewFingerprint = text(plan.inputFingerprint);
+  const hasFingerprint = /^[0-9a-f]{64}$/i.test(previewFingerprint);
+  const blockedCount = number(plan.blockedZones);
   summary.innerHTML = [
     summaryCard('Deployment allocated', tp(plan.allocatedDeploymentTp)),
     summaryCard('Deployment unallocated', tp(plan.unallocatedDeploymentTp)),
-    summaryCard('Blocked territories', String(number(plan.blockedZones))),
+    summaryCard('Blocked territories', String(blockedCount)),
     summaryCard('Threshold reference', text(reference.version) || '—'),
   ].join('');
 
@@ -173,6 +205,7 @@ function renderPlan(body) {
         <span class="route-order-badge">${escapeHtml(zone.commandLabel || command.toUpperCase())}</span>
       </div>
       <div class="route-facts">
+        ${fact('Route priority', `#${number(zone.priority)}`)}
         ${fact('Current TP', tp(zone.currentTp))}
         ${fact('Target', `${stars(zone.targetStars)} · ${tp(zone.targetThresholdTp)}`)}
         ${fact('Safe ceiling', tp(zone.safeCeilingTp))}
@@ -188,7 +221,21 @@ function renderPlan(body) {
   const href = safeHref(reference.sourceUrl);
   source.innerHTML = `<b>Evidence boundary:</b> ${escapeHtml(body.evidenceBoundary || plan.sourceBoundary || '')}<br>
     <b>Threshold data:</b> ${escapeHtml(reference.sourceName || 'Versioned ROTE reference')} · ${escapeHtml(reference.sourceKind || 'reference')}${href !== '#' ? ` · <a href="${escapeHtml(href)}" target="_blank" rel="noreferrer">source ↗</a>` : ''}.<br>
-    This result is a non-persisted officer preview. Recalculate whenever current TP or remaining actions change.`;
+    <b>Input fingerprint:</b> <code>${escapeHtml(previewFingerprint || 'unavailable')}</code><br>
+    This result is a non-persisted officer preview until Apply Safe Orders succeeds.`;
+
+  if (applyButton) {
+    applyButton.disabled = blockedCount > 0 || !hasFingerprint;
+    applyButton.title = blockedCount > 0
+      ? 'Resolve all blocked territories before applying.'
+      : hasFingerprint ? 'Apply these orders to unlocked territory commands.' : 'Optimizer fingerprint unavailable.';
+  }
+  if (applyStatus) {
+    applyStatus.className = 'route-apply-status';
+    applyStatus.textContent = blockedCount > 0
+      ? 'Apply is disabled because this preview contains blocked territories.'
+      : 'Preview verified. Applying will re-run the optimizer against current server state before any command changes.';
+  }
   results.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
@@ -209,6 +256,7 @@ form?.addEventListener('submit', async (event) => {
   event.preventDefault();
   inputResult.classList.remove('error');
   results.hidden = true;
+  resetApplyState();
   try {
     const input = collectPreviewInput();
     submitButton.disabled = true;
@@ -217,7 +265,9 @@ form?.addEventListener('submit', async (event) => {
       method: 'POST',
       body: JSON.stringify(input),
     });
-    inputResult.textContent = 'Safe preview generated from the current durable event state plus your explicit remaining-TP inputs.';
+    lastPreviewInput = input;
+    lastPreviewBody = body;
+    inputResult.textContent = 'Safe preview generated from current durable event state plus your explicit route priority and remaining-TP inputs.';
     renderPlan(body);
   } catch (error) {
     inputResult.classList.add('error');
@@ -231,8 +281,55 @@ form?.addEventListener('submit', async (event) => {
   }
 });
 
+applyButton?.addEventListener('click', async () => {
+  const previewFingerprint = text(lastPreviewBody?.plan?.inputFingerprint);
+  if (!lastPreviewInput || !/^[0-9a-f]{64}$/i.test(previewFingerprint)) {
+    applyStatus.className = 'route-apply-status error';
+    applyStatus.textContent = 'Generate a fresh safe preview before applying route orders.';
+    applyButton.disabled = true;
+    return;
+  }
+  if (number(lastPreviewBody?.plan?.blockedZones) > 0) {
+    applyStatus.className = 'route-apply-status error';
+    applyStatus.textContent = 'Resolve all blocked territories and recalculate before applying.';
+    applyButton.disabled = true;
+    return;
+  }
+
+  const unlocked = array(lastPreviewBody?.plan?.zones).filter((zone) => !(zone.lockedByOfficer === true || zone.commandSource === 'officer-lock'));
+  const locked = array(lastPreviewBody?.plan?.zones).length - unlocked.length;
+  const confirmed = window.confirm(`Apply ${unlocked.length} optimizer order${unlocked.length === 1 ? '' : 's'} to the active ${text(lastPreviewBody?.event?.currentPhase || 'TB')} event?${locked ? ` ${locked} officer-locked zone${locked === 1 ? '' : 's'} will remain unchanged.` : ''}\n\nThe server will reject this if current territory state changed after the preview.`);
+  if (!confirmed) return;
+
+  applyButton.disabled = true;
+  applyButton.textContent = 'Applying…';
+  applyStatus.className = 'route-apply-status';
+  applyStatus.textContent = 'Re-running optimizer against current server state and opening atomic audit transaction…';
+  try {
+    const body = await api('/api/account/web-actions/tb/route/apply', {
+      method: 'POST',
+      body: JSON.stringify({ ...lastPreviewInput, expectedInputFingerprint: previewFingerprint }),
+    });
+    applyStatus.className = 'route-apply-status success';
+    applyStatus.innerHTML = `<strong>Orders applied.</strong> ${escapeHtml(String(number(body.appliedZoneCount)))} unlocked zone${number(body.appliedZoneCount) === 1 ? '' : 's'} updated; ${escapeHtml(String(number(body.lockedZoneCount)))} locked zone${number(body.lockedZoneCount) === 1 ? '' : 's'} preserved.<br>Audit snapshot <code>${escapeHtml(body.snapshotId || 'saved')}</code> · fingerprint <code>${escapeHtml(body.inputFingerprint || previewFingerprint)}</code>.`;
+    applyButton.textContent = 'Orders Applied';
+    lastPreviewInput = null;
+    lastPreviewBody = null;
+    await load();
+  } catch (error) {
+    applyStatus.className = 'route-apply-status error';
+    const blocked = array(error?.details?.blockedPlanets);
+    applyStatus.textContent = blocked.length
+      ? `${error.message} Blocked: ${blocked.join(', ')}.`
+      : `${error.message}${error.code ? ` (${error.code})` : ''}`;
+    applyButton.textContent = error.code === 'ROUTE_PREVIEW_STALE' ? 'Recalculate Required' : 'Apply Safe Orders';
+    applyButton.disabled = error.code === 'ROUTE_PREVIEW_STALE';
+  }
+});
+
 recalculate?.addEventListener('click', () => {
   results.hidden = true;
+  resetApplyState();
   form?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 });
 

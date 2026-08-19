@@ -86,6 +86,33 @@ test('POST route preview delegates only through the authenticated route preview 
   assert.equal(res.payload.plan.algorithm, 'tb-route-optimizer-v1');
 });
 
+test('POST route apply delegates to the authenticated audited apply service', async () => {
+  const body = {
+    expectedInputFingerprint: 'a'.repeat(64),
+    remainingGuildDeploymentTp: 60_000_000,
+    remainingTpByPlanet: { geonosis: { remainingMissionTp: 0, remainingOperationTp: 0 } },
+  };
+  let received = null;
+  const routeApply = {
+    async apply(userId, input) {
+      assert.equal(userId, 'user-1');
+      received = input;
+      return { applied: true, snapshotId: 'snapshot-1', appliedZoneCount: 1 };
+    },
+  };
+  const api = createTbEventStateApi({ session, service: {}, routeApply });
+  const res = response();
+  await api.handle(
+    request('POST', body, { origin: 'https://command.example', 'content-type': 'application/json' }),
+    res,
+    new URL('https://command.example/api/account/web-actions/tb/route/apply'),
+  );
+  assert.equal(res.status, 200);
+  assert.deepEqual(received, body);
+  assert.equal(res.payload.applied, true);
+  assert.equal(res.payload.appliedZoneCount, 1);
+});
+
 test('route preview errors expose structured missing-input details', async () => {
   const routePreview = {
     async preview() {
@@ -106,6 +133,28 @@ test('route preview errors expose structured missing-input details', async () =>
   assert.equal(res.status, 400);
   assert.equal(res.payload.code, 'ROUTE_ZONE_INPUTS_INCOMPLETE');
   assert.deepEqual(res.payload.details.missingPlanets, ['bracca']);
+});
+
+test('route apply errors expose stale preview details without falling through to generic failure', async () => {
+  const routeApply = {
+    async apply() {
+      const error = new Error('Recalculate.');
+      error.status = 409;
+      error.code = 'ROUTE_PREVIEW_STALE';
+      error.details = { currentInputFingerprint: 'b'.repeat(64) };
+      throw error;
+    },
+  };
+  const api = createTbEventStateApi({ session, service: {}, routeApply });
+  const res = response();
+  await api.handle(
+    request('POST', {}, { origin: 'https://command.example', 'content-type': 'application/json' }),
+    res,
+    new URL('https://command.example/api/account/web-actions/tb/route/apply'),
+  );
+  assert.equal(res.status, 409);
+  assert.equal(res.payload.code, 'ROUTE_PREVIEW_STALE');
+  assert.equal(res.payload.details.currentInputFingerprint, 'b'.repeat(64));
 });
 
 test('POST member action status route extracts the UUID and status', async () => {

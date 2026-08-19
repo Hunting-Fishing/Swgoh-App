@@ -20,8 +20,8 @@ function explicitInputs(overrides = {}) {
   return {
     remainingGuildDeploymentTp: 60_000_000,
     remainingTpByPlanet: {
-      geonosis: { remainingMissionTp: 10_000_000, remainingOperationTp: 5_000_000 },
-      bracca: { remainingMissionTp: 0, remainingOperationTp: 0 },
+      geonosis: { priority: 1, remainingMissionTp: 10_000_000, remainingOperationTp: 5_000_000 },
+      bracca: { priority: 2, remainingMissionTp: 0, remainingOperationTp: 0 },
     },
     ...overrides,
   };
@@ -76,12 +76,12 @@ test('remaining Guild deployment TP must be explicit', async () => {
   );
 });
 
-test('every configured territory requires explicit mission and Operation TP inputs', async () => {
+test('every configured territory requires explicit priority plus mission and Operation TP inputs', async () => {
   const service = createTbRoutePreviewService({ events: { async eventSnapshot() { return snapshot(); } }, operations: officerOperations });
   await assert.rejects(
     () => service.preview('user-1', {
       remainingGuildDeploymentTp: 60_000_000,
-      remainingTpByPlanet: { geonosis: { remainingMissionTp: 0, remainingOperationTp: 0 } },
+      remainingTpByPlanet: { geonosis: { priority: 1, remainingMissionTp: 0, remainingOperationTp: 0 } },
     }),
     (error) => error.status === 400
       && error.code === 'ROUTE_ZONE_INPUTS_INCOMPLETE'
@@ -89,7 +89,30 @@ test('every configured territory requires explicit mission and Operation TP inpu
   );
 });
 
-test('preview joins explicit remaining TP to server-owned zone state', async () => {
+test('duplicate route priorities fail before optimizer execution', async () => {
+  let plannerCalled = false;
+  const service = createTbRoutePreviewService({
+    events: { async eventSnapshot() { return snapshot(); } },
+    operations: officerOperations,
+    planner() { plannerCalled = true; return {}; },
+  });
+  const duplicated = explicitInputs({
+    remainingTpByPlanet: {
+      geonosis: { priority: 1, remainingMissionTp: 0, remainingOperationTp: 0 },
+      bracca: { priority: 1, remainingMissionTp: 0, remainingOperationTp: 0 },
+    },
+  });
+  await assert.rejects(
+    () => service.preview('user-1', duplicated),
+    (error) => error.status === 400
+      && error.code === 'ROUTE_PRIORITY_DUPLICATE'
+      && error.details.duplicatePriorities[0].planets.includes('geonosis')
+      && error.details.duplicatePriorities[0].planets.includes('bracca'),
+  );
+  assert.equal(plannerCalled, false);
+});
+
+test('preview joins explicit priority and remaining TP to server-owned zone state', async () => {
   let plannerInput = null;
   const service = createTbRoutePreviewService({
     events: { async eventSnapshot(userId) { assert.equal(userId, 'user-1'); return snapshot(); } },
@@ -107,17 +130,20 @@ test('preview joins explicit remaining TP to server-owned zone state', async () 
   assert.equal(result.persisted, false);
   assert.equal(result.inputSource, 'officer-preview');
   assert.equal(result.officer.guildId, 'guild-1');
+  assert.equal(result.zones[0].currentTp, 120_000_000);
   assert.equal(plannerInput.remainingGuildDeploymentTp, 60_000_000);
   assert.equal(plannerInput.zones[0].currentTp, 120_000_000, 'preview body cannot replace durable current TP');
   assert.equal(plannerInput.zones[0].targetStars, 1, 'preview body cannot replace durable target stars');
+  assert.equal(plannerInput.zones[0].priority, 1);
   assert.equal(plannerInput.zones[0].remainingMissionTp, 10_000_000);
   assert.equal(plannerInput.zones[0].remainingOperationTp, 5_000_000);
 });
 
-test('real planner respects durable preload cap after explicit remaining TP is supplied', async () => {
+test('real planner respects durable preload cap after explicit route inputs are supplied', async () => {
   const service = createTbRoutePreviewService({ events: { async eventSnapshot() { return snapshot(); } }, operations: officerOperations });
   const result = await service.preview('user-1', explicitInputs());
   const bracca = result.plan.zones.find((zone) => zone.planetId === 'bracca');
+  assert.equal(bracca.priority, 2);
   assert.equal(bracca.command, 'preload');
   assert.equal(bracca.safeCeilingTp, 140_000_000);
   assert.ok(bracca.currentTp + bracca.recommendedDeploymentTp <= 140_000_000);
