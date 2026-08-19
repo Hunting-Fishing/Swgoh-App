@@ -41,6 +41,8 @@ test('P2 Bracca Zeffo unlock keeps Cere mandatory and exposes Cal/JKCK as legal 
   assert.equal(node.entryRule.squadSize, 2);
   assert.equal(node.entryRule.threshold.includes('R7+'), true);
   assert.equal(node.entryRule.threshold.includes('7★'), true);
+  assert.equal(node.requiredUnits[0].relicMin, 7);
+  assert.equal(node.alternativeUnits.every((row) => row.relicMin === 7 && row.starsMin === 7), true);
   assert.match(node.entryRule.notes, /Cere Junda plus either Cal Kestis or Jedi Knight Cal Kestis/i);
 });
 
