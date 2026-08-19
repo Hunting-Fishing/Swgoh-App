@@ -15,7 +15,7 @@ import { discordStateStore } from './discord-state-store.mjs';
 import { discordTbStage9PlanCommand } from './discord-tb-stage9-plan-command.mjs';
 
 const EPHEMERAL_FLAG = 1 << 6;
-const STAGE9_SUBCOMMANDS = new Set(['plan-status']);
+const STAGE9_SUBCOMMANDS = new Set(['plan-status', 'plan-diff']);
 
 function replayRequest(request, rawBody) {
   const replay = Readable.from([rawBody]);
