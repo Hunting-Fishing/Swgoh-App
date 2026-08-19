@@ -1,3 +1,5 @@
+import "./tb-war-room-entry.js";
+
 const UNIT_ROUTE = "/guild/units";
 const ALLY_STORAGE_KEY = "swgoh:guild-route-ally-code";
 
