@@ -1,4 +1,5 @@
 import "./gac-round-readiness.js";
+import "./gac-verified-battle-ui.js";
 import { parseMechanics } from "./gac-datacron-mechanics.js";
 
 function injectStyles() {
