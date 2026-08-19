@@ -101,7 +101,7 @@ function formatStatus(result = {}) {
   } else {
     lines.push('', 'No Stage 10 delivery receipts exist for this exact immutable artifact and destination.');
   }
-  lines.push('', '_Read-only receipt view. This command cannot publish or send DMs._');
+  lines.push('', '_Read-only receipt view. This action cannot publish or send DMs._');
   return lines.join('\n').slice(0, 1900);
 }
 
@@ -110,17 +110,17 @@ export function createDiscordTbStage10Command(options = {}) {
 
   async function execute(interaction = {}) {
     const name = subcommand(interaction);
-    if (name === 'delivery-status') return formatStatus(await service.status(interaction));
-    if (name === 'plan-delivery') {
-      const action = text(optionValue(interaction, 'action')).toLowerCase();
-      if (action === 'preview') return formatPreview(await service.preview(interaction));
-      if (action === 'publish') return formatPublished(await service.publish(interaction));
-      throw new Error('Stage 10 plan-delivery requires action:PREVIEW or action:PUBLISH.');
+    if (name !== 'plan-delivery') {
+      const error = new Error('Unknown Stage 10 ROTE delivery command.');
+      error.status = 404;
+      error.code = 'STAGE10_SUBCOMMAND_NOT_FOUND';
+      throw error;
     }
-    const error = new Error('Unknown Stage 10 ROTE delivery command.');
-    error.status = 404;
-    error.code = 'STAGE10_SUBCOMMAND_NOT_FOUND';
-    throw error;
+    const action = text(optionValue(interaction, 'action')).toLowerCase();
+    if (action === 'preview') return formatPreview(await service.preview(interaction));
+    if (action === 'status') return formatStatus(await service.status(interaction));
+    if (action === 'publish') return formatPublished(await service.publish(interaction));
+    throw new Error('Stage 10 plan-delivery requires action:PREVIEW, action:STATUS, or action:PUBLISH.');
   }
 
   return Object.freeze({ execute });
