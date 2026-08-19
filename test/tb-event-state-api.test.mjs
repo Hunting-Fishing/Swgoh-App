@@ -59,3 +59,24 @@ test('POST refresh persists the generated Today queue through the service', asyn
   assert.equal(res.status, 200);
   assert.equal(res.payload.durable, true);
 });
+
+test('POST member action status route extracts the UUID and status', async () => {
+  const actionId = '44444444-4444-4444-8444-444444444444';
+  const service = {
+    async setActionStatus(userId, receivedId, status) {
+      assert.equal(userId, 'user-1');
+      assert.equal(receivedId, actionId);
+      assert.equal(status, 'completed');
+      return { id: receivedId, status };
+    },
+  };
+  const api = createTbEventStateApi({ session, service });
+  const res = response();
+  await api.handle(
+    request('POST', { status: 'completed' }, { origin: 'https://command.example', 'content-type': 'application/json' }),
+    res,
+    new URL(`https://command.example/api/account/web-actions/tb/action/${actionId}/status`),
+  );
+  assert.equal(res.status, 200);
+  assert.equal(res.payload.status, 'completed');
+});
