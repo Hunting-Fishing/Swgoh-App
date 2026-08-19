@@ -1,3 +1,4 @@
+import { mergeCounterEvidence, verifiedBattleObservation } from "./gac-counter-evidence-merge.mjs";
 import { supabaseCoreStore } from "./supabase-core-store.mjs";
 
 function clean(value) {
@@ -116,11 +117,14 @@ function counterRow(row = {}) {
     battles,
     wins,
     holds: Math.max(0, finite(row.holds)),
+    draws: Math.max(0, finite(row.draws)),
     winRate: battles ? wins / battles : 0,
     averageBanners: nullableFinite(row.average_banners),
     league: clean(row.league),
     seasonId: clean(row.season_id),
+    seasonIds: Object.freeze(asArray(row.season_ids)),
     source: clean(row.source),
+    evidenceSources: Object.freeze(asArray(row.evidence_sources)),
     sourceRef: clean(row.source_ref),
     sourceUpdatedAt: clean(row.source_updated_at),
     confidence: finite(row.confidence, 1),
@@ -216,19 +220,33 @@ export function createGacHistoryService(options = {}) {
     const format = normalizeFormat(options.format);
     const enemyLeaderBaseId = normalizeBaseId(options.enemyLeaderBaseId);
     const limit = boundedLimit(options.limit, 100, 500);
-    const rows = asArray(await store.select("gac_counter_observations", {
-      select: "format,enemy_leader_base_id,enemy_members,counter_leader_base_id,counter_members,battles,wins,holds,average_banners,league,season_id,source,source_ref,source_updated_at,confidence,observed_at",
-      format: `eq.${format}`,
-      enemy_leader_base_id: `eq.${enemyLeaderBaseId}`,
-      order: "battles.desc,wins.desc,average_banners.desc.nullslast",
-      limit,
-    }));
+    const [aggregateRows, verifiedBattleRows] = await Promise.all([
+      store.select("gac_counter_observations", {
+        select: "format,enemy_leader_base_id,enemy_members,counter_leader_base_id,counter_members,battles,wins,holds,draws,average_banners,league,season_id,source,source_ref,source_updated_at,confidence,observed_at",
+        format: `eq.${format}`,
+        enemy_leader_base_id: `eq.${enemyLeaderBaseId}`,
+        order: "battles.desc,wins.desc,average_banners.desc.nullslast",
+        limit,
+      }),
+      store.select("gac_battles", {
+        select: "format,season_id,attacker_leader_base_id,attacker_members,defender_leader_base_id,defender_members,battle_outcome,source,source_ref,source_updated_at,imported_at,metadata",
+        format: `eq.${format}`,
+        defender_leader_base_id: `eq.${enemyLeaderBaseId}`,
+        source: "eq.verified-owner-war-room",
+        order: "source_updated_at.desc",
+        limit,
+      }),
+    ]);
+    const verifiedObservations = asArray(verifiedBattleRows).map(verifiedBattleObservation).filter(Boolean);
+    const merged = mergeCounterEvidence([...asArray(aggregateRows), ...verifiedObservations]);
     return Object.freeze({
       source: "gac-counter-evidence",
       format,
       enemyLeaderBaseId,
-      observations: Object.freeze(rows.map(counterRow)),
-      count: rows.length,
+      observations: Object.freeze(merged.map(counterRow)),
+      count: merged.length,
+      evidenceSources: Object.freeze([...new Set(merged.flatMap((row) => asArray(row.evidence_sources)))].sort()),
+      verifiedBattleSamples: verifiedObservations.length,
     });
   }
 
