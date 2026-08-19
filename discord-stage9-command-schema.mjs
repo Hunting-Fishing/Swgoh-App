@@ -1,7 +1,7 @@
 const text = (value) => String(value ?? '').trim();
 const array = (value) => Array.isArray(value) ? value : [];
 
-export const DISCORD_STAGE9_PLAN_SCHEMA_VERSION = '2026-08-19-stage9-plan-approve-v3';
+export const DISCORD_STAGE9_PLAN_SCHEMA_VERSION = '2026-08-19-stage9-plan-cancel-v4';
 
 const phaseChoices = ['P1', 'P2', 'P3', 'P4', 'P5', 'P6'].map((phase) => Object.freeze({ name: phase, value: phase }));
 
@@ -25,29 +25,9 @@ export const DISCORD_STAGE9_TB_SUBCOMMANDS = Object.freeze([
     name: 'plan-diff',
     description: 'Officer-read changes between two verified immutable ROTE plan versions',
     options: Object.freeze([
-      Object.freeze({
-        type: 3,
-        name: 'phase',
-        description: 'ROTE phase containing both immutable versions',
-        required: true,
-        choices: Object.freeze(phaseChoices),
-      }),
-      Object.freeze({
-        type: 3,
-        name: 'from',
-        description: 'Older immutable version number or version ID',
-        required: true,
-        min_length: 1,
-        max_length: 100,
-      }),
-      Object.freeze({
-        type: 3,
-        name: 'to',
-        description: 'Newer immutable version number or version ID',
-        required: true,
-        min_length: 1,
-        max_length: 100,
-      }),
+      Object.freeze({ type: 3, name: 'phase', description: 'ROTE phase containing both immutable versions', required: true, choices: Object.freeze(phaseChoices) }),
+      Object.freeze({ type: 3, name: 'from', description: 'Older immutable version number or version ID', required: true, min_length: 1, max_length: 100 }),
+      Object.freeze({ type: 3, name: 'to', description: 'Newer immutable version number or version ID', required: true, min_length: 1, max_length: 100 }),
     ]),
   }),
   Object.freeze({
@@ -55,29 +35,19 @@ export const DISCORD_STAGE9_TB_SUBCOMMANDS = Object.freeze([
     name: 'plan-approve',
     description: 'Approve one exact immutable ROTE plan version after hash confirmation',
     options: Object.freeze([
-      Object.freeze({
-        type: 3,
-        name: 'phase',
-        description: 'ROTE phase containing the immutable version',
-        required: true,
-        choices: Object.freeze(phaseChoices),
-      }),
-      Object.freeze({
-        type: 3,
-        name: 'version',
-        description: 'Immutable version number or version ID to approve',
-        required: true,
-        min_length: 1,
-        max_length: 100,
-      }),
-      Object.freeze({
-        type: 3,
-        name: 'hash',
-        description: 'First 12+ hexadecimal characters of the plan hash shown by plan-status',
-        required: true,
-        min_length: 12,
-        max_length: 64,
-      }),
+      Object.freeze({ type: 3, name: 'phase', description: 'ROTE phase containing the immutable version', required: true, choices: Object.freeze(phaseChoices) }),
+      Object.freeze({ type: 3, name: 'version', description: 'Immutable version number or version ID to approve', required: true, min_length: 1, max_length: 100 }),
+      Object.freeze({ type: 3, name: 'hash', description: 'First 12+ hexadecimal characters of the plan hash shown by plan-status', required: true, min_length: 12, max_length: 64 }),
+    ]),
+  }),
+  Object.freeze({
+    type: 1,
+    name: 'plan-cancel',
+    description: 'Cancel one immutable ROTE plan version without changing its payload',
+    options: Object.freeze([
+      Object.freeze({ type: 3, name: 'phase', description: 'ROTE phase containing the immutable version', required: true, choices: Object.freeze(phaseChoices) }),
+      Object.freeze({ type: 3, name: 'version', description: 'Immutable version number or version ID to cancel', required: true, min_length: 1, max_length: 100 }),
+      Object.freeze({ type: 3, name: 'reason', description: 'Optional officer cancellation reason', required: false, max_length: 300 }),
     ]),
   }),
 ]);
