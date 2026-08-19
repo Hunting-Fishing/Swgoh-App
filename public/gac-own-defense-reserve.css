@@ -140,11 +140,78 @@
   border-radius: .4rem;
   padding: .22rem .4rem;
   background: rgba(31, 87, 119, .12);
-  color: #9dccE8;
+  color: #9dcce8;
   font-size: .54rem;
   cursor: pointer;
 }
 .gac-own-saved-actions button.danger { border-color: rgba(236, 96, 96, .22); color: #d89494; background: rgba(116, 34, 34, .1); }
+
+.gac-saved-board-banner {
+  display: flex;
+  justify-content: space-between;
+  gap: .6rem;
+  align-items: center;
+  margin: .6rem 0;
+  padding: .45rem .55rem;
+  border: 1px solid rgba(77, 199, 255, .24);
+  border-radius: .55rem;
+  background: rgba(21, 84, 116, .12);
+  font-size: .58rem;
+}
+.gac-saved-board-banner strong { color: #8fddff; letter-spacing: .045em; }
+.gac-saved-board-banner span { color: #7f93a5; }
+.gac-saved-source-badge {
+  padding: .13rem .34rem;
+  border: 1px solid rgba(89, 206, 255, .22);
+  border-radius: 999px;
+  color: #8bd9fa;
+  font-size: .51rem;
+  letter-spacing: .06em;
+}
+.gac-saved-enemy-dc,
+.gac-saved-own-dc {
+  margin-top: .42rem;
+  padding: .4rem .48rem;
+  border-radius: .5rem;
+  font-size: .57rem;
+  line-height: 1.4;
+}
+.gac-saved-enemy-dc {
+  border: 1px solid rgba(244, 91, 91, .24);
+  background: rgba(116, 31, 31, .1);
+  color: #c99191;
+}
+.gac-saved-enemy-dc strong { color: #efaaaa; }
+.gac-saved-own-dc {
+  border: 1px solid rgba(82, 202, 156, .24);
+  background: rgba(28, 104, 72, .1);
+  color: #91c9ad;
+}
+.gac-saved-own-dc strong { color: #a9dfc4; }
+.gac-saved-own-dc.is-unknown {
+  border-style: dashed;
+  color: #818b9c;
+  background: rgba(255, 255, 255, .02);
+}
+.gac-saved-enemy-dc strong,
+.gac-saved-enemy-dc span,
+.gac-saved-own-dc strong,
+.gac-saved-own-dc span { display: block; }
+.gac-saved-dc-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .22rem;
+  margin-top: .28rem;
+}
+.gac-saved-dc-tags b {
+  padding: .09rem .27rem;
+  border: 1px solid rgba(255, 255, 255, .11);
+  border-radius: 999px;
+  font-size: .5rem;
+  font-weight: 800;
+}
+.gac-saved-enemy-dc .gac-saved-dc-tags b { color: #e4a2a2; border-color: rgba(242, 112, 112, .18); }
+.gac-saved-own-dc .gac-saved-dc-tags b { color: #9dd5b8; border-color: rgba(87, 210, 153, .18); }
 
 @media (max-width: 900px) {
   .gac-own-defense-toolbar { grid-template-columns: 1fr 1fr; }
@@ -154,6 +221,7 @@
   .gac-own-defense-toolbar { grid-template-columns: 1fr; }
   .gac-own-defense-picker { grid-template-columns: 1fr 1fr; max-height: 360px; }
   .gac-own-saved-card { align-items: flex-start; flex-direction: column; }
+  .gac-saved-board-banner { align-items: flex-start; flex-direction: column; }
 }
 @media (max-width: 420px) {
   .gac-own-defense-picker { grid-template-columns: 1fr; }
