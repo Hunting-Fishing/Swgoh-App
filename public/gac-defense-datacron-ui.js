@@ -245,9 +245,11 @@ function ensureMounted() {
   setTimeout(bind, 0);
 }
 
-ensureMounted();
-document.addEventListener("DOMContentLoaded", ensureMounted, { once: true });
-window.addEventListener("hashchange", () => setTimeout(ensureMounted, 0));
-new MutationObserver(ensureMounted).observe(document.documentElement, { childList: true, subtree: true });
+if (typeof document !== "undefined") {
+  ensureMounted();
+  document.addEventListener("DOMContentLoaded", ensureMounted, { once: true });
+  window.addEventListener("hashchange", () => setTimeout(ensureMounted, 0));
+  new MutationObserver(ensureMounted).observe(document.documentElement, { childList: true, subtree: true });
+}
 
 export { assessmentHtml, datacronKey, optionLabel, selectedDefenseSquad };
