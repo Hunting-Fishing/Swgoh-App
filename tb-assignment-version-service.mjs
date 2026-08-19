@@ -220,8 +220,55 @@ export function createTbAssignmentVersionService(options = {}) {
     throw lastConflict || serviceError('Unable to allocate an immutable assignment version.', 409, 'TB_ASSIGNMENT_VERSION_CONFLICT');
   }
 
+  async function approveVersion(context = {}, input = {}) {
+    const guildId = text(context?.guild?.id || context?.guildId);
+    const actorUserId = text(context?.userId);
+    const runId = text(input.runId || input.versionId);
+    const confirmedHash = text(input.planHash || input.hash).toLowerCase();
+
+    if (!guildId) throw serviceError('Guild context is required.', 400, 'GUILD_CONTEXT_REQUIRED');
+    if (!actorUserId) throw serviceError('Officer user context is required.', 401, 'OFFICER_CONTEXT_REQUIRED');
+    if (!runId) throw serviceError('An immutable assignment version ID is required.', 400, 'TB_ASSIGNMENT_VERSION_REQUIRED');
+    if (!/^[0-9a-f]{64}$/.test(confirmedHash)) {
+      throw serviceError('Approval requires the full 64-character assignment plan hash.', 400, 'TB_ASSIGNMENT_INVALID_HASH');
+    }
+
+    const before = await readVersion(guildId, runId);
+    if (!before) throw serviceError('Immutable assignment version was not found for this Guild.', 404, 'TB_ASSIGNMENT_VERSION_NOT_FOUND');
+
+    const beforeVerification = verifyTbAssignmentRunHash(before);
+    if (!beforeVerification.valid) {
+      throw serviceError('Persisted assignment payload does not match its stored hash.', 500, 'TB_ASSIGNMENT_HASH_VERIFICATION_FAILED');
+    }
+    if (beforeVerification.stored !== confirmedHash) {
+      throw serviceError('Approval hash does not match the selected immutable assignment version.', 409, 'TB_ASSIGNMENT_APPROVAL_HASH_MISMATCH');
+    }
+
+    const raw = await store.rpc('approve_guild_tb_assignment_version', {
+      p_guild_id: guildId,
+      p_run_id: runId,
+      p_plan_hash: confirmedHash,
+      p_actor_user_id: actorUserId,
+    });
+    const approval = rpcObject(raw, 'approve_guild_tb_assignment_version');
+
+    const after = await readVersion(guildId, runId);
+    if (!after) throw serviceError('Approved assignment version could not be re-read.', 502, 'TB_ASSIGNMENT_VERSION_READBACK_FAILED');
+    const afterVerification = verifyTbAssignmentRunHash(after);
+    if (!afterVerification.valid || text(after.approved_plan_hash).toLowerCase() !== confirmedHash || !text(after.approved_at)) {
+      throw serviceError('Assignment approval failed post-approval verification.', 500, 'TB_ASSIGNMENT_APPROVAL_VERIFICATION_FAILED');
+    }
+
+    return Object.freeze({
+      version: sanitizeVersion(after),
+      verification: afterVerification,
+      approval: Object.freeze(object(approval)),
+    });
+  }
+
   return Object.freeze({
     createVersion,
+    approveVersion,
     readVersion,
     latestVersionNumber,
   });
