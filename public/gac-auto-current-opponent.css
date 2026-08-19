@@ -1,0 +1,55 @@
+.gac-auto-opponent-status {
+  display: inline-flex;
+  max-width: 100%;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border: 1px solid rgba(133, 163, 207, 0.22);
+  border-radius: 10px;
+  background: rgba(10, 18, 31, 0.8);
+  font-size: 0.72rem;
+}
+
+.gac-auto-opponent-status > span {
+  color: rgba(190, 209, 238, 0.68);
+  font-size: 0.63rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+.gac-auto-opponent-status > strong {
+  color: #f3f7ff;
+  font-size: 0.76rem;
+}
+
+.gac-auto-opponent-status > small {
+  flex-basis: 100%;
+  color: rgba(193, 209, 232, 0.72);
+  line-height: 1.35;
+}
+
+.gac-auto-opponent-status.is-checking {
+  border-color: rgba(89, 165, 255, 0.38);
+  box-shadow: inset 0 0 18px rgba(89, 165, 255, 0.05);
+}
+
+.gac-auto-opponent-status.is-locked {
+  border-color: rgba(255, 215, 95, 0.46);
+  background: linear-gradient(135deg, rgba(255, 215, 95, 0.08), rgba(8, 16, 29, 0.88));
+  box-shadow: inset 0 0 20px rgba(255, 215, 95, 0.045);
+}
+
+.gac-auto-opponent-status.is-locked > span,
+.gac-auto-opponent-status.is-locked > strong {
+  color: #ffe79c;
+}
+
+.gac-auto-opponent-status.is-manual {
+  border-color: rgba(255, 191, 92, 0.26);
+}
+
+.gac-auto-opponent-status.is-degraded {
+  border-color: rgba(255, 110, 110, 0.32);
+}
