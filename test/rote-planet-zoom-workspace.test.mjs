@@ -114,13 +114,14 @@ test("character pools and audited fleet pools are both presented as exact", () =
   assert.equal(poolEvidenceLevel(missionEntryRule(genericFleet.mission)), "exact");
 });
 
-test("Hondo mission-type disagreement is surfaced while Reva marker alias is not treated as a conflict", () => {
+test("Hondo is normalized to current combat typing while Reva marker alias is also conflict-free", () => {
   const felucia = resolveRoteMissionNodes("felucia", roteMissionMap("felucia"));
   const hondo = felucia.nodes.find((node) => node.missionId === "felucia-hondo");
   assert.ok(hondo);
   assert.equal(hondo.type, "combat");
-  assert.equal(hondo.mission.missionType, "special");
-  assert.equal(missionTypeConflict(hondo), true);
+  assert.equal(hondo.mission.missionType, "combat");
+  assert.equal(missionTypeConflict(hondo), false);
+  assert.match(hondo.mission.name, /Tarkin/);
 
   const tatooine = resolveRoteMissionNodes("tatooine", roteMissionMap("tatooine"));
   const reva = tatooine.nodes.find((node) => node.missionId === "tatooine-reva");
