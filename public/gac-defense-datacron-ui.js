@@ -1,3 +1,4 @@
+import { displaySlotFromBackend, readBoardPosition, ZONES, zoneLabel } from "./gac-board-position.js";
 import { loadEligibilityContext } from "./gac-datacron-eligibility.js";
 import { assessDefenseDatacron, exposureLabel } from "./gac-defense-datacron-risk.js";
 
@@ -26,7 +27,7 @@ function injectStyles() {
   if (document.querySelector('link[data-gac-defense-datacron-risk="true"]')) return;
   const link = document.createElement("link");
   link.rel = "stylesheet";
-  link.href = "/gac-defense-datacron-risk.css?v=20260819-gacdefdc2";
+  link.href = "/gac-defense-datacron-risk.css?v=20260819-gacdefdc3";
   link.dataset.gacDefenseDatacronRisk = "true";
   document.head.append(link);
 }
@@ -101,6 +102,10 @@ function currentRound() {
   return validRound(byId("gacBracketRound")?.value);
 }
 
+function currentBoardPosition() {
+  return readBoardPosition(byId("gacDefenseZone")?.value, byId("gacDefenseSlot")?.value);
+}
+
 function ensureControl() {
   const leader = byId("gacDefenseLeader");
   if (!leader) return null;
@@ -113,11 +118,18 @@ function ensureControl() {
     <select id="gacDefenseDatacron" disabled>
       <option value="">Enemy Datacron · none confirmed</option>
     </select>
+    <div class="gac-board-position-controls">
+      <select id="gacDefenseZone">
+        <option value="">Board zone · optional</option>
+        ${ZONES.map((entry) => `<option value="${escapeHtml(entry.value)}">${escapeHtml(entry.label)}</option>`).join("")}
+      </select>
+      <input id="gacDefenseSlot" type="number" min="1" max="100" step="1" inputmode="numeric" placeholder="Slot # · optional">
+    </div>
     <div class="gac-board-persistence-controls">
       <select id="gacSavedDefense" disabled><option value="">Saved defenses · none</option></select>
       <button id="gacSaveDefense" type="button" disabled>Save Current Defense</button>
     </div>
-    <small id="gacDefenseDatacronStatus">Select only the exact datacron you can see assigned to this defense in-game.</small>`;
+    <small id="gacDefenseDatacronStatus">Select only the exact datacron you can see assigned to this defense in-game. Zone and slot are optional, but if one is entered both are required.</small>`;
   leader.insertAdjacentElement("afterend", wrapper);
   select = byId("gacDefenseDatacron");
   select?.addEventListener("change", () => {
@@ -125,6 +137,8 @@ function ensureControl() {
     void recomputeAssessment();
     updateSaveState();
   });
+  byId("gacDefenseZone")?.addEventListener("change", updateSaveState);
+  byId("gacDefenseSlot")?.addEventListener("input", updateSaveState);
   byId("gacSaveDefense")?.addEventListener("click", () => void saveCurrentDefense());
   byId("gacSavedDefense")?.addEventListener("change", (event) => {
     const id = clean(event.target.value);
@@ -162,7 +176,7 @@ function renderSelector(message = "") {
   select.innerHTML = `<option value="">Enemy Datacron · none confirmed</option>${options}`;
   if (!values.some((datacron, index) => datacronKey(datacron, index) === state.selectedKey)) state.selectedKey = "";
   select.value = state.selectedKey;
-  if (status) status.textContent = message || "USER-CONFIRMED BOARD EVIDENCE · choose only the datacron visibly assigned to this defense.";
+  if (status) status.textContent = message || "USER-CONFIRMED BOARD EVIDENCE · choose only the datacron visibly assigned to this defense. Add zone + slot when known for exact board identity.";
   updateSaveState();
 }
 
@@ -249,17 +263,21 @@ function updateSaveState() {
   const leader = clean(byId("gacDefenseLeader")?.value);
   const mine = allyCode(byId("allyCode")?.value);
   const opponent = allyCode(byId("gacOpponentCode")?.value);
-  const ready = /^\d{9}$/.test(mine) && /^\d{9}$/.test(opponent) && Boolean(currentRound()) && members.length === size && members.includes(leader);
+  const position = currentBoardPosition();
+  const ready = /^\d{9}$/.test(mine) && /^\d{9}$/.test(opponent) && Boolean(currentRound()) && members.length === size && members.includes(leader) && position.complete;
   button.disabled = state.saveBusy || !ready;
   button.textContent = state.saveBusy ? "Saving Defense…" : "Save Current Defense";
+  button.title = position.complete ? "" : "Enter both board zone and slot, or leave both blank.";
 }
 
 function savedDefenseLabel(defense, index) {
   const unitIndex = new Map((state.roster?.units || []).map((unit) => [clean(unit?.baseId), clean(unit?.name)]));
   const leader = unitIndex.get(clean(defense?.leaderBaseId)) || clean(defense?.leaderBaseId) || `Defense ${index + 1}`;
   const dc = clean(defense?.datacron?.id) ? ` · DC L${Number(defense?.datacron?.level || 0)}` : "";
-  const zone = clean(defense?.zone) ? ` · ${clean(defense.zone)}` : "";
-  return `${leader}${dc}${zone}`;
+  const zone = clean(defense?.zone) ? ` · ${zoneLabel(defense.zone)}` : "";
+  const slot = displaySlotFromBackend(defense?.slot);
+  const slotLabel = slot ? ` · Slot ${slot}` : "";
+  return `${leader}${dc}${zone}${slotLabel}`;
 }
 
 function renderSavedDefenses(selectedId = "") {
@@ -299,6 +317,11 @@ function restoreDefense(defense) {
     leader.dispatchEvent(new Event("change", { bubbles: true }));
   }
 
+  const zone = byId("gacDefenseZone");
+  const slot = byId("gacDefenseSlot");
+  if (zone) zone.value = clean(defense?.zone);
+  if (slot) slot.value = displaySlotFromBackend(defense?.slot);
+
   const datacronId = clean(defense?.datacron?.id);
   const values = datacrons();
   const matchIndex = Array.isArray(values) ? values.findIndex((datacron) => clean(datacron?.id) === datacronId) : -1;
@@ -307,12 +330,15 @@ function restoreDefense(defense) {
   if (dcSelect) dcSelect.value = state.selectedKey;
   const status = byId("gacDefenseDatacronStatus");
   if (status) {
+    const position = currentBoardPosition();
+    const positionLabel = position.specified && position.complete ? ` · ${zoneLabel(position.zone)} Slot ${position.displaySlot}` : "";
     status.textContent = datacronId && matchIndex < 0
-      ? "Saved defense restored. Its saved datacron is not present in the opponent's current live inventory, so the assignment was not re-selected."
-      : "Saved current-round defense restored from verified owner evidence.";
+      ? `Saved defense restored${positionLabel}. Its saved datacron is not present in the opponent's current live inventory, so the assignment was not re-selected.`
+      : `Saved current-round defense restored from verified owner evidence${positionLabel}.`;
   }
   void recomputeAssessment();
   renderSavedDefenses(defense?.id);
+  updateSaveState();
 }
 
 async function loadSavedDefenses() {
@@ -347,7 +373,8 @@ async function saveCurrentDefense() {
   const members = selectedMemberIds();
   const leaderBaseId = clean(byId("gacDefenseLeader")?.value);
   const datacron = selectedDatacron();
-  if (!mine || !opponent || !round || members.length !== size || !members.includes(leaderBaseId)) return;
+  const position = currentBoardPosition();
+  if (!mine || !opponent || !round || members.length !== size || !members.includes(leaderBaseId) || !position.complete) return;
 
   state.saveBusy = true;
   updateSaveState();
@@ -361,11 +388,14 @@ async function saveCurrentDefense() {
       leaderBaseId,
       members,
       datacronId: clean(datacron?.id),
+      zone: position.zone,
+      slot: position.slot,
     });
     if (status) {
+      const positionLabel = position.specified ? ` at ${zoneLabel(position.zone)} Slot ${position.displaySlot}` : "";
       status.textContent = datacron && !clean(datacron?.id)
-        ? "Defense saved. This live datacron had no stable instance ID, so its assignment was not persisted."
-        : `Defense saved for Round ${result.round}. Server revalidated the opponent roster${result?.defense?.datacron?.id ? " and exact datacron ID" : ""}.`;
+        ? `Defense saved${positionLabel}. This live datacron had no stable instance ID, so its assignment was not persisted.`
+        : `Defense saved for Round ${result.round}${positionLabel}. Server revalidated the opponent roster${result?.defense?.datacron?.id ? " and exact datacron ID" : ""}.`;
     }
     await loadSavedDefenses();
     renderSavedDefenses(result?.id);
@@ -467,6 +497,7 @@ if (typeof document !== "undefined") {
 
 export {
   assessmentHtml,
+  currentBoardPosition,
   datacronKey,
   optionLabel,
   restoreDefense,
