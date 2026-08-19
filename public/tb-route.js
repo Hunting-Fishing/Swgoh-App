@@ -10,8 +10,12 @@ const summary = document.querySelector('[data-route-summary]');
 const commandList = document.querySelector('[data-route-command-list]');
 const source = document.querySelector('[data-route-source]');
 const recalculate = document.querySelector('[data-route-recalculate]');
+const applyButton = document.querySelector('[data-route-apply]');
+const applyStatus = document.querySelector('[data-route-apply-status]');
 
 let snapshot = null;
+let lastPreviewInput = null;
+let lastPreviewBody = null;
 
 const text = (value) => String(value ?? '').trim();
 const array = (value) => Array.isArray(value) ? value : [];
@@ -72,6 +76,19 @@ async function api(path, options = {}) {
     throw error;
   }
   return body;
+}
+
+function resetApplyState() {
+  lastPreviewInput = null;
+  lastPreviewBody = null;
+  if (applyButton) {
+    applyButton.disabled = true;
+    applyButton.textContent = 'Apply Safe Orders';
+  }
+  if (applyStatus) {
+    applyStatus.className = 'route-apply-status';
+    applyStatus.textContent = '';
+  }
 }
 
 function renderEvent(body) {
@@ -154,10 +171,13 @@ function renderPlan(body) {
   if (!plan) throw new Error('The server did not return a route plan.');
   results.hidden = false;
   const reference = plan.thresholdReference || {};
+  const previewFingerprint = text(plan.inputFingerprint);
+  const hasFingerprint = /^[0-9a-f]{64}$/i.test(previewFingerprint);
+  const blockedCount = number(plan.blockedZones);
   summary.innerHTML = [
     summaryCard('Deployment allocated', tp(plan.allocatedDeploymentTp)),
     summaryCard('Deployment unallocated', tp(plan.unallocatedDeploymentTp)),
-    summaryCard('Blocked territories', String(number(plan.blockedZones))),
+    summaryCard('Blocked territories', String(blockedCount)),
     summaryCard('Threshold reference', text(reference.version) || '—'),
   ].join('');
 
@@ -188,7 +208,21 @@ function renderPlan(body) {
   const href = safeHref(reference.sourceUrl);
   source.innerHTML = `<b>Evidence boundary:</b> ${escapeHtml(body.evidenceBoundary || plan.sourceBoundary || '')}<br>
     <b>Threshold data:</b> ${escapeHtml(reference.sourceName || 'Versioned ROTE reference')} · ${escapeHtml(reference.sourceKind || 'reference')}${href !== '#' ? ` · <a href="${escapeHtml(href)}" target="_blank" rel="noreferrer">source ↗</a>` : ''}.<br>
-    This result is a non-persisted officer preview. Recalculate whenever current TP or remaining actions change.`;
+    <b>Input fingerprint:</b> <code>${escapeHtml(previewFingerprint || 'unavailable')}</code><br>
+    This result is a non-persisted officer preview until Apply Safe Orders succeeds.`;
+
+  if (applyButton) {
+    applyButton.disabled = blockedCount > 0 || !hasFingerprint;
+    applyButton.title = blockedCount > 0
+      ? 'Resolve all blocked territories before applying.'
+      : hasFingerprint ? 'Apply these orders to unlocked territory commands.' : 'Optimizer fingerprint unavailable.';
+  }
+  if (applyStatus) {
+    applyStatus.className = 'route-apply-status';
+    applyStatus.textContent = blockedCount > 0
+      ? 'Apply is disabled because this preview contains blocked territories.'
+      : 'Preview verified. Applying will re-run the optimizer against current server state before any command changes.';
+  }
   results.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
@@ -209,6 +243,7 @@ form?.addEventListener('submit', async (event) => {
   event.preventDefault();
   inputResult.classList.remove('error');
   results.hidden = true;
+  resetApplyState();
   try {
     const input = collectPreviewInput();
     submitButton.disabled = true;
@@ -217,6 +252,8 @@ form?.addEventListener('submit', async (event) => {
       method: 'POST',
       body: JSON.stringify(input),
     });
+    lastPreviewInput = input;
+    lastPreviewBody = body;
     inputResult.textContent = 'Safe preview generated from the current durable event state plus your explicit remaining-TP inputs.';
     renderPlan(body);
   } catch (error) {
@@ -231,8 +268,55 @@ form?.addEventListener('submit', async (event) => {
   }
 });
 
+applyButton?.addEventListener('click', async () => {
+  const fingerprint = text(lastPreviewBody?.plan?.inputFingerprint);
+  if (!lastPreviewInput || !/^[0-9a-f]{64}$/i.test(fingerprint)) {
+    applyStatus.className = 'route-apply-status error';
+    applyStatus.textContent = 'Generate a fresh safe preview before applying route orders.';
+    applyButton.disabled = true;
+    return;
+  }
+  if (number(lastPreviewBody?.plan?.blockedZones) > 0) {
+    applyStatus.className = 'route-apply-status error';
+    applyStatus.textContent = 'Resolve all blocked territories and recalculate before applying.';
+    applyButton.disabled = true;
+    return;
+  }
+
+  const unlocked = array(lastPreviewBody?.plan?.zones).filter((zone) => !(zone.lockedByOfficer === true || zone.commandSource === 'officer-lock'));
+  const locked = array(lastPreviewBody?.plan?.zones).length - unlocked.length;
+  const confirmed = window.confirm(`Apply ${unlocked.length} optimizer order${unlocked.length === 1 ? '' : 's'} to the active ${text(lastPreviewBody?.event?.currentPhase || 'TB')} event?${locked ? ` ${locked} officer-locked zone${locked === 1 ? '' : 's'} will remain unchanged.` : ''}\n\nThe server will reject this if current territory state changed after the preview.`);
+  if (!confirmed) return;
+
+  applyButton.disabled = true;
+  applyButton.textContent = 'Applying…';
+  applyStatus.className = 'route-apply-status';
+  applyStatus.textContent = 'Re-running optimizer against current server state and opening atomic audit transaction…';
+  try {
+    const body = await api('/api/account/web-actions/tb/route/apply', {
+      method: 'POST',
+      body: JSON.stringify({ ...lastPreviewInput, expectedInputFingerprint: fingerprint }),
+    });
+    applyStatus.className = 'route-apply-status success';
+    applyStatus.innerHTML = `<strong>Orders applied.</strong> ${escapeHtml(String(number(body.appliedZoneCount)))} unlocked zone${number(body.appliedZoneCount) === 1 ? '' : 's'} updated; ${escapeHtml(String(number(body.lockedZoneCount)))} locked zone${number(body.lockedZoneCount) === 1 ? '' : 's'} preserved.<br>Audit snapshot <code>${escapeHtml(body.snapshotId || 'saved')}</code> · fingerprint <code>${escapeHtml(body.inputFingerprint || fingerprint)}</code>.`;
+    applyButton.textContent = 'Orders Applied';
+    lastPreviewInput = null;
+    lastPreviewBody = null;
+    await load();
+  } catch (error) {
+    applyStatus.className = 'route-apply-status error';
+    const blocked = array(error?.details?.blockedPlanets);
+    applyStatus.textContent = blocked.length
+      ? `${error.message} Blocked: ${blocked.join(', ')}.`
+      : `${error.message}${error.code ? ` (${error.code})` : ''}`;
+    applyButton.textContent = error.code === 'ROUTE_PREVIEW_STALE' ? 'Recalculate Required' : 'Apply Safe Orders';
+    applyButton.disabled = error.code === 'ROUTE_PREVIEW_STALE';
+  }
+});
+
 recalculate?.addEventListener('click', () => {
   results.hidden = true;
+  resetApplyState();
   form?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 });
 
