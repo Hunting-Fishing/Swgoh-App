@@ -27,18 +27,33 @@ function forecastPriorityValue(prediction = {}) {
     Math.max(0, Number(prediction?.battleObservedMatchups || 0)) * 100 +
     Math.max(0, Number(prediction?.observedByPlayers || 0));
 }
-function forecastEntries(report = {}, modeValue = "", limit = 8) {
+function visibleForecastRows(report = {}, modeValue = "", limit = 8) {
   const format = modeFormat(modeValue);
-  const size = modeSize(modeValue);
   const max = Math.max(1, Number(limit) || 8);
-  const rows = (Array.isArray(report?.predictions) ? report.predictions : [])
+  return (Array.isArray(report?.predictions) ? report.predictions : [])
     .filter((prediction) => !format || clean(prediction?.format).toLowerCase() === format)
-    .slice(0, max)
+    .slice(0, max);
+}
+function forecastEligibleForPrestage(prediction = {}) {
+  const evidenceClass = clean(prediction?.evidenceClass).toLowerCase();
+  if (Number(prediction?.verifiedHistoricalBoards || 0) >= 1) return true;
+  if (Number(prediction?.battleObservedMatchups || 0) >= 3) return true;
+  return ["verified-zone-recurring", "verified-zone-once", "battle-recurring"].includes(evidenceClass);
+}
+function forecastPrestageReason(prediction = {}, modeValue = "") {
+  const size = modeSize(modeValue);
+  if (normalizeMembers(prediction?.members).length !== size) return "exact historical composition is unresolved for this format";
+  if (!forecastEligibleForPrestage(prediction)) return "single/limited sighting does not reserve a scarce squad";
+  return "eligible for advisory counter pre-stage";
+}
+function forecastEntries(report = {}, modeValue = "", limit = 8) {
+  const size = modeSize(modeValue);
+  const rows = visibleForecastRows(report, modeValue, limit)
     .map((prediction, forecastIndex) => ({ prediction, forecastIndex }));
   const seen = new Set();
   const valid = rows.filter(({ prediction }) => {
     const members = normalizeMembers(prediction?.members);
-    if (members.length !== size) return false;
+    if (members.length !== size || !forecastEligibleForPrestage(prediction)) return false;
     const key = forecastEntryKey(prediction);
     if (!key || seen.has(key)) return false;
     seen.add(key);
@@ -125,8 +140,10 @@ export {
   consumedAttackIds,
   defenderUnits,
   evidenceMapFromBatch,
+  forecastEligibleForPrestage,
   forecastEntries,
   forecastEntryKey,
+  forecastPrestageReason,
   forecastPriorityValue,
   leadersForEntries,
   modeFormat,
@@ -137,4 +154,5 @@ export {
   planningExclusions,
   rosterIndex,
   validRound,
+  visibleForecastRows,
 };
