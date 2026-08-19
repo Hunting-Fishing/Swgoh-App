@@ -2,7 +2,7 @@ import { planBoardCounters } from "./gac-counter-engine.js";
 import { bestCoverage, loadEligibilityContext } from "./gac-datacron-eligibility.js";
 import { mechanicsLabels } from "./gac-datacron-mechanics.js";
 
-const state = { requestId: 0 };
+const state = { requestId: 0, autoKey: "" };
 const number = new Intl.NumberFormat("en-US");
 
 function clean(value) { return String(value ?? "").trim(); }
@@ -145,12 +145,21 @@ async function renderPersistedPlan(model) {
   }).join("") || `<div class="workspace-note">Save at least one verified opponent defense to build the persisted whole-board attack plan.</div>`;
 }
 
-async function refreshSavedBoardPlan() {
+function contextKey() {
   const mineCode = allyCode(byId("allyCode")?.value);
   const opponentCode = allyCode(byId("gacOpponentCode")?.value);
   const round = currentRound();
-  const output = byId("gacBoardPlannerGrid");
-  if (!output || !/^\d{9}$/.test(mineCode) || !/^\d{9}$/.test(opponentCode) || !round) return;
+  if (!byId("gacBoardPlannerGrid") || !/^\d{9}$/.test(mineCode) || !/^\d{9}$/.test(opponentCode) || !round) return "";
+  return `${mineCode}|${opponentCode}|${round}|${squadSize()}`;
+}
+
+async function refreshSavedBoardPlan({ force = false } = {}) {
+  const key = contextKey();
+  if (!key) return;
+  if (!force && state.autoKey === key) return;
+  state.autoKey = key;
+  const [mineCode, opponentCode, roundText] = key.split("|");
+  const round = Number(roundText);
   const requestId = ++state.requestId;
   try {
     const [mineRoster, opponentRoster, opponentBoard, ownBoard] = await Promise.all([
@@ -175,9 +184,7 @@ async function refreshSavedBoardPlan() {
     });
   } catch (error) {
     if (requestId !== state.requestId) return;
-    if (![401, 409].includes(Number(error?.status))) {
-      console.warn("Persisted GAC board planner unavailable", error);
-    }
+    if (![401, 409].includes(Number(error?.status))) console.warn("Persisted GAC board planner unavailable", error);
   }
 }
 
@@ -185,30 +192,33 @@ function bind() {
   const form = byId("gacMatchupForm");
   if (form && form.dataset.savedBoardPlannerBound !== "true") {
     form.dataset.savedBoardPlannerBound = "true";
-    form.addEventListener("submit", () => setTimeout(() => void refreshSavedBoardPlan(), 0));
+    form.addEventListener("submit", () => setTimeout(() => void refreshSavedBoardPlan({ force: true }), 0));
   }
   const round = byId("gacBracketRound");
   if (round && round.dataset.savedBoardPlannerBound !== "true") {
     round.dataset.savedBoardPlannerBound = "true";
-    round.addEventListener("change", () => void refreshSavedBoardPlan());
+    round.addEventListener("change", () => void refreshSavedBoardPlan({ force: true }));
   }
   const mode = byId("gacMode");
   if (mode && mode.dataset.savedBoardPlannerBound !== "true") {
     mode.dataset.savedBoardPlannerBound = "true";
-    mode.addEventListener("change", () => void refreshSavedBoardPlan());
+    mode.addEventListener("change", () => void refreshSavedBoardPlan({ force: true }));
   }
 }
 
 function ensureMounted() {
   bind();
-  if (byId("gacBoardPlannerGrid")) void refreshSavedBoardPlan();
+  void refreshSavedBoardPlan();
 }
 
 if (typeof window !== "undefined" && typeof document !== "undefined") {
-  window.addEventListener("gac-board-evidence-updated", () => void refreshSavedBoardPlan());
+  window.addEventListener("gac-board-evidence-updated", () => void refreshSavedBoardPlan({ force: true }));
   ensureMounted();
   document.addEventListener("DOMContentLoaded", ensureMounted, { once: true });
-  window.addEventListener("hashchange", () => setTimeout(ensureMounted, 0));
+  window.addEventListener("hashchange", () => {
+    state.autoKey = "";
+    setTimeout(ensureMounted, 0);
+  });
   new MutationObserver(ensureMounted).observe(document.documentElement, { childList: true, subtree: true });
 }
 
