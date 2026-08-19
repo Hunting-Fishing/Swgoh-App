@@ -1,4 +1,5 @@
 import { loadEligibilityContext } from "./gac-datacron-eligibility.js";
+import { counterEvidenceStatus, tacticalRiskGates } from "./gac-datacron-risk-gates.js";
 import {
   assessDefenseDatacron,
   exposureLabel,
@@ -59,6 +60,15 @@ function squadUnits(ids, roster = {}) {
   return ids.map((id) => index.get(clean(id).toUpperCase())).filter(Boolean);
 }
 
+function riskGateHtml(assessment) {
+  const gates = tacticalRiskGates(assessment?.mechanics || []);
+  const evidence = counterEvidenceStatus(assessment);
+  const gateLine = gates.length
+    ? `<div class="gac-enemy-datacron-gates">${gates.map((gate) => `<div><b>${escapeHtml(gate.label)}</b><span>${escapeHtml(gate.evidence.join(" · "))}</span><small>${escapeHtml(gate.instruction)}</small></div>`).join("")}</div>`
+    : `<small>No tactical gate category was resolved from the official mechanics text.</small>`;
+  return `${gateLine}<div class="gac-enemy-datacron-evidence"><strong>${escapeHtml(evidence.label)}</strong><small>${escapeHtml(evidence.note)}</small></div>`;
+}
+
 function liveAssessmentHtml(assessment, resolution = "") {
   const mechanics = Array.isArray(assessment?.mechanics) ? assessment.mechanics : [];
   const coverage = assessment?.coverage == null
@@ -72,12 +82,14 @@ function liveAssessmentHtml(assessment, resolution = "") {
       <div class="gac-enemy-datacron-head"><strong>${escapeHtml(exposureLabel(assessment))}</strong><span>LIVE VERIFIED · ${escapeHtml(threatLabel(assessment))}</span></div>
       <div>${escapeHtml(assessment?.label || "Assigned datacron")} · ${escapeHtml(coverage)}${assessment?.leaderEligible === true ? " · leader eligible" : ""}</div>
       ${mechanicHtml}
+      ${riskGateHtml(assessment)}
       <small>Explicit live placement reference · ${escapeHtml(resolution || "assignment verified")}. Opponent inventory is used only to resolve that exact ID, never to guess an assignment.</small>
     </div>`;
 }
 
 function unknownHtml(message = "No explicit datacron assignment was exposed for this defense.") {
-  return `<div class="gac-enemy-datacron-risk is-unknown"><div class="gac-enemy-datacron-head"><strong>ENEMY DATACRON · UNKNOWN</strong><span>NO GUESSING</span></div><small>${escapeHtml(message)} Opponent inventory is not used to infer one.</small></div>`;
+  const evidence = counterEvidenceStatus({ selected: false });
+  return `<div class="gac-enemy-datacron-risk is-unknown"><div class="gac-enemy-datacron-head"><strong>ENEMY DATACRON · UNKNOWN</strong><span>NO GUESSING</span></div><small>${escapeHtml(message)} Opponent inventory is not used to infer one.</small><div class="gac-enemy-datacron-evidence"><strong>${escapeHtml(evidence.label)}</strong><small>${escapeHtml(evidence.note)}</small></div></div>`;
 }
 
 async function enhanceBoard() {
@@ -162,4 +174,4 @@ if (typeof document !== "undefined") {
   new MutationObserver(ensureMounted).observe(document.documentElement, { childList: true, subtree: true });
 }
 
-export { cardEnemyMemberIds, liveAssessmentHtml, squadUnits, unknownHtml };
+export { cardEnemyMemberIds, liveAssessmentHtml, riskGateHtml, squadUnits, unknownHtml };
