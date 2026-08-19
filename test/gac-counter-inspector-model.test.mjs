@@ -162,7 +162,7 @@ test("roster resolution and composition helpers fail closed on partial current r
   assert.equal(sameComposition(["B", "A"], ["A", "B"]), true);
   assert.equal(sameComposition(["A", "B"], ["A", "C"]), false);
   assert.equal(observedPercent(0.756), 75.6);
-  assert.equal(observedPercent(null), 0);
+  assert.equal(observedPercent(null), null);
 });
 
 test("counter inspector is explicitly browser-loaded and contains no persistent mutation method", async () => {
