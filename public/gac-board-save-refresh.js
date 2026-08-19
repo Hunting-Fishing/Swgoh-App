@@ -12,11 +12,13 @@ function savedDefenseCount(select) {
   return [...select.options].filter((option) => Number.isInteger(Number(option.value)) && Number(option.value) > 0).length;
 }
 function publish() {
+  const select = byId("gacSavedDefense");
   const round = validRound(byId("gacBracketRound")?.value);
   dispatchBoardEvidenceUpdated({
     owner: "opponent",
     round,
     action: "loaded",
+    defenseCount: savedDefenseCount(select),
   });
 }
 function schedulePublish(delay = 40) {
