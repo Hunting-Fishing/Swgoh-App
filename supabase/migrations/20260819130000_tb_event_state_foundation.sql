@@ -34,6 +34,7 @@ create table if not exists public.guild_tb_zone_states (
   planet_id text not null,
   current_tp bigint not null default 0 check (current_tp >= 0),
   current_stars integer not null default 0 check (current_stars between 0 and 3),
+  preload_cap_tp bigint check (preload_cap_tp is null or preload_cap_tp >= 0),
   deployment_tp bigint not null default 0 check (deployment_tp >= 0),
   combat_tp bigint not null default 0 check (combat_tp >= 0),
   operation_tp bigint not null default 0 check (operation_tp >= 0),
@@ -80,7 +81,7 @@ create table if not exists public.guild_tb_member_actions (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint guild_tb_member_actions_phase_check check (phase ~ '^P[1-6]$'),
-  constraint guild_tb_member_actions_ally_check check (ally_code ~ '^\d{9}$'),
+  constraint guild_tb_member_actions_ally_check check (ally_code ~ '^[0-9]{9}$'),
   constraint guild_tb_member_actions_type_check check (action_type in ('operation','special','combat','fleet','deploy','acknowledge')),
   constraint guild_tb_member_actions_status_check check (status in ('pending','acknowledged','completed','skipped','blocked')),
   constraint guild_tb_member_actions_source_check check (source_kind in ('generated','officer','reported','canonical')),
@@ -104,5 +105,5 @@ grant all on table public.guild_tb_zone_states to service_role;
 grant all on table public.guild_tb_member_actions to service_role;
 
 comment on table public.guild_tb_events is 'Canonical Command Center Territory Battle instances. Reference map data is intentionally separate from live/officer event state.';
-comment on table public.guild_tb_zone_states is 'Per-event Territory Battle zone state and officer commands, with explicit source provenance.';
+comment on table public.guild_tb_zone_states is 'Per-event Territory Battle zone state and officer commands, including an explicit preload TP safety cap, with source provenance.';
 comment on table public.guild_tb_member_actions is 'Durable ordered Today in TB task queue generated from an event fingerprint and current verified player roster.';
