@@ -1,4 +1,5 @@
 import { gacBracketIndexService } from "./gac-bracket-index-service.mjs";
+import { gacCounterEvidenceBatchService } from "./gac-counter-evidence-batch-service.mjs";
 import { createGacCurrentOpponentConfirmationApi } from "./gac-current-opponent-confirmation-api.mjs";
 import { gacHistoryImportService } from "./gac-history-import-service.mjs";
 import { gacHistoryService } from "./gac-history-service.mjs";
@@ -58,6 +59,7 @@ export function createGacApi({
   history = gacHistoryService,
   historyImport = gacHistoryImportService,
   bracketIndex = gacBracketIndexService,
+  counterBatch = gacCounterEvidenceBatchService,
   scouting = gacScoutingService,
   now = Date.now,
   importCooldownMs = 30 * 60 * 1000,
@@ -298,6 +300,24 @@ export function createGacApi({
           });
         } catch (error) {
           writeError(writeJson, response, error, "GAC opponent scouting evidence is unavailable.");
+        }
+        return true;
+      }
+
+      if (url.pathname === "/api/gac/counters/batch") {
+        try {
+          const leaders = [
+            ...url.searchParams.getAll("enemyLeader"),
+            ...String(url.searchParams.get("leaders") || "").split(","),
+          ].filter(Boolean);
+          const body = await counterBatch.getCounterEvidenceBatch({
+            format: url.searchParams.get("format"),
+            enemyLeaderBaseIds: leaders,
+            limit: positiveLimit(url.searchParams.get("limit"), 40, 100),
+          });
+          writeJson(response, 200, body, { "X-GAC-Source": "persisted-counter-evidence-batch" });
+        } catch (error) {
+          writeError(writeJson, response, error, "Batched GAC counter evidence is unavailable.");
         }
         return true;
       }
