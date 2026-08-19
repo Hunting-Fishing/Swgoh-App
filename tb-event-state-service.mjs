@@ -25,6 +25,12 @@ function cleanPhase(value) {
   return /^P[1-6]$/.test(phase) ? phase : '';
 }
 
+function nextPhase(value) {
+  const phase = cleanPhase(value);
+  const number = Number(phase.slice(1));
+  return phase && number < 6 ? `P${number + 1}` : '';
+}
+
 function cleanStatus(value, fallback = 'active') {
   const status = text(value).toLowerCase();
   return ['planned','active','completed','archived'].includes(status) ? status : fallback;
@@ -49,7 +55,7 @@ function phaseAllowsPlanet(phase, planet) {
   if (text(planet.phase).toUpperCase() === currentPhase) return true;
   if (planet.bonus !== true || !planet.unlockFrom) return false;
   const unlockSource = ROTE_PLANETS.find((candidate) => candidate.id === planet.unlockFrom);
-  return text(unlockSource?.phase).toUpperCase() === currentPhase;
+  return nextPhase(unlockSource?.phase) === currentPhase;
 }
 
 function memberMatchesAssignment(assignment = {}, player = {}) {
