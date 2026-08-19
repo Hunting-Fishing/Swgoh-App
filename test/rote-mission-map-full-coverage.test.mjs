@@ -8,6 +8,7 @@ import {
   roteMissionMap,
   roteMissionMapMatches,
 } from "../public/rote-mission-map-registry.js";
+import { resolveRoteMissionNodes } from "../public/rote-mission-node-eligibility.js";
 
 test("ROTE mission map registry keeps eight explicit provider groups", () => {
   assert.equal(ROTE_MISSION_MAP_PROVIDERS.length, 8);
@@ -78,11 +79,21 @@ test("bonus territories remain explicit and do not collide with normal phase pro
   assert.equal(roteMissionMapMatches("mandalore").length, 1);
 });
 
-test("all source-linked live-preparation mappings are all-or-nothing", () => {
+test("live-preparation team links always have a mission and source-incomplete missions may intentionally omit a team", () => {
+  let missionOnly = 0;
   for (const planet of ROTE_PLANETS) {
     const map = roteMissionMap(planet.id);
+    const resolved = resolveRoteMissionNodes(planet.id, map);
+    const byId = new Map(resolved.nodes.map((node) => [node.id, node]));
     for (const node of map.nodes) {
-      assert.equal(Boolean(node.missionId), Boolean(node.teamId), `${planet.id}/${node.id} must not have a partial live-preparation link`);
+      if (node.teamId) assert.ok(node.missionId, `${planet.id}/${node.id} team link requires an exact mission link`);
+      if (!node.missionId || node.teamId) continue;
+      missionOnly += 1;
+      const resolvedNode = byId.get(node.id);
+      assert.ok(resolvedNode?.mission, `${planet.id}/${node.id} mission-only link must still resolve`);
+      assert.equal(resolvedNode.mission.recommendations.length, 0, `${planet.id}/${node.id} may omit teamId only when no complete recommendation is asserted`);
+      assert.match(resolvedNode.note || "", /SOURCE TEAM TBD|source.*incomplete|does not provide a complete recommended squad/i, `${planet.id}/${node.id} mission-only link must explain the evidence boundary`);
     }
   }
+  assert.equal(missionOnly, 4, "only the four source-incomplete P6 generic missions should remain mission-only mappings");
 });
