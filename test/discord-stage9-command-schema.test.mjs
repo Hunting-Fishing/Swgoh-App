@@ -19,8 +19,14 @@ const base = {
 test('adds Stage 9 plan lifecycle commands exactly once without changing existing TB subcommands', () => {
   const first = applyDiscordStage9TbCommandSchema(base);
   assert.equal(first.changed, true);
-  assert.deepEqual(first.added, ['plan-status', 'plan-diff', 'plan-approve', 'plan-cancel']);
+  assert.deepEqual(first.added, ['plan-preview', 'plan-status', 'plan-diff', 'plan-approve', 'plan-cancel']);
   assert.deepEqual(first.command.options.slice(0, 2), base.options);
+
+  const preview = first.command.options.find((row) => row.name === 'plan-preview');
+  assert.ok(preview);
+  assert.deepEqual(preview.options.map((row) => row.name), ['phase']);
+  assert.equal(preview.options[0].required, true);
+  assert.equal(preview.options[0].choices.length, 6);
 
   const status = first.command.options.find((row) => row.name === 'plan-status');
   assert.ok(status);
@@ -41,15 +47,23 @@ test('adds Stage 9 plan lifecycle commands exactly once without changing existin
 
   const second = applyDiscordStage9TbCommandSchema(first.command);
   assert.equal(second.changed, false);
-  for (const name of ['plan-status', 'plan-diff', 'plan-approve', 'plan-cancel']) {
+  for (const name of ['plan-preview', 'plan-status', 'plan-diff', 'plan-approve', 'plan-cancel']) {
     assert.equal(second.command.options.filter((row) => row.name === name).length, 1);
   }
 });
 
 test('Stage 9 command schema has its own explicit version identifier', () => {
-  assert.match(DISCORD_STAGE9_PLAN_SCHEMA_VERSION, /stage9-plan-cancel-v4$/);
+  assert.match(DISCORD_STAGE9_PLAN_SCHEMA_VERSION, /stage9-plan-preview-v5$/);
 });
 
 test('rejects accidental patching of a non-TB Discord command', () => {
   assert.throws(() => applyDiscordStage9TbCommandSchema({ name: 'guild', options: [] }), /requires the registered \/tb command/i);
+});
+
+test('fails closed before Discord root command option overflow', () => {
+  const crowded = {
+    ...base,
+    options: Array.from({ length: 21 }, (_, index) => ({ type: 1, name: `base-${index}`, description: 'Base command' })),
+  };
+  assert.throws(() => applyDiscordStage9TbCommandSchema(crowded), /25-option \/tb limit/i);
 });
