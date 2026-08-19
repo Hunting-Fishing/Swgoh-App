@@ -7,6 +7,7 @@ create table if not exists public.gac_attack_plan_assignments (
   datacron jsonb,
   status text not null default 'planned' check (status in ('planned','attempted','win','loss','abandoned')),
   attempt_count integer not null default 0 check (attempt_count >= 0),
+  attempt_log jsonb not null default '[]'::jsonb,
   banners integer check (banners is null or banners >= 0),
   source text not null default 'verified-owner-war-room',
   source_ref text,
@@ -26,6 +27,8 @@ alter table public.gac_attack_plan_assignments enable row level security;
 revoke all on public.gac_attack_plan_assignments from anon, authenticated;
 
 comment on table public.gac_attack_plan_assignments is
-  'Verified-owner operational GAC war-room state: one planned/current counter per saved enemy defense, separate from historical battle evidence.';
+  'Verified-owner operational GAC war-room state: one current plan per saved enemy defense plus an append-only attempt log, separate from historical battle evidence.';
+comment on column public.gac_attack_plan_assignments.attempt_log is
+  'Append-only operational attempt snapshots (squad, datacron id, result, banners, timestamp). These are not promoted to historical counter evidence automatically.';
 comment on column public.gac_attack_plan_assignments.status is
   'Operational state only; a win/loss becomes historical evidence only through a separate verified battle-recording path.';
