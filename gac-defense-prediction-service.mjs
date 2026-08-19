@@ -274,6 +274,15 @@ function summarizePredictionPlacements(battlePlacements = [], verifiedPlacements
   });
 }
 
+function suppliedHistoricalBattleRows(rows, allyCode, playerId) {
+  return asArray(rows).filter((row) => {
+    if (clean(row?.source) !== "c3po-gahistory") return false;
+    const opponentAllyCode = clean(row?.opponent_ally_code).replace(/\D/g, "");
+    const opponentPlayerId = clean(row?.opponent_swgoh_player_id);
+    return opponentAllyCode === allyCode || Boolean(playerId && opponentPlayerId === playerId);
+  });
+}
+
 export function createGacDefensePredictionService(options = {}) {
   const store = options.store || supabaseCoreStore;
   const now = options.now || (() => Date.now());
@@ -291,24 +300,31 @@ export function createGacDefensePredictionService(options = {}) {
     const allyCode = normalizeAllyCode(allyCodeInput);
     const format = normalizeFormat(predictionOptions.format);
     const limit = Math.max(100, Math.min(5000, Math.floor(finite(predictionOptions.limit, 2500))));
-    const player = await selectTargetPlayer(allyCode);
-    const playerId = clean(player?.swgoh_player_id);
+    const suppliedPlayer = predictionOptions?.player && typeof predictionOptions.player === "object" ? predictionOptions.player : null;
+    const suppliedPlayerCode = clean(suppliedPlayer?.ally_code || suppliedPlayer?.allyCode).replace(/\D/g, "");
+    const player = suppliedPlayer && suppliedPlayerCode === allyCode ? suppliedPlayer : await selectTargetPlayer(allyCode);
+    const playerId = clean(player?.swgoh_player_id || player?.playerId);
 
-    let battleRows = asArray(await store.select("gac_battles", {
-      select: "swgoh_player_id,ally_code,event_instance_id,season_id,format,round_number,match_index,match_id,opponent_swgoh_player_id,opponent_ally_code,defender_leader_base_id,defender_members,source,source_ref,source_updated_at,imported_at,metadata",
-      opponent_ally_code: `eq.${allyCode}`,
-      source: "eq.c3po-gahistory",
-      order: "source_updated_at.desc",
-      limit,
-    }));
-    if (!battleRows.length && playerId) {
+    let battleRows;
+    if (Array.isArray(predictionOptions.battleRows)) {
+      battleRows = suppliedHistoricalBattleRows(predictionOptions.battleRows, allyCode, playerId);
+    } else {
       battleRows = asArray(await store.select("gac_battles", {
         select: "swgoh_player_id,ally_code,event_instance_id,season_id,format,round_number,match_index,match_id,opponent_swgoh_player_id,opponent_ally_code,defender_leader_base_id,defender_members,source,source_ref,source_updated_at,imported_at,metadata",
-        opponent_swgoh_player_id: `eq.${playerId}`,
+        opponent_ally_code: `eq.${allyCode}`,
         source: "eq.c3po-gahistory",
         order: "source_updated_at.desc",
         limit,
       }));
+      if (!battleRows.length && playerId) {
+        battleRows = asArray(await store.select("gac_battles", {
+          select: "swgoh_player_id,ally_code,event_instance_id,season_id,format,round_number,match_index,match_id,opponent_swgoh_player_id,opponent_ally_code,defender_leader_base_id,defender_members,source,source_ref,source_updated_at,imported_at,metadata",
+          opponent_swgoh_player_id: `eq.${playerId}`,
+          source: "eq.c3po-gahistory",
+          order: "source_updated_at.desc",
+          limit,
+        }));
+      }
     }
 
     const opponentRounds = asArray(await store.select("gac_rounds", {
@@ -387,6 +403,7 @@ export {
   boardSetsByFormat,
   historicalEvent,
   summarizePredictionPlacements,
+  suppliedHistoricalBattleRows,
   teamSignature,
   verifiedPlacementRows,
 };
