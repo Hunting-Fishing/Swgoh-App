@@ -194,7 +194,11 @@ export function createDiscordTbStage9PlanPreviewCommand(options = {}) {
         hardReservationCount: Number(snapshot?.planningControls?.hardReservationCount || 0),
       }),
       guildBindingSource: text(snapshot?.guildBindingSource),
-      plannerSummary: object(snapshot?.plan?.summary),
+      plannerSummary: Object.freeze({
+        assigned: assignments.length,
+        unfilled: unfilled.length,
+        helpAssignments,
+      }),
     });
 
     const inputFingerprint = fingerprint({
