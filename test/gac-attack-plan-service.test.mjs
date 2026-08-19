@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import { createGacAttackPlanService } from "../gac-attack-plan-service.mjs";
 
 function clone(value) { return value == null ? value : JSON.parse(JSON.stringify(value)); }
-function unfilter(value) { return String(value ?? "").replace(/^(eq\.|in\.\()/, "").replace(/\)$/, ""); }
 
 function harness(options = {}) {
   const calls = [];
@@ -199,6 +198,26 @@ test("abandoning an unattempted plan frees its attackers for another defense", a
 
   const second = await service.saveAssignment("USER-1", plan(45));
   assert.equal(second.assignment.status, "planned");
+});
+
+test("cannot replan a defense while its attack is marked in progress", async () => {
+  const { service } = harness();
+  const first = await service.saveAssignment("USER-1", plan(44));
+  await service.updateStatus("USER-1", { ...context, id: first.assignment.id, status: "attempted" });
+  await assert.rejects(
+    () => service.saveAssignment("USER-1", plan(44, ["ATK_D", "ATK_E", "ATK_F"])),
+    (error) => error?.status === 409 && /attempt in progress/i.test(error.message)
+  );
+});
+
+test("cleared defense is terminal and cannot receive a new planned counter", async () => {
+  const { service } = harness();
+  const first = await service.saveAssignment("USER-1", plan(44));
+  await service.updateStatus("USER-1", { ...context, id: first.assignment.id, status: "win", banners: 65 });
+  await assert.rejects(
+    () => service.saveAssignment("USER-1", plan(44, ["ATK_D", "ATK_E", "ATK_F"])),
+    (error) => error?.status === 409 && /already cleared/i.test(error.message)
+  );
 });
 
 test("rejects attack planning against a defense outside verified current-board evidence", async () => {
