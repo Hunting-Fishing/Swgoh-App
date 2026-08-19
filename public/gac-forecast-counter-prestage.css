@@ -1,0 +1,117 @@
+.gac-forecast-counter-status {
+  margin: .38rem 0 .62rem;
+  padding: .42rem .55rem;
+  border: 1px solid rgba(127, 151, 191, .18);
+  border-radius: .55rem;
+  background: rgba(7, 12, 23, .62);
+  color: #8f9db3;
+  font-size: .62rem;
+  font-weight: 800;
+  letter-spacing: .035em;
+}
+.gac-forecast-counter-status.is-checking { color: #9fc8f0; border-color: rgba(89, 165, 255, .3); }
+.gac-forecast-counter-status.is-ready { color: #9fe6bc; border-color: rgba(102, 218, 163, .3); }
+.gac-forecast-counter-status.is-partial { color: #f1ca77; border-color: rgba(237, 184, 77, .3); }
+.gac-forecast-counter-status.is-error { color: #ff9c9c; border-color: rgba(255, 105, 105, .3); }
+
+.gac-forecast-prestage {
+  margin-top: .62rem;
+  padding: .58rem;
+  border: 1px solid rgba(87, 169, 230, .22);
+  border-radius: .65rem;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(59, 151, 218, .08), transparent 15rem),
+    rgba(5, 11, 23, .75);
+}
+.gac-forecast-prestage[data-source="evidence"] {
+  border-color: rgba(114, 220, 163, .34);
+  background:
+    radial-gradient(circle at 100% 0%, rgba(69, 193, 133, .09), transparent 16rem),
+    rgba(5, 14, 20, .78);
+}
+.gac-forecast-prestage.is-empty { border-style: dashed; opacity: .9; }
+.gac-prestage-heading > span {
+  display: block;
+  color: #73bce9;
+  font-size: .56rem;
+  font-weight: 900;
+  letter-spacing: .09em;
+}
+.gac-forecast-prestage[data-source="evidence"] .gac-prestage-heading > span { color: #78dba8; }
+.gac-prestage-heading > strong {
+  display: block;
+  margin-top: .18rem;
+  color: #eff6ff;
+  font-size: .72rem;
+}
+.gac-prestage-heading > span + strong + span,
+.gac-prestage-heading > strong + span {
+  margin-top: .16rem;
+  color: #91a0b7;
+  font-size: .61rem;
+}
+.gac-prestage-units {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .25rem;
+  margin-top: .48rem;
+}
+.gac-prestage-unit {
+  display: inline-flex;
+  width: 47px;
+  flex-direction: column;
+  align-items: center;
+  gap: .16rem;
+}
+.gac-prestage-unit img,
+.gac-prestage-unit > span {
+  width: 37px;
+  height: 37px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid rgba(95, 176, 228, .36);
+  background: rgba(12, 24, 39, .92);
+}
+.gac-prestage-unit > span {
+  display: grid;
+  place-items: center;
+  color: #9ed2f2;
+  font-size: .58rem;
+  font-weight: 900;
+}
+.gac-prestage-unit small {
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
+  color: #78879e;
+  font-size: .52rem;
+}
+.gac-prestage-deltas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .25rem;
+  margin-top: .45rem;
+}
+.gac-prestage-deltas span {
+  border: 1px solid rgba(119, 144, 181, .15);
+  border-radius: 999px;
+  padding: .2rem .36rem;
+  color: #8190a7;
+  font-size: .56rem;
+}
+.gac-prestage-deltas strong { color: #dce8f5; }
+.gac-prestage-allocation {
+  margin-top: .42rem;
+  color: #8d9db4;
+  font-size: .59rem;
+  line-height: 1.4;
+}
+.gac-prestage-allocation strong { color: #c5d4e5; }
+.gac-forecast-prestage > small {
+  display: block;
+  margin-top: .38rem;
+  color: #be9f63;
+  font-size: .56rem;
+}
