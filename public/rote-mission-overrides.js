@@ -1,4 +1,28 @@
 import { roteFleetEntryAudit } from "./rote-fleet-entry-audit-data.js";
+import {
+  ROTE_TACTICAL_P1_P2_SOURCE,
+  roteTacticalP1P2Override,
+} from "./rote-tactical-p1-p2-data.js";
+import {
+  ROTE_TACTICAL_P3_SOURCE,
+  roteTacticalP3Override,
+} from "./rote-tactical-p3-data.js";
+import {
+  ROTE_TACTICAL_P4_SOURCE,
+  roteTacticalP4Override,
+} from "./rote-tactical-p4-data.js";
+import {
+  ROTE_TACTICAL_P5_SOURCE,
+  roteTacticalP5Override,
+} from "./rote-tactical-p5-data.js";
+import {
+  ROTE_TACTICAL_P6_SOURCE,
+  roteTacticalP6Override,
+} from "./rote-tactical-p6-data.js";
+import {
+  ROTE_TACTICAL_BONUS_SOURCE,
+  roteTacticalBonusOverride,
+} from "./rote-tactical-bonus-data.js";
 
 const CANONICAL_BASE_IDS = Object.freeze({
   BOKATANMANDALORE: "MANDALORBOKATAN",
@@ -37,173 +61,61 @@ function normalizeRecommendation(recommendation = {}) {
   };
 }
 
-function communityTacticalRecommendation(id, presetName, memberNames) {
-  return Object.freeze({
-    id,
-    name: presetName,
-    confidence: "community",
-    verifiedLegal: false,
-    members: Object.freeze(memberNames.map((name) => Object.freeze({ name }))),
-    sourceIds: Object.freeze(["genskaar-rote"]),
-    lastVerified: "2026-08-19",
-  });
+function normalizeEntry(entry = {}) {
+  return {
+    ...entry,
+    requiredBaseIds: Array.isArray(entry.requiredBaseIds) ? entry.requiredBaseIds.map(canonicalId) : entry.requiredBaseIds,
+    allowedBaseIds: Array.isArray(entry.allowedBaseIds) ? entry.allowedBaseIds.map(canonicalId) : entry.allowedBaseIds,
+    mandatoryMembers: Array.isArray(entry.mandatoryMembers) ? entry.mandatoryMembers.map(normalizeMember) : entry.mandatoryMembers,
+  };
 }
 
-const GEONOSIS_TACTICAL_SOURCE = Object.freeze({
-  sourceId: "genskaar-rote",
-  sourceRevision: "7a4b848846bb394c0970f98780b08ce20a5926da",
-  lastVerified: "2026-08-19",
-});
+const TATOOINE_UNLOCK_RECOMMENDATIONS = Object.freeze([
+  Object.freeze({
+    id: "rote-tatooine-mandalore-unlock-ig12",
+    name: "ROTE-P3-TAT-MANDALORE-IG12",
+    confidence: "community",
+    verifiedLegal: true,
+    members: [
+      { name: "Bo-Katan (Mand'alor)", baseId: "MANDALORBOKATAN" },
+      { name: "The Mandalorian (Beskar Armor)", baseId: "THEMANDALORIANBESKARARMOR" },
+      { name: "IG-12 & Grogu", baseId: "IG12" },
+    ],
+    sourceIds: ["cg-mandalore-zone", "starwarsfans-mandalore-unlock", "genskaar-rote"],
+    lastVerified: "2026-08-19",
+  }),
+  Object.freeze({
+    id: "rote-tatooine-mandalore-unlock-paz",
+    name: "ROTE-P3-TAT-MANDALORE-PAZ",
+    confidence: "community",
+    verifiedLegal: true,
+    members: [
+      { name: "Bo-Katan (Mand'alor)", baseId: "MANDALORBOKATAN" },
+      { name: "The Mandalorian (Beskar Armor)", baseId: "THEMANDALORIANBESKARARMOR" },
+      { name: "Paz Vizsla", baseId: "PAZVIZSLA" },
+    ],
+    sourceIds: ["cg-mandalore-zone", "starwarsfans-mandalore-unlock", "genskaar-rote"],
+    lastVerified: "2026-08-19",
+  }),
+]);
 
-const GEONOSIS_TACTICAL_OVERRIDES = Object.freeze({
-  "geonosis-generic-1": Object.freeze({
-    name: "Combat Mission — Nexu",
-    enemies: Object.freeze(["Nexu"]),
-    commandTag: "NEXU | SLKR / LV",
-    presetPrefix: "ROTE-P2-GEO-NEXU",
-    recommendations: Object.freeze([
-      communityTacticalRecommendation("rote-p2-geo-nexu-slkr", "ROTE-P2-GEO-NEXU-SLKR", [
-        "Supreme Leader Kylo Ren",
-        "First Order Officer",
-        "Kylo Ren (Unmasked)",
-        "General Hux",
-        "Sith Trooper",
-      ]),
-      communityTacticalRecommendation("rote-p2-geo-nexu-lv", "ROTE-P2-GEO-NEXU-LV", [
-        "Lord Vader",
-        "Maul",
-        "Royal Guard",
-        "Admiral Piett",
-        "Darth Vader",
-      ]),
-    ]),
-  }),
-  "geonosis-generic-2": Object.freeze({
-    name: "Combat Mission — Acklay",
-    enemies: Object.freeze(["Acklay"]),
-    commandTag: "ACKLAY | SLKR / LV / BH+WAT / INQS",
-    presetPrefix: "ROTE-P2-GEO-ACKLAY",
-    recommendations: Object.freeze([
-      communityTacticalRecommendation("rote-p2-geo-acklay-slkr", "ROTE-P2-GEO-ACKLAY-SLKR", [
-        "Supreme Leader Kylo Ren",
-        "First Order Officer",
-        "Kylo Ren (Unmasked)",
-        "General Hux",
-        "Sith Trooper",
-      ]),
-      communityTacticalRecommendation("rote-p2-geo-acklay-lv", "ROTE-P2-GEO-ACKLAY-LV", [
-        "Lord Vader",
-        "Maul",
-        "Royal Guard",
-        "Admiral Piett",
-        "Darth Vader",
-      ]),
-      communityTacticalRecommendation("rote-p2-geo-acklay-bh-wat", "ROTE-P2-GEO-ACKLAY-BH-WAT", [
-        "Bossk",
-        "Boba Fett",
-        "Jango Fett",
-        "Boba Fett, Scion of Jango",
-        "Wat Tambor",
-      ]),
-      communityTacticalRecommendation("rote-p2-geo-acklay-inqs", "ROTE-P2-GEO-ACKLAY-INQS", [
-        "Grand Inquisitor",
-        "Seventh Sister",
-        "Ninth Sister",
-        "Fifth Brother",
-        "Eighth Brother",
-      ]),
-    ]),
-  }),
-  "geonosis-generic-3": Object.freeze({
-    name: "Combat Mission — Reek",
-    enemies: Object.freeze(["Reek"]),
-    commandTag: "REEK | SEE+WAT / INQS / LV / SLKR / TRENCH",
-    presetPrefix: "ROTE-P2-GEO-REEK",
-    recommendations: Object.freeze([
-      communityTacticalRecommendation("rote-p2-geo-reek-see-wat", "ROTE-P2-GEO-REEK-SEE-WAT", [
-        "Sith Eternal Emperor",
-        "Wat Tambor",
-        "Darth Nihilus",
-        "Darth Sion",
-        "Darth Traya",
-      ]),
-      communityTacticalRecommendation("rote-p2-geo-reek-inqs", "ROTE-P2-GEO-REEK-INQS", [
-        "Grand Inquisitor",
-        "Seventh Sister",
-        "Ninth Sister",
-        "Fifth Brother",
-        "Eighth Brother",
-      ]),
-      communityTacticalRecommendation("rote-p2-geo-reek-lv", "ROTE-P2-GEO-REEK-LV", [
-        "Lord Vader",
-        "Maul",
-        "Royal Guard",
-        "Admiral Piett",
-        "Darth Vader",
-      ]),
-      communityTacticalRecommendation("rote-p2-geo-reek-slkr", "ROTE-P2-GEO-REEK-SLKR", [
-        "Supreme Leader Kylo Ren",
-        "First Order Officer",
-        "Kylo Ren (Unmasked)",
-        "General Hux",
-        "Sith Trooper",
-      ]),
-      communityTacticalRecommendation("rote-p2-geo-reek-trench", "ROTE-P2-GEO-REEK-TRENCH", [
-        "Admiral Trench",
-        "Nute Gunray",
-        "Jango Fett",
-        "Count Dooku",
-        "Wat Tambor",
-      ]),
-    ]),
-  }),
-  "geonosis-geos": Object.freeze({
-    name: "Combat Mission — Geonosians",
-    enemies: Object.freeze(["Partisan Fighters", "Kanan Jarrus / Ezra Bridger / Chopper / Captain Rex"]),
-    commandTag: "GEOS | GBA LEAD",
-    presetPrefix: "ROTE-P2-GEO-GEOS",
-    recommendations: Object.freeze([
-      communityTacticalRecommendation("rote-p2-geo-geos", "ROTE-P2-GEO-GEOS", [
-        "Geonosian Brood Alpha",
-        "Geonosian Soldier",
-        "Geonosian Spy",
-        "Poggle the Lesser",
-        "Sun Fac",
-      ]),
-    ]),
-  }),
-  "geonosis-fleet": Object.freeze({
-    name: "Fleet Mission — Leviathan",
-    enemies: Object.freeze(["Malevolence / Geonosian fleet"]),
-    commandTag: "FLEET | LEVIATHAN",
-    presetPrefix: "ROTE-P2-GEO-FLEET",
-    recommendations: Object.freeze([
-      communityTacticalRecommendation("rote-p2-geo-fleet-leviathan", "ROTE-P2-GEO-FLEET-LEVIATHAN", [
-        "Leviathan",
-        "Sith Fighter",
-        "Fury-class Interceptor",
-        "B-28 Extinction-class Bomber",
-        "Mark VI Interceptor",
-        "TIE Dagger",
-        "Scimitar",
-      ]),
-    ]),
-  }),
-});
-
-const TATOOINE_UNLOCK_RECOMMENDATION = Object.freeze({
-  id: "rote-tatooine-mandalore-unlock-ig12",
-  name: "Bo-Katan + Beskar Mando + IG-12",
-  confidence: "community",
-  verifiedLegal: true,
-  members: [
-    { name: "Bo-Katan (Mand'alor)", baseId: "MANDALORBOKATAN" },
-    { name: "The Mandalorian (Beskar Armor)", baseId: "THEMANDALORIANBESKARARMOR" },
-    { name: "IG-12 & Grogu", baseId: "IG12" },
-  ],
-  sourceIds: ["cg-mandalore-zone", "starwarsfans-mandalore-unlock"],
-  lastVerified: "2026-08-15",
-});
+function applyTacticalOverride(next, tacticalOverride, source) {
+  if (!tacticalOverride) return next;
+  next.name = tacticalOverride.name;
+  next.enemies = [...tacticalOverride.enemies];
+  next.recommendations = tacticalOverride.recommendations.map(normalizeRecommendation);
+  if (tacticalOverride.missionType) next.missionType = tacticalOverride.missionType;
+  next.sources = [...new Set([...(next.sources || []), source.sourceId])];
+  next.tactical = {
+    encounter: tacticalOverride.name,
+    commandTag: tacticalOverride.commandTag,
+    presetPrefix: tacticalOverride.presetPrefix,
+    sourceId: source.sourceId,
+    sourceRevision: source.sourceRevision,
+    lastVerified: source.lastVerified,
+  };
+  return next;
+}
 
 export function normalizeRoteMission(mission = {}) {
   const next = {
@@ -235,24 +147,15 @@ export function normalizeRoteMission(mission = {}) {
     next.lastVerified = fleetAudit.lastVerified;
   }
 
-  const geonosisTactical = GEONOSIS_TACTICAL_OVERRIDES[next.id];
-  if (geonosisTactical) {
-    next.name = geonosisTactical.name;
-    next.enemies = [...geonosisTactical.enemies];
-    next.recommendations = geonosisTactical.recommendations.map(normalizeRecommendation);
-    next.sources = [...new Set([...(next.sources || []), GEONOSIS_TACTICAL_SOURCE.sourceId])];
-    next.tactical = {
-      encounter: geonosisTactical.name.replace(/^.*—\s*/, ""),
-      commandTag: geonosisTactical.commandTag,
-      presetPrefix: geonosisTactical.presetPrefix,
-      sourceId: GEONOSIS_TACTICAL_SOURCE.sourceId,
-      sourceRevision: GEONOSIS_TACTICAL_SOURCE.sourceRevision,
-      lastVerified: GEONOSIS_TACTICAL_SOURCE.lastVerified,
-    };
-  }
+  applyTacticalOverride(next, roteTacticalP1P2Override(next.id), ROTE_TACTICAL_P1_P2_SOURCE);
+  applyTacticalOverride(next, roteTacticalP3Override(next.id), ROTE_TACTICAL_P3_SOURCE);
+  applyTacticalOverride(next, roteTacticalP4Override(next.id), ROTE_TACTICAL_P4_SOURCE);
+  applyTacticalOverride(next, roteTacticalP5Override(next.id), ROTE_TACTICAL_P5_SOURCE);
+  applyTacticalOverride(next, roteTacticalP6Override(next.id), ROTE_TACTICAL_P6_SOURCE);
+  applyTacticalOverride(next, roteTacticalBonusOverride(next.id), ROTE_TACTICAL_BONUS_SOURCE);
 
   if (next.id === "tatooine-mandalore-unlock") {
-    next.name = "Krayt Dragon Special Mission — Unlock Mandalore";
+    next.name = "Unlock Mandalore · Krayt Dragon";
     next.entry = {
       ...next.entry,
       verified: true,
@@ -272,9 +175,18 @@ export function normalizeRoteMission(mission = {}) {
       ],
       notes: "Official unlock mission: Bo-Katan (Mand'alor) R7 + The Mandalorian (Beskar Armor) R7 + one additional Mandalorian R7. Twenty-five guild clears unlock Mandalore for that Territory Battle instance.",
     };
-    next.recommendations = [TATOOINE_UNLOCK_RECOMMENDATION];
+    next.enemies = ["Krayt Dragon"];
+    next.recommendations = TATOOINE_UNLOCK_RECOMMENDATIONS.map(normalizeRecommendation);
     next.rewards = ["50 Mk II Guild Event Tokens per clear", "25 guild clears unlock Mandalore"];
-    next.sources = [...new Set([...(next.sources || []), "cg-mandalore-zone", "starwarsfans-mandalore-unlock"])];
+    next.sources = [...new Set([...(next.sources || []), "cg-mandalore-zone", "starwarsfans-mandalore-unlock", ROTE_TACTICAL_P3_SOURCE.sourceId])];
+    next.tactical = {
+      encounter: "Unlock Mandalore · Krayt Dragon",
+      commandTag: "MANDALORE UNLOCK | BKM + BAM + 1 MANDO",
+      presetPrefix: "ROTE-P3-TAT-MANDALORE",
+      sourceId: ROTE_TACTICAL_P3_SOURCE.sourceId,
+      sourceRevision: ROTE_TACTICAL_P3_SOURCE.sourceRevision,
+      lastVerified: ROTE_TACTICAL_P3_SOURCE.lastVerified,
+    };
   }
 
   if (next.id === "mandalore-bkm") {
@@ -285,15 +197,6 @@ export function normalizeRoteMission(mission = {}) {
   }
 
   return next;
-}
-
-function normalizeEntry(entry = {}) {
-  return {
-    ...entry,
-    requiredBaseIds: Array.isArray(entry.requiredBaseIds) ? entry.requiredBaseIds.map(canonicalId) : entry.requiredBaseIds,
-    allowedBaseIds: Array.isArray(entry.allowedBaseIds) ? entry.allowedBaseIds.map(canonicalId) : entry.allowedBaseIds,
-    mandatoryMembers: Array.isArray(entry.mandatoryMembers) ? entry.mandatoryMembers.map(normalizeMember) : entry.mandatoryMembers,
-  };
 }
 
 export function normalizeRoteMissions(missions = []) {

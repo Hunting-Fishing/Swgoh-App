@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { ROTE_MISSIONS_BY_PLANET } from "../public/rote-mission-data.js";
+import { normalizedRoteMissionsForPlanet } from "../public/rote-mission-node-eligibility.js";
 import {
   ROTE_P1_MISSION_MAPS,
   ROTE_P1_MISSION_MAP_SOURCE,
@@ -33,10 +33,10 @@ test("source mission coordinates remain valid percentages and node ids stay uniq
   }
 });
 
-test("internal roster-preparation links resolve only to existing mission recommendations", () => {
+test("all P1 playable nodes link to normalized tactical recommendations", () => {
   let linked = 0;
   for (const [planetId, map] of Object.entries(ROTE_P1_MISSION_MAPS)) {
-    const missions = new Map((ROTE_MISSIONS_BY_PLANET[planetId] || []).map((mission) => [mission.id, mission]));
+    const missions = new Map(normalizedRoteMissionsForPlanet(planetId).map((mission) => [mission.id, mission]));
     for (const node of map.nodes) {
       if (!node.missionId && !node.teamId) continue;
       linked += 1;
@@ -47,18 +47,32 @@ test("internal roster-preparation links resolve only to existing mission recomme
         mission.recommendations.some((recommendation) => recommendation.id === node.teamId),
         `${planetId}/${node.id} references missing recommendation ${node.teamId}`,
       );
+      assert.ok(mission.tactical?.commandTag, `${planetId}/${node.id} should expose a tactical command tag`);
+      assert.ok(mission.recommendations.every((recommendation) => recommendation.name.startsWith("ROTE-P1-")));
     }
   }
-  assert.equal(linked, 6, "only the six unambiguous P1 strategy/recommendation mappings should be linked");
+  assert.equal(linked, 15, "all fifteen P1 playable mission/fleet nodes should be linked");
 });
 
-test("generic, deployment and Operations nodes remain unforced", () => {
+test("P1 infrastructure nodes remain source-only", () => {
   const sourceOnly = Object.values(ROTE_P1_MISSION_MAPS)
     .flatMap((map) => map.nodes)
     .filter((node) => !node.missionId && !node.teamId);
-  assert.ok(sourceOnly.some((node) => node.type === "deployment"));
-  assert.ok(sourceOnly.some((node) => node.type === "operations"));
-  assert.ok(sourceOnly.some((node) => node.type === "combat"));
+  assert.equal(sourceOnly.length, 6);
+  assert.ok(sourceOnly.every((node) => node.type === "deployment" || node.type === "operations"));
+});
+
+test("P1 tactical names expose useful encounter labels", () => {
+  const mustafar = new Map(normalizedRoteMissionsForPlanet("mustafar").map((mission) => [mission.id, mission]));
+  const corellia = new Map(normalizedRoteMissionsForPlanet("corellia").map((mission) => [mission.id, mission]));
+  const coruscant = new Map(normalizedRoteMissionsForPlanet("coruscant").map((mission) => [mission.id, mission]));
+
+  assert.match(mustafar.get("mustafar-generic-1")?.name || "", /Droids.*Wat Tambor/);
+  assert.match(mustafar.get("mustafar-lv")?.name || "", /JMK/);
+  assert.match(corellia.get("corellia-jabba")?.name || "", /Qi'ra/);
+  assert.match(corellia.get("corellia-generic-1")?.name || "", /Imperial Forces/);
+  assert.match(coruscant.get("coruscant-jedi")?.name || "", /Lord Vader/);
+  assert.match(coruscant.get("coruscant-generic-1")?.name || "", /Clone Forces/);
 });
 
 test("P1 mission map provenance and backgrounds are pinned to the source revision", () => {

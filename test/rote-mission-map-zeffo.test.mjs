@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { ROTE_MISSIONS_BY_PLANET } from "../public/rote-mission-data.js";
+import { normalizedRoteMissionsForPlanet } from "../public/rote-mission-node-eligibility.js";
 import {
   ROTE_ZEFFO_MISSION_MAP,
   ROTE_ZEFFO_MISSION_MAP_SOURCE,
@@ -29,27 +29,46 @@ test("Zeffo source node positions and mission types remain valid", () => {
   }
 });
 
-test("only the verified Clone special is linked to live preparation", () => {
+test("all five Zeffo playable nodes link to tactical recommendations", () => {
+  const missions = new Map(normalizedRoteMissionsForPlanet("zeffo").map((mission) => [mission.id, mission]));
   const linked = ROTE_ZEFFO_MISSION_MAP.nodes.filter((node) => node.missionId || node.teamId);
-  assert.equal(linked.length, 1);
-  const clones = linked[0];
-  assert.equal(clones.id, "c3");
-  assert.equal(clones.missionId, "zeffo-clones");
-  assert.equal(clones.teamId, "rote-clones");
-
-  const mission = (ROTE_MISSIONS_BY_PLANET.zeffo || []).find((entry) => entry.id === clones.missionId);
-  assert.ok(mission);
-  assert.ok(mission.recommendations.some((recommendation) => recommendation.id === clones.teamId));
+  assert.equal(linked.length, 5);
+  for (const node of linked) {
+    assert.ok(node.missionId && node.teamId, `${node.id} links must be all-or-nothing`);
+    const mission = missions.get(node.missionId);
+    assert.ok(mission, `missing mission ${node.missionId}`);
+    assert.ok(mission.recommendations.some((recommendation) => recommendation.id === node.teamId), `missing recommendation ${node.teamId}`);
+    assert.ok(mission.tactical?.commandTag);
+    assert.ok(mission.recommendations.every((recommendation) => recommendation.name.startsWith("ROTE-ZEFFO-")));
+  }
 });
 
-test("JKCK triple-value mission remains source-only without an invented recommendation", () => {
+test("Zeffo tactical labels expose AT-ST, Tomb Guardians and Second Sister", () => {
+  const missions = new Map(normalizedRoteMissionsForPlanet("zeffo").map((mission) => [mission.id, mission]));
+  assert.match(missions.get("zeffo-ufu")?.name || "", /Purge Troopers.*AT-ST/);
+  assert.match(missions.get("zeffo-clones")?.name || "", /Tomb Guardians.*Chiata/);
+  assert.match(missions.get("zeffo-generic-1")?.name || "", /Haxion Brood.*Tomb Guardians/);
+  assert.match(missions.get("zeffo-jkck")?.name || "", /Second Sister/);
+  assert.match(missions.get("zeffo-fleet")?.name || "", /Malevolence/);
+});
+
+test("Clone special retains the verified stun warning while using source squad options", () => {
+  const clones = ROTE_ZEFFO_MISSION_MAP.nodes.find((node) => node.id === "c3");
+  const mission = normalizedRoteMissionsForPlanet("zeffo").find((entry) => entry.id === "zeffo-clones");
+  assert.equal(clones.missionId, "zeffo-clones");
+  assert.equal(clones.teamId, "rote-zeffo-clones-crex");
+  assert.match(clones.note, /cannot be defeated unless stunned/i);
+  assert.equal(mission?.tactical?.commandTag, "CLONES | STUN TOMB GUARDIANS");
+  assert.ok(mission?.recommendations.length >= 3);
+});
+
+test("JKCK triple-value mission is now linked to the complete source JKCK team", () => {
   const jkck = ROTE_ZEFFO_MISSION_MAP.nodes.find((node) => node.id === "c8");
   assert.ok(jkck);
-  assert.equal(jkck.missionId, "");
-  assert.equal(jkck.teamId, "");
+  assert.equal(jkck.missionId, "zeffo-jkck");
+  assert.equal(jkck.teamId, "rote-zeffo-jkck");
   assert.match(jkck.requirement, /Jedi Knight Cal Kestis/);
   assert.match(jkck.reward, /487,500 → 1,023,750 TP/);
-  assert.match(jkck.note, /no explicit roster recommendation/);
 });
 
 test("Zeffo deployment exposes unlock-tier thresholds rather than normal three-star labels", () => {

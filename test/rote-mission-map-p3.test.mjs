@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { ROTE_MISSIONS_BY_PLANET } from "../public/rote-mission-data.js";
+import { normalizedRoteMissionsForPlanet } from "../public/rote-mission-node-eligibility.js";
 import {
   ROTE_P3_MISSION_MAPS,
   ROTE_P3_MISSION_MAP_SOURCE,
@@ -33,10 +33,10 @@ test("P3 source node coordinates and types remain valid", () => {
   }
 });
 
-test("P3 live-preparation links resolve only to existing recommendation objects", () => {
+test("all P3 playable nodes link to normalized tactical recommendations", () => {
   let linked = 0;
   for (const [planetId, map] of Object.entries(ROTE_P3_MISSION_MAPS)) {
-    const missions = new Map((ROTE_MISSIONS_BY_PLANET[planetId] || []).map((mission) => [mission.id, mission]));
+    const missions = new Map(normalizedRoteMissionsForPlanet(planetId).map((mission) => [mission.id, mission]));
     for (const node of map.nodes) {
       if (!node.missionId && !node.teamId) continue;
       linked += 1;
@@ -47,12 +47,22 @@ test("P3 live-preparation links resolve only to existing recommendation objects"
         mission.recommendations.some((recommendation) => recommendation.id === node.teamId),
         `${planetId}/${node.id} missing recommendation ${node.teamId}`,
       );
+      assert.ok(mission.tactical?.commandTag, `${planetId}/${node.id} should expose a tactical command tag`);
+      assert.ok(mission.recommendations.every((recommendation) => recommendation.name.startsWith("ROTE-P3-")));
     }
   }
-  assert.equal(linked, 6, "only six P3 main-planet nodes have explicit existing recommendations");
+  assert.equal(linked, 16, "all sixteen P3 main-planet playable nodes should be linked");
 });
 
-test("P3 high-value special nodes retain current requirements and rewards", () => {
+test("P3 infrastructure nodes remain source-only", () => {
+  const sourceOnly = Object.values(ROTE_P3_MISSION_MAPS)
+    .flatMap((map) => map.nodes)
+    .filter((node) => !node.missionId && !node.teamId);
+  assert.equal(sourceOnly.length, 6);
+  assert.ok(sourceOnly.every((node) => node.type === "deployment" || node.type === "operations"));
+});
+
+test("P3 high-value special nodes retain current requirements, rewards and tactical identity", () => {
   const merrin = ROTE_P3_MISSION_MAPS.dathomir.nodes.find((node) => node.id === "c8");
   const reva = ROTE_P3_MISSION_MAPS.tatooine.nodes.find((node) => node.id === "c4");
   const mandalore = ROTE_P3_MISSION_MAPS.tatooine.nodes.find((node) => node.id === "c5");
@@ -73,6 +83,31 @@ test("P3 high-value special nodes retain current requirements and rewards", () =
   assert.equal(saw.type, "special");
   assert.match(saw.requirement, /Saw Gerrera/);
   assert.match(saw.reward, /50 Mk II/);
+
+  const tatooine = new Map(normalizedRoteMissionsForPlanet("tatooine").map((mission) => [mission.id, mission]));
+  const unlock = tatooine.get("tatooine-mandalore-unlock");
+  assert.equal(unlock?.tactical?.commandTag, "MANDALORE UNLOCK | BKM + BAM + 1 MANDO");
+  assert.deepEqual(unlock?.enemies, ["Krayt Dragon"]);
+  assert.deepEqual(unlock?.recommendations.map((recommendation) => recommendation.name), [
+    "ROTE-P3-TAT-MANDALORE-IG12",
+    "ROTE-P3-TAT-MANDALORE-PAZ",
+  ]);
+});
+
+test("P3 tactical labels expose the important enemy encounters", () => {
+  const dathomir = new Map(normalizedRoteMissionsForPlanet("dathomir").map((mission) => [mission.id, mission]));
+  const tatooine = new Map(normalizedRoteMissionsForPlanet("tatooine").map((mission) => [mission.id, mission]));
+  const kashyyyk = new Map(normalizedRoteMissionsForPlanet("kashyyyk").map((mission) => [mission.id, mission]));
+
+  assert.match(dathomir.get("dathomir-aphra")?.name || "", /Talzin/);
+  assert.match(dathomir.get("dathomir-merrin")?.name || "", /Hondo.*Maul/);
+  assert.match(tatooine.get("tatooine-jabba")?.name || "", /Pirates.*Hondo/);
+  assert.match(tatooine.get("tatooine-fennec")?.name || "", /Tusken/);
+  assert.match(tatooine.get("tatooine-reva")?.name || "", /Jawas.*JMK/);
+  assert.match(tatooine.get("tatooine-generic-1")?.name || "", /Sandtroopers/);
+  assert.match(kashyyyk.get("kashyyyk-generic-1")?.name || "", /Mara Jade/);
+  assert.match(kashyyyk.get("kashyyyk-wookiee")?.name || "", /Ninth Sister/);
+  assert.match(kashyyyk.get("kashyyyk-saw")?.name || "", /AT-ST/);
 });
 
 test("P3 source provenance is pinned while current requirement evidence is explicit", () => {

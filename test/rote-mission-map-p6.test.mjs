@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { ROTE_MISSIONS_BY_PLANET } from "../public/rote-mission-data.js";
+import { normalizedRoteMissionsForPlanet } from "../public/rote-mission-node-eligibility.js";
 import { ROTE_P6_MISSION_MAPS, ROTE_P6_MISSION_MAP_SOURCE } from "../public/rote-mission-map-p6-data.js";
 
 const EXPECTED_PLANETS = ["death-star", "hoth", "scarif"];
@@ -27,36 +27,49 @@ test("P6 source node coordinates, types and R9 character gates remain valid", ()
   }
 });
 
-test("P6 live-preparation links resolve only to six explicit existing recommendations", () => {
-  let linked = 0;
+test("all P6 playable nodes map to normalized tactical mission details without fabricating missing teams", () => {
+  let mapped = 0;
+  let linkedTeams = 0;
   for (const [planetId, map] of Object.entries(ROTE_P6_MISSION_MAPS)) {
-    const missions = new Map((ROTE_MISSIONS_BY_PLANET[planetId] || []).map((mission) => [mission.id, mission]));
+    const missions = new Map(normalizedRoteMissionsForPlanet(planetId).map((mission) => [mission.id, mission]));
     for (const node of map.nodes) {
-      if (!node.missionId && !node.teamId) continue;
-      linked += 1;
-      assert.ok(node.missionId && node.teamId, `${planetId}/${node.id} links must be all-or-nothing`);
+      if (!node.missionId) continue;
+      mapped += 1;
       const mission = missions.get(node.missionId);
       assert.ok(mission, `${planetId}/${node.id} missing mission ${node.missionId}`);
-      assert.ok(
-        mission.recommendations.some((recommendation) => recommendation.id === node.teamId),
-        `${planetId}/${node.id} missing recommendation ${node.teamId}`,
-      );
+      assert.ok(mission.tactical?.commandTag, `${planetId}/${node.id} should expose a tactical command tag`);
+      if (!node.teamId) {
+        assert.equal(mission.recommendations.length, 0, `${planetId}/${node.id} should remain team-TBD when source recommendation is incomplete`);
+        continue;
+      }
+      linkedTeams += 1;
+      assert.ok(mission.recommendations.some((recommendation) => recommendation.id === node.teamId), `${planetId}/${node.id} missing recommendation ${node.teamId}`);
+      assert.ok(mission.recommendations.every((recommendation) => recommendation.name.startsWith("ROTE-P6-")));
     }
   }
-  assert.equal(linked, 6, "only Vader, Iden, Aphra, Jabba and the two required Scarif missions should be linked");
+  assert.equal(mapped, 15, "all fifteen P6 playable nodes should have exact mission mappings");
+  assert.equal(linkedTeams, 11, "eleven P6 nodes have complete source/community or explicitly planning-labeled squad links");
 });
 
-test("Death Star Vader and Iden nodes keep exact mappings and source coordinates", () => {
+test("P6 infrastructure nodes remain source-only", () => {
+  const sourceOnly = Object.values(ROTE_P6_MISSION_MAPS)
+    .flatMap((map) => map.nodes)
+    .filter((node) => !node.missionId);
+  assert.equal(sourceOnly.length, 6);
+  assert.ok(sourceOnly.every((node) => node.type === "deployment" || node.type === "operations"));
+});
+
+test("Death Star Vader and Iden nodes keep exact mappings and tactical presets", () => {
   const map = ROTE_P6_MISSION_MAPS["death-star"];
   const vader = map.nodes.find((node) => node.id === "c2");
   const iden = map.nodes.find((node) => node.id === "c6");
   assert.deepEqual([vader.top, vader.left], [28, 47]);
   assert.equal(vader.missionId, "death-star-vader");
-  assert.equal(vader.teamId, "rote-lv");
+  assert.equal(vader.teamId, "rote-p6-ds-vader-solo");
   assert.match(vader.requirement, /Darth Vader/);
   assert.deepEqual([iden.top, iden.left], [50, 19]);
   assert.equal(iden.missionId, "death-star-iden");
-  assert.equal(iden.teamId, "rote-iden");
+  assert.equal(iden.teamId, "rote-p6-ds-iden");
   assert.match(iden.requirement, /Iden Versio/);
 });
 
@@ -69,25 +82,43 @@ test("Hoth Aphra uses the current Special Mission type rather than stale source 
   assert.match(aphra.requirement, /BT-1/);
   assert.match(aphra.requirement, /0-0-0/);
   assert.equal(aphra.missionId, "hoth-aphra");
-  assert.equal(aphra.teamId, "rote-aphra");
+  assert.equal(aphra.teamId, "rote-p6-hot-aphra");
   assert.match(aphra.note, /current mission typing overrides the stale source type/i);
   assert.equal(jabba.missionId, "hoth-jabba");
-  assert.equal(jabba.teamId, "rote-jabba");
+  assert.equal(jabba.teamId, "rote-p6-hot-jabba");
 });
 
-test("Scarif required Rogue One nodes preserve current required-unit groups and mappings", () => {
+test("Scarif required Rogue One nodes stay honest about source confidence", () => {
   const cassian = ROTE_P6_MISSION_MAPS.scarif.nodes.find((node) => node.id === "c2");
   const baze = ROTE_P6_MISSION_MAPS.scarif.nodes.find((node) => node.id === "c6");
   assert.match(cassian.requirement, /Cassian Andor/);
   assert.match(cassian.requirement, /Pao/);
   assert.match(cassian.requirement, /K-2SO/);
   assert.equal(cassian.missionId, "scarif-cassian");
-  assert.equal(cassian.teamId, "rote-scarif-cassian");
+  assert.equal(cassian.teamId, "rote-p6-sca-cassian-plan");
   assert.match(baze.requirement, /Baze Malbus/);
   assert.match(baze.requirement, /Chirrut Îmwe/);
   assert.match(baze.requirement, /Scarif Rebel Pathfinder/);
   assert.equal(baze.missionId, "scarif-baze");
-  assert.equal(baze.teamId, "rote-scarif-baze");
+  assert.equal(baze.teamId, "rote-p6-sca-baze-plan");
+
+  const missions = new Map(normalizedRoteMissionsForPlanet("scarif").map((mission) => [mission.id, mission]));
+  for (const id of ["scarif-cassian", "scarif-baze"]) {
+    assert.ok(missions.get(id)?.recommendations.every((recommendation) => recommendation.confidence === "unknown"));
+  }
+});
+
+test("P6 tactical labels expose Wampas, Cartel and major fleet encounters", () => {
+  const deathStar = new Map(normalizedRoteMissionsForPlanet("death-star").map((mission) => [mission.id, mission]));
+  const hoth = new Map(normalizedRoteMissionsForPlanet("hoth").map((mission) => [mission.id, mission]));
+  const scarif = new Map(normalizedRoteMissionsForPlanet("scarif").map((mission) => [mission.id, mission]));
+
+  assert.match(deathStar.get("death-star-fleet")?.name || "", /Home One/);
+  assert.match(hoth.get("hoth-generic-1")?.name || "", /Wampas/);
+  assert.match(hoth.get("hoth-aphra")?.name || "", /Sana/);
+  assert.match(hoth.get("hoth-jabba")?.name || "", /Dash Rendar/);
+  assert.match(scarif.get("scarif-fleet")?.name || "", /Chimaera/);
+  assert.match(scarif.get("scarif-generic-1")?.name || "", /Imperial Forces/);
 });
 
 test("P6 fleet values, Operations values and territory thresholds remain phase-correct", () => {
