@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#050b14">
   <title>Star Route Optimizer · SWGOH Command Center</title>
-  <link rel="stylesheet" href="/tb-route.css?v=20260819-route1">
+  <link rel="stylesheet" href="/tb-route.css?v=20260819-route2">
 </head>
 <body>
   <main class="route-shell" data-route-root>
@@ -56,7 +56,7 @@
 
           <div class="route-submit-row">
             <button type="submit" data-route-submit disabled>Generate Safe Preview</button>
-            <span>Preview only · nothing is saved or published</span>
+            <span>Preview only · no commands change until you explicitly apply the verified result</span>
           </div>
         </form>
         <div class="route-input-result" data-route-input-result></div>
@@ -69,8 +69,9 @@
           <li>Static star thresholds never replace current event TP.</li>
           <li>Every active territory needs explicit remaining mission + Operation TP.</li>
           <li>PRELOAD reserves known mission/Operation TP before allocating deployment.</li>
-          <li>Officer locks remain visible and are not silently overwritten.</li>
+          <li>Officer locks remain visible and are never overwritten by route apply.</li>
           <li>Missing or phase-mismatched threshold data blocks deployment advice.</li>
+          <li>Apply re-runs the optimizer server-side and rejects stale previews.</li>
         </ul>
         <a href="/guild/tb/today#officer-controls">Edit event / territory commands →</a>
       </aside>
@@ -79,13 +80,17 @@
     <section class="route-results" data-route-results hidden>
       <header class="route-results-head">
         <div><span>ROUTE SOLUTION</span><h2>Commander Orders</h2></div>
-        <button type="button" data-route-recalculate>Recalculate</button>
+        <div class="route-result-actions">
+          <button type="button" data-route-recalculate>Recalculate</button>
+          <button class="apply" type="button" data-route-apply disabled>Apply Safe Orders</button>
+        </div>
       </header>
+      <div class="route-apply-status" data-route-apply-status></div>
       <div class="route-summary" data-route-summary></div>
       <div class="route-command-list" data-route-command-list></div>
       <footer class="route-source" data-route-source></footer>
     </section>
   </main>
-  <script type="module" src="/tb-route.js?v=20260819-route1"></script>
+  <script type="module" src="/tb-route.js?v=20260819-route2"></script>
 </body>
 </html>
