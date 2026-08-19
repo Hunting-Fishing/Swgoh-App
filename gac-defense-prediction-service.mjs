@@ -52,7 +52,8 @@ function historicalEvent(event = {}, nowMs = Date.now()) {
   const status = clean(event?.status).toLowerCase();
   const endedAt = Date.parse(clean(event?.ends_at));
   if (endedAt && endedAt < nowMs) return true;
-  return /(history|complete|completed|ended|finished|closed|final)/.test(status);
+  if (/^history(?:[-_].*)?$/.test(status)) return true;
+  return /^(?:complete|completed|ended|finished|closed|final)(?:[-_].*)?$/.test(status);
 }
 function battleBoardKey(row = {}) {
   const observer = clean(row.swgoh_player_id || row.ally_code || "observer");
