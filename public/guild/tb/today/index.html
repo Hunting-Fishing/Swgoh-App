@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#07111f">
   <title>Today in TB · SWGOH Command Center</title>
-  <link rel="stylesheet" href="/tb-today.css?v=20260819-tbtoday1">
+  <link rel="stylesheet" href="/tb-today.css?v=20260819-tbtoday2">
 </head>
 <body>
   <main class="tb-today-shell" data-tb-today-root>
@@ -22,7 +22,7 @@
       <div>
         <span class="tb-kicker">TERRITORY BATTLE · MEMBER COMMAND QUEUE</span>
         <h1>Today in TB</h1>
-        <p>One ordered list: officer commands, Operations, playable missions, then deployment.</p>
+        <p>One ordered list: officer commands, Operations, playable missions, then safe deployment or preload instructions.</p>
       </div>
       <div class="tb-event-clock" data-tb-event-clock>
         <small>EVENT STATE</small>
@@ -47,7 +47,7 @@
 
     <details class="tb-officer-panel" data-tb-officer-panel>
       <summary>Officer Event Controls</summary>
-      <p>Creates explicit Command Center event state. These controls do not claim static ROTE reference data is live game state.</p>
+      <p>Creates explicit Command Center event state. These controls do not claim static ROTE reference data is live game state. PRELOAD fails closed unless an explicit TP cap is saved.</p>
       <form data-tb-event-form>
         <label>Current phase<select name="currentPhase"><option>P1</option><option>P2</option><option>P3</option><option>P4</option><option>P5</option><option>P6</option></select></label>
         <label>Event starts<input name="startedAt" type="datetime-local"></label>
@@ -58,13 +58,16 @@
       <form data-tb-zone-form>
         <label>Territory<select name="planetId" data-tb-planet-select></select></label>
         <label>Command<select name="commandState"><option value="attack">ATTACK</option><option value="preload">PRELOAD</option><option value="hold">HOLD</option><option value="deploy">DEPLOY</option><option value="stop">STOP</option></select></label>
+        <label>Current zone TP<input name="currentTp" type="number" min="0" step="1" value="0"></label>
+        <label>Preload cap TP<input name="preloadCapTp" type="number" min="0" step="1" placeholder="Required for PRELOAD"></label>
+        <label>Current stars<input name="currentStars" type="number" min="0" max="3" value="0"></label>
         <label>Target stars<input name="targetStars" type="number" min="0" max="3" value="0"></label>
-        <label class="wide">Officer message<input name="commandMessage" maxlength="800" placeholder="Example: Missions only. Keep under 1 star. No deploy."></label>
+        <label class="wide">Officer message<input name="commandMessage" maxlength="800" placeholder="Example: Missions first. Preload only. Do not cross 148,124,999 TP."></label>
         <button type="submit">Save Territory Command</button>
       </form>
       <div class="tb-officer-result" data-tb-officer-result></div>
     </details>
   </main>
-  <script type="module" src="/tb-today.js?v=20260819-tbtoday1"></script>
+  <script type="module" src="/tb-today.js?v=20260819-tbtoday2"></script>
 </body>
 </html>
