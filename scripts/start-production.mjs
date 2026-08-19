@@ -55,6 +55,7 @@ function runPreflight(command, options = {}) {
   return new Promise((resolve) => {
     let settled = false;
     let timedOut = false;
+    let timeoutTimer = null;
     let forceKillTimer = null;
     const startedAt = Date.now();
     let child;
@@ -62,7 +63,7 @@ function runPreflight(command, options = {}) {
     const finish = (result) => {
       if (settled) return;
       settled = true;
-      clearTimeout(timeoutTimer);
+      if (timeoutTimer) clearTimeout(timeoutTimer);
       if (forceKillTimer) clearTimeout(forceKillTimer);
       resolve(Object.freeze({
         name: clean(command?.name) || "preflight",
@@ -82,7 +83,7 @@ function runPreflight(command, options = {}) {
       return;
     }
 
-    const timeoutTimer = setTimeout(() => {
+    timeoutTimer = setTimeout(() => {
       timedOut = true;
       try { child.kill("SIGTERM"); } catch {}
       forceKillTimer = setTimeout(() => {
