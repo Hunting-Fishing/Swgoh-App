@@ -12,10 +12,10 @@ import {
 } from './discord-tb.mjs';
 import { handleDiscordInteractionRequest as handleCoreDiscordInteractionRequest } from './discord-interaction-router-core.mjs';
 import { discordStateStore } from './discord-state-store.mjs';
-import { discordTbStage9PlanCommand } from './discord-tb-stage9-plan-command.mjs';
+import { discordTbStage9Command } from './discord-tb-stage9-command.mjs';
 
 const EPHEMERAL_FLAG = 1 << 6;
-const STAGE9_SUBCOMMANDS = new Set(['plan-status', 'plan-diff', 'plan-approve']);
+const STAGE9_SUBCOMMANDS = new Set(['plan-status', 'plan-diff', 'plan-approve', 'plan-cancel']);
 
 function replayRequest(request, rawBody) {
   const replay = Readable.from([rawBody]);
@@ -61,7 +61,7 @@ function safeError(error) {
 }
 
 function scheduleStage9Response(interaction, config, services) {
-  const command = services?.stage9PlanCommand || discordTbStage9PlanCommand;
+  const command = services?.stage9Command || discordTbStage9Command;
   Promise.resolve()
     .then(() => command.execute(interaction))
     .catch((error) => safeError(error))
