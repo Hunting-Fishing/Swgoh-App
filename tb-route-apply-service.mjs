@@ -30,6 +30,7 @@ function routeInputsFromPlan(plan = {}) {
     remainingTpByPlanet: Object.freeze(Object.fromEntries(array(plan.zones).map((zone) => [
       planetId(zone),
       Object.freeze({
+        priority: Number(zone.priority || 0),
         remainingMissionTp: Number(zone.remainingMissionTp || 0),
         remainingOperationTp: Number(zone.remainingOperationTp || 0),
       }),
