@@ -25,6 +25,8 @@ test("single or limited battle sightings do not reserve scarce squads automatica
   assert.equal(forecastEligibleForPrestage(row({ battleObservedMatchups: 2 })), false);
   assert.equal(forecastEligibleForPrestage(row({ battleObservedMatchups: 3, evidenceClass: "battle-recurring" })), true);
   assert.equal(forecastEligibleForPrestage(row({ verifiedHistoricalBoards: 1, evidenceClass: "verified-zone-once" })), true);
+  assert.equal(forecastEligibleForPrestage(row({ battleObservedMatchups: 0, evidenceClass: "battle-recurring" })), false);
+  assert.equal(forecastEligibleForPrestage(row({ verifiedHistoricalBoards: 0, evidenceClass: "verified-zone-recurring" })), false);
   assert.match(forecastPrestageReason(row(), "5"), /does not reserve a scarce squad/i);
 });
 
