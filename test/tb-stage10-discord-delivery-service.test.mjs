@@ -196,6 +196,7 @@ function makeHarness({ enabled = false } = {}) {
     decisions,
     requests,
     destinations,
+    binding,
     get fetchCalls() { return fetchCalls; },
     get publishabilityCalls() { return publishabilityCalls; },
   };
@@ -210,6 +211,7 @@ test('delivery preview defaults linked-member mentions ON and reports coverage w
   assert.equal(result.mentionCoverage.assignedMembers, 2);
   assert.equal(result.mentionCoverage.linkedMembers, 1);
   assert.equal(result.mentionCoverage.unlinkedMembers, 1);
+  assert.match(result.mentionCoverage.audienceFingerprint, /^[0-9a-f]{64}$/);
   assert.equal(result.deliveryEnabled, false);
   assert.equal(result.delivered, 0);
   assert.ok(result.chunks.length > 1);
@@ -283,6 +285,7 @@ test('exact approved mention delivery allowlists only linked users and identical
   assert.equal(harness.receipts.every((row) => row.external_message_id), true);
   assert.equal(harness.receipts.every((row) => row.request_metadata.mentions === true), true);
   assert.equal(harness.receipts.every((row) => /^[0-9a-f]{64}$/.test(row.request_metadata.contentHash)), true);
+  assert.equal(harness.receipts.every((row) => row.request_metadata.audienceFingerprint === first.mentionCoverage.audienceFingerprint), true);
 
   const bodies = harness.requests.map((row) => row.body);
   assert.equal(bodies.every((body) => Array.isArray(body.allowed_mentions?.parse) && body.allowed_mentions.parse.length === 0), true);
@@ -298,6 +301,37 @@ test('exact approved mention delivery allowlists only linked users and identical
   assert.equal(harness.fetchCalls, sendsAfterFirst);
   assert.equal(harness.audits.filter((row) => row.action === 'tb-immutable.publish').length, 2);
   assert.equal(harness.audits.at(-1).metadata.includeMentions, true);
+});
+
+test('partial mention delivery refuses resume if the Discord link registry changed', async () => {
+  const harness = makeHarness({ enabled: true });
+  const preview = await harness.service.preview(interaction('preview'));
+  harness.receipts.push({
+    id: 'receipt-partial',
+    guild_id: 'guild-1',
+    run_type: 'tb',
+    run_id: artifact.id,
+    destination_id: 'destination-1',
+    delivery_kind: 'discord_channel',
+    recipient_key: 'public',
+    chunk_index: 0,
+    idempotency_key: preview.idempotencyKey,
+    status: 'delivered',
+    external_message_id: 'already-delivered-message',
+    request_metadata: {
+      mentions: true,
+      audienceFingerprint: preview.mentionCoverage.audienceFingerprint,
+      contentHash: preview.chunks[0].contentHash,
+    },
+  });
+  delete harness.binding.guildState.userLinks[linkedDiscordUserId];
+
+  await assert.rejects(
+    () => harness.service.publish(interaction('publish', { hash: 'a'.repeat(12), confirm: 'PUBLISH' })),
+    (error) => error?.code === 'STAGE10_MENTION_AUDIENCE_CHANGED',
+  );
+  assert.equal(harness.fetchCalls, 0);
+  assert.equal(harness.receipts.length, 1);
 });
 
 test('mentions OFF and ON have independent receipt identities for the same approved artifact', async () => {
