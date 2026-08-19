@@ -29,10 +29,12 @@ function forecastPriorityValue(prediction = {}) {
 }
 function forecastEntries(report = {}, modeValue = "", limit = 8) {
   const format = modeFormat(modeValue);
+  const size = modeSize(modeValue);
   const rows = Array.isArray(report?.predictions) ? report.predictions : [];
   const seen = new Set();
   return rows
     .filter((prediction) => !format || clean(prediction?.format).toLowerCase() === format)
+    .filter((prediction) => normalizeMembers(prediction?.members).length === size)
     .filter((prediction) => {
       const key = forecastEntryKey(prediction);
       if (!key || seen.has(key)) return false;
