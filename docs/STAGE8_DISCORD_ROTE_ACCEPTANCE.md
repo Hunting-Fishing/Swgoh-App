@@ -96,13 +96,13 @@ Conclusion: availability state is durably consumed by the planner and cleanup re
 - Critical mission-entry and Operation-shortage alerts were surfaced.
 - Officer burden identified Fahey, Aaron and The Revanchist with one risky assignment each.
 
-`/tb assignments phase:P6`
+Initial `/tb assignments phase:P6` before the Stage 8 display fix:
 
 - Assigned: 112/270.
 - Unfilled: 158.
 - HELP/risk: 3.
 - First 12 preview rows did not expose the three risky rows even though aggregate detection was correct. Tracked as #139.
-- Protection display again leaked all-phase `956 / critical 6` instead of P6 phase totals.
+- Protection display leaked all-phase `956 / critical 6` instead of P6 phase totals.
 
 `/tb farms phase:P6`
 
@@ -139,7 +139,7 @@ Observed:
 
 Cause: Discord assignment formatting consumed `safety.summary` all-phase totals after filtering assignment rows by phase.
 
-Feature-branch fix:
+Fix:
 
 - Added `shapeDiscordPlanningSnapshot()`.
 - A phase-scoped Discord plan now receives phase-scoped `safety.protections` and recomputed `protectedUnits` / `criticalProtections` counters.
@@ -152,10 +152,11 @@ Observed:
 - P6 correctly detected `HELP/risk: 3`.
 - The first 12 Discord preview rows were SAFE, hiding the three risky donor decisions in the remaining 100 rows.
 
-Feature-branch fix:
+Fix:
 
-- Discord plan shaping now prioritizes risky/HELP/non-SAFE assignments before ordinary SAFE rows for the requested phase.
-- Existing Discord assignment labels already append non-SAFE status, so this makes the detected HELP rows immediately visible without changing assignment decisions.
+- Discord plan shaping prioritizes risky/HELP/non-SAFE assignments before ordinary SAFE rows for the requested phase.
+- Non-SAFE rows append a concise safety status/reason.
+- Assignment decisions themselves are unchanged.
 
 ## Automated regression work added on `fix/stage8-discord-rote-acceptance`
 
@@ -166,15 +167,46 @@ New coverage verifies:
 3. Equal-safety Operation donor selection uses real, non-zero Galactic Power as the final tie-break and selects the higher-GP candidate.
 4. A generic verified fleet gate without authoritative selectable-ship identity remains `gate-only`; even a roster that clears generic ship thresholds is never marked `exactReady`.
 
-## Remaining gates
+## Post-deployment verification — accepted live 2026-08-19
 
-- CI must pass for the feature branch/PR.
-- After deployment, rerun `/tb assignments phase:P6` and confirm:
-  - phase-scoped protection total is 99 rather than 956;
-  - the three risky/HELP assignments appear at the top of the preview with non-SAFE status.
-- Keep public publishing and DMs disabled.
-- Live cross-member Stage 7 denial remains deferred until a second normal linked tester exists.
-- A live fleet partial-evidence case is optional if one naturally appears; automated fail-closed regression is the acceptance safeguard until then.
+After restoring the Discord guild installation and slash-command visibility, `/tb status` confirmed signed HTTP interactions enabled in the configured pilot guild with outbound publishing and DMs still disabled.
+
+A fresh `/tb assignments phase:P6` then verified the deployed Stage 8 fixes:
+
+- Assigned: **112/270 (41.5%)**.
+- Unfilled: **158**.
+- Mission protections: **99**, matching the P6 phase board instead of the former all-phase `956` leak.
+- Critical protections: **0** for the P6 scope.
+- HELP/risk: **3**.
+- The first three preview rows are now the risky assignments:
+  - Lord Vader → The Revanchist · `MISSION PROTECTED OVERRIDE`.
+  - Lord Vader → Aaron · `MISSION PROTECTED OVERRIDE`.
+  - Jedi Master Kenobi → Fahey · `MISSION PROTECTED OVERRIDE`.
+- Ordinary SAFE assignments follow the risky rows.
+- `112 assigned + 158 unfilled = 270` remains internally consistent.
+- `Needs officer attention` continues to expose the P6 shortages rather than silently filling impossible slots.
+
+Conclusion: #135 and #139 are verified fixed in the deployed Discord pilot. The stressed-path planner remains fail-visible and the Discord officer preview now surfaces the exact risky donor decisions immediately.
+
+## Stage 8 verdict
+
+Accepted for the current private-pilot scope:
+
+- Healthy P1 planning path.
+- Stressed P5/P6 planning paths.
+- Hard-reserve planner enforcement and cleanup.
+- Availability planner enforcement and cleanup.
+- Phase-scoped mission-protection totals.
+- HELP/risky donor detection and officer-visible risky rows.
+- Actionable farm-priority output.
+- GP tie-break regression safeguard.
+- Fleet generic-gate fail-closed regression safeguard.
+
+Deferred, not failed:
+
+- Signed live cross-member normal-user denial remains deferred until a second normal linked tester exists.
+- A naturally occurring live fleet partial-evidence Discord case has not appeared; automated fail-closed regression is the current acceptance safeguard.
+- Repository GitHub Actions infrastructure has previously failed before executing test steps; no CI-pass claim is made until that runner/account condition is independently healthy.
 
 ## Clean pilot state at end of current live tests
 
