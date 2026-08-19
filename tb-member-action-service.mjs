@@ -28,6 +28,10 @@ function actionKey(...parts) {
   return parts.map((part) => text(part).replace(/[^A-Za-z0-9_.:-]+/g, '-')).filter(Boolean).join(':').slice(0, 240);
 }
 
+function assignmentBaseId(assignment = {}) {
+  return text(assignment.baseId || assignment.base_id).toUpperCase();
+}
+
 function recommendationForRoster(rosterBody, mission) {
   const recommendations = array(mission?.recommendations);
   if (!recommendations.length) return null;
@@ -38,9 +42,19 @@ function recommendationForRoster(rosterBody, mission) {
   return fits.find((row) => row.fit?.complete)?.recommendation || fits[0]?.recommendation || null;
 }
 
+function rosterAfterOperations(rosterBody, reservedBaseIds) {
+  if (!reservedBaseIds.size) return rosterBody;
+  const available = (rows) => array(rows).filter((unit) => !reservedBaseIds.has(text(unit?.baseId).toUpperCase()));
+  return Object.freeze({
+    ...rosterBody,
+    units: Object.freeze(available(rosterBody?.units)),
+    ships: Object.freeze(available(rosterBody?.ships)),
+  });
+}
+
 function operationTask(assignment, phase) {
   const slotId = text(assignment?.slotId || assignment?.slot_id || assignment?.operationSlotId || assignment?.operation_slot_id);
-  const baseId = text(assignment?.baseId || assignment?.base_id).toUpperCase();
+  const baseId = assignmentBaseId(assignment);
   const unitName = text(assignment?.unitName || assignment?.unit_name || assignment?.name) || baseId || 'assigned unit';
   const planetId = text(assignment?.planetId || assignment?.planet_id || assignment?.territoryId || assignment?.territory_id);
   const assignmentPhase = cleanPhase(assignment?.phase) || phase;
@@ -140,7 +154,7 @@ function preloadSafetyTask(zone, planet, phase) {
   });
 }
 
-function missionTask({ mission, planet, rosterBody, phase }) {
+function missionTask({ mission, planet, rosterBody, phase, operationsReservedCount = 0 }) {
   const eligibility = missionRosterEligibility(rosterBody, mission);
   if (!eligibility.loaded || !eligibility.ready) return null;
   const recommendation = recommendationForRoster(rosterBody, mission);
@@ -152,7 +166,7 @@ function missionTask({ mission, planet, rosterBody, phase }) {
   const details = [];
   if (tag) details.push(tag);
   if (recommendation?.name) details.push(`Recommended: ${recommendation.name}`);
-  details.push('Your current roster meets the encoded entry gate.');
+  details.push('Your roster meets the encoded entry gate after assigned Operations donations are reserved.');
   return Object.freeze({
     actionKey: actionKey(actionType, phase, planet.id, mission.id),
     actionType,
@@ -172,6 +186,7 @@ function missionTask({ mission, planet, rosterBody, phase }) {
       recommendationName: text(recommendation?.name),
       reward: array(mission?.rewards).join(' · '),
       entryPercent: Number(eligibility.percent || 0),
+      operationsReservedCount,
     }),
   });
 }
@@ -214,11 +229,13 @@ export function buildTbMemberTasks(input = {}) {
   if (!phase || !rosterBody) return Object.freeze([]);
 
   const tasks = [];
-  for (const assignment of array(input.operationAssignments)) {
+  const activeAssignments = array(input.operationAssignments).filter((assignment) => {
     const assignmentPhase = cleanPhase(assignment?.phase);
-    if (assignmentPhase && assignmentPhase !== phase) continue;
-    tasks.push(operationTask(assignment, phase));
-  }
+    return !assignmentPhase || assignmentPhase === phase;
+  });
+  const operationsReservedBaseIds = new Set(activeAssignments.map(assignmentBaseId).filter(Boolean));
+  for (const assignment of activeAssignments) tasks.push(operationTask(assignment, phase));
+  const missionRosterBody = rosterAfterOperations(rosterBody, operationsReservedBaseIds);
 
   const configuredZones = array(input.zones).filter((zone) => cleanPhase(zone?.phase) === phase);
   for (const zone of configuredZones) {
@@ -231,7 +248,7 @@ export function buildTbMemberTasks(input = {}) {
     if (command === 'stop') continue;
 
     for (const mission of normalizedRoteMissionsForPlanet(planet.id)) {
-      const task = missionTask({ mission, planet, rosterBody, phase });
+      const task = missionTask({ mission, planet, rosterBody: missionRosterBody, phase, operationsReservedCount: operationsReservedBaseIds.size });
       if (task) tasks.push(task);
     }
 
