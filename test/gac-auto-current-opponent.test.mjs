@@ -9,13 +9,13 @@ import {
   validRound,
 } from "../public/gac-auto-current-opponent.js";
 
-test("exact bracket evidence resolves current opponent and round without guessing", () => {
+test("exact bracket evidence resolves current opponent and valid event round without guessing", () => {
   const pairing = exactPairingFromBracket({
     event: { eventInstanceId: "GAC-82", round: 3 },
     currentOpponent: { allyCode: "987-654-321", name: "Navygators" },
     opponentResolution: {
       exact: true,
-      round: 3,
+      round: 0,
       source: "comlink-live",
       confidence: 1,
     },
