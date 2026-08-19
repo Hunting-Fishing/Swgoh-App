@@ -25,8 +25,8 @@ const rosterBody = { units: geos, ships: [] };
 const event = { id: 'event-1', current_phase: 'P2' };
 const operationAssignments = [{ phase: 'P2', slotId: 'geo-op-1', baseId: 'GEONOSIANSPY', unitName: 'Geonosian Spy', planetId: 'geonosis' }];
 
-function zone(commandState) {
-  return [{ phase: 'P2', planet_id: 'geonosis', command_state: commandState, command_message: commandState === 'stop' ? 'No actions here.' : '' }];
+function zone(commandState, overrides = {}) {
+  return [{ phase: 'P2', planet_id: 'geonosis', command_state: commandState, command_message: commandState === 'stop' ? 'No actions here.' : '', ...overrides }];
 }
 
 test('Today queue puts Operations before playable missions and deployment', () => {
@@ -48,10 +48,40 @@ test('STOP command suppresses missions and deployment while keeping the Operatio
   assert.ok(tasks.find((task) => task.actionType === 'acknowledge')?.explanation.includes('No actions here.'));
 });
 
-test('PRELOAD allows mission work but suppresses deployment', () => {
-  const tasks = buildTbMemberTasks({ event, zones: zone('preload'), rosterBody, operationAssignments: [] });
+test('PRELOAD keeps missions available and creates a cap-aware deployment task', () => {
+  const tasks = buildTbMemberTasks({
+    event,
+    zones: zone('preload', { current_tp: 120000000, preload_cap_tp: 148124999 }),
+    rosterBody,
+    operationAssignments: [],
+  });
   assert.ok(tasks.some((task) => task.actionType === 'combat'));
+  const preload = tasks.find((task) => task.actionType === 'deploy');
+  assert.ok(preload);
+  assert.equal(preload.payload.preloadCapTp, 148124999);
+  assert.match(preload.explanation, /do not cross the cap/i);
+});
+
+test('PRELOAD without a TP cap fails closed and does not tell a member to deploy', () => {
+  const tasks = buildTbMemberTasks({ event, zones: zone('preload'), rosterBody, operationAssignments: [] });
   assert.equal(tasks.some((task) => task.actionType === 'deploy'), false);
+  const warning = tasks.find((task) => task.actionType === 'acknowledge');
+  assert.ok(warning);
+  assert.equal(warning.payload.capMissing, true);
+  assert.match(warning.explanation, /do not deploy/i);
+});
+
+test('PRELOAD at or above the cap becomes a stop-deploy warning', () => {
+  const tasks = buildTbMemberTasks({
+    event,
+    zones: zone('preload', { current_tp: 148125000, preload_cap_tp: 148124999 }),
+    rosterBody,
+    operationAssignments: [],
+  });
+  assert.equal(tasks.some((task) => task.actionType === 'deploy'), false);
+  const warning = tasks.find((task) => task.actionType === 'acknowledge');
+  assert.equal(warning?.payload?.capReached, true);
+  assert.match(warning?.title || '', /CAP REACHED/i);
 });
 
 test('unconfigured territories are not inferred as active live tasks', () => {
