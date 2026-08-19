@@ -21,10 +21,33 @@ test('planner decorates active ROTE zone with versioned thresholds and optimizes
     zones: [zone()],
   });
   assert.equal(plan.planner, 'rote-route-planning-service-v1');
+  assert.match(plan.inputFingerprint, /^[0-9a-f]{64}$/);
   assert.equal(plan.thresholdReference.sourceKind, 'community-reference');
   assert.equal(plan.zones[0].targetThresholdTp, 148_125_000);
   assert.equal(plan.zones[0].recommendedDeploymentTp, 28_125_000);
   assert.equal(plan.rejectedThresholdZones.length, 0);
+});
+
+test('input fingerprint is deterministic for equivalent inputs and changes with route state', () => {
+  const input = {
+    remainingGuildDeploymentTp: 40_000_000,
+    riskMode: 'safe',
+    zones: [
+      zone({ planet_id: 'geonosis' }),
+      zone({ planet_id: 'bracca', current_tp: 100_000_000 }),
+    ],
+  };
+  const first = buildRoteRoutePlan(input);
+  const reordered = buildRoteRoutePlan({ ...input, zones: [...input.zones].reverse() });
+  const changed = buildRoteRoutePlan({ ...input, zones: [zone({ planet_id: 'geonosis', current_tp: 120_000_001 }), input.zones[1]] });
+  assert.equal(first.inputFingerprint, reordered.inputFingerprint);
+  assert.notEqual(first.inputFingerprint, changed.inputFingerprint);
+});
+
+test('officer command and lock state participate in the optimizer fingerprint', () => {
+  const open = buildRoteRoutePlan({ remainingGuildDeploymentTp: 40_000_000, zones: [zone({ command_state: 'attack', locked_by_officer: false })] });
+  const locked = buildRoteRoutePlan({ remainingGuildDeploymentTp: 40_000_000, zones: [zone({ command_state: 'attack', locked_by_officer: true })] });
+  assert.notEqual(open.inputFingerprint, locked.inputFingerprint);
 });
 
 test('phase mismatch rejects static threshold decoration and fails closed', () => {
