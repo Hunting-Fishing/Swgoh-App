@@ -48,32 +48,53 @@ test("optional preflight failures are reported as degraded without throwing", as
   assert.equal(summary.results.length, 2);
 });
 
-test("web server import proceeds when optional startup preflight fails", async () => {
-  let imported = 0;
+test("normal production mode establishes web startup before optional preflights", async () => {
+  const order = [];
   const summary = await startProduction({
     env: {},
     commands: [{ name: "catalog", args: [] }],
-    runner: async () => result("catalog", false),
-    importServer: async () => { imported += 1; },
+    runner: async () => {
+      order.push("preflight");
+      return result("catalog", false);
+    },
+    importServer: async () => { order.push("server"); },
   });
-  assert.equal(imported, 1);
+  assert.deepEqual(order, ["server", "preflight"]);
   assert.equal(summary.ok, false);
   assert.deepEqual(summary.degraded, ["catalog"]);
 });
 
-test("explicit strict startup mode preserves a fail-closed maintenance option", async () => {
-  let imported = 0;
+test("explicit strict startup mode runs preflights first and blocks server import on failure", async () => {
+  const order = [];
   await assert.rejects(
     startProduction({
       env: { SWGOH_STRICT_STARTUP_PREFLIGHTS: "true" },
       commands: [{ name: "discord-stage10-schema", args: [] }],
-      runner: async () => result("discord-stage10-schema", false),
-      importServer: async () => { imported += 1; },
+      runner: async () => {
+        order.push("preflight");
+        return result("discord-stage10-schema", false);
+      },
+      importServer: async () => { order.push("server"); },
     }),
     (error) => error?.code === "STARTUP_PREFLIGHT_FAILED",
   );
-  assert.equal(imported, 0);
+  assert.deepEqual(order, ["preflight"]);
   assert.equal(strictStartupPreflights({ SWGOH_STRICT_STARTUP_PREFLIGHTS: "1" }), true);
+});
+
+test("strict mode imports the web server only after all preflights pass", async () => {
+  const order = [];
+  const summary = await startProduction({
+    env: { SWGOH_STRICT_STARTUP_PREFLIGHTS: "yes" },
+    commands: [{ name: "catalog", args: [] }],
+    runner: async () => {
+      order.push("preflight");
+      return result("catalog", true);
+    },
+    importServer: async () => { order.push("server"); },
+  });
+  assert.deepEqual(order, ["preflight", "server"]);
+  assert.equal(summary.ok, true);
 });
 
 test("npm start has one stable production entrypoint instead of an && preflight chain", async () => {
