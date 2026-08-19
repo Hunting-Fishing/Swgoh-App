@@ -2,6 +2,8 @@
 
 Updated: 2026-08-19 (GMT+8)
 
+> Development note: this feature branch was created before a parallel Stage 9 foundation landed directly on `main`. The branch is retained only as design/reference material and must not be merged as-is because it duplicates the authoritative main-branch persistence/services. Continue Stage 9 from current `main`.
+
 ## Objective
 
 Stage 9 creates an immutable, officer-approvable ROTE assignment artifact that Stage 10 delivery can consume without ever publishing a changed or stale draft under an earlier approval.
