@@ -1,7 +1,7 @@
 .gac-defense-datacron-control {
   display: inline-grid;
-  gap: .18rem;
-  min-width: min(360px, 70vw);
+  gap: .24rem;
+  min-width: min(390px, 74vw);
   vertical-align: middle;
 }
 
@@ -10,9 +10,50 @@
   min-width: 260px;
 }
 
+.gac-board-persistence-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: .3rem;
+  align-items: center;
+}
+
+#gacSavedDefense,
+#gacSaveDefense {
+  min-height: 34px;
+}
+
+#gacSavedDefense {
+  min-width: 0;
+  max-width: 100%;
+}
+
+#gacSaveDefense {
+  border: 1px solid rgba(88, 196, 255, .32);
+  border-radius: .48rem;
+  padding: .3rem .55rem;
+  background: rgba(29, 87, 121, .16);
+  color: #a9dcfa;
+  font-size: .59rem;
+  font-weight: 800;
+  letter-spacing: .025em;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+#gacSaveDefense:hover:not(:disabled) {
+  border-color: rgba(105, 211, 255, .55);
+  background: rgba(37, 112, 153, .24);
+  color: #d5f1ff;
+}
+
+#gacSaveDefense:disabled {
+  cursor: not-allowed;
+  opacity: .42;
+}
+
 #gacDefenseDatacronStatus {
   display: block;
-  max-width: 360px;
+  max-width: 390px;
   color: #7e8799;
   font-size: .58rem;
   line-height: 1.35;
@@ -99,6 +140,13 @@
   #gacDefenseDatacron {
     width: 100%;
     min-width: 0;
+  }
+  .gac-board-persistence-controls {
+    grid-template-columns: 1fr;
+  }
+  #gacSaveDefense,
+  #gacSavedDefense {
+    width: 100%;
   }
   .gac-enemy-datacron-head {
     align-items: flex-start;
