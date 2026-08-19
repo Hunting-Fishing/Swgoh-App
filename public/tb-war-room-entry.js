@@ -135,7 +135,8 @@ function configuredMarkup(data) {
     <div class="tb-war-command-strip">${Object.entries(summary.commandCounts).map(([command, count]) => commandBadge(command, count)).join('') || '<span class="tb-war-no-command">No zone commands configured</span>'}</div>
     ${zoneRows.length ? `<div class="tb-war-zones">${zoneRows.map(zoneCard).join('')}</div>` : '<div class="tb-war-empty">No current-phase territory state has been entered yet. Officers can configure it from Today in TB.</div>'}
     <div class="tb-war-room-actions">
-      <a class="primary" href="/guild/tb/today">Open Today in TB</a>
+      <a class="primary" href="/guild/tb/route">Open Star Route Optimizer</a>
+      <a href="/guild/tb/today">Open Today in TB</a>
       <a href="/guild/tb/today#officer-controls">Edit Event & Territory Commands</a>
       <button type="button" data-tb-war-refresh>Refresh Event State</button>
     </div>
