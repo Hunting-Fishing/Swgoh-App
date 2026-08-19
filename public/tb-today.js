@@ -31,12 +31,18 @@ async function api(path, options = {}) {
   return body;
 }
 
+function nextPhaseLabel(value) {
+  const match = String(value || '').toUpperCase().match(/^P([1-6])$/);
+  const phaseNumber = Number(match?.[1] || 0);
+  return phaseNumber > 0 && phaseNumber < 6 ? `P${phaseNumber + 1}` : '';
+}
+
 function phasePlanetOptions(phase) {
   const currentPhase = String(phase || '').toUpperCase();
   const sourcePhaseById = new Map(ROTE_PLANETS.map((planet) => [planet.id, String(planet.phase || '').toUpperCase()]));
   const rows = ROTE_PLANETS.filter((planet) =>
     String(planet.phase || '').toUpperCase() === currentPhase
-    || (planet.bonus === true && sourcePhaseById.get(planet.unlockFrom) === currentPhase));
+    || (planet.bonus === true && nextPhaseLabel(sourcePhaseById.get(planet.unlockFrom)) === currentPhase));
   return rows.map((planet) => `<option value="${escapeHtml(planet.id)}">${escapeHtml(planet.name)}${planet.bonus ? ' · BONUS' : ''}</option>`).join('');
 }
 
