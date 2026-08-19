@@ -1,3 +1,4 @@
+import "./gac-defense-datacron-ui.js";
 import {
   bestCoverage,
   datacronLabel,
