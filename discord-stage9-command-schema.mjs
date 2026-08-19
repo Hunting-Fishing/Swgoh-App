@@ -1,7 +1,7 @@
 const text = (value) => String(value ?? '').trim();
 const array = (value) => Array.isArray(value) ? value : [];
 
-export const DISCORD_STAGE9_PLAN_SCHEMA_VERSION = '2026-08-19-stage9-plan-status-v1';
+export const DISCORD_STAGE9_PLAN_SCHEMA_VERSION = '2026-08-19-stage9-plan-diff-v2';
 
 const phaseChoices = ['P1', 'P2', 'P3', 'P4', 'P5', 'P6'].map((phase) => Object.freeze({ name: phase, value: phase }));
 
@@ -17,6 +17,36 @@ export const DISCORD_STAGE9_TB_SUBCOMMANDS = Object.freeze([
         description: 'Optional ROTE phase scope',
         required: false,
         choices: Object.freeze(phaseChoices),
+      }),
+    ]),
+  }),
+  Object.freeze({
+    type: 1,
+    name: 'plan-diff',
+    description: 'Officer-read changes between two verified immutable ROTE plan versions',
+    options: Object.freeze([
+      Object.freeze({
+        type: 3,
+        name: 'phase',
+        description: 'ROTE phase containing both immutable versions',
+        required: true,
+        choices: Object.freeze(phaseChoices),
+      }),
+      Object.freeze({
+        type: 3,
+        name: 'from',
+        description: 'Older immutable version number or version ID',
+        required: true,
+        min_length: 1,
+        max_length: 100,
+      }),
+      Object.freeze({
+        type: 3,
+        name: 'to',
+        description: 'Newer immutable version number or version ID',
+        required: true,
+        min_length: 1,
+        max_length: 100,
       }),
     ]),
   }),
