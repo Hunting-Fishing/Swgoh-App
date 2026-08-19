@@ -98,7 +98,8 @@ function rosterIndex(roster = {}) {
 function defenderUnits(entry = {}, opponentRoster = {}) {
   const index = rosterIndex(opponentRoster);
   const members = normalizeMembers(entry?.defense?.members || entry?.prediction?.members);
-  return members.map((id) => index.get(id)).filter(Boolean);
+  const units = members.map((id) => index.get(id)).filter(Boolean);
+  return units.length === members.length ? units : [];
 }
 function allocationByForecastIndex(plan = {}) {
   return new Map((Array.isArray(plan?.assignments) ? plan.assignments : [])
