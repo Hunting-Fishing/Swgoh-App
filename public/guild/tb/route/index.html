@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#050b14">
+  <title>Star Route Optimizer · SWGOH Command Center</title>
+  <link rel="stylesheet" href="/tb-route.css?v=20260819-route1">
+</head>
+<body>
+  <main class="route-shell" data-route-root>
+    <header class="route-topbar">
+      <a class="route-brand" href="/guild/tb"><span>SWGOH</span><strong>COMMAND CENTER</strong></a>
+      <nav aria-label="Territory Battle navigation">
+        <a href="/guild/tb">War Room</a>
+        <a href="/guild/tb/today">Today in TB</a>
+        <a href="/guild/tb/farming">TB Farming</a>
+      </nav>
+    </header>
+
+    <section class="route-hero">
+      <div>
+        <span class="route-kicker">OFFICER WAR ROOM · MILESTONE D</span>
+        <h1>Star Route + Preload Optimizer</h1>
+        <p>Turn durable territory state plus explicit remaining TP into safe <b>ATTACK</b>, <b>PRELOAD</b>, <b>HOLD</b>, <b>DEPLOY</b>, or <b>STOP</b> orders.</p>
+      </div>
+      <div class="route-event" data-route-event>
+        <small>ACTIVE EVENT</small>
+        <strong>Loading…</strong>
+        <span>Checking authenticated TB state</span>
+      </div>
+    </section>
+
+    <section class="route-boundary" data-route-boundary>
+      Loading evidence boundary…
+    </section>
+
+    <section class="route-grid">
+      <section class="route-input-panel">
+        <header>
+          <div><span>LIVE INPUT GATE</span><h2>Confirm remaining TP</h2></div>
+          <b>NO ASSUMPTIONS</b>
+        </header>
+        <p class="route-help">Current zone TP, stars, target stars, commands, locks, and preload caps come from the saved event state. Enter only the remaining values the server cannot yet derive canonically.</p>
+
+        <form data-route-form>
+          <label class="route-total-input">
+            <span>Remaining Guild deployable TP</span>
+            <input name="remainingGuildDeploymentTp" type="number" min="0" step="1" inputmode="numeric" placeholder="Enter current remaining deployable TP" required>
+          </label>
+          <input name="riskMode" type="hidden" value="safe">
+
+          <div class="route-zone-inputs" data-route-zone-inputs>
+            <div class="route-loading">Loading configured territories…</div>
+          </div>
+
+          <div class="route-submit-row">
+            <button type="submit" data-route-submit disabled>Generate Safe Preview</button>
+            <span>Preview only · nothing is saved or published</span>
+          </div>
+        </form>
+        <div class="route-input-result" data-route-input-result></div>
+      </section>
+
+      <aside class="route-rules">
+        <span>SAFETY RULES</span>
+        <h2>Fail closed</h2>
+        <ul>
+          <li>Static star thresholds never replace current event TP.</li>
+          <li>Every active territory needs explicit remaining mission + Operation TP.</li>
+          <li>PRELOAD reserves known mission/Operation TP before allocating deployment.</li>
+          <li>Officer locks remain visible and are not silently overwritten.</li>
+          <li>Missing or phase-mismatched threshold data blocks deployment advice.</li>
+        </ul>
+        <a href="/guild/tb/today#officer-controls">Edit event / territory commands →</a>
+      </aside>
+    </section>
+
+    <section class="route-results" data-route-results hidden>
+      <header class="route-results-head">
+        <div><span>ROUTE SOLUTION</span><h2>Commander Orders</h2></div>
+        <button type="button" data-route-recalculate>Recalculate</button>
+      </header>
+      <div class="route-summary" data-route-summary></div>
+      <div class="route-command-list" data-route-command-list></div>
+      <footer class="route-source" data-route-source></footer>
+    </section>
+  </main>
+  <script type="module" src="/tb-route.js?v=20260819-route1"></script>
+</body>
+</html>
