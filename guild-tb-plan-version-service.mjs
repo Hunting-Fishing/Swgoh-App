@@ -33,6 +33,11 @@ function uuidOrEmpty(value, label = 'ID') {
   return normalized;
 }
 
+function discordSnowflakeOrEmpty(value) {
+  const normalized = text(value);
+  return /^\d{16,22}$/.test(normalized) ? normalized : '';
+}
+
 function canonical(value) {
   if (value === null || value === undefined) return null;
   if (Array.isArray(value)) return value.map(canonical);
@@ -169,7 +174,7 @@ function versionDelta(fromRun = {}, toRun = {}) {
 
 async function latestApproval(store, runId) {
   const rows = await store.select('guild_tb_assignment_run_approvals', {
-    select: 'id,guild_id,run_id,plan_hash,decision,actor_user_id,reason,metadata,created_at',
+    select: 'id,guild_id,run_id,plan_hash,decision,actor_user_id,actor_discord_user_id,reason,metadata,created_at',
     run_id: `eq.${runId}`,
     order: 'created_at.desc',
     limit: 1,
@@ -202,6 +207,19 @@ async function newerVersion(store, run) {
   return first(await store.select('guild_tb_assignment_runs', query));
 }
 
+function normalizedContext(context = {}) {
+  const guildId = uuidOrEmpty(context?.guild?.id, 'Guild ID');
+  if (!guildId) throw error('Guild context is required.', 'GUILD_ID_REQUIRED', 400);
+  const userId = uuidOrEmpty(context.userId, 'Officer user ID');
+  const actorDiscordUserId = discordSnowflakeOrEmpty(context.actorDiscordUserId);
+  return Object.freeze({
+    ...context,
+    guild: Object.freeze({ ...object(context.guild), id: guildId }),
+    userId,
+    actorDiscordUserId,
+  });
+}
+
 export async function assertTbAssignmentRunPublishable({ store = supabaseCoreStore, guildId, runId } = {}) {
   const normalizedGuildId = uuidOrEmpty(guildId, 'Guild ID');
   if (!normalizedGuildId) throw error('Guild ID is required.', 'GUILD_ID_REQUIRED', 400);
@@ -224,19 +242,24 @@ export function createGuildTbPlanVersionService(options = {}) {
   const operations = options.operationsService || createGuildOperationsService({ store });
   const now = typeof options.now === 'function' ? options.now : nowIso;
 
-  async function audit(context, action, runId, metadata = {}) {
+  async function audit(rawContext, action, runId, metadata = {}) {
+    const context = normalizedContext(rawContext);
     await store.insert('guild_operations_audit_log', [{
       guild_id: context.guild.id,
-      actor_user_id: context.userId,
+      actor_user_id: context.userId || null,
       action,
       entity_type: 'guild_tb_assignment_run',
       entity_id: text(runId) || null,
-      metadata: object(metadata),
+      metadata: {
+        ...object(metadata),
+        ...(context.actorDiscordUserId ? { actorDiscordUserId: context.actorDiscordUserId } : {}),
+      },
       occurred_at: now(),
     }], { returning: false });
   }
 
-  async function requirePlan(context, planIdInput) {
+  async function requirePlan(rawContext, planIdInput) {
+    const context = normalizedContext(rawContext);
     const planId = uuidOrEmpty(planIdInput, 'TB plan ID');
     if (!planId) return '';
     const rows = await store.select('guild_tb_plans', {
@@ -249,8 +272,8 @@ export function createGuildTbPlanVersionService(options = {}) {
     return planId;
   }
 
-  async function createVersion(userId, lookupAllyCode, input = {}) {
-    const context = await operations.requireOfficer(userId, lookupAllyCode);
+  async function createVersionForContext(rawContext, input = {}) {
+    const context = normalizedContext(rawContext);
     const planId = await requirePlan(context, input.planId);
     const rotePhase = phase(input.phase);
     const hashInput = {
@@ -271,7 +294,8 @@ export function createGuildTbPlanVersionService(options = {}) {
       p_assignments: array(input.assignments),
       p_unfilled: array(input.unfilled),
       p_diagnostics: object(input.diagnostics),
-      p_created_by_user_id: context.userId,
+      p_created_by_user_id: context.userId || null,
+      p_created_by_discord_user_id: context.actorDiscordUserId || null,
     }));
     if (!created?.id) throw error('Immutable assignment version could not be persisted.', 'TB_ASSIGNMENT_VERSION_CREATE_FAILED', 503);
     await audit(context, 'tb-assignment-version.create', created.id, {
@@ -285,10 +309,10 @@ export function createGuildTbPlanVersionService(options = {}) {
     return Object.freeze({ ...created, planHash });
   }
 
-  async function listVersions(userId, lookupAllyCode, input = {}) {
-    const context = await operations.requireOfficer(userId, lookupAllyCode);
+  async function listVersionsForContext(rawContext, input = {}) {
+    const context = normalizedContext(rawContext);
     const query = {
-      select: 'id,guild_id,plan_id,status,rote_phase,version_number,plan_hash,input_fingerprint,diagnostics,created_by_user_id,created_at,supersedes_run_id,superseded_by_run_id,cancelled_at,cancelled_by_user_id',
+      select: 'id,guild_id,plan_id,status,rote_phase,version_number,plan_hash,input_fingerprint,diagnostics,created_by_user_id,created_by_discord_user_id,created_at,supersedes_run_id,superseded_by_run_id,cancelled_at,cancelled_by_user_id,cancelled_by_discord_user_id,cancel_reason',
       guild_id: `eq.${context.guild.id}`,
       order: 'created_at.desc',
       limit: Math.min(50, Math.max(1, Number(input.limit || 20))),
@@ -301,16 +325,16 @@ export function createGuildTbPlanVersionService(options = {}) {
     return Object.freeze(result);
   }
 
-  async function getVersion(userId, lookupAllyCode, runId) {
-    const context = await operations.requireOfficer(userId, lookupAllyCode);
+  async function getVersionForContext(rawContext, runId) {
+    const context = normalizedContext(rawContext);
     const run = await readRun(store, context.guild.id, runId);
     const approval = await latestApproval(store, run.id);
     const recomputedHash = run.plan_hash ? hashTbAssignmentPayload(runHashInput(run)) : '';
     return Object.freeze({ ...run, approval, recomputedHash, hashValid: Boolean(run.plan_hash && recomputedHash === run.plan_hash) });
   }
 
-  async function approveVersion(userId, lookupAllyCode, runId, expectedHash) {
-    const context = await operations.requireOfficer(userId, lookupAllyCode);
+  async function approveVersionForContext(rawContext, runId, expectedHash, reason = '') {
+    const context = normalizedContext(rawContext);
     const run = await readRun(store, context.guild.id, runId);
     if (!run.plan_hash) throw error('Assignment version has no immutable plan hash.', 'TB_PLAN_HASH_MISSING');
     const confirmation = text(expectedHash).toLowerCase();
@@ -329,20 +353,22 @@ export function createGuildTbPlanVersionService(options = {}) {
       run_id: run.id,
       plan_hash: run.plan_hash,
       decision: 'approved',
-      actor_user_id: context.userId,
-      reason: text(arguments?.[4]?.reason) || null,
+      actor_user_id: context.userId || null,
+      actor_discord_user_id: context.actorDiscordUserId || null,
+      reason: text(reason) || null,
       metadata: { versionNumber: Number(run.version_number || 0), phase: run.rote_phase },
     }]));
     await audit(context, 'tb-assignment-version.approve', run.id, {
       phase: run.rote_phase,
       versionNumber: Number(run.version_number || 0),
       planHash: run.plan_hash,
+      reason: text(reason) || null,
     });
     return Object.freeze({ run, approval, idempotent: false });
   }
 
-  async function cancelVersion(userId, lookupAllyCode, runId, reason = '') {
-    const context = await operations.requireOfficer(userId, lookupAllyCode);
+  async function cancelVersionForContext(rawContext, runId, reason = '') {
+    const context = normalizedContext(rawContext);
     const run = await readRun(store, context.guild.id, runId);
     if (text(run.status).toLowerCase() === 'published') throw error('Published assignment versions cannot be cancelled retroactively.', 'TB_ASSIGNMENT_ALREADY_PUBLISHED');
     if (text(run.status).toLowerCase() === 'cancelled' || run.cancelled_at) return Object.freeze({ ...run, idempotent: true });
@@ -352,7 +378,9 @@ export function createGuildTbPlanVersionService(options = {}) {
     }, {
       status: 'cancelled',
       cancelled_at: now(),
-      cancelled_by_user_id: context.userId,
+      cancelled_by_user_id: context.userId || null,
+      cancelled_by_discord_user_id: context.actorDiscordUserId || null,
+      cancel_reason: text(reason) || null,
     }));
     const approval = await latestApproval(store, run.id);
     if (approval?.decision === 'approved') {
@@ -361,7 +389,8 @@ export function createGuildTbPlanVersionService(options = {}) {
         run_id: run.id,
         plan_hash: run.plan_hash,
         decision: 'revoked',
-        actor_user_id: context.userId,
+        actor_user_id: context.userId || null,
+        actor_discord_user_id: context.actorDiscordUserId || null,
         reason: text(reason) || 'Assignment version cancelled.',
         metadata: { previousApprovalId: approval.id },
       }]);
@@ -375,15 +404,15 @@ export function createGuildTbPlanVersionService(options = {}) {
     return Object.freeze({ ...updated, idempotent: false });
   }
 
-  async function compareVersions(userId, lookupAllyCode, fromRunId, toRunId) {
-    const context = await operations.requireOfficer(userId, lookupAllyCode);
+  async function compareVersionsForContext(rawContext, fromRunId, toRunId) {
+    const context = normalizedContext(rawContext);
     const fromRun = await readRun(store, context.guild.id, fromRunId);
     const toRun = await readRun(store, context.guild.id, toRunId);
     return versionDelta(fromRun, toRun);
   }
 
-  async function assertPublishable(userId, lookupAllyCode, runId) {
-    const context = await operations.requireOfficer(userId, lookupAllyCode);
+  async function assertPublishableForContext(rawContext, runId) {
+    const context = normalizedContext(rawContext);
     try {
       return await assertTbAssignmentRunPublishable({ store, guildId: context.guild.id, runId });
     } catch (cause) {
@@ -395,6 +424,38 @@ export function createGuildTbPlanVersionService(options = {}) {
     }
   }
 
+  async function webContext(userId, lookupAllyCode) {
+    return normalizedContext(await operations.requireOfficer(userId, lookupAllyCode));
+  }
+
+  async function createVersion(userId, lookupAllyCode, input = {}) {
+    return createVersionForContext(await webContext(userId, lookupAllyCode), input);
+  }
+
+  async function listVersions(userId, lookupAllyCode, input = {}) {
+    return listVersionsForContext(await webContext(userId, lookupAllyCode), input);
+  }
+
+  async function getVersion(userId, lookupAllyCode, runId) {
+    return getVersionForContext(await webContext(userId, lookupAllyCode), runId);
+  }
+
+  async function approveVersion(userId, lookupAllyCode, runId, expectedHash, reason = '') {
+    return approveVersionForContext(await webContext(userId, lookupAllyCode), runId, expectedHash, reason);
+  }
+
+  async function cancelVersion(userId, lookupAllyCode, runId, reason = '') {
+    return cancelVersionForContext(await webContext(userId, lookupAllyCode), runId, reason);
+  }
+
+  async function compareVersions(userId, lookupAllyCode, fromRunId, toRunId) {
+    return compareVersionsForContext(await webContext(userId, lookupAllyCode), fromRunId, toRunId);
+  }
+
+  async function assertPublishable(userId, lookupAllyCode, runId) {
+    return assertPublishableForContext(await webContext(userId, lookupAllyCode), runId);
+  }
+
   return Object.freeze({
     createVersion,
     listVersions,
@@ -403,6 +464,13 @@ export function createGuildTbPlanVersionService(options = {}) {
     cancelVersion,
     compareVersions,
     assertPublishable,
+    createVersionForContext,
+    listVersionsForContext,
+    getVersionForContext,
+    approveVersionForContext,
+    cancelVersionForContext,
+    compareVersionsForContext,
+    assertPublishableForContext,
   });
 }
 
