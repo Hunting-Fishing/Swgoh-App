@@ -99,6 +99,8 @@ function requireExplicitUniquePriorities(zones) {
 
 function fingerprintZone(zone = {}) {
   return Object.freeze({
+    id: text(zone.id),
+    eventId: text(zone.eventId ?? zone.event_id),
     phase: phase(zone.phase),
     planetId: zonePlanetId(zone),
     priority: routePriority(zone),
@@ -116,6 +118,9 @@ function fingerprintZone(zone = {}) {
     lockedByOfficer: zone.lockedByOfficer === true || zone.locked_by_officer === true,
     deployAllowed: zone.deployAllowed ?? zone.deploy_allowed ?? true,
     combatAllowed: zone.combatAllowed ?? zone.combat_allowed ?? true,
+    sourceKind: text(zone.sourceKind ?? zone.source_kind),
+    observedAt: text(zone.observedAt ?? zone.observed_at),
+    updatedAt: text(zone.updatedAt ?? zone.updated_at),
     starThresholds: array(zone.starThresholds ?? zone.star_thresholds).map(Number),
     thresholdRejected: zone.thresholdRejected === true,
     thresholdRejectionCode: text(zone.thresholdRejectionCode),
@@ -154,6 +159,6 @@ export function buildRoteRoutePlan(input = {}) {
     inputFingerprint,
     thresholdReference: ROTE_THRESHOLD_REFERENCE,
     rejectedThresholdZones: Object.freeze(rejectedThresholdZones),
-    sourceBoundary: 'Current TP, stars, remaining capacity and officer commands must come from the active event state. Route priority is explicit officer input. ROTE star thresholds are static versioned reference data only.',
+    sourceBoundary: 'Current TP, stars, remaining capacity and officer commands must come from the active event state. Route priority is explicit officer input. The optimizer fingerprint includes durable event/zone identity and version timestamps. ROTE star thresholds are static versioned reference data only.',
   });
 }
