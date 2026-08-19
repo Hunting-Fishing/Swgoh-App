@@ -63,14 +63,14 @@ function battleBoardKey(row = {}) {
 function verifiedBoardKey(row = {}, round = {}, event = {}) {
   const eventId = clean(row?.metadata?.eventInstanceId || event?.event_instance_id || round?.event_id || "event");
   const roundNumber = finite(row?.metadata?.round || round?.round_number, 0);
-  const target = clean(row?.metadata?.opponentAllyCode || row?.metadata?.allyCode || "target");
-  const perspective = clean(row?.owner || "owner");
-  return `${eventId}|${roundNumber}|${target}|${perspective}|${clean(row.round_id)}`;
+  const target = clean(row?.metadata?.opponentAllyCode || "target");
+  return `${eventId}|${roundNumber}|${target}|${clean(row.round_id)}`;
 }
 function battlePlacementRows(rows = [], format = "") {
   const output = [];
   const seen = new Set();
   for (const row of asArray(rows)) {
+    if (clean(row?.source) !== "c3po-gahistory") continue;
     const kind = clean(row?.metadata?.battleType).toLowerCase();
     if (kind && kind !== "character") continue;
     const rowMode = clean(row?.format).toLowerCase();
@@ -104,6 +104,8 @@ function verifiedPlacementRows(rows = [], roundsById = new Map(), eventsById = n
   const withheld = [];
   const seen = new Set();
   for (const row of asArray(rows)) {
+    if (clean(row?.owner) !== "opponent" || clean(row?.side) !== "defense") continue;
+    if (clean(row?.source) !== "user-confirmed-current-board") continue;
     const round = roundsById.get(clean(row?.round_id)) || {};
     const event = eventsById.get(clean(round?.event_id)) || {};
     const rowMode = rowFormat(row, event);
@@ -154,6 +156,7 @@ function summarizePredictionPlacements(battlePlacements = [], verifiedPlacements
         slots: new Map(),
         lastSeenAt: "",
         latestDatacron: null,
+        latestDatacronAt: 0,
       });
     }
     return groups.get(row.signature);
@@ -178,8 +181,10 @@ function summarizePredictionPlacements(battlePlacements = [], verifiedPlacements
         group.slots.get(slotKey).add(row.boardKey);
       }
     }
-    if (row.datacron && (!group.latestDatacron || (Date.parse(row.lastSeenAt) || 0) >= (Date.parse(group.lastSeenAt) || 0))) {
+    const datacronAt = Date.parse(row.lastSeenAt) || 0;
+    if (row.datacron && datacronAt >= group.latestDatacronAt) {
       group.latestDatacron = row.datacron;
+      group.latestDatacronAt = datacronAt;
     }
     group.lastSeenAt = newest(group.lastSeenAt, row.lastSeenAt);
   }
@@ -265,6 +270,7 @@ export function createGacDefensePredictionService(options = {}) {
     let battleRows = asArray(await store.select("gac_battles", {
       select: "swgoh_player_id,ally_code,event_instance_id,season_id,format,round_number,match_index,match_id,opponent_swgoh_player_id,opponent_ally_code,defender_leader_base_id,defender_members,source,source_ref,source_updated_at,imported_at,metadata",
       opponent_ally_code: `eq.${allyCode}`,
+      source: "eq.c3po-gahistory",
       order: "source_updated_at.desc",
       limit,
     }));
@@ -272,6 +278,7 @@ export function createGacDefensePredictionService(options = {}) {
       battleRows = asArray(await store.select("gac_battles", {
         select: "swgoh_player_id,ally_code,event_instance_id,season_id,format,round_number,match_index,match_id,opponent_swgoh_player_id,opponent_ally_code,defender_leader_base_id,defender_members,source,source_ref,source_updated_at,imported_at,metadata",
         opponent_swgoh_player_id: `eq.${playerId}`,
+        source: "eq.c3po-gahistory",
         order: "source_updated_at.desc",
         limit,
       }));
@@ -283,15 +290,8 @@ export function createGacDefensePredictionService(options = {}) {
       order: "recorded_at.desc",
       limit: 500,
     }));
-    const ownRounds = player?.id ? asArray(await store.select("gac_rounds", {
-      select: "id,event_id,round_number,player_id,opponent_ally_code,result,verified,source,recorded_at",
-      player_id: `eq.${player.id}`,
-      order: "recorded_at.desc",
-      limit: 500,
-    })) : [];
-    const allRounds = [...opponentRounds, ...ownRounds];
-    const roundIds = inFilter(allRounds.map((row) => row.id));
-    const eventIds = inFilter(allRounds.map((row) => row.event_id));
+    const roundIds = inFilter(opponentRounds.map((row) => row.id));
+    const eventIds = inFilter(opponentRounds.map((row) => row.event_id));
     const [events, squadRows] = await Promise.all([
       eventIds ? store.select("gac_events", {
         select: "id,event_instance_id,season_id,format,status,ends_at",
@@ -301,24 +301,18 @@ export function createGacDefensePredictionService(options = {}) {
       roundIds ? store.select("gac_round_squads", {
         select: "round_id,owner,side,zone,squad_slot,leader_base_id,members,datacron,source,confidence,observed_at,metadata",
         round_id: roundIds,
+        owner: "eq.opponent",
         side: "eq.defense",
         source: "eq.user-confirmed-current-board",
         order: "observed_at.desc",
         limit: 5000,
       }) : [],
     ]);
-    const roundsById = new Map(allRounds.map((row) => [clean(row.id), row]));
+    const roundsById = new Map(opponentRounds.map((row) => [clean(row.id), row]));
     const eventsById = new Map(asArray(events).map((row) => [clean(row.id), row]));
-    const opponentRoundIds = new Set(opponentRounds.map((row) => clean(row.id)));
-    const ownRoundIds = new Set(ownRounds.map((row) => clean(row.id)));
-    const relevantSquads = asArray(squadRows).filter((row) => {
-      const roundId = clean(row.round_id);
-      return (row.owner === "opponent" && opponentRoundIds.has(roundId)) ||
-        (row.owner === "player" && ownRoundIds.has(roundId));
-    });
 
     const broad = battlePlacementRows(battleRows, format);
-    const verified = verifiedPlacementRows(relevantSquads, roundsById, eventsById, {
+    const verified = verifiedPlacementRows(squadRows, roundsById, eventsById, {
       format,
       nowMs: now(),
     });
@@ -334,7 +328,7 @@ export function createGacDefensePredictionService(options = {}) {
       }),
       format: format || "all",
       coverage: Object.freeze({
-        battleRows: battleRows.length,
+        publishedHistoricalBattleRows: battleRows.length,
         deduplicatedBattlePlacements: broad.length,
         battleObservedMatchups: summary.battleBoardsObserved,
         verifiedHistoricalBoardRows: verified.included.length,
@@ -345,8 +339,9 @@ export function createGacDefensePredictionService(options = {}) {
       predictions: Object.freeze(summary.predictions.slice(0, 30)),
       notes: Object.freeze([
         "Predictions are historical scouting evidence, never a claim about the opponent's current hidden board.",
+        "Broad recurrence uses published C-3PO GAHistory battle rows only; current War Room battle logs are not republished through this prediction path.",
         "Repeated attacks against the same exact defense in one matchup are deduplicated before placement frequency is calculated.",
-        "Named zone/slot tendencies come only from verified saved-board observations after the parent GAC event is historical/completed.",
+        "Named zone/slot tendencies come only from verified opponent-board observations after the parent GAC event is historical/completed.",
         "Current or completion-unresolved verified board rows are withheld from this public historical prediction path.",
         "Appearance rates use incomplete observed-board coverage and are scouting frequencies, not calibrated presence probabilities.",
       ]),
