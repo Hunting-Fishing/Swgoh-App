@@ -36,12 +36,13 @@ const squad = [
 
 const unitIndex = new Map(squad.map((unit) => [unit.baseId, { baseId: unit.baseId, name: unit.name, alignment: "Dark", categories: ["SITH"] }]));
 const datacronCatalog = {
-  targetRules: new Map([
+  targetingRules: new Map([
     ["RULE_ALL", { id: "RULE_ALL", includeCategories: [], excludeCategories: [], forceAlignments: [], includeLabels: ["Any Obtainable"] }],
   ]),
-  sets: new Map([["19", { id: "19", displayName: "Set 19" }]]),
+  sets: new Map([["19", { id: 19, displayName: "Set 19" }]]),
   templates: new Map(),
-  affixTemplates: new Map(),
+  affixes: [],
+  abilityAffixes: new Map(),
 };
 
 test("enemy defense datacron assessment preserves verified coverage and mechanics without inventing power", () => {
