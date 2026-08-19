@@ -30,7 +30,7 @@ function exactPairingFromBracket(body = {}, ownerCode = "") {
   const opponent = body?.currentOpponent || null;
   const code = allyCode(opponent?.allyCode);
   const owner = allyCode(ownerCode);
-  const round = validRound(resolution?.round || body?.event?.round);
+  const round = validRound(resolution?.round) || validRound(body?.event?.round);
   if (resolution?.exact !== true || !/^\d{9}$/.test(code) || code === owner || !round) return null;
   const eventInstanceId = clean(resolution?.eventInstanceId || body?.event?.eventInstanceId);
   return Object.freeze({
@@ -222,7 +222,6 @@ function refreshOnNavigation() {
     if (!ensureMounted()) return;
     state.attemptedOwner = "";
     state.appliedKey = "";
-    state.manualOpponentTouched = false;
     schedule(240, { force: true });
   }, 0);
 }
