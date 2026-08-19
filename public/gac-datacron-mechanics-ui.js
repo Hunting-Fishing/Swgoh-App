@@ -1,4 +1,11 @@
 import "./gac-round-readiness.js";
+import "./gac-saved-board-map.js";
+import "./gac-round-progress.js";
+import "./gac-war-map-status.js";
+import "./gac-board-save-refresh.js";
+import "./gac-enemy-defense-delete.js";
+import "./gac-save-next-slot.js";
+import "./gac-verified-battle-ui.js";
 import { parseMechanics } from "./gac-datacron-mechanics.js";
 
 function injectStyles() {

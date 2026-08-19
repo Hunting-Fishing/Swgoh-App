@@ -10,6 +10,7 @@
   min-width: 260px;
 }
 
+.gac-board-position-controls,
 .gac-board-persistence-controls {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -17,14 +18,22 @@
   align-items: center;
 }
 
+#gacDefenseZone,
+#gacDefenseSlot,
 #gacSavedDefense,
 #gacSaveDefense {
   min-height: 34px;
 }
 
+#gacDefenseZone,
 #gacSavedDefense {
   min-width: 0;
   max-width: 100%;
+}
+
+#gacDefenseSlot {
+  width: 118px;
+  min-width: 0;
 }
 
 #gacSaveDefense {
@@ -178,11 +187,14 @@
     width: 100%;
     min-width: 0;
   }
+  .gac-board-position-controls,
   .gac-board-persistence-controls {
     grid-template-columns: 1fr;
   }
   #gacSaveDefense,
-  #gacSavedDefense {
+  #gacSavedDefense,
+  #gacDefenseZone,
+  #gacDefenseSlot {
     width: 100%;
   }
   .gac-enemy-datacron-head {

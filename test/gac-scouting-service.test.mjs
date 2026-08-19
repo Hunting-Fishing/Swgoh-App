@@ -18,6 +18,7 @@ function battle(overrides = {}) {
     defender_leader_base_id: "DEFENSE_LEAD",
     defender_members: ["DEFENSE_LEAD", "D2", "D3", "D4", "D5"],
     battle_outcome: "win",
+    source: "c3po-gahistory",
     source_updated_at: "2026-08-18T00:00:00.000Z",
     metadata: { battleType: "character" },
     ...overrides,
@@ -51,6 +52,8 @@ test("scouting report combines target offense with defenses observed by other pl
       defender_leader_base_id: "OTHER_DEFENSE",
       defender_members: ["OTHER_DEFENSE", "O2", "O3", "O4", "O5"],
       battle_outcome: "win",
+      source: "verified-owner-war-room",
+      metadata: { explicitOwnerConfirmation: true },
     }),
     battle({
       swgoh_player_id: "TARGET",
@@ -65,7 +68,7 @@ test("scouting report combines target offense with defenses observed by other pl
     }),
   ];
   const defenseRows = [
-    battle({ swgoh_player_id: "P1", battle_outcome: "loss" }),
+    battle({ swgoh_player_id: "P1", battle_outcome: "loss", source: "verified-owner-war-room", metadata: { explicitOwnerConfirmation: true } }),
     battle({ swgoh_player_id: "P2", battle_outcome: "win" }),
   ];
 
@@ -92,4 +95,7 @@ test("scouting report combines target offense with defenses observed by other pl
   assert.equal(report.offensiveTendencies[0].leaderBaseId, "TARGET_ATTACK");
   assert.equal(report.offensiveTendencies[0].attempts, 2);
   assert.equal(report.offensiveTendencies[0].winRate, 1);
+  assert.match(report.notes[0], /explicitly owner-confirmed completed battles/i);
+  assert.match(report.notes[0], /historical observations, not a claim about the current hidden board/i);
+  assert.match(report.notes[1], /sourced imports and explicitly owner-confirmed completed battles/i);
 });
