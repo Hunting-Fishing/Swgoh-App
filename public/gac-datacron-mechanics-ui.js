@@ -1,6 +1,14 @@
+import "./gac-round-readiness.js";
 import { parseMechanics } from "./gac-datacron-mechanics.js";
 
 function injectStyles() {
+  if (!document.querySelector('link[data-gac-round-readiness="true"]')) {
+    const link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href = "/gac-round-readiness.css?v=20260819-gacready1";
+    link.dataset.gacRoundReadiness = "true";
+    document.head.append(link);
+  }
   if (document.querySelector('style[data-gac-datacron-mechanics="true"]')) return;
   const style = document.createElement("style");
   style.dataset.gacDatacronMechanics = "true";
