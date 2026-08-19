@@ -43,15 +43,19 @@ function mandatoryAnchors(rule, indexes) {
   return Object.freeze(array(rule?.mandatory).map((member) => unitAnchor(indexes, member, 'mandatory')));
 }
 
-function alternativeAnchors(rule, indexes) {
+function alternativeAnchors(rule, mission, indexes) {
   const mandatoryIds = new Set(array(rule?.mandatory).map((member) => text(member?.baseId)).filter(Boolean));
+  const entry = mission?.entry || {};
   const alternatives = array(rule?.allowedBaseIds)
     .map(text)
     .filter(Boolean)
     .filter((baseId) => !mandatoryIds.has(baseId));
   return Object.freeze(alternatives.map((baseId) => unitAnchor(indexes, {
     baseId,
-    starsMin: rule?.threshold?.find?.(() => false) ?? null,
+    starsMin: entry?.starsMin ?? null,
+    gearMin: entry?.gearMin ?? null,
+    relicMin: entry?.relicMin ?? null,
+    powerMin: entry?.powerMin ?? null,
   }, 'alternative')));
 }
 
@@ -95,7 +99,7 @@ function tacticalMissionNode(node, indexes, body, catalog) {
 
   const rule = missionEntryRule(mission);
   const requiredUnits = mandatoryAnchors(rule, indexes);
-  const alternativeUnits = alternativeAnchors(rule, indexes);
+  const alternativeUnits = alternativeAnchors(rule, mission, indexes);
   const recommendation = selectedRecommendation(node, mission);
   const readiness = body
     ? evaluateTbMissionReadinessPolicyV2(body, mission, recommendation, catalog)
