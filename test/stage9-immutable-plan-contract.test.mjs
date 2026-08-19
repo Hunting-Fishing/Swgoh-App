@@ -16,7 +16,7 @@ test('Stage 9 migration locks immutable payloads, preserves identical previews a
   assert.match(sql, /v_previous\.plan_hash = p_plan_hash/);
   assert.match(sql, /return v_previous/);
   assert.match(sql, /set superseded_by_run_id = v_created\.id/);
-  assert.match(sql, /security invoker[\s\S]*guard_immutable_tb_assignment_run_payload/);
+  assert.match(sql, /guard_immutable_tb_assignment_run_payload\(\)[\s\S]*security invoker/);
   assert.match(sql, /revoke all on function public\.guard_immutable_tb_assignment_run_payload\(\) from public,anon,authenticated/);
   assert.match(sql, /revoke all on function public\.create_guild_tb_assignment_version\([\s\S]*\) from public,anon,authenticated/);
 });
