@@ -1,5 +1,6 @@
 const API = '/api/account/web-actions/tb';
 const ROUTE = '/guild/tb';
+const STYLE_HREF = '/tb-war-room-entry.css?v=20260819-tbwar1';
 
 const escapeHtml = (value) => String(value ?? '')
   .replaceAll('&', '&amp;')
@@ -11,6 +12,14 @@ const escapeAttr = escapeHtml;
 const number = (value) => new Intl.NumberFormat().format(Number(value || 0));
 const array = (value) => Array.isArray(value) ? value : [];
 const text = (value) => String(value ?? '').trim();
+
+function ensureStyle() {
+  if (typeof document === 'undefined' || document.querySelector(`link[href="${STYLE_HREF}"]`)) return;
+  const link = document.createElement('link');
+  link.rel = 'stylesheet';
+  link.href = STYLE_HREF;
+  document.head.appendChild(link);
+}
 
 function routeActive() {
   const path = typeof location === 'undefined' ? '' : location.pathname.replace(/\/+$/, '') || '/';
@@ -188,6 +197,7 @@ async function renderWarRoom({ force = false } = {}) {
 
 function install() {
   if (!routeActive() || typeof document === 'undefined') return;
+  ensureStyle();
   renderWarRoom({ force: true });
   window.addEventListener('swgoh:guild-command-snapshot', () => renderWarRoom({ force: true }));
   const observer = new MutationObserver(() => {
