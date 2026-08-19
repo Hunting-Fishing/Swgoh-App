@@ -15,6 +15,22 @@ function unitBaseId(value = {}) {
   return upper(value?.baseId || value?.unitBaseId || value?.id);
 }
 
+function abilitySnapshot(ability = {}) {
+  const tier = finite(ability?.tier ?? ability?.displayTier);
+  return Object.freeze({
+    id: text(ability?.id),
+    name: text(ability?.name),
+    tier,
+    hasZeta: typeof ability?.hasZeta === 'boolean' ? ability.hasZeta : null,
+    hasOmicron: typeof ability?.hasOmicron === 'boolean' ? ability.hasOmicron : null,
+    omicronMode: finite(ability?.omicronMode),
+  });
+}
+
+function statValue(unit = {}, key) {
+  return finite(unit?.[key] ?? unit?.stats?.[key] ?? unit?.modStats?.[key] ?? unit?.calculatedStats?.[key]);
+}
+
 function progressionSnapshot(unit = {}) {
   return Object.freeze({
     baseId: unitBaseId(unit),
@@ -24,12 +40,24 @@ function progressionSnapshot(unit = {}) {
     relic: finite(unit?.relic),
     zetaCount: finite(unit?.zetaCount),
     omicronCount: finite(unit?.omicronCount),
-    speed: finite(unit?.speed ?? unit?.stats?.speed),
-    health: finite(unit?.health ?? unit?.stats?.health),
-    protection: finite(unit?.protection ?? unit?.stats?.protection),
-    offense: finite(unit?.offense ?? unit?.stats?.offense),
-    potency: finite(unit?.potency ?? unit?.stats?.potency),
-    tenacity: finite(unit?.tenacity ?? unit?.stats?.tenacity),
+    abilities: Object.freeze(array(unit?.abilities).map((ability) => abilitySnapshot(ability))),
+    stats: Object.freeze({
+      speed: statValue(unit, 'speed'),
+      health: statValue(unit, 'health'),
+      protection: statValue(unit, 'protection'),
+      offense: statValue(unit, 'offense'),
+      physicalDamage: statValue(unit, 'physicalDamage'),
+      specialDamage: statValue(unit, 'specialDamage'),
+      potency: statValue(unit, 'potency'),
+      tenacity: statValue(unit, 'tenacity'),
+      criticalChance: statValue(unit, 'criticalChance'),
+      criticalDamage: statValue(unit, 'criticalDamage'),
+      defense: statValue(unit, 'defense'),
+      armor: statValue(unit, 'armor'),
+      resistance: statValue(unit, 'resistance'),
+      accuracy: statValue(unit, 'accuracy'),
+      criticalAvoidance: statValue(unit, 'criticalAvoidance'),
+    }),
   });
 }
 
@@ -65,7 +93,7 @@ export function normalizeTbMissionAttemptOutcome(input = {}) {
 }
 
 export function normalizeTbMissionAttempt(input = {}) {
-  const team = array(input?.team).map((unit) => progressionSnapshot(unit));
+  const team = array(input?.team).map((unit, index) => Object.freeze({ ...progressionSnapshot(unit), slot: finite(unit?.slot, index) }));
   const outcome = normalizeTbMissionAttemptOutcome(input);
   return Object.freeze({
     id: text(input?.id),
