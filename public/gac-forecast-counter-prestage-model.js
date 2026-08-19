@@ -30,29 +30,35 @@ function forecastPriorityValue(prediction = {}) {
 function forecastEntries(report = {}, modeValue = "", limit = 8) {
   const format = modeFormat(modeValue);
   const size = modeSize(modeValue);
-  const rows = Array.isArray(report?.predictions) ? report.predictions : [];
-  const seen = new Set();
-  return rows
+  const max = Math.max(1, Number(limit) || 8);
+  const rows = (Array.isArray(report?.predictions) ? report.predictions : [])
     .filter((prediction) => !format || clean(prediction?.format).toLowerCase() === format)
-    .filter((prediction) => normalizeMembers(prediction?.members).length === size)
-    .filter((prediction) => {
-      const key = forecastEntryKey(prediction);
-      if (!key || seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    })
-    .slice(0, Math.max(1, Number(limit) || 8))
-    .map((prediction, index) => Object.freeze({
-      forecastIndex: index,
+    .slice(0, max)
+    .map((prediction, forecastIndex) => ({ prediction, forecastIndex }));
+  const seen = new Set();
+  const valid = rows.filter(({ prediction }) => {
+    const members = normalizeMembers(prediction?.members);
+    if (members.length !== size) return false;
+    const key = forecastEntryKey(prediction);
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  return valid.map(({ prediction, forecastIndex }, planIndex) => {
+    const defenseId = 900_000 + forecastIndex + 1;
+    return Object.freeze({
+      planIndex,
+      forecastIndex,
       key: forecastEntryKey(prediction),
-      defenseId: 900_000 + index + 1,
+      defenseId,
       prediction,
       defense: Object.freeze({
-        id: 900_000 + index + 1,
+        id: defenseId,
         leaderBaseId: normalizeBaseId(prediction?.leaderBaseId),
         members: Object.freeze(normalizeMembers(prediction?.members)),
       }),
-    }));
+    });
+  });
 }
 function consumedAttackIds(assignments = []) {
   const ids = new Set();
