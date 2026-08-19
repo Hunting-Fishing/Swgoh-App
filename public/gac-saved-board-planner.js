@@ -26,18 +26,44 @@ function reservedBaseIds(ownDefenses = []) {
     .filter(Boolean))]);
 }
 
+function warRoomReservedBaseIds(assignments = []) {
+  const ids = new Set();
+  for (const assignment of Array.isArray(assignments) ? assignments : []) {
+    for (const attempt of Array.isArray(assignment?.attemptLog) ? assignment.attemptLog : []) {
+      for (const id of Array.isArray(attempt?.members) ? attempt.members : []) {
+        if (clean(id)) ids.add(clean(id));
+      }
+    }
+    if (["planned", "attempted"].includes(clean(assignment?.status).toLowerCase())) {
+      for (const id of Array.isArray(assignment?.members) ? assignment.members : []) {
+        if (clean(id)) ids.add(clean(id));
+      }
+    }
+  }
+  return Object.freeze([...ids]);
+}
+
 function buildPersistedBoardPlan(ownBody, opponentBody, opponentDefenses, ownDefenses, options = {}) {
-  const excludeBaseIds = reservedBaseIds(ownDefenses);
+  const defenseReserved = reservedBaseIds(ownDefenses);
+  const warRoomReserved = warRoomReservedBaseIds(options.attackAssignments || []);
   const size = Number(options.size) === 3 ? 3 : 5;
+  const excludeBaseIds = [...new Set([
+    ...defenseReserved,
+    ...warRoomReserved,
+    ...(options.excludeBaseIds || []),
+  ])];
   const plan = planBoardCounters(ownBody, opponentBody, opponentDefenses, {
     ...options,
     size,
-    excludeBaseIds: [...excludeBaseIds, ...(options.excludeBaseIds || [])],
+    excludeBaseIds,
   });
   return Object.freeze({
     source: "user-confirmed-current-board",
     size,
-    reservedBaseIds: excludeBaseIds,
+    reservedBaseIds: defenseReserved,
+    warRoomReservedBaseIds: warRoomReserved,
+    allUnavailableBaseIds: Object.freeze(excludeBaseIds),
+    attackAssignments: Object.freeze(Array.isArray(options.attackAssignments) ? options.attackAssignments : []),
     opponentDefenses: Object.freeze(Array.isArray(opponentDefenses) ? opponentDefenses : []),
     ownDefenses: Object.freeze(Array.isArray(ownDefenses) ? ownDefenses : []),
     assignments: Object.freeze(plan),
@@ -101,7 +127,7 @@ function ensureSavedBanner(output, model) {
     banner.className = "gac-saved-board-banner";
     output.insertAdjacentElement("beforebegin", banner);
   }
-  banner.innerHTML = `<strong>VERIFIED SAVED BOARD · ROUND ${model.round || "?"}</strong><span>${number.format(model.enemyCount)} enemy defenses · ${number.format(model.reservedCount)} of your attackers reserved on defense</span>`;
+  banner.innerHTML = `<strong>VERIFIED SAVED BOARD · ROUND ${model.round || "?"}</strong><span>${number.format(model.enemyCount)} enemy defenses · ${number.format(model.defenseReservedCount)} attackers on your defense · ${number.format(model.warRoomReservedCount)} reserved/consumed by war room</span>`;
 }
 
 async function renderPersistedPlan(model) {
@@ -115,12 +141,17 @@ async function renderPersistedPlan(model) {
   output.dataset.boardSource = "verified-saved-board";
   output.innerHTML = model.plan.assignments.map((assignment, index) => {
     const defense = assignment.defense;
+    const sourceDefense = model.enemyDefenses?.[assignment.defenseIndex] || defense;
+    const defenseId = Number(sourceDefense?.id || 0);
     const enemyUnits = (defense?.members || []).map((id) => enemyIndex.get(clean(id))).filter(Boolean);
     const recommendation = assignment.recommendation;
     const ownCoverage = recommendation?.squad?.length && eligibility && Array.isArray(model.mineRoster?.datacrons)
       ? bestCoverage(model.mineRoster.datacrons, recommendation.squad, eligibility.unitIndex, eligibility.datacronCatalog)
       : null;
-    return `<article class="gac-board-card gac-saved-board-card">
+    const attackerMembers = recommendation?.squad?.map((unit) => clean(unit?.baseId)).filter(Boolean) || [];
+    const attackerLeader = attackerMembers[0] || "";
+    const ownDatacronId = clean(ownCoverage?.datacron?.id);
+    return `<article class="gac-board-card gac-saved-board-card" data-defense-id="${defenseId}" data-recommended-attacker-members="${escapeHtml(attackerMembers.join(","))}" data-recommended-attacker-leader="${escapeHtml(attackerLeader)}" data-recommended-datacron-id="${escapeHtml(ownDatacronId)}">
       <div class="gac-board-card-head">
         <div><span>SAVED DEFENSE ${index + 1}${defense?.zone ? ` · ${escapeHtml(defense.zone)}` : ""}</span><strong>${escapeHtml(enemyUnits[0]?.name || defense?.leaderBaseId || "Enemy defense")}</strong></div>
         <span class="gac-saved-source-badge">VERIFIED OWNER</span>
@@ -128,9 +159,9 @@ async function renderPersistedPlan(model) {
       <div class="gac-board-lane">
         <div><span class="gac-board-caption">ENEMY</span><div class="gac-board-units">${enemyUnits.length ? enemyUnits.map((unit) => portrait(unit)).join("") : (defense?.members || []).map((id) => portrait(null, id)).join("")}</div></div>
         <div class="gac-board-arrow">→</div>
-        <div><span class="gac-board-caption">STRATEGIC COUNTER</span><div class="gac-board-units">${recommendation?.squad?.length ? recommendation.squad.map((unit) => portrait(unit)).join("") : `<div class="gac-board-no-counter">No non-overlapping roster-fit squad available.</div>`}</div></div>
+        <div class="gac-war-room-counter-lane"><span class="gac-board-caption">STRATEGIC COUNTER</span><div class="gac-board-units">${recommendation?.squad?.length ? recommendation.squad.map((unit) => portrait(unit)).join("") : `<div class="gac-board-no-counter">No non-overlapping roster-fit squad available.</div>`}</div></div>
       </div>
-      ${enemyDatacronEvidence(defense)}
+      ${enemyDatacronEvidence(sourceDefense)}
       ${recommendation ? `<div class="gac-board-metrics">
         <strong>${escapeHtml(recommendation.confidence)}</strong>
         <span>Fit ${number.format(recommendation.score)}</span>
@@ -143,6 +174,7 @@ async function renderPersistedPlan(model) {
       <div class="gac-board-strategy"><span>COMMAND CENTER LOGIC</span><strong>${escapeHtml(assignment.allocationReason || "Board-wide allocation")}</strong></div>` : `<div class="gac-board-strategy gac-board-strategy-risk"><span>COMMAND CENTER LOGIC</span><strong>${escapeHtml(assignment.allocationReason || "No attack squad remained")}</strong></div>`}
     </article>`;
   }).join("") || `<div class="workspace-note">Save at least one verified opponent defense to build the persisted whole-board attack plan.</div>`;
+  window.dispatchEvent(new CustomEvent("gac-saved-board-rendered", { detail: { round: model.round } }));
 }
 
 function contextKey() {
@@ -162,25 +194,36 @@ async function refreshSavedBoardPlan({ force = false } = {}) {
   const round = Number(roundText);
   const requestId = ++state.requestId;
   try {
-    const [mineRoster, opponentRoster, opponentBoard, ownBoard] = await Promise.all([
+    const [mineRoster, opponentRoster, opponentBoard, ownBoard, warRoom] = await Promise.all([
       fetchJson(`/api/player/${mineCode}`),
       fetchJson(`/api/player/${opponentCode}`),
       fetchJson(`/api/gac/current-board/${mineCode}/defense?round=${round}`),
       fetchJson(`/api/gac/current-board/${mineCode}/my-defense?round=${round}`),
+      fetchJson(`/api/gac/attack-plan/${mineCode}?round=${round}`).catch((error) => {
+        if ([401, 404, 409].includes(Number(error?.status))) return { assignments: [] };
+        throw error;
+      }),
     ]);
     if (requestId !== state.requestId) return;
     if (allyCode(opponentBoard?.opponent?.allyCode) !== opponentCode) return;
     const enemyDefenses = Array.isArray(opponentBoard?.defenses) ? opponentBoard.defenses : [];
     const ownDefenses = Array.isArray(ownBoard?.defenses) ? ownBoard.defenses : [];
+    const attackAssignments = Array.isArray(warRoom?.assignments) ? warRoom.assignments : [];
     if (!enemyDefenses.length) return;
-    const plan = buildPersistedBoardPlan(mineRoster, opponentRoster, enemyDefenses, ownDefenses, { size: squadSize() });
+    const plan = buildPersistedBoardPlan(mineRoster, opponentRoster, enemyDefenses, ownDefenses, {
+      size: squadSize(),
+      attackAssignments,
+    });
     await renderPersistedPlan({
       mineRoster,
       opponentRoster,
+      enemyDefenses,
+      attackAssignments,
       plan,
       round,
       enemyCount: enemyDefenses.length,
-      reservedCount: plan.reservedBaseIds.length,
+      defenseReservedCount: plan.reservedBaseIds.length,
+      warRoomReservedCount: plan.warRoomReservedBaseIds.length,
     });
   } catch (error) {
     if (requestId !== state.requestId) return;
@@ -213,6 +256,8 @@ function ensureMounted() {
 
 if (typeof window !== "undefined" && typeof document !== "undefined") {
   window.addEventListener("gac-board-evidence-updated", () => void refreshSavedBoardPlan({ force: true }));
+  window.addEventListener("gac-war-room-updated", () => void refreshSavedBoardPlan({ force: true }));
+  void import("./gac-round-war-room.js").catch(() => {});
   ensureMounted();
   document.addEventListener("DOMContentLoaded", ensureMounted, { once: true });
   window.addEventListener("hashchange", () => {
@@ -222,4 +267,4 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
   new MutationObserver(ensureMounted).observe(document.documentElement, { childList: true, subtree: true });
 }
 
-export { buildPersistedBoardPlan, reservedBaseIds };
+export { buildPersistedBoardPlan, reservedBaseIds, warRoomReservedBaseIds };
