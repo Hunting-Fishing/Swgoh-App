@@ -32,8 +32,12 @@ async function api(path, options = {}) {
 }
 
 function phasePlanetOptions(phase) {
-  const rows = ROTE_PLANETS.filter((planet) => String(planet.phase || '').toUpperCase() === String(phase || '').toUpperCase());
-  return rows.map((planet) => `<option value="${escapeHtml(planet.id)}">${escapeHtml(planet.name)}</option>`).join('');
+  const currentPhase = String(phase || '').toUpperCase();
+  const sourcePhaseById = new Map(ROTE_PLANETS.map((planet) => [planet.id, String(planet.phase || '').toUpperCase()]));
+  const rows = ROTE_PLANETS.filter((planet) =>
+    String(planet.phase || '').toUpperCase() === currentPhase
+    || (planet.bonus === true && sourcePhaseById.get(planet.unlockFrom) === currentPhase));
+  return rows.map((planet) => `<option value="${escapeHtml(planet.id)}">${escapeHtml(planet.name)}${planet.bonus ? ' · BONUS' : ''}</option>`).join('');
 }
 
 function taskIcon(type) {
