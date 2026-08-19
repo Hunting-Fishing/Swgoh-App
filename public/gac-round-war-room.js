@@ -1,9 +1,23 @@
-const state = { requestId: 0, assignments: [], roster: null, busy: new Set() };
+import { planBoardCounters } from "./gac-counter-engine.js";
+import { bestCoverage, loadEligibilityContext } from "./gac-datacron-eligibility.js";
+
+const state = {
+  requestId: 0,
+  assignments: [],
+  roster: null,
+  opponentRoster: null,
+  opponentDefenses: [],
+  ownDefenses: [],
+  openPlan: [],
+  eligibility: null,
+  busy: new Set(),
+};
 const number = new Intl.NumberFormat("en-US");
 
 function clean(value) { return String(value ?? "").trim(); }
 function byId(id) { return document.getElementById(id); }
 function allyCode(value) { return clean(value).replace(/\D/g, "").slice(0, 9); }
+function n(value) { const parsed = Number(value); return Number.isFinite(parsed) ? parsed : 0; }
 function validRound(value) {
   const round = Number(value);
   return Number.isInteger(round) && round >= 1 && round <= 3 ? round : null;
@@ -12,12 +26,13 @@ function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>'\"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '\"': "&quot;" }[char]));
 }
 function currentRound() { return validRound(byId("gacBracketRound")?.value); }
+function squadSize() { return Number(byId("gacMode")?.value) === 3 ? 3 : 5; }
 
 function injectStyles() {
   if (document.querySelector('link[data-gac-war-room="true"]')) return;
   const link = document.createElement("link");
   link.rel = "stylesheet";
-  link.href = "/gac-round-war-room.css?v=20260819-gacwar1";
+  link.href = "/gac-round-war-room.css?v=20260819-gacwar2";
   link.dataset.gacWarRoom = "true";
   document.head.append(link);
 }
@@ -53,6 +68,60 @@ function consumedBaseIds(assignments = []) {
     }
   }
   return Object.freeze([...ids]);
+}
+
+function ownDefenseBaseIds(defenses = []) {
+  return Object.freeze([...new Set((Array.isArray(defenses) ? defenses : [])
+    .flatMap((defense) => Array.isArray(defense?.members) ? defense.members : [])
+    .map(clean)
+    .filter(Boolean))]);
+}
+
+function isOpenDefenseStatus(value) {
+  const status = clean(value).toLowerCase();
+  return !["planned", "attempted", "win"].includes(status);
+}
+
+function buildOpenWarRoomPlan(ownRoster, opponentRoster, opponentDefenses, ownDefenses, attackAssignments, options = {}) {
+  const assignmentIndex = assignmentByDefense(attackAssignments);
+  const unavailableBaseIds = [...new Set([
+    ...ownDefenseBaseIds(ownDefenses),
+    ...consumedBaseIds(attackAssignments),
+    ...(Array.isArray(options.excludeBaseIds) ? options.excludeBaseIds.map(clean).filter(Boolean) : []),
+  ])];
+  const openEntries = (Array.isArray(opponentDefenses) ? opponentDefenses : [])
+    .map((defense, sourceIndex) => ({
+      defense,
+      sourceIndex,
+      defenseId: Number(defense?.id || 0),
+      assignment: assignmentIndex.get(Number(defense?.id || 0)) || null,
+    }))
+    .filter((entry) => isOpenDefenseStatus(entry.assignment?.status));
+  const size = Number(options.size) === 3 ? 3 : 5;
+  const planned = planBoardCounters(
+    ownRoster,
+    opponentRoster,
+    openEntries.map((entry) => entry.defense),
+    {
+      ...options,
+      size,
+      excludeBaseIds: unavailableBaseIds,
+    },
+  );
+  return Object.freeze({
+    size,
+    unavailableBaseIds: Object.freeze(unavailableBaseIds),
+    openDefenseIds: Object.freeze(openEntries.map((entry) => entry.defenseId).filter((id) => id > 0)),
+    assignments: Object.freeze(planned.map((assignment) => {
+      const entry = openEntries[assignment.defenseIndex];
+      return Object.freeze({
+        ...assignment,
+        sourceDefenseIndex: entry?.sourceIndex ?? assignment.defenseIndex,
+        defenseId: entry?.defenseId || 0,
+        previousStatus: clean(entry?.assignment?.status).toLowerCase(),
+      });
+    })),
+  });
 }
 
 function rosterIndex(roster = {}) {
@@ -120,36 +189,99 @@ function controlsHtml(assignment, hasRecommendation) {
   return "";
 }
 
+function recommendationByDefense(openPlan = []) {
+  return new Map((Array.isArray(openPlan) ? openPlan : []).map((assignment) => [Number(assignment?.defenseId || 0), assignment]));
+}
+
+function ownDatacronForRecommendation(recommendation) {
+  if (!recommendation?.squad?.length || !state.eligibility || !Array.isArray(state.roster?.datacrons)) return null;
+  return bestCoverage(
+    state.roster.datacrons,
+    recommendation.squad,
+    state.eligibility.unitIndex,
+    state.eligibility.datacronCatalog,
+  );
+}
+
+function setAuthoritativeRecommendation(card, assignment, units) {
+  const recommendation = assignment?.recommendation || null;
+  const lane = card.querySelector(".gac-war-room-counter-lane .gac-board-units");
+  card.dataset.warAuthoritative = "true";
+  delete card.dataset.recommendedDatacronId;
+  if (!recommendation?.squad?.length) {
+    card.dataset.recommendedAttackerMembers = "";
+    card.dataset.recommendedAttackerLeader = "";
+    if (lane) lane.innerHTML = `<div class="gac-board-no-counter">No remaining non-overlapping roster-fit squad is available.</div>`;
+    return { recommendation: null, datacron: null };
+  }
+  const members = recommendation.squad.map((unit) => clean(unit?.baseId)).filter(Boolean);
+  card.dataset.recommendedAttackerMembers = members.join(",");
+  card.dataset.recommendedAttackerLeader = members[0] || "";
+  if (lane) lane.innerHTML = recommendation.squad.map((unit) => portrait(units.get(clean(unit?.baseId)) || unit, clean(unit?.baseId))).join("");
+  const coverage = ownDatacronForRecommendation(recommendation);
+  const datacronId = clean(coverage?.datacron?.id);
+  if (datacronId) card.dataset.recommendedDatacronId = datacronId;
+  return { recommendation, datacron: coverage };
+}
+
+function recommendationSummaryHtml(assignment, loadout) {
+  const recommendation = assignment?.recommendation;
+  if (!recommendation) return `<div class="gac-war-recommendation is-empty"><strong>WAR ROOM REPLAN</strong><span>No remaining non-overlapping counter found.</span></div>`;
+  const datacronId = clean(loadout?.datacron?.id);
+  return `<div class="gac-war-recommendation">
+    <strong>WAR ROOM REPLAN · AUTHORITATIVE</strong>
+    <span>Fit ${number.format(n(recommendation.score))} · Allocation ${number.format(Math.round(n(assignment.allocationScore)))} · Relic Δ ${number.format(n(recommendation.relicDelta))} · Fastest ${number.format(n(recommendation.speedEdge))}</span>
+    <span>${number.format(n(assignment.alternativesRemaining))} alternates${datacronId ? ` · recommended DC ${escapeHtml(datacronId.slice(-8))}` : ""}</span>
+    <small>${escapeHtml(assignment.allocationReason || "Remaining-roster board allocation")}</small>
+  </div>`;
+}
+
 function decorateCards() {
   const cards = [...document.querySelectorAll("#gacBoardPlannerGrid .gac-saved-board-card")];
   if (!cards.length) return;
   const assignments = assignmentByDefense(state.assignments);
+  const openRecommendations = recommendationByDefense(state.openPlan);
   const units = rosterIndex(state.roster);
   for (const card of cards) {
     card.querySelector(".gac-war-room")?.remove();
     card.classList.remove("gac-war-is-cleared", "gac-war-is-locked", "gac-war-is-loss");
+    delete card.dataset.warAuthoritative;
     const defenseId = Number(card.dataset.defenseId);
     const assignment = assignments.get(defenseId) || null;
     const status = clean(assignment?.status).toLowerCase();
-    const recommendation = recommendationPayload(card);
+    const openAssignment = openRecommendations.get(defenseId) || null;
     const lane = card.querySelector(".gac-war-room-counter-lane .gac-board-units");
+    let authoritative = { recommendation: null, datacron: null };
+
     if (assignment && ["planned", "attempted"].includes(status) && lane) {
       lane.innerHTML = lockedCounterHtml(assignment, units);
       card.classList.add("gac-war-is-locked");
+      card.dataset.warAuthoritative = "true";
+      card.dataset.recommendedAttackerMembers = "";
+      card.dataset.recommendedAttackerLeader = "";
+      card.dataset.recommendedDatacronId = "";
     } else if (assignment && status === "win" && lane) {
       lane.innerHTML = `<div class="gac-war-cleared-lane">✓ CLEARED</div>`;
       card.classList.add("gac-war-is-cleared");
-    } else if (assignment && status === "loss") {
-      card.classList.add("gac-war-is-loss");
+      card.dataset.warAuthoritative = "true";
+      card.dataset.recommendedAttackerMembers = "";
+      card.dataset.recommendedAttackerLeader = "";
+      card.dataset.recommendedDatacronId = "";
+    } else {
+      authoritative = setAuthoritativeRecommendation(card, openAssignment, units);
+      if (assignment && status === "loss") card.classList.add("gac-war-is-loss");
     }
 
+    const recommendation = recommendationPayload(card);
     const panel = document.createElement("div");
     panel.className = "gac-war-room";
     panel.dataset.assignmentId = assignment?.id == null ? "" : String(assignment.id);
+    const openSummary = isOpenDefenseStatus(status) ? recommendationSummaryHtml(openAssignment, authoritative.datacron) : "";
     panel.innerHTML = `
       <div class="gac-war-room-head"><strong>ROUND WAR ROOM</strong><span>${escapeHtml(assignmentStatusLabel(assignment))}</span></div>
       ${assignment ? `<small>Attempts ${number.format(Number(assignment.attemptCount || 0))}${assignment?.datacron?.id ? ` · DC ${escapeHtml(clean(assignment.datacron.id).slice(-8))}` : ""}</small>` : `<small>Locking a counter reserves every attacker in that squad for this defense.</small>`}
       ${attemptHistoryHtml(assignment)}
+      ${openSummary}
       <div class="gac-war-actions">${controlsHtml(assignment, Boolean(recommendation))}</div>`;
     card.append(panel);
   }
@@ -157,20 +289,42 @@ function decorateCards() {
 
 async function refresh() {
   const mine = allyCode(byId("allyCode")?.value);
+  const opponent = allyCode(byId("gacOpponentCode")?.value);
   const round = currentRound();
-  if (!/^\d{9}$/.test(mine) || !round) return;
+  if (!/^\d{9}$/.test(mine) || !/^\d{9}$/.test(opponent) || !round) return;
   const requestId = ++state.requestId;
   try {
-    const [warRoom, roster] = await Promise.all([
+    const [warRoom, roster, opponentRoster, opponentBoard, ownBoard, eligibility] = await Promise.all([
       fetchJson(`/api/gac/attack-plan/${mine}?round=${round}`),
       fetchJson(`/api/player/${mine}`),
+      fetchJson(`/api/player/${opponent}`),
+      fetchJson(`/api/gac/current-board/${mine}/defense?round=${round}`),
+      fetchJson(`/api/gac/current-board/${mine}/my-defense?round=${round}`),
+      loadEligibilityContext().catch(() => null),
     ]);
     if (requestId !== state.requestId) return;
+    if (allyCode(opponentBoard?.opponent?.allyCode) !== opponent) return;
     state.assignments = Array.isArray(warRoom?.assignments) ? warRoom.assignments : [];
     state.roster = roster;
+    state.opponentRoster = opponentRoster;
+    state.opponentDefenses = Array.isArray(opponentBoard?.defenses) ? opponentBoard.defenses : [];
+    state.ownDefenses = Array.isArray(ownBoard?.defenses) ? ownBoard.defenses : [];
+    state.eligibility = eligibility;
+    const plan = buildOpenWarRoomPlan(
+      roster,
+      opponentRoster,
+      state.opponentDefenses,
+      state.ownDefenses,
+      state.assignments,
+      { size: squadSize() },
+    );
+    state.openPlan = plan.assignments;
     decorateCards();
     const banner = byId("gacSavedBoardBanner");
-    if (banner) banner.dataset.warRoomConsumed = String(consumedBaseIds(state.assignments).length);
+    if (banner) {
+      banner.dataset.warRoomConsumed = String(plan.unavailableBaseIds.length);
+      banner.dataset.warRoomOpenDefenses = String(plan.openDefenseIds.length);
+    }
   } catch (error) {
     if (requestId !== state.requestId) return;
     if (![401, 409].includes(Number(error?.status))) console.warn("GAC war room unavailable", error);
@@ -251,6 +405,9 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
 export {
   assignmentByDefense,
   assignmentStatusLabel,
+  buildOpenWarRoomPlan,
   consumedBaseIds,
+  isOpenDefenseStatus,
+  ownDefenseBaseIds,
   recommendationPayload,
 };
