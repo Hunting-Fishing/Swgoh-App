@@ -1,4 +1,5 @@
 import { tbEventStateService } from './tb-event-state-service.mjs';
+import { guildOperationsService } from './guild-operations-service.mjs';
 import { buildRoteRoutePlan } from './tb-route-planning-service.mjs';
 
 const array = (value) => Array.isArray(value) ? value : [];
@@ -32,6 +33,7 @@ function routeInputForPlanet(inputs, id) {
 
 export function createTbRoutePreviewService(options = {}) {
   const events = options.events || tbEventStateService;
+  const operations = options.operations || guildOperationsService;
   const planner = typeof options.planner === 'function' ? options.planner : buildRoteRoutePlan;
 
   async function preview(userId, input = {}) {
@@ -47,6 +49,7 @@ export function createTbRoutePreviewService(options = {}) {
       });
     }
 
+    const officer = await operations.requireOfficer(userId, snapshot?.identity?.allyCode);
     const remainingGuildDeploymentTp = nonNegativeInteger(
       input.remainingGuildDeploymentTp ?? input.remaining_guild_deployment_tp,
       'Remaining Guild deployable TP',
@@ -97,9 +100,10 @@ export function createTbRoutePreviewService(options = {}) {
       inputSource: 'officer-preview',
       persisted: false,
       identity: snapshot.identity,
+      officer: Object.freeze({ guildId: text(officer?.guild?.id), guildName: text(officer?.guild?.name) }),
       event: snapshot.event,
       plan,
-      evidenceBoundary: 'Current event TP/stars/commands come from the authenticated durable TB event state. Remaining deployable/mission/Operation TP is explicit preview input and is not persisted or represented as canonical game state.',
+      evidenceBoundary: 'Current event TP/stars/commands come from the authenticated durable TB event state. Remaining deployable/mission/Operation TP is explicit officer preview input and is not persisted or represented as canonical game state.',
     });
   }
 
