@@ -1,32 +1,80 @@
 import { gacBoardObservationService } from "./gac-board-observation-service.mjs";
 import { gacBracketIndexService } from "./gac-bracket-index-service.mjs";
 import { gacCurrentOpponentConfirmationService } from "./gac-current-opponent-confirmation-service.mjs";
-import {
-  assertSameOrigin,
-  eventInstanceId,
-  normalizeAllyCode,
-  readJsonBody,
-  validRound,
-} from "./gac-current-opponent-confirmation-api.mjs";
 import { supabaseAuthSession } from "./supabase-auth-session.mjs";
+
+const MAX_BODY_BYTES = 12 * 1024;
 
 function clean(value) { return String(value ?? "").trim(); }
 function asArray(value) { return Array.isArray(value) ? value : []; }
+function normalizeAllyCode(value) {
+  const code = clean(value).replace(/\D/g, "");
+  return /^\d{9}$/.test(code) ? code : "";
+}
 function normalizeBaseId(value) { return clean(value).split(":")[0].toUpperCase(); }
+function validRound(value) {
+  const round = Number(value);
+  return Number.isInteger(round) && round >= 1 && round <= 3 ? round : null;
+}
 function validSize(value) {
   const size = Number(value);
   return size === 3 || size === 5 ? size : null;
+}
+function eventInstanceId(...values) {
+  for (const value of values) {
+    const id = clean(value?.eventInstanceId || value?.event?.eventInstanceId);
+    if (id) return id;
+  }
+  return "";
+}
+function expectedOrigin(request) {
+  const host = clean(request?.headers?.["x-forwarded-host"] || request?.headers?.host);
+  const proto = clean(clean(request?.headers?.["x-forwarded-proto"]).split(",")[0]) || "https";
+  return host ? `${proto}://${host}` : "";
+}
+function assertSameOrigin(request) {
+  const origin = clean(request?.headers?.origin);
+  if (!origin) return;
+  const expected = expectedOrigin(request);
+  if (!expected || origin !== expected) {
+    const error = new Error("Cross-origin GAC board request rejected.");
+    error.status = 403;
+    throw error;
+  }
+}
+async function readJsonBody(request) {
+  const type = clean(request?.headers?.["content-type"]).toLowerCase();
+  if (type && !type.startsWith("application/json")) {
+    const error = new Error("Content-Type must be application/json.");
+    error.status = 415;
+    throw error;
+  }
+  let size = 0;
+  const chunks = [];
+  for await (const chunk of request) {
+    size += chunk.length;
+    if (size > MAX_BODY_BYTES) {
+      const error = new Error("Request body is too large.");
+      error.status = 413;
+      throw error;
+    }
+    chunks.push(chunk);
+  }
+  if (!chunks.length) return {};
+  try {
+    return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  } catch {
+    const error = new Error("Request body must contain valid JSON.");
+    error.status = 400;
+    throw error;
+  }
 }
 function statusFor(error) {
   const status = Number(error?.status);
   return Number.isInteger(status) && status >= 400 && status <= 599 ? status : 500;
 }
 function rosterUnits(body = {}) {
-  const values = [
-    ...asArray(body?.units),
-    ...asArray(body?.roster),
-    ...asArray(body?.rosterUnit),
-  ];
+  const values = [...asArray(body?.units), ...asArray(body?.roster), ...asArray(body?.rosterUnit)];
   const index = new Map();
   for (const unit of values) {
     const id = normalizeBaseId(unit?.baseId || unit?.base_id || unit?.definitionId || unit?.defId);
@@ -91,7 +139,7 @@ export function createGacBoardObservationApi(options = {}) {
       error.status = 409;
       throw error;
     }
-    return { currentEvent, playerContext, eventInstanceId: id, round, confirmed };
+    return { eventInstanceId: id, round, confirmed };
   }
 
   return Object.freeze({
@@ -182,13 +230,21 @@ export function createGacBoardObservationApi(options = {}) {
           "X-GAC-Board-Evidence": "verified-user",
         });
       } catch (error) {
-        writeJson(response, statusFor(error), {
-          error: error?.message || "The current GAC board observation could not be processed.",
-        });
+        writeJson(response, statusFor(error), { error: error?.message || "The current GAC board observation could not be processed." });
       }
       return true;
     },
   });
 }
 
-export { datacronById, normalizeBaseId, rosterUnits, validSize };
+export {
+  assertSameOrigin,
+  datacronById,
+  eventInstanceId,
+  normalizeAllyCode,
+  normalizeBaseId,
+  readJsonBody,
+  rosterUnits,
+  validRound,
+  validSize,
+};
