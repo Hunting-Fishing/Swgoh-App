@@ -7,6 +7,15 @@ function predictionFormatForMode(value) {
   return "";
 }
 
+function predictionCoverageForMode(coverage = {}, modeValue = "") {
+  const format = predictionFormatForMode(modeValue);
+  if (!format) return coverage || {};
+  return coverage?.byFormat?.[format] || {
+    battleObservedMatchups: 0,
+    verifiedHistoricalBoards: 0,
+  };
+}
+
 function predictionEvidenceLabel(value) {
   const key = clean(value).toLowerCase();
   return ({
@@ -40,20 +49,29 @@ function predictionZoneSummary(prediction = {}) {
   const slot = Array.isArray(prediction?.slotTendencies)
     ? prediction.slotTendencies.find((entry) => clean(entry?.zone) === clean(zone.zone))
     : null;
-  const slotText = slot && Number.isInteger(Number(slot.slot)) ? ` · slot ${Number(slot.slot) + 1}` : "";
-  return `${clean(zone.zone)}${slotText} · ${appearances}/${teamBoards || appearances} verified appearances`;
+  const slotText = slot && Number.isInteger(Number(slot.slot))
+    ? ` · slot ${Number(slot.slot) + 1} seen ${Math.max(0, Number(slot.verifiedBoards || 0))}/${appearances || 1}`
+    : "";
+  return `${clean(zone.zone)} · ${appearances}/${teamBoards || appearances} verified appearances${slotText}`;
+}
+
+function scopedPredictionCoverage(prediction = {}, coverage = {}) {
+  if (prediction?.formatCoverage && typeof prediction.formatCoverage === "object") return prediction.formatCoverage;
+  return predictionCoverageForMode(coverage, prediction?.format);
 }
 
 function predictionBroadSummary(prediction = {}, coverage = {}) {
   const appearances = Math.max(0, Number(prediction?.battleObservedMatchups || 0));
-  const boards = Math.max(0, Number(coverage?.battleObservedMatchups || 0));
+  const scoped = scopedPredictionCoverage(prediction, coverage);
+  const boards = Math.max(0, Number(scoped?.battleObservedMatchups || 0));
   if (!appearances) return "No published battle-history recurrence";
   return `${appearances}/${boards || appearances} observed historical matchups`;
 }
 
 function predictionVerifiedSummary(prediction = {}, coverage = {}) {
   const appearances = Math.max(0, Number(prediction?.verifiedHistoricalBoards || 0));
-  const boards = Math.max(0, Number(coverage?.verifiedHistoricalBoards || 0));
+  const scoped = scopedPredictionCoverage(prediction, coverage);
+  const boards = Math.max(0, Number(scoped?.verifiedHistoricalBoards || 0));
   if (!appearances) return "No completed verified boards for this exact team";
   return `${appearances}/${boards || appearances} completed verified boards`;
 }
@@ -71,6 +89,7 @@ function historicalDatacronSummary(datacron) {
 export {
   historicalDatacronSummary,
   predictionBroadSummary,
+  predictionCoverageForMode,
   predictionEvidenceLabel,
   predictionEvidenceTone,
   predictionFormatForMode,
