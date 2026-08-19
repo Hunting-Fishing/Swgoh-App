@@ -1,3 +1,4 @@
+import { createGacAttackPlanApi } from "./gac-attack-plan-api.mjs";
 import { createGacBoardObservationApi } from "./gac-board-observation-api.mjs";
 import { gacBracketIndexService } from "./gac-bracket-index-service.mjs";
 import { gacCurrentOpponentConfirmationService } from "./gac-current-opponent-confirmation-service.mjs";
@@ -93,6 +94,15 @@ export function createGacCurrentOpponentConfirmationApi(options = {}) {
     confirmation,
     ...(options.boardObservations ? { observations: options.boardObservations } : {}),
   });
+  const attackPlanApi = createGacAttackPlanApi({
+    requestGateway,
+    writeJson,
+    authSession,
+    bracketIndex,
+    confirmation,
+    ...(options.boardObservations ? { boards: options.boardObservations } : {}),
+    ...(options.attackPlans ? { plans: options.attackPlans } : {}),
+  });
 
   async function indexedBracket(code, currentEvent, playerContext) {
     const id = eventInstanceId(currentEvent, playerContext);
@@ -116,6 +126,7 @@ export function createGacCurrentOpponentConfirmationApi(options = {}) {
   return Object.freeze({
     async handle(request, response, url) {
       if (await boardApi.handle(request, response, url)) return true;
+      if (await attackPlanApi.handle(request, response, url)) return true;
       const match = request.method === "POST" && url.pathname.match(/^\/api\/gac\/current-opponent\/(\d{9})\/confirm$/);
       if (!match) return false;
 
