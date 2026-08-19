@@ -13,9 +13,11 @@ import {
 import { handleDiscordInteractionRequest as handleCoreDiscordInteractionRequest } from './discord-interaction-router-core.mjs';
 import { discordStateStore } from './discord-state-store.mjs';
 import { discordTbStage9Command } from './discord-tb-stage9-command.mjs';
+import { discordTbStage10Command } from './discord-tb-stage10-command.mjs';
 
 const EPHEMERAL_FLAG = 1 << 6;
 const STAGE9_SUBCOMMANDS = new Set(['plan-preview', 'plan-status', 'plan-diff', 'plan-approve', 'plan-cancel']);
+const STAGE10_SUBCOMMANDS = new Set(['plan-delivery']);
 
 function replayRequest(request, rawBody) {
   const replay = Readable.from([rawBody]);
@@ -52,11 +54,15 @@ function deferredEphemeral() {
   };
 }
 
-function safeError(error) {
-  const message = String(error?.message || 'Immutable ROTE plan command failed.')
+function safeError(error, stage = 9) {
+  const fallback = stage === 10 ? 'Controlled ROTE delivery command failed.' : 'Immutable ROTE plan command failed.';
+  const message = String(error?.message || fallback)
     .replace(/[\r\n]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+  if (stage === 10) {
+    return `**SWGOH Command Center · Stage 10 ROTE Delivery failed**\n${message}\nDelivery stopped fail-closed. Check \`/tb plan-delivery action:STATUS\` before retrying. No member DMs were sent.`;
+  }
   return `**SWGOH Command Center · Immutable ROTE Plan failed**\n${message}\nNo assignments were published and no DMs were sent.`;
 }
 
@@ -64,10 +70,21 @@ function scheduleStage9Response(interaction, config, services) {
   const command = services?.stage9Command || discordTbStage9Command;
   Promise.resolve()
     .then(() => command.execute(interaction))
-    .catch((error) => safeError(error))
+    .catch((error) => safeError(error, 9))
     .then((content) => editDiscordOriginalResponse(interaction, config, content, services?.fetch || fetch))
     .catch((error) => {
       console.error('Discord Stage 9 immutable plan response failed:', error?.message || error);
+    });
+}
+
+function scheduleStage10Response(interaction, config, services) {
+  const command = services?.stage10Command || discordTbStage10Command;
+  Promise.resolve()
+    .then(() => command.execute(interaction))
+    .catch((error) => safeError(error, 10))
+    .then((content) => editDiscordOriginalResponse(interaction, config, content, services?.fetch || fetch))
+    .catch((error) => {
+      console.error('Discord Stage 10 controlled delivery response failed:', error?.message || error);
     });
 }
 
@@ -92,8 +109,11 @@ export async function handleDiscordInteractionRequest(request, response, env = p
   const isStage9 = Number(interaction?.type) === DISCORD_INTERACTION_TYPES.APPLICATION_COMMAND
     && command === 'tb'
     && STAGE9_SUBCOMMANDS.has(subcommand);
+  const isStage10 = Number(interaction?.type) === DISCORD_INTERACTION_TYPES.APPLICATION_COMMAND
+    && command === 'tb'
+    && STAGE10_SUBCOMMANDS.has(subcommand);
 
-  if (!isStage9) {
+  if (!isStage9 && !isStage10) {
     return handleCoreDiscordInteractionRequest(replayRequest(request, rawBody), response, env, services);
   }
 
@@ -135,6 +155,7 @@ export async function handleDiscordInteractionRequest(request, response, env = p
   }
 
   jsonResponse(response, 200, deferredEphemeral());
-  scheduleStage9Response(interaction, config, { ...services, stateStore });
+  if (isStage10) scheduleStage10Response(interaction, config, { ...services, stateStore });
+  else scheduleStage9Response(interaction, config, { ...services, stateStore });
   return true;
 }
