@@ -2,6 +2,7 @@ import { discordTbConfig } from '../discord-tb.mjs';
 import {
   applyDiscordStage9TbCommandSchema,
   DISCORD_STAGE9_PLAN_SCHEMA_VERSION,
+  DISCORD_STAGE9_TB_SUBCOMMANDS,
 } from '../discord-stage9-command-schema.mjs';
 
 const API_VERSION = 'v10';
@@ -45,6 +46,11 @@ async function discordRequest(pathname, options = {}) {
   throw lastError || new Error('Discord Stage 9 schema request failed.');
 }
 
+function missingStage9Subcommands(options = []) {
+  const returned = new Set((Array.isArray(options) ? options : []).map((option) => String(option?.name || '').toLowerCase()));
+  return DISCORD_STAGE9_TB_SUBCOMMANDS.map((row) => row.name).filter((name) => !returned.has(name));
+}
+
 async function patchStage9Schema() {
   const base = `/applications/${config.applicationId}/guilds/${config.pilotGuildId}/commands`;
   const listed = await discordRequest(base);
@@ -54,7 +60,9 @@ async function patchStage9Schema() {
 
   const patch = applyDiscordStage9TbCommandSchema(tb);
   if (!patch.changed) {
-    console.log(`Discord Stage 9 schema ${patch.schemaVersion} already present; no patch required.`);
+    const missing = missingStage9Subcommands(tb.options);
+    if (missing.length) throw new Error(`Stage 9 schema reported unchanged but is missing: ${missing.join(', ')}.`);
+    console.log(`Discord Stage 9 schema ${patch.schemaVersion} already present; all ${DISCORD_STAGE9_TB_SUBCOMMANDS.length} plan commands verified.`);
     return;
   }
 
@@ -67,10 +75,13 @@ async function patchStage9Schema() {
     },
   });
   const options = Array.isArray(updated.body?.options) ? updated.body.options : [];
-  if (!options.some((option) => option?.name === 'plan-status')) {
-    throw new Error('Discord accepted the Stage 9 command update but plan-status was not present in the returned schema.');
+  const missing = missingStage9Subcommands(options);
+  if (missing.length) {
+    throw new Error(`Discord accepted the Stage 9 command update but returned a schema missing: ${missing.join(', ')}.`);
   }
+  if (options.length > 25) throw new Error(`Discord /tb schema exceeds the 25-subcommand limit (${options.length}).`);
   console.log(`Discord Stage 9 schema ${patch.schemaVersion} patched on attempt ${updated.attempt}: ${patch.added.join(', ')}.`);
+  console.log(`Verified all ${DISCORD_STAGE9_TB_SUBCOMMANDS.length} Stage 9 commands; /tb uses ${options.length}/25 subcommand slots.`);
 }
 
 if (!config.commandRegistrationConfigured) {
