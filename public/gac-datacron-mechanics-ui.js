@@ -1,5 +1,6 @@
 import "./gac-round-readiness.js";
 import "./gac-saved-board-map.js";
+import "./gac-round-progress.js";
 import "./gac-war-map-status.js";
 import "./gac-verified-battle-ui.js";
 import { parseMechanics } from "./gac-datacron-mechanics.js";
