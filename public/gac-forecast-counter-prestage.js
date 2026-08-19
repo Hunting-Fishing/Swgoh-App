@@ -16,7 +16,13 @@ import {
 const state = {
   requestId: 0,
   timer: null,
-  detail: null,
+  scoutingKey: "",
+  scoutingReport: null,
+  opponentRoster: null,
+  mineRosterKey: "",
+  mineRoster: null,
+  grid: null,
+  gridObserver: null,
 };
 const number = new Intl.NumberFormat("en-US");
 
@@ -82,8 +88,8 @@ function clearRendered() {
 }
 
 function cardForEntry(entry) {
-  return [...document.querySelectorAll(".gac-scout-prediction-card")]
-    .find((card) => clean(card?.dataset?.forecastKey) === clean(entry?.key)) || null;
+  const cards = [...document.querySelectorAll("#gacScoutPredictionGrid .gac-scout-prediction-card")];
+  return cards[Number(entry?.forecastIndex)] || null;
 }
 
 function portrait(unit = {}) {
@@ -116,7 +122,7 @@ function evidenceLine(assignment, recommendation) {
   return `<strong>HISTORICAL COUNTER EVIDENCE · EXACT FORECAST TEAM</strong><span>${number.format(wins)}/${number.format(battles)} observed wins${rate} · ${escapeHtml(assignment?.reliability?.label || "historical sample")}</span>`;
 }
 
-function heuristicLine(assignment, recommendation) {
+function heuristicLine(recommendation) {
   return `<strong>ROSTER-FIT FALLBACK</strong><span>${escapeHtml(recommendation?.confidence || "Roster-fit recommendation")} · Fit ${number.format(Number(recommendation?.score || 0))}</span>`;
 }
 
@@ -136,9 +142,7 @@ function renderAssignment(entry, assignment, context) {
 
   const evidenceBacked = assignment?.source === "historical-counter-evidence" || recommendation?.source === "historical-counter-evidence";
   const defenders = defenderUnits(entry, context.opponentRoster);
-  const explanation = evidenceBacked
-    ? evidenceLine(assignment, recommendation)
-    : heuristicLine(assignment, recommendation);
+  const explanation = evidenceBacked ? evidenceLine(assignment, recommendation) : heuristicLine(recommendation);
   box.dataset.source = evidenceBacked ? "evidence" : "heuristic";
   box.innerHTML = `
     <div class="gac-prestage-heading"><span>ADVISORY COUNTER PRE-STAGE</span>${explanation}</div>
@@ -180,39 +184,73 @@ async function loadEvidence(entries, format) {
   }
 }
 
+function clearForecastCache() {
+  state.scoutingKey = "";
+  state.scoutingReport = null;
+  state.opponentRoster = null;
+}
+
+async function loadForecastData(opponent) {
+  if (state.scoutingKey === opponent && state.scoutingReport && state.opponentRoster) {
+    return Object.freeze({ report: state.scoutingReport, opponentRoster: state.opponentRoster });
+  }
+  const [report, opponentRoster] = await Promise.all([
+    fetchJson(`/api/gac/scouting/${opponent}?limit=2500&import=0`),
+    fetchJson(`/api/player/${opponent}`),
+  ]);
+  state.scoutingKey = opponent;
+  state.scoutingReport = report;
+  state.opponentRoster = opponentRoster;
+  return Object.freeze({ report, opponentRoster });
+}
+
+async function loadMineRoster(mine) {
+  if (state.mineRosterKey === mine && state.mineRoster) return state.mineRoster;
+  const roster = await fetchJson(`/api/player/${mine}`);
+  state.mineRosterKey = mine;
+  state.mineRoster = roster;
+  return roster;
+}
+
 async function refresh() {
-  const detail = state.detail;
-  const prediction = detail?.report;
-  const opponentRoster = detail?.opponentRoster;
-  if (!prediction || prediction?.truth !== "historical-prediction-not-current-board" || !opponentRoster) {
+  const cards = document.querySelectorAll("#gacScoutPredictionGrid .gac-scout-prediction-card");
+  if (!cards.length) {
     clearRendered();
     return;
   }
   const mine = allyCode(byId("allyCode")?.value);
-  const opponent = allyCode(byId("gacOpponentCode")?.value || detail?.opponentCode);
+  const opponent = allyCode(byId("gacOpponentCode")?.value);
   if (!/^\d{9}$/.test(mine) || !/^\d{9}$/.test(opponent)) {
     clearRendered();
     setStatus("idle", "COUNTER PRE-STAGE · load your Ally Code and opponent first");
     return;
   }
-  const mode = byId("gacMode")?.value || detail?.mode || "5";
+  const mode = byId("gacMode")?.value || "5";
   const size = modeSize(mode);
   const format = modeFormat(mode) || (size === 3 ? "3v3" : "5v5");
-  const entries = forecastEntries(prediction, mode, 8);
-  if (!entries.length) {
-    clearRendered();
-    setStatus("idle", `COUNTER PRE-STAGE · no ${format} forecast teams to allocate`);
-    return;
-  }
   const round = validRound(byId("gacBracketRound")?.value);
   const requestId = ++state.requestId;
   setStatus("checking", "COUNTER PRE-STAGE · allocating scarce squads across forecast defenses…");
   try {
-    const [mineRoster, context, evidence] = await Promise.all([
-      fetchJson(`/api/player/${mine}`),
+    const [{ report, opponentRoster }, mineRoster, context] = await Promise.all([
+      loadForecastData(opponent),
+      loadMineRoster(mine),
       planningContext(mine, round),
-      loadEvidence(entries, format),
     ]);
+    if (requestId !== state.requestId) return;
+    const prediction = report?.defensePrediction;
+    if (!prediction || prediction?.unavailable || prediction?.truth !== "historical-prediction-not-current-board") {
+      clearRendered();
+      setStatus("idle", "COUNTER PRE-STAGE · historical defense prediction evidence unavailable");
+      return;
+    }
+    const entries = forecastEntries(prediction, mode, 8);
+    if (!entries.length) {
+      clearRendered();
+      setStatus("idle", `COUNTER PRE-STAGE · no ${format} forecast teams to allocate`);
+      return;
+    }
+    const evidence = await loadEvidence(entries, format);
     if (requestId !== state.requestId) return;
     const plan = hybridBoardPlan(mineRoster, opponentRoster, entries, evidence.map, {
       size,
@@ -235,29 +273,78 @@ async function refresh() {
   }
 }
 
-function schedule(delay = 120) {
+function schedule(delay = 140) {
   clearTimeout(state.timer);
   state.timer = setTimeout(() => void refresh(), Math.max(0, delay));
+}
+
+function watchForecastGrid() {
+  const grid = byId("gacScoutPredictionGrid");
+  if (!grid || state.grid === grid) return;
+  state.gridObserver?.disconnect();
+  state.grid = grid;
+  state.gridObserver = new MutationObserver(() => schedule(120));
+  state.gridObserver.observe(grid, { childList: true });
+  schedule(180);
+}
+
+function bindControls() {
+  const opponent = byId("gacOpponentCode");
+  if (opponent && opponent.dataset.gacForecastPrestageBound !== "true") {
+    opponent.dataset.gacForecastPrestageBound = "true";
+    opponent.addEventListener("input", () => {
+      clearForecastCache();
+      clearRendered();
+    });
+  }
+  const mine = byId("allyCode");
+  if (mine && mine.dataset.gacForecastPrestageBound !== "true") {
+    mine.dataset.gacForecastPrestageBound = "true";
+    mine.addEventListener("change", () => {
+      state.mineRosterKey = "";
+      state.mineRoster = null;
+      schedule(180);
+    });
+  }
+  const round = byId("gacBracketRound");
+  if (round && round.dataset.gacForecastPrestageBound !== "true") {
+    round.dataset.gacForecastPrestageBound = "true";
+    round.addEventListener("change", () => schedule(160));
+  }
+}
+
+function ensureMounted() {
+  injectStylesheet();
+  ensureStatus();
+  watchForecastGrid();
+  bindControls();
 }
 
 function bind() {
   if (typeof window === "undefined" || typeof document === "undefined") return;
   if (document.documentElement.dataset.gacForecastPrestageBound === "true") return;
   document.documentElement.dataset.gacForecastPrestageBound = "true";
-  injectStylesheet();
-  window.addEventListener("gac-defense-forecast-rendered", (event) => {
-    state.detail = event?.detail || null;
-    schedule(80);
+  ensureMounted();
+  document.addEventListener("DOMContentLoaded", ensureMounted, { once: true });
+  window.addEventListener("hashchange", () => setTimeout(ensureMounted, 0));
+  window.addEventListener("gac-board-evidence-updated", () => {
+    clearForecastCache();
+    schedule(160);
   });
-  window.addEventListener("gac-board-evidence-updated", () => schedule(120));
-  window.addEventListener("gac-war-room-updated", () => schedule(120));
-  window.addEventListener("gac-current-opponent-auto-resolved", () => schedule(180));
+  window.addEventListener("gac-war-room-updated", () => schedule(140));
+  window.addEventListener("gac-current-opponent-auto-resolved", () => {
+    clearForecastCache();
+    schedule(220);
+  });
+  new MutationObserver(() => ensureMounted()).observe(document.documentElement, { childList: true, subtree: true });
 }
 
 if (typeof window !== "undefined" && typeof document !== "undefined") bind();
 
 export {
+  clearForecastCache,
   fetchOptional,
   loadEvidence,
+  loadForecastData,
   planningContext,
 };
