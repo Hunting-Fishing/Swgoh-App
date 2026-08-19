@@ -4,12 +4,17 @@ import { buildRoteRoutePlan } from '../tb-route-planning-service.mjs';
 
 function zone(overrides = {}) {
   return {
+    id: 'zone-state-1',
+    event_id: '11111111-1111-4111-8111-111111111111',
     phase: 'P2',
     planet_id: 'geonosis',
     priority: 1,
     current_tp: 120_000_000,
     current_stars: 0,
     target_stars: 1,
+    source_kind: 'officer',
+    observed_at: '2026-08-19T12:55:00.000Z',
+    updated_at: '2026-08-19T13:00:00.000Z',
     remainingMissionTp: 0,
     remainingOperationTp: 0,
     ...overrides,
@@ -48,7 +53,7 @@ test('planner refuses duplicate route priorities before allocating shared deploy
       remainingGuildDeploymentTp: 40_000_000,
       zones: [
         zone({ planet_id: 'geonosis', priority: 1 }),
-        zone({ planet_id: 'bracca', priority: 1, current_tp: 100_000_000 }),
+        zone({ id: 'zone-state-2', planet_id: 'bracca', priority: 1, current_tp: 100_000_000, updated_at: '2026-08-19T13:00:01.000Z' }),
       ],
     }),
     (error) => error.status === 400
@@ -64,7 +69,7 @@ test('input fingerprint is deterministic for equivalent inputs and changes with 
     riskMode: 'safe',
     zones: [
       zone({ planet_id: 'geonosis', priority: 1 }),
-      zone({ planet_id: 'bracca', priority: 2, current_tp: 100_000_000 }),
+      zone({ id: 'zone-state-2', planet_id: 'bracca', priority: 2, current_tp: 100_000_000, updated_at: '2026-08-19T13:00:01.000Z' }),
     ],
   };
   const first = buildRoteRoutePlan(input);
@@ -74,19 +79,33 @@ test('input fingerprint is deterministic for equivalent inputs and changes with 
   assert.notEqual(first.inputFingerprint, changed.inputFingerprint);
 });
 
+test('durable event identity and row version participate in the optimizer fingerprint', () => {
+  const base = buildRoteRoutePlan({ remainingGuildDeploymentTp: 40_000_000, zones: [zone()] });
+  const rewritten = buildRoteRoutePlan({
+    remainingGuildDeploymentTp: 40_000_000,
+    zones: [zone({ updated_at: '2026-08-19T13:00:05.000Z' })],
+  });
+  const nextEvent = buildRoteRoutePlan({
+    remainingGuildDeploymentTp: 40_000_000,
+    zones: [zone({ event_id: '22222222-2222-4222-8222-222222222222' })],
+  });
+  assert.notEqual(base.inputFingerprint, rewritten.inputFingerprint);
+  assert.notEqual(base.inputFingerprint, nextEvent.inputFingerprint);
+});
+
 test('priority is part of the optimizer fingerprint', () => {
   const first = buildRoteRoutePlan({
     remainingGuildDeploymentTp: 40_000_000,
     zones: [
       zone({ planet_id: 'geonosis', priority: 1 }),
-      zone({ planet_id: 'bracca', priority: 2, current_tp: 100_000_000 }),
+      zone({ id: 'zone-state-2', planet_id: 'bracca', priority: 2, current_tp: 100_000_000, updated_at: '2026-08-19T13:00:01.000Z' }),
     ],
   });
   const reversedPriority = buildRoteRoutePlan({
     remainingGuildDeploymentTp: 40_000_000,
     zones: [
       zone({ planet_id: 'geonosis', priority: 2 }),
-      zone({ planet_id: 'bracca', priority: 1, current_tp: 100_000_000 }),
+      zone({ id: 'zone-state-2', planet_id: 'bracca', priority: 1, current_tp: 100_000_000, updated_at: '2026-08-19T13:00:01.000Z' }),
     ],
   });
   assert.notEqual(first.inputFingerprint, reversedPriority.inputFingerprint);
