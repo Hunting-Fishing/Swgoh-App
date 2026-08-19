@@ -119,6 +119,14 @@ function sanitizeVersion(run = {}) {
   });
 }
 
+function requireReadContext(context = {}) {
+  const guildId = text(context?.guild?.id || context?.guildId);
+  const actorUserId = text(context?.userId);
+  if (!guildId) throw serviceError('Guild context is required.', 400, 'GUILD_CONTEXT_REQUIRED');
+  if (!actorUserId) throw serviceError('Officer user context is required.', 401, 'OFFICER_CONTEXT_REQUIRED');
+  return Object.freeze({ guildId, actorUserId });
+}
+
 export function createTbAssignmentVersionService(options = {}) {
   const store = options.store || supabaseCoreStore;
   const maxCreateAttempts = Math.max(1, Math.min(5, Number(options.maxCreateAttempts || 3)));
@@ -147,6 +155,55 @@ export function createTbAssignmentVersionService(options = {}) {
       id: `eq.${runId}`,
       limit: 1,
     }));
+  }
+
+  async function getVersion(context = {}, input = {}) {
+    const { guildId } = requireReadContext(context);
+    const runId = text(input.runId || input.versionId);
+    if (!runId) throw serviceError('An immutable assignment version ID is required.', 400, 'TB_ASSIGNMENT_VERSION_REQUIRED');
+
+    const run = await readVersion(guildId, runId);
+    if (!run || !Number(run.version_number) || !text(run.plan_hash)) {
+      throw serviceError('Immutable assignment version was not found for this Guild.', 404, 'TB_ASSIGNMENT_VERSION_NOT_FOUND');
+    }
+
+    return Object.freeze({
+      version: sanitizeVersion(run),
+      verification: verifyTbAssignmentRunHash(run),
+    });
+  }
+
+  async function listVersions(context = {}, input = {}) {
+    const { guildId } = requireReadContext(context);
+    const planId = text(input.planId);
+    const phaseInput = text(input.rotePhase || input.phase);
+    const rotePhase = phaseInput ? normalizeRotePhase(phaseInput) : '';
+    const requestedLimit = Math.floor(Number(input.limit || 50));
+    const limit = Math.max(1, Math.min(100, Number.isFinite(requestedLimit) ? requestedLimit : 50));
+
+    const query = {
+      select: '*',
+      guild_id: `eq.${guildId}`,
+      version_number: 'not.is.null',
+      plan_hash: 'not.is.null',
+      order: 'created_at.desc',
+      limit,
+      ...(planId ? { plan_id: `eq.${planId}` } : {}),
+      ...(rotePhase ? { rote_phase: `eq.${rotePhase}` } : {}),
+    };
+    const rows = array(await store.select('guild_tb_assignment_runs', query));
+    const versions = rows.map((run) => Object.freeze({
+      version: sanitizeVersion(run),
+      verification: verifyTbAssignmentRunHash(run),
+    }));
+
+    return Object.freeze({
+      guildId,
+      planId,
+      rotePhase,
+      count: versions.length,
+      versions: Object.freeze(versions),
+    });
   }
 
   async function createVersion(context = {}, input = {}) {
@@ -301,6 +358,8 @@ export function createTbAssignmentVersionService(options = {}) {
     createVersion,
     approveVersion,
     cancelVersion,
+    getVersion,
+    listVersions,
     readVersion,
     latestVersionNumber,
   });
