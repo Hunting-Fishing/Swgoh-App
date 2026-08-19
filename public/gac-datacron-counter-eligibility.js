@@ -2,6 +2,7 @@ import "./gac-defense-datacron-ui.js";
 import "./gac-own-defense-reserve.js";
 import "./gac-saved-board-planner.js";
 import "./gac-evidence-war-room.js";
+import "./gac-war-room-matchup-deltas.js";
 import {
   bestCoverage,
   datacronLabel,
