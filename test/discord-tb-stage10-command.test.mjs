@@ -29,45 +29,64 @@ const artifact = {
   unfilled: [],
 };
 
-function makeService() {
+function makeService({ includeMentions = true } = {}) {
+  const common = {
+    context: { guild: { name: 'Ludus Venatus' } },
+    artifact,
+    destination: { display_name: '#tb-assignments' },
+    channelId: '123456789012345678',
+    includeMentions,
+    mentionCoverage: { assignedMembers: 2, linkedMembers: 1, unlinkedMembers: 1 },
+    idempotencyKey: 'b'.repeat(64),
+  };
   return {
     preview: async () => ({
-      context: { guild: { name: 'Ludus Venatus' } }, artifact,
-      destination: { display_name: '#all-bots' }, channelId: '123456789012345678',
-      chunks: ['one'], idempotencyKey: 'b'.repeat(64), delivered: 0, deliveryEnabled: false,
+      ...common,
+      chunks: [{ content: 'one', allowedUsers: [] }], delivered: 0, deliveryEnabled: false,
     }),
     status: async () => ({
-      context: { guild: { name: 'Ludus Venatus' } }, artifact,
-      verification: { valid: true }, channelId: '123456789012345678',
-      idempotencyKey: 'b'.repeat(64), receipts: [],
+      ...common,
+      verification: { valid: true }, receipts: [],
     }),
     publish: async () => ({
-      context: { guild: { name: 'Ludus Venatus' } }, artifact,
-      channelId: '123456789012345678', idempotencyKey: 'b'.repeat(64),
+      ...common,
       chunks: 1, newMessages: 1, reusedChunks: 0, memberDms: 0,
     }),
   };
 }
 
-test('plan-delivery PREVIEW is read-only and reports Stage 10 gate state', async () => {
+test('plan-delivery PREVIEW reports safe mention coverage and verified channel without sending', async () => {
   const command = createDiscordTbStage10Command({ service: makeService() });
   const output = await command.execute(interaction('preview'));
   assert.match(output, /Stage 10 ROTE Delivery Preview/);
   assert.match(output, /Safety gate: LOCKED/);
+  assert.match(output, /Member @mentions: ON/);
+  assert.match(output, /linked assigned members \*\*1\/2\*\*/);
+  assert.match(output, /<\#123456789012345678>/);
+  assert.match(output, /@everyone\/@here\/role parsing: OFF/);
   assert.match(output, /Member DMs: OFF/);
 });
 
-test('plan-delivery STATUS renders durable receipt view', async () => {
+test('plan-delivery STATUS renders durable receipt and mention-policy view', async () => {
   const command = createDiscordTbStage10Command({ service: makeService() });
   const output = await command.execute(interaction('status'));
   assert.match(output, /Stage 10 ROTE Delivery Status/);
   assert.match(output, /Lifecycle: \*\*APPROVED\*\*/);
+  assert.match(output, /Member @mentions: ON/);
   assert.match(output, /Receipts: \*\*0\*\*/);
 });
 
-test('plan-delivery PUBLISH reports no member DMs', async () => {
+test('plan-delivery PUBLISH reports linked mentions but no member DMs', async () => {
   const command = createDiscordTbStage10Command({ service: makeService() });
   const output = await command.execute(interaction('publish'));
   assert.match(output, /Channel Delivery Complete/);
+  assert.match(output, /Member @mentions: ON/);
   assert.match(output, /Member DMs sent: 0/);
+});
+
+test('plan-delivery can explicitly report mentions OFF', async () => {
+  const command = createDiscordTbStage10Command({ service: makeService({ includeMentions: false }) });
+  const output = await command.execute(interaction('preview'));
+  assert.match(output, /Member @mentions: OFF/);
+  assert.match(output, /names only/);
 });

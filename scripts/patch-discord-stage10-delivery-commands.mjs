@@ -63,7 +63,7 @@ async function patchStage10Schema() {
     const missing = missingStage10Subcommands(tb.options);
     if (missing.length) throw new Error(`Stage 10 schema reported unchanged but is missing: ${missing.join(', ')}.`);
     if ((Array.isArray(tb.options) ? tb.options.length : 0) > 25) throw new Error('Discord /tb schema exceeds the 25-subcommand limit.');
-    console.log(`Discord Stage 10 schema ${patch.schemaVersion} already present; all ${DISCORD_STAGE10_TB_SUBCOMMANDS.length} delivery commands verified.`);
+    console.log(`Discord Stage 10 schema ${patch.schemaVersion} already current; all ${DISCORD_STAGE10_TB_SUBCOMMANDS.length} delivery commands verified.`);
     return;
   }
 
@@ -79,7 +79,14 @@ async function patchStage10Schema() {
   const missing = missingStage10Subcommands(options);
   if (missing.length) throw new Error(`Discord accepted the Stage 10 command update but returned a schema missing: ${missing.join(', ')}.`);
   if (options.length > 25) throw new Error(`Discord /tb schema exceeds the 25-subcommand limit (${options.length}).`);
-  console.log(`Discord Stage 10 schema ${patch.schemaVersion} patched on attempt ${updated.attempt}: ${patch.added.join(', ')}.`);
+
+  const verification = applyDiscordStage10TbCommandSchema(updated.body || {});
+  if (verification.changed) {
+    throw new Error(`Discord accepted the Stage 10 command update but the returned schema is still stale: ${[...verification.added, ...verification.updated].join(', ')}.`);
+  }
+
+  const changedNames = [...patch.added.map((name) => `added:${name}`), ...patch.updated.map((name) => `updated:${name}`)];
+  console.log(`Discord Stage 10 schema ${patch.schemaVersion} patched on attempt ${updated.attempt}: ${changedNames.join(', ') || 'canonical refresh'}.`);
   console.log(`Verified all ${DISCORD_STAGE10_TB_SUBCOMMANDS.length} Stage 10 commands; /tb uses ${options.length}/25 subcommand slots.`);
 }
 

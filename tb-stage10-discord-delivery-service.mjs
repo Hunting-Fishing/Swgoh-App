@@ -42,6 +42,11 @@ function snowflake(value) {
   return /^\d{16,22}$/.test(candidate) ? candidate : '';
 }
 
+function allyCode(value) {
+  const digits = text(value).replace(/\D/g, '');
+  return /^\d{9}$/.test(digits) ? digits : '';
+}
+
 function splitLines(lines, max = MAX_CONTENT) {
   const chunks = [];
   let current = '';
@@ -61,22 +66,91 @@ function helpCount(artifact = {}) {
   return array(artifact.assignments).filter((row) => row?.safety?.help === true).length;
 }
 
-function renderApprovedArtifact(artifact = {}, guildName = '') {
+function memberKey(row = {}) {
+  const playerId = text(row?.member?.playerId);
+  const code = allyCode(row?.member?.allyCode);
+  const name = safe(row?.member?.name, '').toLowerCase();
+  return playerId ? `player:${playerId}` : code ? `ally:${code}` : name ? `name:${name}` : '';
+}
+
+function linkedUsersFromBinding(binding = {}) {
+  const byPlayerId = new Map();
+  const byAllyCode = new Map();
+  for (const [discordUserIdRaw, link] of Object.entries(object(binding?.guildState?.userLinks))) {
+    const discordUserId = snowflake(discordUserIdRaw);
+    if (!discordUserId) continue;
+    const playerId = text(link?.playerId);
+    const code = allyCode(link?.swgohAllyCode);
+    if (playerId) byPlayerId.set(playerId, discordUserId);
+    if (code) byAllyCode.set(code, discordUserId);
+  }
+  return Object.freeze({ byPlayerId, byAllyCode });
+}
+
+function discordUserForAssignment(row = {}, links = {}) {
+  const playerId = text(row?.member?.playerId);
+  const code = allyCode(row?.member?.allyCode);
+  return (playerId && links.byPlayerId?.get(playerId)) || (code && links.byAllyCode?.get(code)) || '';
+}
+
+function mentionCoverage(assignments = [], links = {}) {
+  const members = new Map();
+  for (const row of array(assignments)) {
+    const key = memberKey(row);
+    if (!key || members.has(key)) continue;
+    members.set(key, Object.freeze({
+      key,
+      name: safe(row?.member?.name, allyCode(row?.member?.allyCode) || 'member'),
+      discordUserId: discordUserForAssignment(row, links),
+    }));
+  }
+  const values = [...members.values()];
+  const linked = values.filter((row) => Boolean(row.discordUserId));
+  const unlinked = values.filter((row) => !row.discordUserId);
+  const audienceRows = values
+    .map((row) => `${row.key}|${row.discordUserId || 'unlinked'}`)
+    .sort((a, b) => a.localeCompare(b));
+  return Object.freeze({
+    assignedMembers: values.length,
+    linkedMembers: linked.length,
+    unlinkedMembers: unlinked.length,
+    linkedDiscordUserIds: Object.freeze(linked.map((row) => row.discordUserId).sort()),
+    unlinkedNames: Object.freeze(unlinked.map((row) => row.name).sort((a, b) => a.localeCompare(b))),
+    audienceFingerprint: sha(audienceRows.join('\n')),
+  });
+}
+
+function mentionIdsInContent(content = '') {
+  const ids = new Set();
+  for (const match of String(content).matchAll(/<@(\d{16,22})>/g)) ids.add(match[1]);
+  return [...ids];
+}
+
+function renderApprovedArtifact(artifact = {}, guildName = '', binding = {}, includeMentions = true) {
+  const links = linkedUsersFromBinding(binding);
   const assignments = array(artifact.assignments).slice().sort((a, b) =>
     safe(a.phase).localeCompare(safe(b.phase))
       || safe(a.squadId || a.conflictId).localeCompare(safe(b.squadId || b.conflictId))
       || safe(a.name || a.baseId).localeCompare(safe(b.name || b.baseId))
   );
+  const coverage = mentionCoverage(assignments, links);
   const lines = [
     '**SWGOH Command Center · APPROVED ROTE Operation Assignments**',
     `Guild: **${safe(guildName)}** · Phase: **${safe(artifact.rotePhase)}** · Immutable: **v${Number(artifact.versionNumber || 0)}**`,
     `Approved artifact: \`${shortHash(artifact.planHash)}\``,
     `Assigned: **${assignments.length}** · Unfilled: **${array(artifact.unfilled).length}** · HELP/risk: **${helpCount(artifact)}**`,
+    includeMentions
+      ? `Member @mentions: **ON** · linked assigned members: **${coverage.linkedMembers}/${coverage.assignedMembers}** · unlinked: **${coverage.unlinkedMembers}**`
+      : 'Member @mentions: **OFF** · names only',
     '',
   ];
   for (const row of assignments) {
     const status = row?.safety?.help === true ? ' · ⚠️ HELP' : '';
-    lines.push(`• ${safe(row.squadId || row.conflictId, 'Operation')} · **${safe(row.name || row.baseId, 'unit')}** → **${safe(row?.member?.name, row?.member?.allyCode || 'member')}**${status}`);
+    const discordUserId = includeMentions ? discordUserForAssignment(row, links) : '';
+    const member = discordUserId
+      ? `<@${discordUserId}>`
+      : `**${safe(row?.member?.name, row?.member?.allyCode || 'member')}**`;
+    lines.push(`• ${safe(row.squadId || row.conflictId, 'Operation')} · **${safe(row.name || row.baseId, 'unit')}** → ${member}${status}`);
   }
   const unfilled = array(artifact.unfilled);
   if (unfilled.length) {
@@ -86,13 +160,43 @@ function renderApprovedArtifact(artifact = {}, guildName = '') {
     }
     if (unfilled.length > 20) lines.push(`• +${unfilled.length - 20} more unfilled slots in Command Center`);
   }
-  lines.push('', '_Immutable officer-approved artifact. Member mentions and DMs are disabled for this Stage 10 channel-only delivery._');
-  return splitLines(lines);
+  lines.push('', includeMentions
+    ? '_Immutable officer-approved artifact. Linked members are mentionable; each linked member is notification-allowlisted at most once across this delivery. Member DMs remain disabled._'
+    : '_Immutable officer-approved artifact. Member mentions and DMs are disabled for this delivery._');
+
+  const seenPingUsers = new Set();
+  const chunks = splitLines(lines).map((content) => {
+    const present = includeMentions ? mentionIdsInContent(content) : [];
+    const allowedUsers = present.filter((userId) => !seenPingUsers.has(userId));
+    for (const userId of allowedUsers) seenPingUsers.add(userId);
+    return Object.freeze({
+      content,
+      allowedUsers: Object.freeze(allowedUsers),
+      contentHash: sha(content),
+    });
+  });
+  return Object.freeze({ chunks: Object.freeze(chunks), coverage });
 }
 
 function optionValue(interaction = {}, name = '') {
   const subcommand = array(interaction?.data?.options).find((row) => Number(row?.type) === 1 || Number(row?.type) === 2);
   return array(subcommand?.options).find((row) => text(row?.name).toLowerCase() === text(name).toLowerCase())?.value ?? null;
+}
+
+function mentionPolicy(interaction = {}) {
+  const raw = text(optionValue(interaction, 'mentions')).toLowerCase();
+  if (!raw) return true;
+  if (raw === 'on') return true;
+  if (raw === 'off') return false;
+  throw serviceError('Mentions must be ON or OFF.', 400, 'STAGE10_MENTION_POLICY_INVALID');
+}
+
+function requestedChannel(interaction = {}) {
+  const raw = text(optionValue(interaction, 'channel'));
+  if (!raw) return '';
+  const channelId = snowflake(raw);
+  if (!channelId) throw serviceError('Selected Discord channel ID is invalid.', 400, 'STAGE10_CHANNEL_INVALID');
+  return channelId;
 }
 
 export function stage10DeliveryConfig(env = process.env) {
@@ -135,30 +239,57 @@ export function createTbStage10DiscordDeliveryService(options = {}) {
     return match;
   }
 
-  async function verifiedChannel(context) {
+  async function readVerifiedDestination(context, binding, channelId) {
+    const destination = first(await store.select('guild_discord_destinations', {
+      select: '*',
+      guild_id: `eq.${context.guild.id}`,
+      destination_kind: 'eq.channel',
+      external_id: `eq.${channelId}`,
+      verified: 'eq.true',
+      limit: 1,
+    }));
+    if (!destination?.id) {
+      throw serviceError('Selected Discord channel is not a durable verified Guild destination. Verify it with /guild verify-channel first.', 409, 'VERIFIED_DESTINATION_REQUIRED');
+    }
+    if (snowflake(destination?.metadata?.discordGuildId) !== snowflake(binding.discordGuildId)) {
+      throw serviceError('Selected verified channel does not belong to the currently bound Discord server.', 409, 'CHANNEL_GUILD_MISMATCH');
+    }
+    const channelType = destination?.metadata?.channelType;
+    if (channelType !== undefined && channelType !== null && ![0, 5].includes(Number(channelType))) {
+      throw serviceError('Stage 10 assignment delivery supports verified text or announcement channels only.', 409, 'UNSUPPORTED_CHANNEL_TYPE');
+    }
+    return destination;
+  }
+
+  async function verifiedChannel(context, requestedChannelId = '') {
     const synced = await destinationService.syncVerifiedDestinations(context.guild.id);
     const binding = synced?.binding;
     if (!binding || text(binding.discordGuildId) !== text(context.discordGuildId)) {
       throw serviceError('The SWGOH Guild does not have a verified Discord binding for this server.', 409, 'DISCORD_GUILD_NOT_VERIFIED');
     }
-    const configuredChannelId = snowflake(binding?.guildState?.commandChannelId);
-    if (!configuredChannelId) {
-      throw serviceError('No verified Guild command channel is configured. Run signed /tb setup before Stage 10 delivery.', 409, 'VERIFIED_DESTINATION_REQUIRED');
+
+    const selectedChannelId = requestedChannelId || snowflake(binding?.guildState?.commandChannelId);
+    if (!selectedChannelId) {
+      throw serviceError('No verified Guild command channel is configured. Run signed /tb setup or select a verified channel before Stage 10 delivery.', 409, 'VERIFIED_DESTINATION_REQUIRED');
     }
-    const destination = array(synced?.destinations).find((row) =>
+
+    let destination = array(synced?.destinations).find((row) =>
       row?.verified === true
       && text(row?.destination_kind) === 'channel'
-      && snowflake(row?.external_id) === configuredChannelId
+      && snowflake(row?.external_id) === selectedChannelId
       && snowflake(row?.metadata?.discordGuildId) === snowflake(context.discordGuildId)
     );
+    if (!destination?.id || requestedChannelId) {
+      destination = await readVerifiedDestination(context, binding, selectedChannelId);
+    }
     if (!destination?.id) {
       throw serviceError('The configured Discord channel is not a durable verified Guild destination.', 409, 'VERIFIED_DESTINATION_REQUIRED');
     }
-    return Object.freeze({ binding, destination, channelId: configuredChannelId });
+    return Object.freeze({ binding, destination, channelId: selectedChannelId });
   }
 
-  function idempotencyKey(artifact, destination) {
-    return sha(`stage10|tb|${artifact.id}|${artifact.planHash}|${destination.id}|discord-channel|mentions:false|dms:false`);
+  function idempotencyKey(artifact, destination, includeMentions) {
+    return sha(`stage10|tb|${artifact.id}|${artifact.planHash}|${destination.id}|discord-channel|mentions:${includeMentions ? 'true' : 'false'}|dms:false`);
   }
 
   async function receiptsFor(key) {
@@ -183,9 +314,29 @@ export function createTbStage10DiscordDeliveryService(options = {}) {
     }));
   }
 
-  async function claimChunk(context, artifact, destination, key, chunkIndex, content) {
+  function assertAudienceStable(receipts, currentFingerprint, includeMentions) {
+    if (!includeMentions || !array(receipts).length) return;
+    for (const receipt of array(receipts)) {
+      const previous = text(receipt?.request_metadata?.audienceFingerprint);
+      if (previous && previous !== currentFingerprint) {
+        throw serviceError('The Discord member-link registry changed after this mention delivery began. Delivery stopped to prevent a mixed notification audience; create a new reviewed delivery after reconciling the existing receipts.', 409, 'STAGE10_MENTION_AUDIENCE_CHANGED');
+      }
+    }
+  }
+
+  async function claimChunk(context, artifact, destination, key, chunkIndex, chunk, includeMentions, audienceFingerprint) {
     let existing = await receiptForChunk(key, chunkIndex);
-    if (existing?.status === 'delivered') return { receipt: existing, reused: true };
+    if (existing?.status === 'delivered') {
+      const previousAudience = text(existing?.request_metadata?.audienceFingerprint);
+      if (includeMentions && previousAudience && previousAudience !== audienceFingerprint) {
+        throw serviceError('The linked-member mention audience changed for an already-delivered chunk. Delivery stopped fail-closed.', 409, 'STAGE10_MENTION_AUDIENCE_CHANGED');
+      }
+      const previousHash = text(existing?.request_metadata?.contentHash);
+      if (previousHash && previousHash !== chunk.contentHash) {
+        throw serviceError('This exact artifact/destination already has delivered receipts for different rendered mention content. Delivery stopped to prevent a mixed or duplicate post set.', 409, 'STAGE10_DELIVERY_CONTENT_CHANGED');
+      }
+      return { receipt: existing, reused: true };
+    }
     if (existing?.status === 'sending') {
       throw serviceError('This exact delivery chunk is already in progress. No duplicate send was attempted.', 409, 'STAGE10_DELIVERY_IN_PROGRESS');
     }
@@ -209,8 +360,11 @@ export function createTbStage10DiscordDeliveryService(options = {}) {
         versionNumber: Number(artifact.versionNumber || 0),
         planHash: artifact.planHash,
         rotePhase: artifact.rotePhase,
-        contentLength: content.length,
-        mentions: false,
+        contentLength: chunk.content.length,
+        contentHash: chunk.contentHash,
+        mentions: includeMentions,
+        mentionUsers: array(chunk.allowedUsers).length,
+        audienceFingerprint: includeMentions ? audienceFingerprint : null,
         memberDms: false,
       },
       attempted_at: now().toISOString(),
@@ -230,15 +384,19 @@ export function createTbStage10DiscordDeliveryService(options = {}) {
     }
   }
 
-  async function requestDiscord(channelId, content, config, attempt = 0) {
+  async function requestDiscord(channelId, content, config, allowedUsers = [], attempt = 0) {
     if (!config.botToken) throw serviceError('Discord bot token is unavailable for Stage 10 delivery.', 503, 'DISCORD_BOT_TOKEN_MISSING');
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), config.requestTimeoutMs);
     try {
+      const users = [...new Set(array(allowedUsers).map(snowflake).filter(Boolean))].slice(0, 100);
       const response = await fetchImpl(`${DISCORD_API}/channels/${channelId}/messages`, {
         method: 'POST',
         headers: { Authorization: `Bot ${config.botToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content, allowed_mentions: { parse: [] } }),
+        body: JSON.stringify({
+          content,
+          allowed_mentions: { parse: [], users, replied_user: false },
+        }),
         signal: controller.signal,
       });
       let payload = {};
@@ -246,7 +404,7 @@ export function createTbStage10DiscordDeliveryService(options = {}) {
       if (response.status === 429 && attempt < 2) {
         const seconds = Math.max(0.25, Math.min(10, Number(payload?.retry_after || response.headers.get('retry-after') || 1)));
         await new Promise((resolve) => setTimeout(resolve, seconds * 1000));
-        return requestDiscord(channelId, content, config, attempt + 1);
+        return requestDiscord(channelId, content, config, users, attempt + 1);
       }
       if (!response.ok) {
         throw serviceError(`Discord returned HTTP ${response.status}: ${safe(payload?.message, 'channel delivery failed')}`, 502, 'STAGE10_DISCORD_DELIVERY_FAILED');
@@ -302,16 +460,19 @@ export function createTbStage10DiscordDeliveryService(options = {}) {
     const selected = await resolveVersion(context, plan.id, phase, versionNumber);
     const runId = selected.version.id;
     const approved = await publishability.assertPublishable(context, { runId, planId: plan.id, rotePhase: phase });
-    const verified = await verifiedChannel(context);
-    return Object.freeze({ context, phase, versionNumber, plan, selected, approved, ...verified });
+    const includeMentions = mentionPolicy(interaction);
+    const selectedChannelId = requestedChannel(interaction);
+    const verified = await verifiedChannel(context, selectedChannelId);
+    return Object.freeze({ context, phase, versionNumber, plan, selected, approved, includeMentions, ...verified });
   }
 
   async function preview(interaction = {}) {
     const resolved = await resolvePublishable(interaction);
     const artifact = resolved.approved.artifact;
-    const chunks = renderApprovedArtifact(artifact, resolved.context.guild.name);
-    const key = idempotencyKey(artifact, resolved.destination);
+    const rendered = renderApprovedArtifact(artifact, resolved.context.guild.name, resolved.binding, resolved.includeMentions);
+    const key = idempotencyKey(artifact, resolved.destination, resolved.includeMentions);
     const receipts = await receiptsFor(key);
+    assertAudienceStable(receipts, rendered.coverage.audienceFingerprint, resolved.includeMentions);
     const delivered = receipts.filter((row) => row.status === 'delivered').length;
     const config = stage10DeliveryConfig(env);
     return Object.freeze({
@@ -321,7 +482,9 @@ export function createTbStage10DiscordDeliveryService(options = {}) {
       artifact,
       destination: resolved.destination,
       channelId: resolved.channelId,
-      chunks: Object.freeze(chunks),
+      chunks: rendered.chunks,
+      mentionCoverage: rendered.coverage,
+      includeMentions: resolved.includeMentions,
       idempotencyKey: key,
       receipts: Object.freeze(receipts),
       delivered,
@@ -367,8 +530,11 @@ export function createTbStage10DiscordDeliveryService(options = {}) {
     }
     if (!config.botToken) throw serviceError('Discord bot token is unavailable for Stage 10 delivery.', 503, 'DISCORD_BOT_TOKEN_MISSING');
 
-    const chunks = renderApprovedArtifact(artifact, resolved.context.guild.name);
-    const key = idempotencyKey(artifact, resolved.destination);
+    const rendered = renderApprovedArtifact(artifact, resolved.context.guild.name, resolved.binding, resolved.includeMentions);
+    const chunks = rendered.chunks;
+    const key = idempotencyKey(artifact, resolved.destination, resolved.includeMentions);
+    const existingReceipts = await receiptsFor(key);
+    assertAudienceStable(existingReceipts, rendered.coverage.audienceFingerprint, resolved.includeMentions);
     const results = [];
 
     for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex += 1) {
@@ -381,16 +547,33 @@ export function createTbStage10DiscordDeliveryService(options = {}) {
       if (!validateConfirmation(recheck.artifact, inputHash)) {
         throw serviceError('The immutable hash changed during Stage 10 delivery. Delivery stopped fail-closed.', 409, 'STAGE10_HASH_CHANGED_DURING_DELIVERY');
       }
+      const destinationRecheck = await verifiedChannel(resolved.context, resolved.channelId);
+      if (text(destinationRecheck.destination?.id) !== text(resolved.destination?.id)) {
+        throw serviceError('The verified Discord destination changed during Stage 10 delivery. Delivery stopped fail-closed.', 409, 'STAGE10_DESTINATION_CHANGED_DURING_DELIVERY');
+      }
+      const reRendered = renderApprovedArtifact(artifact, resolved.context.guild.name, destinationRecheck.binding, resolved.includeMentions);
+      if (resolved.includeMentions && reRendered.coverage.audienceFingerprint !== rendered.coverage.audienceFingerprint) {
+        throw serviceError('The Discord member-link registry changed during Stage 10 delivery. Delivery stopped before sending another chunk.', 409, 'STAGE10_MENTION_AUDIENCE_CHANGED');
+      }
 
-      const content = chunks[chunkIndex];
-      const claim = await claimChunk(resolved.context, artifact, resolved.destination, key, chunkIndex, content);
+      const chunk = chunks[chunkIndex];
+      const claim = await claimChunk(
+        resolved.context,
+        artifact,
+        resolved.destination,
+        key,
+        chunkIndex,
+        chunk,
+        resolved.includeMentions,
+        rendered.coverage.audienceFingerprint,
+      );
       if (claim.reused) {
         results.push(Object.freeze({ receipt: claim.receipt, reused: true }));
         continue;
       }
 
       try {
-        const response = await requestDiscord(resolved.channelId, content, config);
+        const response = await requestDiscord(resolved.channelId, chunk.content, config, chunk.allowedUsers);
         const receipt = await finalizeDelivered(claim.receipt, response);
         results.push(Object.freeze({ receipt, reused: false }));
       } catch (error) {
@@ -417,7 +600,10 @@ export function createTbStage10DiscordDeliveryService(options = {}) {
         chunks: chunks.length,
         reusedChunks: reused,
         newMessages: chunks.length - reused,
-        includeMentions: false,
+        includeMentions: resolved.includeMentions,
+        linkedMentionMembers: rendered.coverage.linkedMembers,
+        assignedMembers: rendered.coverage.assignedMembers,
+        mentionAudienceFingerprint: rendered.coverage.audienceFingerprint,
         memberDms: false,
         idempotencyKey: key,
       },
@@ -431,6 +617,8 @@ export function createTbStage10DiscordDeliveryService(options = {}) {
       artifact,
       destination: resolved.destination,
       channelId: resolved.channelId,
+      includeMentions: resolved.includeMentions,
+      mentionCoverage: rendered.coverage,
       idempotencyKey: key,
       chunks: chunks.length,
       reusedChunks: reused,
@@ -444,13 +632,19 @@ export function createTbStage10DiscordDeliveryService(options = {}) {
     const context = await contextResolver.resolve(interaction);
     const phase = text(optionValue(interaction, 'phase')).toUpperCase();
     const versionNumber = Number(optionValue(interaction, 'version') || 0);
+    if (!/^P[1-6]$/.test(phase) || !Number.isInteger(versionNumber) || versionNumber < 1) {
+      throw serviceError('A valid ROTE phase and immutable version number are required.', 400, 'STAGE10_VERSION_REQUIRED');
+    }
     const plan = await currentPlan(context.guild.id);
     if (!plan?.id) throw serviceError('No active persisted ROTE plan exists for this Guild.', 404, 'ROTE_PLAN_NOT_FOUND');
     const selected = await resolveVersion(context, plan.id, phase, versionNumber);
     const artifact = selected.version;
-    const verified = await verifiedChannel(context);
-    const key = idempotencyKey(artifact, verified.destination);
+    const includeMentions = mentionPolicy(interaction);
+    const verified = await verifiedChannel(context, requestedChannel(interaction));
+    const key = idempotencyKey(artifact, verified.destination, includeMentions);
     const receipts = await receiptsFor(key);
+    const coverage = mentionCoverage(artifact.assignments, linkedUsersFromBinding(verified.binding));
+    assertAudienceStable(receipts, coverage.audienceFingerprint, includeMentions);
     return Object.freeze({
       mode: 'status',
       context,
@@ -459,6 +653,8 @@ export function createTbStage10DiscordDeliveryService(options = {}) {
       verification: selected.verification,
       destination: verified.destination,
       channelId: verified.channelId,
+      includeMentions,
+      mentionCoverage: coverage,
       idempotencyKey: key,
       receipts: Object.freeze(receipts),
     });
