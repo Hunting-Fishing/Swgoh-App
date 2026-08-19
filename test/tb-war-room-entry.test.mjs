@@ -40,11 +40,14 @@ test('Guild route enhancer loads the War Room module and the module self-loads i
   const router = fs.readFileSync(new URL('../public/guild-unit-matrix-router.js', import.meta.url), 'utf8');
   const js = fs.readFileSync(new URL('../public/tb-war-room-entry.js', import.meta.url), 'utf8');
   const css = fs.readFileSync(new URL('../public/tb-war-room-entry.css', import.meta.url), 'utf8');
+  const today = fs.readFileSync(new URL('../public/guild/tb/today/index.html', import.meta.url), 'utf8');
   assert.match(router, /^import "\.\/tb-war-room-entry\.js";/);
   assert.match(js, /\/api\/account\/web-actions\/tb/);
   assert.match(js, /Open Today in TB/);
+  assert.match(js, /\/guild\/tb\/today#officer-controls/);
   assert.match(js, /tb-war-room-entry\.css/);
   assert.match(js, /swgoh:guild-command-snapshot/);
+  assert.match(today, /id="officer-controls"/);
   assert.match(css, /\.tb-war-room-entry/);
   assert.match(css, /\.tb-war-zone\.command-stop/);
 });
