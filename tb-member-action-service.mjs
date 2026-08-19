@@ -145,10 +145,6 @@ function deploymentTask(zone, planet, phase) {
   });
 }
 
-function zoneForPlanet(zones, planetId, phase) {
-  return array(zones).find((zone) => text(zone?.planet_id || zone?.planetId) === planetId && cleanPhase(zone?.phase) === phase) || null;
-}
-
 function compareTasks(a, b) {
   return Number(a.priority || 999) - Number(b.priority || 999)
     || String(a.planetId || '').localeCompare(String(b.planetId || ''))
@@ -168,10 +164,11 @@ export function buildTbMemberTasks(input = {}) {
     tasks.push(operationTask(assignment, phase));
   }
 
-  const phasePlanets = ROTE_PLANETS.filter((planet) => text(planet.phase).toUpperCase() === phase);
-  for (const planet of phasePlanets) {
-    const zone = zoneForPlanet(input.zones, planet.id, phase);
-    if (!zone) continue;
+  const configuredZones = array(input.zones).filter((zone) => cleanPhase(zone?.phase) === phase);
+  for (const zone of configuredZones) {
+    const planetId = text(zone?.planet_id || zone?.planetId);
+    const planet = ROTE_PLANETS.find((candidate) => candidate.id === planetId);
+    if (!planet) continue;
     const command = lower(zone.command_state || zone.commandState);
     const commandWarning = commandTask(zone, phase);
     if (commandWarning) tasks.push(commandWarning);
