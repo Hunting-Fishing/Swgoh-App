@@ -113,3 +113,95 @@ drop trigger if exists guild_tb_assignment_run_approvals_append_only on public.g
 create trigger guild_tb_assignment_run_approvals_append_only
 before update or delete on public.guild_tb_assignment_run_approvals
 for each row execute function public.guard_append_only_tb_assignment_approval();
+
+-- Atomically allocate a version number, insert the immutable payload, and mark
+-- the immediately previous version superseded. The advisory transaction lock
+-- prevents two officers/workers from claiming the same version concurrently.
+create or replace function public.create_guild_tb_assignment_version(
+  p_guild_id uuid,
+  p_plan_id uuid,
+  p_rote_phase text,
+  p_plan_hash text,
+  p_input_fingerprint text,
+  p_assignments jsonb,
+  p_unfilled jsonb,
+  p_diagnostics jsonb,
+  p_created_by_user_id uuid
+)
+returns public.guild_tb_assignment_runs
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_previous public.guild_tb_assignment_runs%rowtype;
+  v_created public.guild_tb_assignment_runs%rowtype;
+  v_next_version bigint;
+  v_scope text;
+begin
+  if p_rote_phase not in ('P1','P2','P3','P4','P5','P6') then
+    raise exception 'ROTE phase must be P1 through P6' using errcode = '22023';
+  end if;
+  if p_plan_hash is null or p_plan_hash !~ '^[0-9a-f]{64}$' then
+    raise exception 'plan hash must be a lowercase SHA-256 digest' using errcode = '22023';
+  end if;
+
+  v_scope := p_guild_id::text || ':' || coalesce(p_plan_id::text, 'adhoc') || ':' || p_rote_phase;
+  perform pg_advisory_xact_lock(hashtextextended(v_scope, 0));
+
+  select * into v_previous
+  from public.guild_tb_assignment_runs
+  where guild_id = p_guild_id
+    and rote_phase = p_rote_phase
+    and ((p_plan_id is null and plan_id is null) or plan_id = p_plan_id)
+    and version_number is not null
+  order by version_number desc, created_at desc
+  limit 1
+  for update;
+
+  v_next_version := coalesce(v_previous.version_number, 0) + 1;
+
+  insert into public.guild_tb_assignment_runs (
+    guild_id,
+    plan_id,
+    status,
+    rote_phase,
+    version_number,
+    plan_hash,
+    input_fingerprint,
+    assignments,
+    unfilled,
+    diagnostics,
+    delivery,
+    created_by_user_id,
+    supersedes_run_id
+  ) values (
+    p_guild_id,
+    p_plan_id,
+    'preview',
+    p_rote_phase,
+    v_next_version,
+    p_plan_hash,
+    nullif(p_input_fingerprint, ''),
+    coalesce(p_assignments, '[]'::jsonb),
+    coalesce(p_unfilled, '[]'::jsonb),
+    coalesce(p_diagnostics, '{}'::jsonb),
+    '{}'::jsonb,
+    p_created_by_user_id,
+    v_previous.id
+  ) returning * into v_created;
+
+  if v_previous.id is not null
+     and v_previous.cancelled_at is null
+     and v_previous.superseded_by_run_id is null then
+    update public.guild_tb_assignment_runs
+    set superseded_by_run_id = v_created.id
+    where id = v_previous.id;
+  end if;
+
+  return v_created;
+end;
+$$;
+
+revoke all on function public.create_guild_tb_assignment_version(uuid,uuid,text,text,text,jsonb,jsonb,jsonb,uuid) from public,anon,authenticated;
+grant execute on function public.create_guild_tb_assignment_version(uuid,uuid,text,text,text,jsonb,jsonb,jsonb,uuid) to service_role;
