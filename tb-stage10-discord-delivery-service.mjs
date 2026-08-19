@@ -107,12 +107,16 @@ function mentionCoverage(assignments = [], links = {}) {
   const values = [...members.values()];
   const linked = values.filter((row) => Boolean(row.discordUserId));
   const unlinked = values.filter((row) => !row.discordUserId);
+  const audienceRows = values
+    .map((row) => `${row.key}|${row.discordUserId || 'unlinked'}`)
+    .sort((a, b) => a.localeCompare(b));
   return Object.freeze({
     assignedMembers: values.length,
     linkedMembers: linked.length,
     unlinkedMembers: unlinked.length,
     linkedDiscordUserIds: Object.freeze(linked.map((row) => row.discordUserId).sort()),
     unlinkedNames: Object.freeze(unlinked.map((row) => row.name).sort((a, b) => a.localeCompare(b))),
+    audienceFingerprint: sha(audienceRows.join('\n')),
   });
 }
 
@@ -310,9 +314,23 @@ export function createTbStage10DiscordDeliveryService(options = {}) {
     }));
   }
 
-  async function claimChunk(context, artifact, destination, key, chunkIndex, chunk, includeMentions) {
+  function assertAudienceStable(receipts, currentFingerprint, includeMentions) {
+    if (!includeMentions || !array(receipts).length) return;
+    for (const receipt of array(receipts)) {
+      const previous = text(receipt?.request_metadata?.audienceFingerprint);
+      if (previous && previous !== currentFingerprint) {
+        throw serviceError('The Discord member-link registry changed after this mention delivery began. Delivery stopped to prevent a mixed notification audience; create a new reviewed delivery after reconciling the existing receipts.', 409, 'STAGE10_MENTION_AUDIENCE_CHANGED');
+      }
+    }
+  }
+
+  async function claimChunk(context, artifact, destination, key, chunkIndex, chunk, includeMentions, audienceFingerprint) {
     let existing = await receiptForChunk(key, chunkIndex);
     if (existing?.status === 'delivered') {
+      const previousAudience = text(existing?.request_metadata?.audienceFingerprint);
+      if (includeMentions && previousAudience && previousAudience !== audienceFingerprint) {
+        throw serviceError('The linked-member mention audience changed for an already-delivered chunk. Delivery stopped fail-closed.', 409, 'STAGE10_MENTION_AUDIENCE_CHANGED');
+      }
       const previousHash = text(existing?.request_metadata?.contentHash);
       if (previousHash && previousHash !== chunk.contentHash) {
         throw serviceError('This exact artifact/destination already has delivered receipts for different rendered mention content. Delivery stopped to prevent a mixed or duplicate post set.', 409, 'STAGE10_DELIVERY_CONTENT_CHANGED');
@@ -346,6 +364,7 @@ export function createTbStage10DiscordDeliveryService(options = {}) {
         contentHash: chunk.contentHash,
         mentions: includeMentions,
         mentionUsers: array(chunk.allowedUsers).length,
+        audienceFingerprint: includeMentions ? audienceFingerprint : null,
         memberDms: false,
       },
       attempted_at: now().toISOString(),
@@ -453,6 +472,7 @@ export function createTbStage10DiscordDeliveryService(options = {}) {
     const rendered = renderApprovedArtifact(artifact, resolved.context.guild.name, resolved.binding, resolved.includeMentions);
     const key = idempotencyKey(artifact, resolved.destination, resolved.includeMentions);
     const receipts = await receiptsFor(key);
+    assertAudienceStable(receipts, rendered.coverage.audienceFingerprint, resolved.includeMentions);
     const delivered = receipts.filter((row) => row.status === 'delivered').length;
     const config = stage10DeliveryConfig(env);
     return Object.freeze({
@@ -513,6 +533,8 @@ export function createTbStage10DiscordDeliveryService(options = {}) {
     const rendered = renderApprovedArtifact(artifact, resolved.context.guild.name, resolved.binding, resolved.includeMentions);
     const chunks = rendered.chunks;
     const key = idempotencyKey(artifact, resolved.destination, resolved.includeMentions);
+    const existingReceipts = await receiptsFor(key);
+    assertAudienceStable(existingReceipts, rendered.coverage.audienceFingerprint, resolved.includeMentions);
     const results = [];
 
     for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex += 1) {
@@ -529,9 +551,22 @@ export function createTbStage10DiscordDeliveryService(options = {}) {
       if (text(destinationRecheck.destination?.id) !== text(resolved.destination?.id)) {
         throw serviceError('The verified Discord destination changed during Stage 10 delivery. Delivery stopped fail-closed.', 409, 'STAGE10_DESTINATION_CHANGED_DURING_DELIVERY');
       }
+      const reRendered = renderApprovedArtifact(artifact, resolved.context.guild.name, destinationRecheck.binding, resolved.includeMentions);
+      if (resolved.includeMentions && reRendered.coverage.audienceFingerprint !== rendered.coverage.audienceFingerprint) {
+        throw serviceError('The Discord member-link registry changed during Stage 10 delivery. Delivery stopped before sending another chunk.', 409, 'STAGE10_MENTION_AUDIENCE_CHANGED');
+      }
 
       const chunk = chunks[chunkIndex];
-      const claim = await claimChunk(resolved.context, artifact, resolved.destination, key, chunkIndex, chunk, resolved.includeMentions);
+      const claim = await claimChunk(
+        resolved.context,
+        artifact,
+        resolved.destination,
+        key,
+        chunkIndex,
+        chunk,
+        resolved.includeMentions,
+        rendered.coverage.audienceFingerprint,
+      );
       if (claim.reused) {
         results.push(Object.freeze({ receipt: claim.receipt, reused: true }));
         continue;
@@ -568,6 +603,7 @@ export function createTbStage10DiscordDeliveryService(options = {}) {
         includeMentions: resolved.includeMentions,
         linkedMentionMembers: rendered.coverage.linkedMembers,
         assignedMembers: rendered.coverage.assignedMembers,
+        mentionAudienceFingerprint: rendered.coverage.audienceFingerprint,
         memberDms: false,
         idempotencyKey: key,
       },
@@ -608,6 +644,7 @@ export function createTbStage10DiscordDeliveryService(options = {}) {
     const key = idempotencyKey(artifact, verified.destination, includeMentions);
     const receipts = await receiptsFor(key);
     const coverage = mentionCoverage(artifact.assignments, linkedUsersFromBinding(verified.binding));
+    assertAudienceStable(receipts, coverage.audienceFingerprint, includeMentions);
     return Object.freeze({
       mode: 'status',
       context,
