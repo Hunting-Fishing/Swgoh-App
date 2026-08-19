@@ -17,7 +17,7 @@ import { discordTbStage10Command } from './discord-tb-stage10-command.mjs';
 
 const EPHEMERAL_FLAG = 1 << 6;
 const STAGE9_SUBCOMMANDS = new Set(['plan-preview', 'plan-status', 'plan-diff', 'plan-approve', 'plan-cancel']);
-const STAGE10_SUBCOMMANDS = new Set(['plan-delivery', 'delivery-status']);
+const STAGE10_SUBCOMMANDS = new Set(['plan-delivery']);
 
 function replayRequest(request, rawBody) {
   const replay = Readable.from([rawBody]);
@@ -61,7 +61,7 @@ function safeError(error, stage = 9) {
     .replace(/\s+/g, ' ')
     .trim();
   if (stage === 10) {
-    return `**SWGOH Command Center · Stage 10 ROTE Delivery failed**\n${message}\nDelivery stopped fail-closed. Check /tb delivery-status before retrying. No member DMs were sent.`;
+    return `**SWGOH Command Center · Stage 10 ROTE Delivery failed**\n${message}\nDelivery stopped fail-closed. Check \`/tb plan-delivery action:STATUS\` before retrying. No member DMs were sent.`;
   }
   return `**SWGOH Command Center · Immutable ROTE Plan failed**\n${message}\nNo assignments were published and no DMs were sent.`;
 }
