@@ -40,7 +40,7 @@ function tacticalSignature(root, catalog) {
   ].join('|');
 }
 
-async function enhanceOverlay(root) {
+export async function enhanceRoteTacticalOverlay(root) {
   if (!root?.isConnected) return null;
   const planetId = String(root.dataset.roteZoomPlanet || '').trim();
   if (!planetId) return null;
@@ -68,7 +68,7 @@ async function enhanceOverlay(root) {
 async function enhanceAll() {
   scheduled = false;
   const roots = [...document.querySelectorAll('.rote-planet-zoom[data-rote-zoom-planet]')];
-  for (const root of roots) await enhanceOverlay(root);
+  for (const root of roots) await enhanceRoteTacticalOverlay(root);
 }
 
 function scheduleEnhance() {
