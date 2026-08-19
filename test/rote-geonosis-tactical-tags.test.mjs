@@ -53,7 +53,7 @@ test("Geonosis tactical details include concise guild command tags and squad pre
   }
 });
 
-test("Geonosis map nodes resolve to the correct beast mission names", () => {
+test("resolved map nodes surface the tactical command and squad preset directly in mission details", () => {
   const resolved = resolveRoteMissionNodes("geonosis", ROTE_P2_MISSION_MAPS.geonosis);
   const byNode = new Map(resolved.nodes.map((node) => [node.id, node]));
 
@@ -62,6 +62,12 @@ test("Geonosis map nodes resolve to the correct beast mission names", () => {
   assert.equal(byNode.get("c3")?.mission?.name, "Combat · Reek");
   assert.match(byNode.get("c5")?.mission?.name || "", /Geonosians/);
   assert.match(byNode.get("c6")?.mission?.name || "", /Malevolence/);
+
+  assert.match(byNode.get("c1")?.note || "", /TACTICAL: NEXU \| SLKR \/ LV/);
+  assert.match(byNode.get("c1")?.note || "", /SQUAD PRESET: ROTE-P2-GEO-NEXU/);
+  assert.match(byNode.get("c2")?.note || "", /TACTICAL: ACKLAY/);
+  assert.match(byNode.get("c3")?.note || "", /TACTICAL: REEK/);
+  assert.match(byNode.get("c5")?.note || "", /SQUAD PRESET: ROTE-P2-GEO-GEOS/);
 
   assert.deepEqual(resolved.unresolvedNodeIds, []);
   assert.deepEqual(resolved.unassignedMissionIds, []);
