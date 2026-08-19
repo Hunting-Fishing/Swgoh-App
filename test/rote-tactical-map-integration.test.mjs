@@ -1,7 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { enhanceRoteTacticalOverlay } from '../public/rote-tactical-map-integration.js';
+import {
+  enhanceRoteTacticalOverlay,
+  hydrateSelectedMissionReadiness,
+} from '../public/rote-tactical-map-integration.js';
+import { TB_READINESS_EVIDENCE } from '../public/tb-mission-readiness-v2.js';
 
 function fakeClassList(initial = []) {
   const values = new Set(initial);
@@ -95,4 +99,79 @@ test('tactical overlay hydration preserves the existing mission button geometry 
   assert.match(hondoButton.innerHTML, /\/game-assets\/hondo\.png/);
   assert.match(hondoButton.innerHTML, />REQ</);
   assert.match(hondoButton.innerHTML, /R6\+/);
+});
+
+test('selected mission inspector receives tactical Level, Zeta, TB Omicron and mod/stat evidence without replacing the legacy inspector', () => {
+  const originalInspectorContent = '<section data-legacy-inspector>Existing mission inspector</section>';
+  const createdHost = { dataset: {}, innerHTML: '' };
+  const inspector = {
+    ownerDocument: {
+      createElement(tag) {
+        assert.equal(tag, 'div');
+        return createdHost;
+      },
+    },
+    legacyContent: originalInspectorContent,
+    children: [],
+    querySelector() { return null; },
+    appendChild(node) {
+      this.children.push(node);
+      return node;
+    },
+  };
+  const selectedButton = {
+    dataset: { roteZoomNode: 'p2-felucia-hondo' },
+    classList: fakeClassList(['rote-zoom-node', 'selected']),
+  };
+  const root = {
+    querySelector(selector) {
+      if (selector === '.rote-zoom-inspector') return inspector;
+      if (selector.includes('.selected')) return selectedButton;
+      return null;
+    },
+  };
+  const model = {
+    nodes: [{
+      id: 'p2-felucia-hondo',
+      missionId: 'felucia-hondo',
+      infrastructure: false,
+      readiness: {
+        verdict: 'NEEDS ZETA',
+        officialEntryReady: true,
+        battleEvidenceComplete: false,
+        progressionFailures: [{ key: 'level' }],
+        unknownEvidence: [{ type: 'battle-evidence' }],
+        progression: [{
+          baseId: 'HONDO',
+          name: 'Hondo Ohnaka',
+          level: { state: TB_READINESS_EVIDENCE.FAIL, current: 84, target: 85 },
+          stars: { state: TB_READINESS_EVIDENCE.PASS, current: 7, target: 7 },
+          gear: { state: TB_READINESS_EVIDENCE.PASS, current: 13, target: 13 },
+          relic: { state: TB_READINESS_EVIDENCE.PASS, current: 6, target: 6 },
+        }],
+        abilities: [{ state: TB_READINESS_EVIDENCE.UNKNOWN, required: true, name: 'Special 2', reason: 'ability tier unavailable' }],
+        zetas: [{ state: TB_READINESS_EVIDENCE.FAIL, required: true, name: 'I Smell Profit!', installed: false }],
+        omicrons: [{ state: TB_READINESS_EVIDENCE.PASS, required: true, name: 'Territory Business', installed: true, activeHere: true }],
+        stats: [{ state: TB_READINESS_EVIDENCE.UNKNOWN, required: true, baseId: 'HONDO', name: 'Hondo Ohnaka', stat: 'health', minimum: 100000, reason: 'health evidence unavailable' }],
+        evidenceBoundary: 'Official entry remains separate from battle preparation.',
+      },
+    }],
+  };
+
+  const result = hydrateSelectedMissionReadiness(root, model);
+
+  assert.equal(result.hydrated, true);
+  assert.equal(result.missionId, 'felucia-hondo');
+  assert.equal(result.verdict, 'NEEDS ZETA');
+  assert.equal(inspector.legacyContent, originalInspectorContent, 'legacy inspector content remains owned by the existing workspace');
+  assert.equal(inspector.children.length, 1, 'tactical readiness is appended as a child instead of replacing the inspector');
+  assert.equal(createdHost.dataset.roteTacticalReadinessHost, 'true');
+  assert.equal(createdHost.dataset.tacticalMissionId, 'felucia-hondo');
+  assert.equal(createdHost.dataset.tacticalVerdict, 'NEEDS ZETA');
+  assert.match(createdHost.innerHTML, /ENTRY LEGAL/);
+  assert.match(createdHost.innerHTML, /84 \/ 85/);
+  assert.match(createdHost.innerHTML, /I Smell Profit!/);
+  assert.match(createdHost.innerHTML, /Territory Business/);
+  assert.match(createdHost.innerHTML, /health evidence unavailable/);
+  assert.match(createdHost.innerHTML, /Unknown evidence <b>1<\/b>/);
 });
