@@ -125,6 +125,7 @@ function renderZoneInputs(zones) {
         <b>${tp(zone.currentTp)} TP · ${escapeHtml(stars(zone.currentStars))} → ${escapeHtml(stars(zone.targetStars))}</b>
         <span>${escapeHtml(cap)}${zone.lockedByOfficer ? ' · OFFICER LOCK' : ''}</span>
       </div>
+      <label class="priority"><span>Route priority</span><input data-route-priority type="number" min="1" step="1" inputmode="numeric" placeholder="1 = highest" required></label>
       <label><span>Remaining mission / fleet TP</span><input data-route-mission type="number" min="0" step="1" inputmode="numeric" placeholder="Enter 0 if complete" required></label>
       <label><span>Remaining Operations TP</span><input data-route-operation type="number" min="0" step="1" inputmode="numeric" placeholder="Enter 0 if complete" required></label>
     </article>`;
@@ -138,15 +139,26 @@ function collectPreviewInput() {
     throw new Error('Enter the current remaining Guild deployable TP.');
   }
   const remainingTpByPlanet = {};
+  const usedPriorities = new Map();
   for (const row of document.querySelectorAll('[data-route-zone]')) {
     const planetId = text(row.dataset.routeZone);
+    const priorityValue = row.querySelector('[data-route-priority]')?.value ?? '';
     const mission = row.querySelector('[data-route-mission]')?.value ?? '';
     const operation = row.querySelector('[data-route-operation]')?.value ?? '';
+    if (priorityValue === '' || !Number.isFinite(Number(priorityValue)) || Number(priorityValue) < 1 || !Number.isInteger(Number(priorityValue))) {
+      throw new Error(`Enter a positive whole-number route priority for ${planetId}. Priority 1 is highest.`);
+    }
+    const priority = Number(priorityValue);
+    if (usedPriorities.has(priority)) {
+      throw new Error(`Route priority ${priority} is assigned to both ${usedPriorities.get(priority)} and ${planetId}. Every territory needs a unique priority.`);
+    }
+    usedPriorities.set(priority, planetId);
     if (mission === '' || operation === '') throw new Error(`Enter both remaining TP values for ${planetId}. Use 0 only when that source is complete.`);
     if (Number(mission) < 0 || Number(operation) < 0 || !Number.isFinite(Number(mission)) || !Number.isFinite(Number(operation))) {
       throw new Error(`${planetId} remaining TP must be non-negative numbers.`);
     }
     remainingTpByPlanet[planetId] = {
+      priority,
       remainingMissionTp: Math.trunc(Number(mission)),
       remainingOperationTp: Math.trunc(Number(operation)),
     };
@@ -193,6 +205,7 @@ function renderPlan(body) {
         <span class="route-order-badge">${escapeHtml(zone.commandLabel || command.toUpperCase())}</span>
       </div>
       <div class="route-facts">
+        ${fact('Route priority', `#${number(zone.priority)}`)}
         ${fact('Current TP', tp(zone.currentTp))}
         ${fact('Target', `${stars(zone.targetStars)} · ${tp(zone.targetThresholdTp)}`)}
         ${fact('Safe ceiling', tp(zone.safeCeilingTp))}
@@ -254,7 +267,7 @@ form?.addEventListener('submit', async (event) => {
     });
     lastPreviewInput = input;
     lastPreviewBody = body;
-    inputResult.textContent = 'Safe preview generated from the current durable event state plus your explicit remaining-TP inputs.';
+    inputResult.textContent = 'Safe preview generated from current durable event state plus your explicit route priority and remaining-TP inputs.';
     renderPlan(body);
   } catch (error) {
     inputResult.classList.add('error');
@@ -269,8 +282,8 @@ form?.addEventListener('submit', async (event) => {
 });
 
 applyButton?.addEventListener('click', async () => {
-  const fingerprint = text(lastPreviewBody?.plan?.inputFingerprint);
-  if (!lastPreviewInput || !/^[0-9a-f]{64}$/i.test(fingerprint)) {
+  const previewFingerprint = text(lastPreviewBody?.plan?.inputFingerprint);
+  if (!lastPreviewInput || !/^[0-9a-f]{64}$/i.test(previewFingerprint)) {
     applyStatus.className = 'route-apply-status error';
     applyStatus.textContent = 'Generate a fresh safe preview before applying route orders.';
     applyButton.disabled = true;
@@ -295,10 +308,10 @@ applyButton?.addEventListener('click', async () => {
   try {
     const body = await api('/api/account/web-actions/tb/route/apply', {
       method: 'POST',
-      body: JSON.stringify({ ...lastPreviewInput, expectedInputFingerprint: fingerprint }),
+      body: JSON.stringify({ ...lastPreviewInput, expectedInputFingerprint: previewFingerprint }),
     });
     applyStatus.className = 'route-apply-status success';
-    applyStatus.innerHTML = `<strong>Orders applied.</strong> ${escapeHtml(String(number(body.appliedZoneCount)))} unlocked zone${number(body.appliedZoneCount) === 1 ? '' : 's'} updated; ${escapeHtml(String(number(body.lockedZoneCount)))} locked zone${number(body.lockedZoneCount) === 1 ? '' : 's'} preserved.<br>Audit snapshot <code>${escapeHtml(body.snapshotId || 'saved')}</code> · fingerprint <code>${escapeHtml(body.inputFingerprint || fingerprint)}</code>.`;
+    applyStatus.innerHTML = `<strong>Orders applied.</strong> ${escapeHtml(String(number(body.appliedZoneCount)))} unlocked zone${number(body.appliedZoneCount) === 1 ? '' : 's'} updated; ${escapeHtml(String(number(body.lockedZoneCount)))} locked zone${number(body.lockedZoneCount) === 1 ? '' : 's'} preserved.<br>Audit snapshot <code>${escapeHtml(body.snapshotId || 'saved')}</code> · fingerprint <code>${escapeHtml(body.inputFingerprint || previewFingerprint)}</code>.`;
     applyButton.textContent = 'Orders Applied';
     lastPreviewInput = null;
     lastPreviewBody = null;
