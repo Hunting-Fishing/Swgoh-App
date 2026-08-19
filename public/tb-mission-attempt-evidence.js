@@ -11,6 +11,21 @@ export const TB_ATTEMPT_OUTCOME = Object.freeze({
   UNKNOWN: 'unknown',
 });
 
+const TECHNICAL_ATTEMPT_RESULTS = Object.freeze(new Set([
+  'technical_interruption',
+  'railway_restart',
+  'railway_deploy',
+  'deployment_restart',
+  'deployment_failure',
+  'server_error',
+  'service_unavailable',
+  'api_timeout',
+  'request_timeout',
+  'network_error',
+  'transport_failure',
+  'save_failed',
+]));
+
 function unitBaseId(value = {}) {
   return upper(value?.baseId || value?.unitBaseId || value?.id);
 }
@@ -75,14 +90,19 @@ function resultText(value) {
   return text(value).toLowerCase().replace(/[\s-]+/g, '_');
 }
 
+function technicalAttemptInterruption(input = {}, result = '') {
+  return input?.technicalInterruption === true || TECHNICAL_ATTEMPT_RESULTS.has(result);
+}
+
 export function normalizeTbMissionAttemptOutcome(input = {}) {
   const result = resultText(input?.result);
   const wavesCompleted = finite(input?.wavesCompleted, null);
   const wavesTotal = finite(input?.wavesTotal, null);
 
-  if (['skipped', 'skip', 'not_attempted'].includes(result)) return TB_ATTEMPT_OUTCOME.SKIPPED;
+  if (technicalAttemptInterruption(input, result)) return TB_ATTEMPT_OUTCOME.UNKNOWN;
+  if (['skipped', 'skip', 'intentional_skip'].includes(result)) return TB_ATTEMPT_OUTCOME.SKIPPED;
   if (['complete', 'completed', 'success', 'win', '2_of_2', '3_of_3', '4_of_4'].includes(result)) return TB_ATTEMPT_OUTCOME.COMPLETE;
-  if (['failed', 'failure', 'loss', '0_of_2', '0_of_1'].includes(result)) return TB_ATTEMPT_OUTCOME.FAILED;
+  if (['failed', 'battle_failed', 'loss', '0_of_2', '0_of_1'].includes(result)) return TB_ATTEMPT_OUTCOME.FAILED;
   if (['partial', '1_of_2', '1_of_3', '2_of_3', '1_of_4', '2_of_4', '3_of_4'].includes(result)) return TB_ATTEMPT_OUTCOME.PARTIAL;
   if (wavesCompleted != null && wavesTotal != null && wavesTotal > 0) {
     if (wavesCompleted >= wavesTotal) return TB_ATTEMPT_OUTCOME.COMPLETE;
