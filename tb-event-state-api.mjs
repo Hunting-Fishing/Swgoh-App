@@ -85,7 +85,7 @@ export function createTbEventStateApi(options = {}) {
         return true;
       }
 
-      const actionStatus = url.pathname.match(new RegExp(`^${prefix.replaceAll('/', '\\/')}\\/action\\/([0-9a-f-]{36})\\/status$`, 'i'));
+      const actionStatus = url.pathname.match(/^\/api\/account\/web-actions\/tb\/action\/([0-9a-f-]{36})\/status$/i);
       if (actionStatus) {
         writeJson(response, 200, await service.setActionStatus(user.id, actionStatus[1], body?.status));
         return true;
