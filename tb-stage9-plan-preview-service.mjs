@@ -206,13 +206,13 @@ export function createTbStage9PlanPreviewService(options = {}) {
       missionProtectionsHash: digest(array(planner?.safety?.protections)),
       durableControlsHash: controlsBeforeHash,
       sourcePlanHash: digest({
-        id: plan.id,
-        updatedAt: plan.updated_at,
-        phaseLayout: plan.phase_layout || {},
-        requirementOverrides: plan.requirement_overrides || {},
-        ignoredMissions: array(plan.ignored_missions),
-        ignoredPlatoons: array(plan.ignored_platoons),
-        ignoredSlots: array(plan.ignored_slots),
+        id: sourcePlan.id,
+        updatedAt: sourcePlan.updated_at,
+        phaseLayout: sourcePlan.phase_layout || {},
+        requirementOverrides: sourcePlan.requirement_overrides || {},
+        ignoredMissions: array(sourcePlan.ignored_missions),
+        ignoredPlatoons: array(sourcePlan.ignored_platoons),
+        ignoredSlots: array(sourcePlan.ignored_slots),
       }),
     });
     const inputFingerprint = digest(plannerInputs);
