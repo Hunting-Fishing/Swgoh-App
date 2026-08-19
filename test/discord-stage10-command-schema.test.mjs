@@ -13,17 +13,20 @@ const base = {
   options: Array.from({ length: 24 }, (_, index) => ({ type: 1, name: `existing-${index + 1}`, description: `Existing ${index + 1}` })),
 };
 
-test('Stage 10 uses exactly the final /tb subcommand slot', () => {
+test('Stage 10 uses exactly the final /tb subcommand slot with mention and channel options', () => {
   const result = applyDiscordStage10TbCommandSchema(base);
   assert.equal(result.changed, true);
   assert.deepEqual(result.added, ['plan-delivery']);
+  assert.deepEqual(result.updated, []);
   assert.equal(result.command.options.length, 25);
 
   const delivery = result.command.options.find((row) => row.name === 'plan-delivery');
   assert.ok(delivery);
-  assert.deepEqual(delivery.options.map((row) => row.name), ['action', 'phase', 'version', 'hash', 'confirm']);
-  assert.deepEqual(delivery.options.map((row) => row.required), [true, true, true, false, false]);
+  assert.deepEqual(delivery.options.map((row) => row.name), ['action', 'phase', 'version', 'channel', 'mentions', 'hash', 'confirm']);
+  assert.deepEqual(delivery.options.map((row) => row.required), [true, true, true, false, false, false, false]);
   assert.deepEqual(delivery.options.find((row) => row.name === 'action').choices.map((row) => row.value), ['preview', 'status', 'publish']);
+  assert.deepEqual(delivery.options.find((row) => row.name === 'channel').channel_types, [0, 5]);
+  assert.deepEqual(delivery.options.find((row) => row.name === 'mentions').choices.map((row) => row.value), ['on', 'off']);
   assert.equal(delivery.options.find((row) => row.name === 'hash').min_length, 12);
   assert.deepEqual(delivery.options.find((row) => row.name === 'confirm').choices.map((row) => row.value), ['PUBLISH']);
 
@@ -32,13 +35,41 @@ test('Stage 10 uses exactly the final /tb subcommand slot', () => {
   assert.equal(second.command.options.length, 25);
 });
 
+test('Stage 10 refreshes an existing stale plan-delivery definition without consuming another subcommand slot', () => {
+  const stale = {
+    ...base,
+    options: [
+      ...base.options.slice(0, 23),
+      {
+        type: 1,
+        name: 'plan-delivery',
+        description: 'Old Stage 10 delivery',
+        options: [
+          { type: 3, name: 'action', description: 'old', required: true },
+          { type: 3, name: 'phase', description: 'old', required: true },
+          { type: 4, name: 'version', description: 'old', required: true },
+        ],
+      },
+    ],
+  };
+  assert.equal(stale.options.length, 24);
+  const result = applyDiscordStage10TbCommandSchema(stale);
+  assert.equal(result.changed, true);
+  assert.deepEqual(result.added, []);
+  assert.deepEqual(result.updated, ['plan-delivery']);
+  assert.equal(result.command.options.length, 24);
+  const delivery = result.command.options.find((row) => row.name === 'plan-delivery');
+  assert.ok(delivery.options.some((row) => row.name === 'channel'));
+  assert.ok(delivery.options.some((row) => row.name === 'mentions'));
+});
+
 test('Stage 10 refuses to exceed Discord 25-subcommand limit', () => {
   const full = { ...base, options: [...base.options, { type: 1, name: 'already-25', description: '25' }] };
   assert.throws(() => applyDiscordStage10TbCommandSchema(full), /25-subcommand/i);
 });
 
 test('Stage 10 schema has an explicit version identifier', () => {
-  assert.match(DISCORD_STAGE10_DELIVERY_SCHEMA_VERSION, /stage10-controlled-delivery-v2$/);
+  assert.match(DISCORD_STAGE10_DELIVERY_SCHEMA_VERSION, /stage10-mentions-channels-v3$/);
 });
 
 test('Stage 10 schema rejects non-TB command patching', () => {
