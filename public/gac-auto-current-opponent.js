@@ -11,6 +11,15 @@ function clean(value) { return String(value ?? "").trim(); }
 function byId(id) { return document.getElementById(id); }
 function allyCode(value) { return clean(value).replace(/\D/g, "").slice(0, 9); }
 function formatAllyCode(value) { return allyCode(value).replace(/(\d{3})(?=\d)/g, "$1-"); }
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>'\"]/g, (char) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    "'": "&#39;",
+    '\"': "&quot;",
+  }[char]));
+}
 function validRound(value) {
   const round = Number(value);
   return Number.isInteger(round) && round >= 1 && round <= 3 ? round : null;
@@ -83,7 +92,7 @@ function setStatus(kind, title, detail = "") {
   const output = ensureStatus();
   if (!output) return;
   output.className = `gac-auto-opponent-status is-${kind}`;
-  output.innerHTML = `<span>AUTO CURRENT MATCHUP</span><strong>${title}</strong>${detail ? `<small>${detail}</small>` : ""}`;
+  output.innerHTML = `<span>AUTO CURRENT MATCHUP</span><strong>${escapeHtml(title)}</strong>${detail ? `<small>${escapeHtml(detail)}</small>` : ""}`;
 }
 
 function applyExactPairing(pairing) {
@@ -198,21 +207,36 @@ function bindInputs() {
 function ensureMounted() {
   injectStylesheet();
   const form = byId("gacMatchupForm");
-  if (!form) return;
+  if (!form) return false;
   ensureStatus();
   bindInputs();
-  schedule(220);
+  if (form.dataset.gacAutoOpponentMounted !== "true") {
+    form.dataset.gacAutoOpponentMounted = "true";
+    schedule(220);
+  }
+  return true;
+}
+
+function refreshOnNavigation() {
+  setTimeout(() => {
+    if (!ensureMounted()) return;
+    state.attemptedOwner = "";
+    state.appliedKey = "";
+    state.manualOpponentTouched = false;
+    schedule(240, { force: true });
+  }, 0);
 }
 
 if (typeof window !== "undefined" && typeof document !== "undefined") {
   ensureMounted();
   document.addEventListener("DOMContentLoaded", ensureMounted, { once: true });
-  window.addEventListener("hashchange", () => setTimeout(ensureMounted, 0));
+  window.addEventListener("hashchange", refreshOnNavigation);
   new MutationObserver(() => ensureMounted()).observe(document.documentElement, { childList: true, subtree: true });
 }
 
 export {
   allyCode,
+  escapeHtml,
   exactPairingFromBracket,
   formatAllyCode,
   shouldAutoApplyPairing,
