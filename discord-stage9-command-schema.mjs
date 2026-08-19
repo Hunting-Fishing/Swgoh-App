@@ -1,11 +1,19 @@
 const text = (value) => String(value ?? '').trim();
 const array = (value) => Array.isArray(value) ? value : [];
 
-export const DISCORD_STAGE9_PLAN_SCHEMA_VERSION = '2026-08-19-stage9-plan-cancel-v4';
+export const DISCORD_STAGE9_PLAN_SCHEMA_VERSION = '2026-08-19-stage9-plan-preview-v5';
 
 const phaseChoices = ['P1', 'P2', 'P3', 'P4', 'P5', 'P6'].map((phase) => Object.freeze({ name: phase, value: phase }));
 
 export const DISCORD_STAGE9_TB_SUBCOMMANDS = Object.freeze([
+  Object.freeze({
+    type: 1,
+    name: 'plan-preview',
+    description: 'Create a verified immutable ROTE assignment version from the current safe planner',
+    options: Object.freeze([
+      Object.freeze({ type: 3, name: 'phase', description: 'ROTE phase to freeze into an immutable version', required: true, choices: Object.freeze(phaseChoices) }),
+    ]),
+  }),
   Object.freeze({
     type: 1,
     name: 'plan-status',
@@ -37,7 +45,7 @@ export const DISCORD_STAGE9_TB_SUBCOMMANDS = Object.freeze([
     options: Object.freeze([
       Object.freeze({ type: 3, name: 'phase', description: 'ROTE phase containing the immutable version', required: true, choices: Object.freeze(phaseChoices) }),
       Object.freeze({ type: 3, name: 'version', description: 'Immutable version number or version ID to approve', required: true, min_length: 1, max_length: 100 }),
-      Object.freeze({ type: 3, name: 'hash', description: 'First 12+ hexadecimal characters of the plan hash shown by plan-status', required: true, min_length: 12, max_length: 64 }),
+      Object.freeze({ type: 3, name: 'hash', description: 'First 12+ hexadecimal characters of the plan hash shown by plan-preview/status', required: true, min_length: 12, max_length: 64 }),
     ]),
   }),
   Object.freeze({
@@ -80,6 +88,7 @@ export function applyDiscordStage9TbCommandSchema(tbCommand = {}) {
     existing.add(subcommand.name);
     added.push(subcommand.name);
   }
+  if (next.options.length > 25) throw new Error(`Stage 9 schema patch would exceed Discord's 25-option /tb limit (${next.options.length}).`);
   return Object.freeze({
     changed: added.length > 0,
     added: Object.freeze(added),
