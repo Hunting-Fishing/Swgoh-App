@@ -61,15 +61,15 @@ const fixtureGameCatalog = {
     .map((baseId) => ({ baseId, name: baseId }))
 };
 
-test("audit allows quarantined research while preventing it from becoming promotion-ready", async () => {
+test("audit allows the four quarantined B03 research rows while preventing promotion", async () => {
   const body = JSON.parse(await readFile(new URL("../public/data/gac-strategy-source-candidates.json", import.meta.url), "utf8"));
   const audit = auditSourceCandidates(body, emptyProduction);
   assert.equal(audit.safe, true);
-  assert.equal(audit.candidateCount, 1);
-  assert.equal(audit.quarantined, 1);
+  assert.equal(audit.candidateCount, 4);
+  assert.equal(audit.quarantined, 4);
   assert.equal(audit.approved, 0);
   assert.equal(audit.promotionReady, 0);
-  assert.equal(audit.candidates[0].promotionReady, false);
+  assert.equal(audit.candidates.every((candidate) => candidate.promotionReady === false), true);
 });
 
 test("an approved fully reviewed candidate is deterministically added to production", () => {
