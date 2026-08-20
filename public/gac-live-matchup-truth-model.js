@@ -6,7 +6,7 @@ function allyCode(value) { const code = clean(value).replace(/\D/g, ""); return 
 function rosterLoaded(body, expectedAllyCode = "") {
   const expected = allyCode(expectedAllyCode);
   const actual = allyCode(body?.player?.allyCode || body?.player?.ally_code || body?.allyCode || body?.ally_code);
-  return Boolean(body?.source === "live" && body?.player && Array.isArray(body?.units) && (!expected || !actual || actual === expected));
+  return Boolean(body?.source === "live" && body?.player && Array.isArray(body?.units) && (!expected || actual === expected));
 }
 
 function aggregateOffense(tendencies = []) {
@@ -61,8 +61,34 @@ function scoutingHistory(scouting = {}) {
   });
 }
 
+function roundIdentity(row = {}, index = 0) {
+  const eventId = clean(row?.event?.id || row?.event?.seasonId);
+  const round = Number(row?.round);
+  if (eventId && Number.isInteger(round) && round >= 1 && round <= 3) return `${eventId}|${round}`;
+  const id = clean(row?.id);
+  return id ? `id:${id}` : `row:${index}`;
+}
+
+function roundPreference(row = {}) {
+  const result = clean(row?.result).toLowerCase();
+  const knownResult = result === "win" || result === "loss" ? 1 : 0;
+  const verified = row?.verified === true ? 1 : 0;
+  const confidence = Math.max(0, Math.min(1, finite(row?.confidence)));
+  return (knownResult * 100) + (verified * 10) + confidence;
+}
+
+function dedupeRecordedRounds(history = {}) {
+  const unique = new Map();
+  asArray(history?.rounds).forEach((row, index) => {
+    const key = roundIdentity(row, index);
+    const current = unique.get(key);
+    if (!current || roundPreference(row) > roundPreference(current)) unique.set(key, row);
+  });
+  return Object.freeze([...unique.values()]);
+}
+
 function recordedRoundHistory(history = {}) {
-  const rounds = asArray(history?.rounds);
+  const rounds = dedupeRecordedRounds(history);
   const known = rounds.filter((row) => ["win", "loss"].includes(clean(row?.result).toLowerCase()));
   const wins = known.filter((row) => clean(row?.result).toLowerCase() === "win").length;
   const losses = known.filter((row) => clean(row?.result).toLowerCase() === "loss").length;
@@ -77,7 +103,7 @@ function recordedRoundHistory(history = {}) {
     verifiedRecordedResults: verifiedKnown,
     known: known.length > 0,
     truthLabel: known.length
-      ? "Recorded GAC round results only; unknown imported rounds remain unknown."
+      ? "Recorded GAC round results only; duplicate source rows are collapsed per event/round and unknown imported rounds remain unknown."
       : "No verified/recorded GAC round W/L is available yet; imported history is not converted into a match result.",
   });
 }
@@ -158,8 +184,11 @@ export {
   aggregateOffense,
   allyCode,
   boardState,
+  dedupeRecordedRounds,
   recordedRoundHistory,
   rosterLoaded,
+  roundIdentity,
+  roundPreference,
   scoutingHistory,
   truthDashboardModel,
 };
