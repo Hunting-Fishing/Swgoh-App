@@ -23,4 +23,8 @@ function dispatchBoardEvidenceUpdated(input = {}) {
   return detail;
 }
 
+if (typeof window !== "undefined") {
+  void import("./gac-live-matchup-truth-dashboard.js").catch(() => {});
+}
+
 export { boardEvidenceDetail, dispatchBoardEvidenceUpdated, validRound };
