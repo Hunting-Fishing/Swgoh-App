@@ -7,6 +7,7 @@ const discordGuildId = '987654321098765432';
 const user1 = '700000000000000001';
 const user2 = '700000000000000002';
 const user3 = '700000000000000003';
+const user4 = '700000000000000004';
 
 function discordResponse(body, status = 200) {
   return { ok: status >= 200 && status < 300, status, async text() { return JSON.stringify(body); } };
@@ -27,6 +28,7 @@ function serviceFixture(overrides = {}) {
   const players = [
     { id: 'db-alpha', ally_code: '111222333', swgoh_player_id: 'live-alpha', name: 'Alpha', current_guild_id: guildId },
     { id: 'db-bravo', ally_code: '444555666', swgoh_player_id: 'live-bravo', name: 'Bravo', current_guild_id: guildId },
+    { id: 'db-charlie', ally_code: '777888999', swgoh_player_id: 'live-charlie', name: 'Charlie', current_guild_id: guildId },
   ];
   const state = {
     commandChannelId: '123456789012345678',
@@ -64,6 +66,13 @@ function serviceFixture(overrides = {}) {
     status: () => ({ enabled: true, durable: true }),
     async readGuild(id) { assert.equal(id, discordGuildId); return structuredClone(state); },
     async linkPlayer(input) {
+      for (const linked of Object.values(state.userLinks)) {
+        if (linked.discordUserId !== input.discordUserId && linked.swgohAllyCode === input.swgohAllyCode) {
+          const error = new Error('That SWGOH Ally Code is already linked to another Discord user in this server.');
+          error.code = 'ALLY_CODE_ALREADY_LINKED';
+          throw error;
+        }
+      }
       writes.links.push(input);
       const row = { discordUserId: input.discordUserId, swgohAllyCode: input.swgohAllyCode, playerId: input.playerId, linkedAt: '2026-08-18T00:00:00Z', updatedAt: '2026-08-18T00:00:00Z' };
       state.userLinks[input.discordUserId] = row;
@@ -76,15 +85,19 @@ function serviceFixture(overrides = {}) {
       return previous;
     },
   };
+  const canonicalDiscordMembers = [
+    { nick: 'Alpha Discord', user: { id: user1, username: 'alpha', global_name: 'Alpha Discord', bot: false } },
+    { nick: 'Charlie', user: { id: user4, username: 'charlie', global_name: 'Charlie', bot: false } },
+    { nick: 'Helper Bot', user: { id: '700000000000000099', username: 'helper', global_name: 'Helper Bot', bot: true } },
+  ];
   const defaultFetch = async (url) => {
     const target = String(url);
-    if (target.includes(`/guilds/${discordGuildId}/members?`)) {
-      return discordResponse([
-        { nick: 'Alpha Discord', user: { id: user1, username: 'alpha', bot: false } },
-      ]);
+    if (target.includes(`/guilds/${discordGuildId}/members?`)) return discordResponse(canonicalDiscordMembers);
+    if (target.endsWith(`/guilds/${discordGuildId}/members/${user4}`)) {
+      return discordResponse({ nick: 'Charlie', user: { id: user4, username: 'charlie', global_name: 'Charlie', bot: false } });
     }
-    if (target.endsWith(`/guilds/${discordGuildId}/members/${user2}`)) {
-      return discordResponse({ nick: 'Manual Member', user: { id: user2, username: 'manual', bot: false } });
+    if (target.endsWith(`/guilds/${discordGuildId}/members/${user1}`)) {
+      return discordResponse({ nick: 'Alpha Discord', user: { id: user1, username: 'alpha', global_name: 'Alpha Discord', bot: false } });
     }
     throw new Error(`Unexpected fetch ${target}`);
   };
@@ -104,16 +117,27 @@ function serviceFixture(overrides = {}) {
   };
 }
 
-test('link inventory marks former SWGOH and former Discord members stale without guessing when checks succeed', async () => {
+test('registration inventory exposes current links, unlinked candidates, mention coverage, and exact-safe suggestions', async () => {
   const { service } = serviceFixture();
   const result = await service.list('web-officer', '732764286');
+  assert.equal(result.source, 'durable-discord-registration-manager-v2');
   assert.equal(result.discordMembershipChecked, true);
   assert.equal(result.total, 3);
   assert.equal(result.current, 1);
   assert.equal(result.stale, 2);
   assert.equal(result.swgohMissing, 1);
   assert.equal(result.discordMissing, 2);
-  assert.equal(result.unlinkedCurrentMembers, 0);
+  assert.equal(result.currentGuildMembers, 3);
+  assert.equal(result.linkedCurrentMembers, 2);
+  assert.equal(result.unlinkedCurrentMembers, 1);
+  assert.equal(result.mentionReadyMembers, 1);
+  assert.equal(result.mentionCoveragePercent, 33);
+  assert.deepEqual(result.availableDiscordMembers.map((row) => row.discordUserId), [user4]);
+  assert.deepEqual(result.unlinkedCurrentPlayers.map((row) => row.swgohAllyCode), ['777888999']);
+  assert.equal(result.exactSuggestions.length, 1);
+  assert.equal(result.exactSuggestions[0].discordUserId, user4);
+  assert.equal(result.exactSuggestions[0].swgohAllyCode, '777888999');
+  assert.equal(result.ambiguousSuggestions.length, 0);
   const alpha = result.links.find((row) => row.discordUserId === user1);
   assert.equal(alpha.stale, false);
   assert.equal(alpha.discordDisplayName, 'Alpha Discord');
@@ -127,15 +151,15 @@ test('link inventory marks former SWGOH and former Discord members stale without
 
 test('manual link requires both a current canonical Guild player and current Discord server membership', async () => {
   const { service, writes } = serviceFixture();
-  const result = await service.link('web-officer', '732764286', { discordUserId: user2, swgohAllyCode: '444555666' });
+  const result = await service.link('web-officer', '732764286', { discordUserId: user4, swgohAllyCode: '777888999' });
   assert.equal(result.currentGuildMember, true);
   assert.equal(result.discordMemberPresent, true);
-  assert.equal(result.swgohAllyCode, '444555666');
-  assert.equal(result.playerName, 'Bravo');
+  assert.equal(result.swgohAllyCode, '777888999');
+  assert.equal(result.playerName, 'Charlie');
   assert.equal(result.auditRecorded, true);
   assert.equal(result.durableAuditRecorded, true);
   assert.equal(writes.links.length, 1);
-  assert.equal(writes.links[0].playerId, 'live-bravo');
+  assert.equal(writes.links[0].playerId, 'live-charlie');
   assert.equal(writes.links[0].actorDiscordUserId, '');
   assert.equal(writes.audits.at(-1).actor_user_id, 'web-officer');
   assert.equal(writes.audits.at(-1).action, 'discord-player-link.manual');
@@ -145,7 +169,7 @@ test('manual link refuses an Ally Code outside the current canonical Guild befor
   let fetchCalls = 0;
   const { service, writes } = serviceFixture({ fetch: async () => { fetchCalls += 1; return discordResponse({}); } });
   await assert.rejects(
-    service.link('web-officer', '732764286', { discordUserId: user2, swgohAllyCode: '999888777' }),
+    service.link('web-officer', '732764286', { discordUserId: user4, swgohAllyCode: '999888777' }),
     (error) => error?.code === 'PLAYER_NOT_CURRENT_GUILD_MEMBER',
   );
   assert.equal(fetchCalls, 0);
@@ -155,8 +179,26 @@ test('manual link refuses an Ally Code outside the current canonical Guild befor
 test('manual link refuses a Discord account that is not in the bound server', async () => {
   const { service, writes } = serviceFixture({ fetch: async () => discordResponse({ message: 'Unknown Member' }, 404) });
   await assert.rejects(
-    service.link('web-officer', '732764286', { discordUserId: user2, swgohAllyCode: '444555666' }),
+    service.link('web-officer', '732764286', { discordUserId: user4, swgohAllyCode: '777888999' }),
     (error) => error?.code === 'DISCORD_MEMBER_NOT_FOUND',
+  );
+  assert.equal(writes.links.length, 0);
+});
+
+test('manual link refuses silently relinking a Discord user to a different SWGOH player', async () => {
+  const { service, writes } = serviceFixture();
+  await assert.rejects(
+    service.link('web-officer', '732764286', { discordUserId: user1, swgohAllyCode: '777888999' }),
+    (error) => error?.code === 'DISCORD_USER_ALREADY_LINKED',
+  );
+  assert.equal(writes.links.length, 0);
+});
+
+test('manual link refuses assigning an Ally Code that is already owned by another Discord user', async () => {
+  const { service, writes } = serviceFixture();
+  await assert.rejects(
+    service.link('web-officer', '732764286', { discordUserId: user4, swgohAllyCode: '111222333' }),
+    (error) => error?.code === 'ALLY_CODE_ALREADY_LINKED',
   );
   assert.equal(writes.links.length, 0);
 });
@@ -175,17 +217,21 @@ test('manual unlink uses durable unlink semantics and records the web officer au
 
 test('secondary Supabase audit failure never reports a completed durable link as failed', async () => {
   const { service, writes } = serviceFixture({ auditInsertFails: true });
-  const result = await service.link('web-officer', '732764286', { discordUserId: user2, swgohAllyCode: '444555666' });
+  const result = await service.link('web-officer', '732764286', { discordUserId: user4, swgohAllyCode: '777888999' });
   assert.equal(writes.links.length, 1, 'durable state mutation completed');
   assert.equal(result.currentGuildMember, true);
   assert.equal(result.auditRecorded, false);
   assert.equal(result.durableAuditRecorded, true);
 });
 
-test('link inventory does not falsely mark Discord presence stale when bot membership lookup is unavailable', async () => {
+test('registration inventory does not falsely mark Discord presence stale when bot membership lookup is unavailable', async () => {
   const { service } = serviceFixture({ env: {} });
   const result = await service.list('web-officer', '732764286');
   assert.equal(result.discordMembershipChecked, false);
+  assert.equal(result.availableDiscordMembers.length, 0);
+  assert.equal(result.exactSuggestions.length, 0);
+  assert.equal(result.linkedCurrentMembers, 2);
+  assert.equal(result.mentionReadyMembers, 2);
   const alpha = result.links.find((row) => row.discordUserId === user1);
   assert.equal(alpha.discordMemberPresent, null);
   assert.equal(alpha.stale, false);

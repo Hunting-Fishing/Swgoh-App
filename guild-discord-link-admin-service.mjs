@@ -29,8 +29,32 @@ function normalizeAlly(value) {
   const code = text(value).replace(/\D/g, '');
   return /^\d{9}$/.test(code) ? code : '';
 }
+function normalizeName(value) {
+  return text(value)
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ');
+}
 function displayName(member = {}) {
   return text(member?.nick || member?.user?.global_name || member?.user?.username || member?.user?.id);
+}
+function safeDiscordCandidate(member = {}) {
+  return Object.freeze({
+    discordUserId: text(member?.user?.id),
+    displayName: displayName(member),
+    username: text(member?.user?.username),
+  });
+}
+function safePlayerCandidate(player = {}) {
+  return Object.freeze({
+    playerId: text(player?.id),
+    swgohPlayerId: text(player?.swgoh_player_id),
+    swgohAllyCode: normalizeAlly(player?.ally_code),
+    playerName: text(player?.name),
+  });
 }
 function safeLink(link = {}, player = null, discordMember = null, discordChecked = false) {
   const currentGuildMember = Boolean(player?.id);
@@ -51,6 +75,44 @@ function safeLink(link = {}, player = null, discordMember = null, discordChecked
     linkedAt: text(link.linkedAt),
     updatedAt: text(link.updatedAt),
   });
+}
+
+function buildRegistrationSuggestions(discordMembers = [], players = []) {
+  const playerIndex = new Map();
+  for (const player of players) {
+    const key = normalizeName(player?.name);
+    if (!key) continue;
+    if (!playerIndex.has(key)) playerIndex.set(key, []);
+    playerIndex.get(key).push(player);
+  }
+
+  const exact = [];
+  const ambiguous = [];
+  for (const member of discordMembers) {
+    const names = [...new Set([
+      normalizeName(member?.nick),
+      normalizeName(member?.user?.global_name),
+      normalizeName(member?.user?.username),
+    ].filter(Boolean))];
+    const candidates = [...new Map(
+      names.flatMap((name) => array(playerIndex.get(name)))
+        .map((player) => [normalizeAlly(player?.ally_code), player])
+        .filter(([code]) => code),
+    ).values()];
+    const discord = safeDiscordCandidate(member);
+    if (candidates.length === 1) {
+      exact.push(Object.freeze({
+        ...discord,
+        ...safePlayerCandidate(candidates[0]),
+      }));
+    } else if (candidates.length > 1) {
+      ambiguous.push(Object.freeze({
+        ...discord,
+        candidates: Object.freeze(candidates.map(safePlayerCandidate)),
+      }));
+    }
+  }
+  return Object.freeze({ exact: Object.freeze(exact), ambiguous: Object.freeze(ambiguous) });
 }
 
 export function createGuildDiscordLinkAdminService(options = {}) {
@@ -98,6 +160,7 @@ export function createGuildDiscordLinkAdminService(options = {}) {
     try { body = raw ? JSON.parse(raw) : null; } catch { body = null; }
     if (!response.ok) {
       if (response.status === 404) throw httpError('That Discord user is not in the bound Discord server.', 404, 'DISCORD_MEMBER_NOT_FOUND');
+      if (response.status === 403) throw httpError('Discord denied access to the server member roster. Enable SERVER MEMBERS INTENT for SWGOH Command Center and retry.', 403, 'DISCORD_SERVER_MEMBERS_INTENT_REQUIRED');
       throw httpError(`Discord API returned HTTP ${response.status}.`, 502, 'DISCORD_API_FAILED');
     }
     return body;
@@ -167,12 +230,25 @@ export function createGuildDiscordLinkAdminService(options = {}) {
       return safeLink(link, player, discordMember, discordResult.checked === true);
     }).sort((a, b) => Number(b.stale) - Number(a.stale) || a.playerName.localeCompare(b.playerName) || a.discordUserId.localeCompare(b.discordUserId));
 
-    const linkedCurrentPlayerIds = new Set(links.filter((row) => row.currentGuildMember).map((row) => row.swgohAllyCode));
+    const linkedDiscordIds = new Set(links.map((row) => row.discordUserId).filter(Boolean));
+    const linkedCurrentAllyCodes = new Set(links.filter((row) => row.currentGuildMember).map((row) => row.swgohAllyCode).filter(Boolean));
+    const availableDiscordRaw = discordResult.checked === true
+      ? array(discordResult.members).filter((member) => !linkedDiscordIds.has(text(member?.user?.id)))
+      : [];
+    const unlinkedPlayerRaw = players.filter((player) => !linkedCurrentAllyCodes.has(normalizeAlly(player?.ally_code)));
+    const suggestions = buildRegistrationSuggestions(availableDiscordRaw, unlinkedPlayerRaw);
+
     const stale = links.filter((row) => row.stale);
     const discordMissing = links.filter((row) => row.discordMemberPresent === false);
     const swgohMissing = links.filter((row) => row.currentGuildMember === false);
+    const linkedCurrentMembers = Math.max(0, players.length - unlinkedPlayerRaw.length);
+    const mentionReadyMembers = discordResult.checked === true
+      ? links.filter((row) => row.currentGuildMember && row.discordMemberPresent === true).length
+      : linkedCurrentMembers;
+    const mentionCoveragePercent = players.length ? Math.round((mentionReadyMembers / players.length) * 100) : 0;
+
     return Object.freeze({
-      source: 'durable-discord-manual-link-admin-v1',
+      source: 'durable-discord-registration-manager-v2',
       discordGuildId: text(bound.discordGuildId),
       discordMembershipChecked: discordResult.checked === true,
       total: links.length,
@@ -180,7 +256,15 @@ export function createGuildDiscordLinkAdminService(options = {}) {
       stale: stale.length,
       discordMissing: discordMissing.length,
       swgohMissing: swgohMissing.length,
-      unlinkedCurrentMembers: Math.max(0, players.length - linkedCurrentPlayerIds.size),
+      currentGuildMembers: players.length,
+      linkedCurrentMembers,
+      unlinkedCurrentMembers: unlinkedPlayerRaw.length,
+      mentionReadyMembers,
+      mentionCoveragePercent,
+      availableDiscordMembers: Object.freeze(availableDiscordRaw.map(safeDiscordCandidate)),
+      unlinkedCurrentPlayers: Object.freeze(unlinkedPlayerRaw.map(safePlayerCandidate)),
+      exactSuggestions: suggestions.exact,
+      ambiguousSuggestions: suggestions.ambiguous,
       links: Object.freeze(links),
     });
   }
@@ -235,8 +319,18 @@ export function createGuildDiscordLinkAdminService(options = {}) {
     if (text(member?.user?.id) !== discordUserId || member?.user?.bot === true) {
       throw httpError('That Discord account is not an eligible human member of the bound server.', 409, 'DISCORD_MEMBER_NOT_ELIGIBLE');
     }
+
     const guildState = await stateStore.readGuild(bound.discordGuildId);
-    const before = guildState?.userLinks?.[discordUserId] || null;
+    const links = object(guildState?.userLinks);
+    const before = links[discordUserId] || null;
+    if (before && normalizeAlly(before?.swgohAllyCode) !== code) {
+      throw httpError('That Discord user is already linked to a different SWGOH player. Unlink the existing pairing before creating a new one.', 409, 'DISCORD_USER_ALREADY_LINKED');
+    }
+    const allyOwner = Object.values(links).find((row) => text(row?.discordUserId) !== discordUserId && normalizeAlly(row?.swgohAllyCode) === code);
+    if (allyOwner) {
+      throw httpError('That SWGOH Ally Code is already linked to another Discord user in this server.', 409, 'ALLY_CODE_ALREADY_LINKED');
+    }
+
     const stored = await stateStore.linkPlayer({
       discordGuildId: bound.discordGuildId,
       discordUserId,
