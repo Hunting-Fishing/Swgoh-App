@@ -17,8 +17,8 @@ const state = {
   evidenceKey: "",
   evidenceByLeader: new Map(),
   evidencePromise: null,
+  evidenceLoaded: false,
   eligibilityPromise: null,
-  renderToken: 0,
   timer: null,
 };
 const number = new Intl.NumberFormat("en-US");
@@ -60,6 +60,7 @@ function resetContext() {
   state.evidenceKey = "";
   state.evidenceByLeader = new Map();
   state.evidencePromise = null;
+  state.evidenceLoaded = false;
 }
 async function loadContext(current, force = false) {
   if (!force && state.key === current.key && state.context) return state.context;
@@ -104,21 +105,24 @@ function evidenceBatch(context) {
 async function loadEvidence(context, force = false) {
   const batch = evidenceBatch(context);
   if (!batch.leaders.length) return new Map();
-  if (!force && state.evidenceKey === batch.key && state.evidenceByLeader.size) return state.evidenceByLeader;
+  if (!force && state.evidenceKey === batch.key && state.evidenceLoaded) return state.evidenceByLeader;
   if (!force && state.evidenceKey === batch.key && state.evidencePromise) return state.evidencePromise;
+  state.evidenceKey = batch.key;
+  state.evidenceLoaded = false;
   const promise = fetchJson(`/api/gac/counters/batch?format=${context.identity.format}&leaders=${encodeURIComponent(batch.leaders.join(","))}&limit=40`)
     .then((body) => {
       state.evidenceByLeader = evidenceMapFromBatch(body);
+      state.evidenceLoaded = true;
       return state.evidenceByLeader;
     })
     .catch(() => {
       state.evidenceByLeader = new Map();
+      state.evidenceLoaded = false;
       return state.evidenceByLeader;
     })
     .finally(() => {
       if (state.evidencePromise === promise) state.evidencePromise = null;
     });
-  state.evidenceKey = batch.key;
   state.evidencePromise = promise;
   return promise;
 }
@@ -220,6 +224,7 @@ function shell(card) {
   details = document.createElement("details");
   details.className = "gac-war-room-attack-brief";
   details.dataset.stale = "true";
+  details.dataset.renderToken = "0";
   details.innerHTML = `<summary><span>⚔ ATTACK BRIEF</span><strong>Known risks · sourced execution only</strong></summary><div class="gac-war-room-attack-brief-body"><div class="workspace-note">Open this brief to resolve the current matchup evidence.</div></div>`;
   details.addEventListener("toggle", () => {
     if (details.open && details.dataset.stale !== "false") void renderCard(card, details);
@@ -235,12 +240,13 @@ async function renderCard(card, details = shell(card), { force = false } = {}) {
   const current = identity();
   if (!current) return;
   const body = details.querySelector(".gac-war-room-attack-brief-body");
-  const token = ++state.renderToken;
+  const token = String((Number(details.dataset.renderToken || 0) || 0) + 1);
+  details.dataset.renderToken = token;
   body.innerHTML = `<div class="workspace-note">Resolving current Attack Brief…</div>`;
   try {
     const context = await loadContext(current, force);
     const [evidenceByLeader, eligibility] = await Promise.all([loadEvidence(context, force), loadEligibility()]);
-    if (token !== state.renderToken && !details.open) return;
+    if (details.dataset.renderToken !== token || !details.open) return;
     const defenseId = Number(card?.dataset?.defenseId || 0);
     const defense = context.enemyDefenses.find((entry) => Number(entry?.id) === defenseId);
     const attackerIds = primaryIds(card);
@@ -265,6 +271,7 @@ async function renderCard(card, details = shell(card), { force = false } = {}) {
     renderBrief(body, card, context, defense, primary, defenders, evidenceMatch, heuristicMatch, datacron, attackerReadiness, defenderReadiness);
     details.dataset.stale = "false";
   } catch (error) {
+    if (details.dataset.renderToken !== token || !details.open) return;
     if ([401, 409].includes(Number(error?.status))) {
       body.innerHTML = `<div class="workspace-note">Attack Brief unavailable until the verified current opponent/board context is restored.</div>`;
       return;
