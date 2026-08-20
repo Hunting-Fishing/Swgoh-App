@@ -12,24 +12,24 @@ async function loadFarmWorkspace() {
 
   loadPromise = (async () => {
     // Canonicalize known legacy/typo Base IDs before any Farm/Journey renderer imports the shared presets.
-    await import("/journey-preset-canonicalizer.js?v=20260820-farmv3a");
+    await import("/journey-preset-canonicalizer.js?v=20260820-farmv3b");
 
-    // Journey Tracker owns the Farm shell, so it must initialize first.
-    await import("/journey-tracker-v2.js?v=20260820-farmv3a");
+    // Journey Tracker owns durable track/untrack state underneath the v3 command surface.
+    await import("/journey-tracker-v2.js?v=20260820-farmv3b");
     await new Promise((resolve) => requestAnimationFrame(() => resolve()));
 
-    // These modules enhance the shell but no longer need to exist while Farm is hidden.
+    // Existing planning modules remain available below the compact v3 target surface.
     await Promise.all([
       import("/farm-material-drilldown.js?v=20260815-pro14"),
       import("/farm-master-plan-pro.js?v=20260815-lazy1"),
-      import("/farm-journey-map-pro.js?v=20260820-farmv3a"),
+      import("/farm-journey-map-pro.js?v=20260820-farmv3b"),
     ]);
 
-    // Eligibility depends on the Journey Map shell being installed.
+    // Eligibility depends on the Journey shell being installed.
     await import("/journey-event-eligibility-pro.js?v=20260815-pro13");
 
-    // Farm v3 adds canonical data-quality reporting plus explicit Active/Ready/Completed states.
-    await import("/farm-tracker-v3-enhancer.js?v=20260820-farmv3a");
+    // Farm v3 owns the visible compact target/matrix experience while reusing the durable tracker underneath.
+    await import("/farm-tracker-v3-enhancer.js?v=20260820-farmv3b");
 
     loaded = true;
     window.dispatchEvent(new CustomEvent("swgoh:farm-workspace-loaded"));
@@ -50,7 +50,6 @@ async function loadFarmWorkspace() {
 
 document.addEventListener("click", (event) => {
   if (event.target.closest?.('button[data-workspace-tab="farm"]')) {
-    // Navigation switches panels synchronously; feature loading then happens asynchronously.
     queueMicrotask(() => loadFarmWorkspace().catch(() => {}));
   }
 }, true);
