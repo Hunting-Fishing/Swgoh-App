@@ -14,15 +14,16 @@ test('Farm workspace canonicalizes Journey Base IDs before any renderer loads pr
   assert.ok(map > canonicalizer);
 });
 
-test('Farm v3 enhancer activates after the legacy tracker and eligibility shells are installed', () => {
+test('Farm v3 enhancer activates after durable tracking and eligibility shells are installed', () => {
   const tracker = loader.indexOf('/journey-tracker-v2.js');
   const eligibility = loader.indexOf('/journey-event-eligibility-pro.js');
   const enhancer = loader.indexOf('/farm-tracker-v3-enhancer.js');
   assert.ok(enhancer > tracker);
   assert.ok(enhancer > eligibility);
   assert.match(loader, /swgoh:farm-workspace-loaded/);
+  assert.match(loader, /farmv3b/);
 });
 
-test('main shell cache-busts the Farm v3 loader', () => {
-  assert.match(index, /farm-workspace-loader\.js\?v=20260820-farmv3a/);
+test('main shell cache-busts the Farm v3 matrix loader', () => {
+  assert.match(index, /farm-workspace-loader\.js\?v=20260820-farmv3b/);
 });
