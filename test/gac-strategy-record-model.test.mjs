@@ -82,6 +82,47 @@ test("exact strategy match is composition-based and rejects same-leader variants
   assert.equal(recordMatches(validated, { ...exactContext, format: "5v5" }), false);
 });
 
+test("3v3 strategy contract supports exact undersized attackers without padding fake units", () => {
+  const twoUnit = validateRecord(record({
+    id: "strategy:test:3v3:two-unit",
+    attacker: { leaderBaseId: "SEE", members: ["SEE", "DARTHBANE"] },
+  }));
+  assert.equal(twoUnit.valid, true);
+  assert.equal(twoUnit.record.attacker.members.length, 2);
+  assert.equal(recordMatches(twoUnit.record, {
+    ...exactContext,
+    attackerMembers: ["DARTHBANE", "SEE"],
+  }), true);
+  assert.equal(recordMatches(twoUnit.record, {
+    ...exactContext,
+    attackerMembers: ["SEE", "DARTHBANE", "FAKE_THIRD"],
+  }), false);
+
+  const solo = validateRecord(record({
+    id: "strategy:test:3v3:solo",
+    attacker: { leaderBaseId: "WAMPA", members: ["WAMPA"] },
+  }));
+  assert.equal(solo.valid, true);
+
+  const oversized = validateRecord(record({
+    attacker: { leaderBaseId: "A", members: ["A", "B", "C", "D"] },
+  }));
+  assert.equal(oversized.valid, false);
+  assert.ok(oversized.errors.includes("invalid-attacker-size"));
+});
+
+test("5v5 strategy contract supports 1 through 5 attackers but exact five defenders", () => {
+  const base = record({
+    id: "strategy:test:5v5:undersized",
+    format: "5v5",
+    defender: { leaderBaseId: "D1", members: ["D1", "D2", "D3", "D4", "D5"] },
+    attacker: { leaderBaseId: "A1", members: ["A1", "A2"] },
+  });
+  assert.equal(validateRecord(base).valid, true);
+  assert.equal(validateRecord({ ...base, defender: { leaderBaseId: "D1", members: ["D1", "D2", "D3", "D4"] } }).valid, false);
+  assert.equal(validateRecord({ ...base, attacker: { leaderBaseId: "A1", members: ["A1", "A2", "A3", "A4", "A5", "A6"] } }).valid, false);
+});
+
 test("validity windows fail closed for future and expired tactics", () => {
   const validated = validateRecord(record()).record;
   assert.equal(withinValidity(validated, Date.parse("2026-08-20T12:00:00Z")), true);
