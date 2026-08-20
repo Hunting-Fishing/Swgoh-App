@@ -140,7 +140,7 @@ function mount() {
   });
   document.addEventListener("DOMContentLoaded", () => schedule(180), { once: true });
   new MutationObserver(() => {
-    if (!byId("gacLiveTestConsole") || byId("gacLiveTruthDashboard")) schedule(100);
+    if (!byId("gacLiveTestConsole") && byId("gacLiveTruthDashboard")) schedule(100);
   }).observe(document.documentElement, { childList: true, subtree: true });
   schedule(220);
 }
