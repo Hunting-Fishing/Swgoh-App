@@ -1,4 +1,5 @@
 import "./gac-live-matchup-truth-dashboard.js";
+import "./gac-live-test-console.js";
 import "./gac-round-readiness.js";
 import "./gac-saved-board-map.js";
 import "./gac-round-progress.js";
