@@ -1,3 +1,5 @@
+import './gac-war-room-provenance-inspector.js';
+
 const TAB_ORDER = ['matchup', 'board', 'delta', 'history', 'diagnostics'];
 
 const state = {
