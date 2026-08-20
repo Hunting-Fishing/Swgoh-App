@@ -1,5 +1,3 @@
-import "./gac-war-room-counter-inspector.js";
-import "./gac-war-room-attack-brief.js";
 import {
   abilityScore,
   characterUnits,
@@ -17,6 +15,7 @@ const state = {
   timer: null,
   key: "",
   context: null,
+  intelligencePromise: null,
 };
 
 function clean(value) { return String(value ?? "").trim(); }
@@ -113,11 +112,26 @@ function injectStyles() {
   document.head.append(link);
 }
 
+function loadWarRoomIntelligence() {
+  if (typeof window === "undefined" || typeof document === "undefined") return Promise.resolve();
+  if (!state.intelligencePromise) {
+    state.intelligencePromise = Promise.all([
+      import("./gac-war-room-counter-inspector.js"),
+      import("./gac-war-room-attack-brief.js"),
+    ]).catch((error) => {
+      state.intelligencePromise = null;
+      console.warn("GAC War Room intelligence modules unavailable", error);
+    });
+  }
+  return state.intelligencePromise;
+}
+
 async function refresh({ force = false } = {}) {
   const current = identity();
   if (!current) return;
   const cards = [...document.querySelectorAll("#gacBoardPlannerGrid .gac-saved-board-card")];
   if (!cards.length) return;
+  void loadWarRoomIntelligence();
   const requestId = ++state.requestId;
   try {
     const context = await loadContext(current, force);
@@ -141,7 +155,10 @@ function bind() {
   if (document.documentElement.dataset.gacWarRoomDeltasBound === "true") return;
   document.documentElement.dataset.gacWarRoomDeltasBound = "true";
   injectStyles();
-  window.addEventListener("gac-saved-board-rendered", () => schedule(220));
+  window.addEventListener("gac-saved-board-rendered", () => {
+    void loadWarRoomIntelligence();
+    schedule(220);
+  });
   window.addEventListener("gac-war-room-updated", () => schedule(160));
   window.addEventListener("gac-board-evidence-updated", () => {
     invalidate();
@@ -154,7 +171,11 @@ function bind() {
     }
   });
   window.addEventListener("hashchange", invalidate);
-  document.addEventListener("DOMContentLoaded", () => schedule(300), { once: true });
+  document.addEventListener("DOMContentLoaded", () => {
+    if (document.querySelector("#gacBoardPlannerGrid .gac-saved-board-card")) void loadWarRoomIntelligence();
+    schedule(300);
+  }, { once: true });
+  if (document.querySelector("#gacBoardPlannerGrid .gac-saved-board-card")) void loadWarRoomIntelligence();
   schedule(420);
 }
 
@@ -166,6 +187,7 @@ export {
   characterUnits,
   fastestSpeed,
   formatSigned,
+  loadWarRoomIntelligence,
   matchupDelta,
   normalizeBaseId,
   rosterIndex,
