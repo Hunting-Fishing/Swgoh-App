@@ -4,6 +4,7 @@ import { gacCurrentOpponentConfirmationService } from "./gac-current-opponent-co
 import { supabaseAuthSession } from "./supabase-auth-session.mjs";
 
 const MAX_BODY_BYTES = 12 * 1024;
+const DATACRON_STATES = new Set(["unknown", "none", "assigned"]);
 
 function clean(value) { return String(value ?? "").trim(); }
 function asArray(value) { return Array.isArray(value) ? value : []; }
@@ -19,6 +20,11 @@ function validRound(value) {
 function validSize(value) {
   const size = Number(value);
   return size === 3 || size === 5 ? size : null;
+}
+function validDatacronState(value, hasDatacron = false) {
+  const state = clean(value).toLowerCase();
+  if (!state) return hasDatacron ? "assigned" : "unknown";
+  return DATACRON_STATES.has(state) ? state : "";
 }
 function eventInstanceId(...values) {
   for (const value of values) {
@@ -240,12 +246,29 @@ export function createGacBoardObservationApi(options = {}) {
 
         const datacronId = clean(body?.datacronId);
         const datacron = datacronId ? datacronById(liveRoster, datacronId, rosterLabel) : null;
+        const datacronState = validDatacronState(body?.datacronState, Boolean(datacron?.id));
+        if (!datacronState) {
+          const error = new Error("Datacron state must be unknown, none, or assigned.");
+          error.status = 400;
+          throw error;
+        }
+        if (datacron?.id && datacronState !== "assigned") {
+          const error = new Error("A submitted Datacron ID requires datacronState=assigned.");
+          error.status = 400;
+          throw error;
+        }
+        if (!datacron?.id && datacronState === "assigned") {
+          const error = new Error("datacronState=assigned requires an exact Datacron ID from the current live roster.");
+          error.status = 400;
+          throw error;
+        }
         const saveInput = {
           ...commonInput,
           size,
           leaderBaseId,
           members,
           datacron,
+          datacronState,
           zone: body?.zone,
           slot: body?.slot,
           sourceRef: owner === "player" ? "gac-command-center-my-defense" : "gac-command-center-current-board",
@@ -274,6 +297,7 @@ export {
   normalizeBaseId,
   readJsonBody,
   rosterUnits,
+  validDatacronState,
   validRound,
   validSize,
 };
