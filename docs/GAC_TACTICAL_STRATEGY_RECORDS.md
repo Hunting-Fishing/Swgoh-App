@@ -44,6 +44,22 @@ Optional validity metadata:
 - `gameDataVersion`
 - notes
 
+## Character squad-size contract
+
+Defense must always be a complete visible defense for the selected format:
+
+- `3v3` defense = exactly 3 characters
+- `5v5` defense = exactly 5 characters
+
+Attack compositions are still exact-match records, but legal undersized attacks are supported:
+
+- `3v3` attack = exactly the sourced 1, 2, or 3 characters
+- `5v5` attack = exactly the sourced 1 through 5 characters
+
+The runtime never pads an undersized source with a fake third/fifth unit. A two-character strategy matches only those two selected attackers; adding a third character makes it a different composition and requires its own sourced record.
+
+This matters for high-banner and specialist counters such as legitimate solo or duo attacks.
+
 ## Datacron presence contract
 
 Every attacker and defender Datacron constraint must explicitly declare one of:
@@ -89,7 +105,7 @@ cannot unlock against:
 
 merely because the leader is the same.
 
-The same rule applies to the attacker squad.
+The same rule applies to the attacker squad, including undersized attackers.
 
 Member order is ignored; membership is not.
 
@@ -148,7 +164,7 @@ Attack Brief behavior is:
 
 ```text
 Exact current defense
-+ exact selected attacker composition
++ exact selected attacker composition (including exact undersized composition)
 + record is active
 + record is inside validity window
 + attacker Datacron presence/rules match
@@ -178,7 +194,7 @@ The Command Center continues to show its evidence-derived Known Risks and pre-ba
   },
   "attacker": {
     "leaderBaseId": "ATT_LEAD",
-    "members": ["ATT_LEAD", "ATT_2", "ATT_3"]
+    "members": ["ATT_LEAD", "ATT_2"]
   },
   "attackerDatacron": {
     "presence": "any",
