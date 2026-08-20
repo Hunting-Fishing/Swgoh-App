@@ -7,7 +7,7 @@ const escapeHtml = (value) => String(value ?? '')
   .replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
   .replaceAll('"', '&quot;').replaceAll("'", '&#039;');
 
-const state = { checking: false, configured: null, event: null, error: '', message: '', timer: 0 };
+const state = { checking: false, configured: null, event: null, error: '', message: '', selectedPhase: 'P1', timer: 0 };
 
 function isOfficerOperationsRoute() {
   return location.pathname.replace(/\/+$/, '') === OPS_PATH;
@@ -69,9 +69,15 @@ function render() {
   panel.innerHTML = `<div class="rote-ledger-head"><div><div class="kicker">ROTE EVENT ACTIVATION</div><h3>No durable active ROTE event yet</h3><p>Select the actual current in-game phase. Command Center will create an <strong>officer-entered</strong> active event and sync canonical Operation slot requirements. It will not infer who was assigned or who filled anything.</p></div></div>
     ${state.error ? `<div class="rote-ledger-note danger">${escapeHtml(state.error)}</div>` : ''}
     ${state.message ? `<div class="rote-ledger-note">${escapeHtml(state.message)}</div>` : ''}
-    <div class="rote-ledger-actions"><label>Current live phase <select id="roteBootstrapPhase">${phaseOptions('P1')}</select></label><button type="button" id="roteBootstrapActivate">Activate Event + Sync Slots</button></div>
+    <div class="rote-ledger-actions"><label>Current live phase <select id="roteBootstrapPhase">${phaseOptions(state.selectedPhase)}</select></label><button type="button" id="roteBootstrapActivate">Activate Event + Sync Slots</button>${state.error ? '<button type="button" class="secondary" id="roteBootstrapRetry">Retry Event Check</button>' : ''}</div>
     <div class="rote-ledger-note warn"><strong>Evidence boundary:</strong> this records an officer-confirmed event phase, not canonical live event telemetry. Unknown start/end times stay unknown.</div>`;
+  document.getElementById('roteBootstrapPhase')?.addEventListener('change', (event) => { state.selectedPhase = text(event.target.value).toUpperCase(); });
   document.getElementById('roteBootstrapActivate')?.addEventListener('click', activate);
+  document.getElementById('roteBootstrapRetry')?.addEventListener('click', () => {
+    state.error = '';
+    state.configured = null;
+    check();
+  });
 }
 
 async function currentEvent() {
@@ -79,8 +85,9 @@ async function currentEvent() {
 }
 
 async function activate() {
-  const phase = text(document.getElementById('roteBootstrapPhase')?.value).toUpperCase();
+  const phase = text(document.getElementById('roteBootstrapPhase')?.value || state.selectedPhase).toUpperCase();
   if (!/^P[1-6]$/.test(phase)) return;
+  state.selectedPhase = phase;
   state.error = '';
   state.message = `Activating ${phase} and synchronizing canonical Operation slots…`;
   render();
@@ -125,6 +132,7 @@ async function check() {
     const snapshot = await currentEvent();
     state.configured = snapshot?.configured === true && Boolean(snapshot?.event?.id);
     state.event = snapshot?.event || null;
+    if (state.event?.currentPhase) state.selectedPhase = text(state.event.currentPhase).toUpperCase();
     state.error = '';
   } catch (error) {
     state.configured = null;
@@ -142,7 +150,7 @@ function schedule() {
     const panel = host();
     if (!panel) return;
     if (panel.dataset.roteEventBootstrapRendered !== 'true') render();
-    if (state.configured === null && !state.checking) check();
+    if (state.configured === null && !state.checking && !state.error) check();
   }, 60);
 }
 
