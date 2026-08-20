@@ -1,0 +1,155 @@
+/* SWGOH Command Center layout v3 — shared structural polish layered over existing live workspaces. */
+:root {
+  --ccv3-rail-bg: rgba(5, 14, 26, .94);
+  --ccv3-rail-line: rgba(94, 199, 255, .18);
+  --ccv3-gold: #efcb58;
+  --ccv3-cyan: #72ddff;
+}
+
+body {
+  background-attachment: fixed;
+}
+
+.shell {
+  width: min(1740px, calc(100% - 18px));
+}
+
+main {
+  min-width: 0;
+}
+
+.workspace-tabs {
+  position: sticky;
+  top: 0;
+  z-index: 80;
+  min-height: 48px;
+  margin: 0 0 8px;
+  padding: 6px;
+  display: grid;
+  grid-template-columns: repeat(10, minmax(92px, 1fr));
+  gap: 4px;
+  border: 1px solid var(--ccv3-rail-line);
+  border-radius: 12px;
+  background:
+    linear-gradient(180deg, rgba(8,24,41,.97), var(--ccv3-rail-bg));
+  box-shadow: 0 10px 26px rgba(0,0,0,.18);
+  backdrop-filter: blur(14px);
+  overflow: visible;
+}
+
+.workspace-tab {
+  min-width: 0;
+  min-height: 35px;
+  padding: 5px 7px;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: rgba(18,43,69,.38);
+  color: #b7c9d9;
+  font-size: .62rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.workspace-tab::before {
+  flex: 0 0 auto;
+}
+
+.workspace-tab:hover {
+  border-color: rgba(104,207,249,.24);
+  background: rgba(26,62,93,.66);
+  color: #edf9ff;
+}
+
+.workspace-tab.active {
+  border-color: rgba(240,205,89,.35);
+  background:
+    linear-gradient(180deg, rgba(239,203,88,.94), rgba(218,170,49,.94));
+  color: #112338;
+  box-shadow: inset 0 1px rgba(255,255,255,.42), 0 2px 8px rgba(0,0,0,.16);
+}
+
+.workspace-tab.active::before {
+  color: #112338;
+}
+
+.workspace-panel {
+  min-width: 0;
+  gap: 8px;
+}
+
+.workspace-panel > .card,
+.workspace-panel > section.card {
+  min-width: 0;
+}
+
+.workspace-intro {
+  border-color: rgba(105,190,255,.16);
+}
+
+.workspace-intro > .kicker {
+  letter-spacing: .12em;
+}
+
+.workspace-panel[data-workspace-panel="gac"].gacv3-workspace {
+  gap: 0;
+}
+
+.workspace-panel[data-workspace-panel="gac"].gacv3-workspace > .gacv3-superseded {
+  display: none !important;
+}
+
+.workspace-panel[data-workspace-panel="gac"].gacv3-workspace > [data-gacv2-root] {
+  margin-top: 0;
+}
+
+/* Keep dense command surfaces visually coherent without forcing legacy detail pages into one layout. */
+.ccv2-dashboard,
+.gacv2-shell,
+.farm-gallery-shell,
+.journey-current-shell,
+.guild-page-card,
+.database.card {
+  scroll-margin-top: 62px;
+}
+
+.card {
+  border-color: rgba(101,183,238,.17);
+}
+
+.database,
+.profile,
+.guild-page-card {
+  box-shadow: 0 10px 28px rgba(0,0,0,.14);
+}
+
+/* Wide displays should read like a workstation instead of a centered phone layout. */
+@media (min-width: 1500px) {
+  .shell { width: min(1800px, calc(100% - 26px)); }
+  .workspace-panel { gap: 10px; }
+  .workspace-tabs { grid-template-columns: repeat(10, minmax(112px, 1fr)); }
+}
+
+@media (max-width: 1280px) {
+  .workspace-tabs {
+    grid-template-columns: repeat(5, minmax(120px, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .shell { width: min(100% - 10px, 1740px); }
+  .workspace-tabs {
+    position: sticky;
+    top: 0;
+    grid-template-columns: none;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(112px, 1fr);
+    overflow-x: auto;
+    overflow-y: hidden;
+    justify-content: start;
+    padding: 5px;
+    scrollbar-width: thin;
+  }
+  .workspace-tab { justify-content: flex-start; }
+}

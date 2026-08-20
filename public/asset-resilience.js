@@ -1,3 +1,5 @@
+import './gac-war-room-v3.js';
+
 const state = {
   loaded: false,
   loading: null,
