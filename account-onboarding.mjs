@@ -6,6 +6,7 @@ import { guildRosterService } from './guild-roster-service.mjs';
 import { playerVerification } from './player-verification.mjs';
 import { supabaseAuthSession } from './supabase-auth-session.mjs';
 import { supabaseCoreStore } from './supabase-core-store.mjs';
+import { tbOperationContributionApi } from './tb-operation-contribution-api.mjs';
 import { webActionApi } from './web-action-api.mjs';
 
 const MAX_BODY_BYTES = 16 * 1024;
@@ -159,6 +160,7 @@ export function createAccountOnboarding(options = {}) {
   const store = options.store || supabaseCoreStore;
   const guildService = options.guildService || guildRosterService;
   const stateStore = options.discordStateStore || discordStateStore;
+  const tbOperationsApi = options.tbOperationContributionApi || tbOperationContributionApi;
   const pilotDiscordGuildId = discordSnowflake(options.discordGuildId || process.env.DISCORD_DEFAULT_GUILD_ID);
   const now = typeof options.now === 'function' ? options.now : () => new Date();
 
@@ -336,6 +338,9 @@ export function createAccountOnboarding(options = {}) {
     }
     if (url.pathname.startsWith('/api/account/guild-operations/')) {
       return guildOperationsApi.handle(request, response, url);
+    }
+    if (url.pathname.startsWith('/api/account/tb-operations/')) {
+      return tbOperationsApi.handle(request, response, url);
     }
     if (url.pathname.startsWith('/api/account/verification')) {
       return playerVerification.handle(request, response, url);
