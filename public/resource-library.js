@@ -1,5 +1,14 @@
 import { ROTE_VISUAL_ASSETS, TB_MISSION_VISUAL_ASSETS } from "./tb-visual-assets-data.js";
 
+function ensureVisualLibraryStyles() {
+  if (document.querySelector('link[data-workspace-visual-library="true"]')) return;
+  const link = document.createElement("link");
+  link.rel = "stylesheet";
+  link.href = "/workspace-visual-library.css?v=20260820-ui5";
+  link.dataset.workspaceVisualLibrary = "true";
+  document.head.appendChild(link);
+}
+
 const NATIVE_TARGETS = Object.freeze([
   Object.freeze({ title: "Roster Commander", status: "LIVE", icon: "◉", action: "roster", description: "Power-user filtering across GP, progression, mods, abilities, factions, roles and ROTE demand." }),
   Object.freeze({ title: "Squad Workbench", status: "LIVE", icon: "◆", action: "squads", description: "Build and save owned squads, inspect composition metrics and move from roster pressure to team construction." }),
@@ -113,6 +122,7 @@ function bindActions() {
 }
 
 function enhanceNativeWorkspaces() {
+  ensureVisualLibraryStyles();
   replaceEventsPanel();
   replaceResourcesPanel();
   bindActions();
