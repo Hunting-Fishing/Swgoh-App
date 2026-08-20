@@ -46,7 +46,12 @@ async function discordJson(url, config, fetchImpl = fetch) {
   const bodyText = await response.text();
   let body = null;
   try { body = bodyText ? JSON.parse(bodyText) : null; } catch { body = null; }
-  if (!response.ok) throw new Error(`Discord API returned HTTP ${response.status}${body?.message ? `: ${safe(body.message)}` : ''}.`);
+  if (!response.ok) {
+    const error = new Error(`Discord API returned HTTP ${response.status}${body?.message ? `: ${safe(body.message)}` : ''}.`);
+    error.status = Number(response.status || 0);
+    error.discordCode = body?.code;
+    throw error;
+  }
   return body;
 }
 
@@ -153,16 +158,53 @@ async function unverifyChannelCommand(interaction, _config, services) {
 }
 
 async function discordGuildMembers(context, config, services) {
-  const body = await discordJson(`${DISCORD_API}/guilds/${context.discordGuildId}/members?limit=1000`, config, services.fetch || fetch);
-  return array(body).filter((row) => row?.user && row.user.bot !== true);
+  try {
+    const body = await discordJson(`${DISCORD_API}/guilds/${context.discordGuildId}/members?limit=1000`, config, services.fetch || fetch);
+    const members = array(body).filter((row) => row?.user);
+    const humans = members.filter((row) => row.user.bot !== true);
+    return Object.freeze({
+      humans: Object.freeze(humans),
+      totalScanned: members.length,
+      botsSkipped: members.length - humans.length,
+    });
+  } catch (error) {
+    if (Number(error?.status) === 403) {
+      throw new Error('Discord denied access to the server member roster. Enable SERVER MEMBERS INTENT for SWGOH Command Center in Discord Developer Portal → Bot → Privileged Gateway Intents, then retry /guild register-mates.');
+    }
+    throw error;
+  }
 }
 
 function buildExactMatches(discordMembers, rosterMembers, guildState) {
-  const alreadyLinkedDiscord = new Set(Object.keys(guildState?.userLinks || {}));
-  const alreadyLinkedAlly = new Set(Object.values(guildState?.userLinks || {}).map((row) => allyCode(row?.swgohAllyCode)).filter(Boolean));
+  const links = guildState?.userLinks && typeof guildState.userLinks === 'object' ? guildState.userLinks : {};
+  const alreadyLinkedDiscord = new Set(Object.keys(links));
+  const alreadyLinkedAlly = new Set(Object.values(links).map((row) => allyCode(row?.swgohAllyCode)).filter(Boolean));
+  const alreadyLinkedPlayer = new Set(Object.values(links).map((row) => text(row?.playerId)).filter(Boolean));
+  const currentRoster = array(rosterMembers);
+  const currentAlly = new Set(currentRoster.map((row) => allyCode(row?.allyCode)).filter(Boolean));
+  const currentPlayer = new Set(currentRoster.map((row) => text(row?.playerId)).filter(Boolean));
+  const humanDiscordIds = new Set(array(discordMembers).map((row) => snowflake(row?.user?.id)).filter(Boolean));
+
+  const currentLinkedRoster = currentRoster.filter((member) =>
+    alreadyLinkedAlly.has(allyCode(member?.allyCode)) || alreadyLinkedPlayer.has(text(member?.playerId))
+  );
+  const unlinkedRoster = currentRoster.filter((member) =>
+    !alreadyLinkedAlly.has(allyCode(member?.allyCode)) && !alreadyLinkedPlayer.has(text(member?.playerId))
+  );
+  const staleLinks = Object.entries(links).filter(([, link]) => {
+    const code = allyCode(link?.swgohAllyCode);
+    const playerId = text(link?.playerId);
+    return !(code && currentAlly.has(code)) && !(playerId && currentPlayer.has(playerId));
+  });
+  const linkedDiscordPresent = [...alreadyLinkedDiscord].filter((id) => humanDiscordIds.has(id)).length;
+  const linkedDiscordMissing = Math.max(0, alreadyLinkedDiscord.size - linkedDiscordPresent);
+  const availableDiscord = array(discordMembers).filter((row) => {
+    const discordUserId = snowflake(row?.user?.id);
+    return discordUserId && !alreadyLinkedDiscord.has(discordUserId);
+  });
+
   const index = new Map();
-  for (const member of rosterMembers) {
-    if (alreadyLinkedAlly.has(allyCode(member.allyCode))) continue;
+  for (const member of unlinkedRoster) {
     const key = normalizedName(member.name);
     if (!key) continue;
     if (!index.has(key)) index.set(key, []);
@@ -171,9 +213,9 @@ function buildExactMatches(discordMembers, rosterMembers, guildState) {
   const exact = [];
   const ambiguous = [];
   const unmatched = [];
-  for (const discordMember of discordMembers) {
+  for (const discordMember of availableDiscord) {
     const discordUserId = snowflake(discordMember?.user?.id);
-    if (!discordUserId || alreadyLinkedDiscord.has(discordUserId)) continue;
+    if (!discordUserId) continue;
     const candidates = [...new Set([
       normalizedName(discordMember?.nick), normalizedName(discordMember?.user?.global_name), normalizedName(discordMember?.user?.username),
     ].filter(Boolean))].flatMap((key) => index.get(key) || []);
@@ -183,15 +225,31 @@ function buildExactMatches(discordMembers, rosterMembers, guildState) {
     else if (unique.length > 1) ambiguous.push({ discordUserId, discordName, candidates: unique });
     else unmatched.push({ discordUserId, discordName });
   }
-  return { exact, ambiguous, unmatched };
+  return Object.freeze({
+    exact: Object.freeze(exact),
+    ambiguous: Object.freeze(ambiguous),
+    unmatched: Object.freeze(unmatched),
+    unlinkedRoster: Object.freeze(unlinkedRoster),
+    staleLinks: Object.freeze(staleLinks),
+    inventory: Object.freeze({
+      rosterMembers: currentRoster.length,
+      linkedSwgohMembers: currentLinkedRoster.length,
+      unlinkedSwgohMembers: unlinkedRoster.length,
+      durableLinks: alreadyLinkedDiscord.size,
+      linkedDiscordPresent,
+      linkedDiscordMissing,
+      availableDiscordHumans: availableDiscord.length,
+      staleLinks: staleLinks.length,
+    }),
+  });
 }
 
 async function registerMatesCommand(interaction, config, services) {
   const context = await resolveContext(interaction.guild_id, services);
   const canonical = services.canonical || canonicalRosterService;
   const roster = await canonical.getGuildRosterByPlayer(context.seedAllyCode);
-  const discordMembers = await discordGuildMembers(context, config, services);
-  const matched = buildExactMatches(discordMembers, array(roster.members), context.guildState);
+  const discordInventory = await discordGuildMembers(context, config, services);
+  const matched = buildExactMatches(discordInventory.humans, array(roster.members), context.guildState);
   const action = text(option(interaction, 'action') || 'preview').toLowerCase();
   const applied = [];
   if (action === 'apply') {
@@ -207,16 +265,47 @@ async function registerMatesCommand(interaction, config, services) {
       applied.push(link);
     }
   }
+
+  const projectedLinked = Math.min(matched.inventory.rosterMembers, matched.inventory.linkedSwgohMembers + applied.length);
+  const projectedUnlinked = Math.max(0, matched.inventory.rosterMembers - projectedLinked);
+  const coverage = matched.inventory.rosterMembers
+    ? `${projectedLinked}/${matched.inventory.rosterMembers} (${Math.round((projectedLinked / matched.inventory.rosterMembers) * 100)}%)`
+    : '0/0';
   const lines = [
     '**SWGOH Command Center · Guild-Mate Registration**',
     `Mode: **${action === 'apply' ? 'APPLY EXACT MATCHES' : 'PREVIEW'}**`,
-    `Exact unique: **${matched.exact.length}** · Ambiguous: **${matched.ambiguous.length}** · Unmatched Discord: **${matched.unmatched.length}** · Applied: **${applied.length}**`,
+    `Guild roster: **${matched.inventory.rosterMembers}** · linked: **${projectedLinked}** · unlinked: **${projectedUnlinked}** · stale links: **${matched.inventory.staleLinks}**`,
+    `Discord humans scanned: **${discordInventory.humans.length}** · already linked here: **${matched.inventory.linkedDiscordPresent}** · available to match: **${matched.inventory.availableDiscordHumans}** · bots skipped: **${discordInventory.botsSkipped}**`,
+    `Exact suggestions: **${matched.exact.length}** · ambiguous: **${matched.ambiguous.length}** · unmatched Discord: **${matched.unmatched.length}** · applied: **${applied.length}**`,
+    `Guild mention-link coverage: **${coverage}**`,
     '',
   ];
   for (const row of matched.exact.slice(0,8)) lines.push(`✅ **${safe(row.discordName)}** → **${safe(row.member.name)}** · ${displayAlly(row.member.allyCode)}`);
   for (const row of matched.ambiguous.slice(0,4)) lines.push(`⚠️ **${safe(row.discordName)}** → ${row.candidates.map((member) => `${safe(member.name)} ${displayAlly(member.allyCode)}`).join(' / ')}`);
-  if (!matched.exact.length && !matched.ambiguous.length) lines.push('No new exact-name matches were found.');
-  lines.push('', '_Only one exact normalized name match is eligible. Fuzzy and ambiguous matches are never auto-linked._');
+
+  if (!matched.exact.length && !matched.ambiguous.length) {
+    if (!matched.inventory.availableDiscordHumans && projectedUnlinked > 0) {
+      lines.push(`No unlinked Discord humans are currently available to auto-match. **${projectedUnlinked} SWGOH Guild members remain unlinked.**`);
+      lines.push('Use `/tb link member:<Discord user> ally_code:<Ally Code>` for explicit officer pairing as those Discord members are available.');
+    } else if (matched.inventory.availableDiscordHumans > 0) {
+      lines.push('No new exact-name matches were found among the currently unlinked Discord humans.');
+    } else if (!projectedUnlinked) {
+      lines.push('✅ All current SWGOH Guild members are linked to Discord.');
+    }
+  }
+
+  if (matched.unlinkedRoster.length) {
+    lines.push('', '**SWGOH members still unlinked**');
+    for (const member of matched.unlinkedRoster.slice(0,6)) lines.push(`• **${safe(member.name)}** · ${displayAlly(member.allyCode)}`);
+    if (matched.unlinkedRoster.length > 6) lines.push(`• +${matched.unlinkedRoster.length - 6} more`);
+  }
+  if (matched.inventory.linkedDiscordMissing) {
+    lines.push('', `⚠️ Durable Discord links not present in the current human member scan: **${matched.inventory.linkedDiscordMissing}**.`);
+  }
+  if (matched.staleLinks.length) {
+    lines.push(`⚠️ Durable links whose SWGOH player is no longer in the current Guild roster: **${matched.staleLinks.length}**.`);
+  }
+  lines.push('', '_Preview never mutates. APPLY links only one-to-one exact normalized matches. Fuzzy and ambiguous matches are never auto-linked._');
   return truncate(lines.join('\n'));
 }
 

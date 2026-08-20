@@ -169,11 +169,15 @@ test("roster resolution and observed-rate helpers preserve unknown evidence", ()
   assert.equal(observedPercent(null), null);
 });
 
-test("counter inspector is activated through matchup deltas and remains read-only", async () => {
+test("counter inspector is lazy-activated after matchup controller evaluation and remains read-only", async () => {
   const activationSource = await readFile(new URL("../public/gac-war-room-matchup-deltas.js", import.meta.url), "utf8");
   const inspectorSource = await readFile(new URL("../public/gac-war-room-counter-inspector.js", import.meta.url), "utf8");
+  const pureDeltaSource = await readFile(new URL("../public/gac-matchup-delta-model.js", import.meta.url), "utf8");
   const authoritativePlannerSource = await readFile(new URL("../public/gac-evidence-war-room.js", import.meta.url), "utf8");
-  assert.match(activationSource, /import "\.\/gac-war-room-counter-inspector\.js";/);
+  assert.match(activationSource, /import\("\.\/gac-war-room-counter-inspector\.js"\)/);
+  assert.doesNotMatch(activationSource, /^import\s+["']\.\/gac-war-room-counter-inspector\.js["'];/m);
+  assert.match(activationSource, /from "\.\/gac-matchup-delta-model\.js"/);
+  assert.doesNotMatch(pureDeltaSource, /\bdocument\b|\bwindow\b/);
   assert.doesNotMatch(authoritativePlannerSource, /gac-war-room-counter-inspector/);
   assert.doesNotMatch(inspectorSource, /method\s*:\s*["'](?:POST|PUT|PATCH|DELETE)["']/i);
   assert.match(inspectorSource, /Inspector is read-only/);

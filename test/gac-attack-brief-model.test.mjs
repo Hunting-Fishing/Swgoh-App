@@ -82,11 +82,12 @@ test("partial Datacron ability coverage is reported as evidence, not a power mul
   assert.match(brief.risks.find((entry) => entry.code === "datacron-partial-ability-coverage").detail, /not an overall Datacron value score/i);
 });
 
-test("Attack Brief browser layer is read-only and source-gated", async () => {
+test("Attack Brief browser layer is read-only, source-gated and lazy-activated", async () => {
   const controller = await readFile(new URL("../public/gac-war-room-attack-brief.js", import.meta.url), "utf8");
   const activation = await readFile(new URL("../public/gac-war-room-matchup-deltas.js", import.meta.url), "utf8");
   assert.doesNotMatch(controller, /method\s*:\s*["'](?:POST|PUT|PATCH|DELETE)["']/i);
   assert.match(controller, /SOURCE-GATED EXECUTION/);
   assert.match(controller, /will not invent an opening ability, first target, kill order, or turn sequence/);
-  assert.match(activation, /import "\.\/gac-war-room-attack-brief\.js";/);
+  assert.match(activation, /import\("\.\/gac-war-room-attack-brief\.js"\)/);
+  assert.doesNotMatch(activation, /^import\s+["']\.\/gac-war-room-attack-brief\.js["'];/m);
 });
