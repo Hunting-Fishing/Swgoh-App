@@ -1,3 +1,6 @@
+import './asset-resilience.js';
+import './gac-war-room-v2.js';
+
 const state = {
   requestId: 0,
   timer: null,
@@ -11,6 +14,14 @@ function clean(value) { return String(value ?? "").trim(); }
 function byId(id) { return document.getElementById(id); }
 function allyCode(value) { return clean(value).replace(/\D/g, "").slice(0, 9); }
 function formatAllyCode(value) { return allyCode(value).replace(/(\d{3})(?=\d)/g, "$1-"); }
+function currentOwnerAllyCode() {
+  return allyCode(
+    byId("allyCode")?.value ||
+    window.__swgohAccountAllyCode ||
+    window.__swgohPlayerRosterSnapshot?.allyCode ||
+    window.__swgohLiveSnapshot?.allyCode
+  );
+}
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>'\"]/g, (char) => ({
     "&": "&amp;",
@@ -65,12 +76,20 @@ async function fetchJson(pathname) {
 }
 
 function injectStylesheet() {
-  if (document.querySelector('link[data-gac-auto-opponent="true"]')) return;
-  const link = document.createElement("link");
-  link.rel = "stylesheet";
-  link.href = "/gac-auto-current-opponent.css?v=20260820-gacauto1";
-  link.dataset.gacAutoOpponent = "true";
-  document.head.append(link);
+  if (!document.querySelector('link[data-gac-auto-opponent="true"]')) {
+    const link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href = "/gac-auto-current-opponent.css?v=20260820-gacauto1";
+    link.dataset.gacAutoOpponent = "true";
+    document.head.appendChild(link);
+  }
+  if (!document.querySelector('link[data-gac-war-room-v2="true"]')) {
+    const link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href = "/gac-war-room-v2.css?v=20260821-gacv2";
+    link.dataset.gacWarRoomV2 = "true";
+    document.head.appendChild(link);
+  }
 }
 
 function ensureStatus() {
@@ -81,7 +100,7 @@ function ensureStatus() {
   output = document.createElement("div");
   output.id = "gacAutoOpponentStatus";
   output.className = "gac-auto-opponent-status is-idle";
-  output.innerHTML = `<span>AUTO CURRENT MATCHUP</span><strong>Waiting for Ally Code</strong>`;
+  output.innerHTML = `<span>AUTO CURRENT MATCHUP</span><strong>Waiting for verified player</strong>`;
   const button = byId("gacFindBracketButton");
   if (button) button.insertAdjacentElement("afterend", output);
   else form.append(output);
@@ -142,10 +161,10 @@ function applyExactPairing(pairing) {
 }
 
 async function resolveCurrentOpponent(options = {}) {
-  const owner = allyCode(byId("allyCode")?.value);
+  const owner = currentOwnerAllyCode();
   if (!/^\d{9}$/.test(owner)) {
     state.attemptedOwner = "";
-    setStatus("idle", "Waiting for Ally Code");
+    setStatus("idle", "Waiting for verified player");
     return null;
   }
   if (!options.force && state.attemptedOwner === owner) return null;
@@ -157,7 +176,7 @@ async function resolveCurrentOpponent(options = {}) {
     if (requestId !== state.requestId) return null;
     const pairing = exactPairingFromBracket(bracket, owner);
     if (!pairing) {
-      setStatus("manual", "Exact pairing not exposed", "Use Resolve Current Opponent / bracket confirmation. No opponent was guessed.");
+      setStatus("manual", "Exact pairing not exposed", "Use the War Room Ally Code search, then confirm the current round if desired. No opponent was guessed.");
       return null;
     }
     const currentOpponent = allyCode(byId("gacOpponentCode")?.value);
@@ -170,9 +189,9 @@ async function resolveCurrentOpponent(options = {}) {
   } catch (error) {
     if (requestId !== state.requestId) return null;
     if ([404, 409].includes(Number(error?.status))) {
-      setStatus("manual", "Automatic pairing unavailable", "Use the existing bracket confirmation flow. No opponent was inferred.");
+      setStatus("manual", "Automatic pairing unavailable", "Use Ally Code search and verified round confirmation. No opponent was inferred.");
     } else {
-      setStatus("degraded", "Live pairing check unavailable", "Manual opponent entry and bracket resolution remain available.");
+      setStatus("degraded", "Live pairing check unavailable", "Manual opponent entry remains available.");
     }
     return null;
   }
@@ -230,11 +249,15 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
   ensureMounted();
   document.addEventListener("DOMContentLoaded", ensureMounted, { once: true });
   window.addEventListener("hashchange", refreshOnNavigation);
+  window.addEventListener('swgoh:workspace-activated', (event) => {
+    if (event.detail?.id === 'gac') refreshOnNavigation();
+  });
   new MutationObserver(() => ensureMounted()).observe(document.documentElement, { childList: true, subtree: true });
 }
 
 export {
   allyCode,
+  currentOwnerAllyCode,
   escapeHtml,
   exactPairingFromBracket,
   formatAllyCode,
