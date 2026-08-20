@@ -27,6 +27,10 @@ async function loadFarmWorkspace() {
 
     // Eligibility depends on the Journey Map shell being installed.
     await import("/journey-event-eligibility-pro.js?v=20260815-pro13");
+
+    // Farm v3 adds canonical data-quality reporting plus explicit Active/Ready/Completed states.
+    await import("/farm-tracker-v3-enhancer.js?v=20260820-farmv3a");
+
     loaded = true;
     window.dispatchEvent(new CustomEvent("swgoh:farm-workspace-loaded"));
   })().catch((error) => {
