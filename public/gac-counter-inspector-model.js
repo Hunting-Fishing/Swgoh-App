@@ -30,7 +30,9 @@ function evidenceObservations(entry = {}) {
 function primaryEvidenceMatch(ownRoster, defense, evidenceEntry, primaryIds, options = {}) {
   const candidates = evidenceCounterCandidates(ownRoster, defense, evidenceObservations(evidenceEntry), options);
   const match = candidates.find((candidate) => candidate.exactTeam && sameComposition(candidate.counterMembers, primaryIds));
-  return match ? Object.freeze({ ...match, reliability: evidenceReliability(match) }) : null;
+  if (!match) return null;
+  const reliability = evidenceReliability(match);
+  return reliability.automatic === true ? Object.freeze({ ...match, reliability }) : null;
 }
 function primaryHeuristicMatch(ownRoster, enemyUnits, primaryIds, options = {}) {
   const candidates = rankRosterFitSquads(ownRoster, enemyUnits, options);
