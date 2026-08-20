@@ -6,6 +6,7 @@ import "./guild-discord-admin-enhancer.js";
 import "./guild-discord-link-admin-enhancer.js";
 import "./guild-integration-report-enhancer.js";
 import "./guild-member-operations-drawer.js";
+import "./rote-operation-ledger-ui.js";
 import "./web-action-feed.js";
 import "./guild-tb-farming-router.js";
 
