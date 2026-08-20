@@ -115,7 +115,7 @@ function validateRecord(value = {}) {
   if (!record.defender.leaderBaseId || !record.defender.members.includes(record.defender.leaderBaseId)) errors.push("invalid-defender-leader");
   if (!record.attacker.leaderBaseId || !record.attacker.members.includes(record.attacker.leaderBaseId)) errors.push("invalid-attacker-leader");
   if (expectedSize && record.defender.members.length !== expectedSize) errors.push("invalid-defender-size");
-  if (expectedSize && record.attacker.members.length !== expectedSize) errors.push("invalid-attacker-size");
+  if (expectedSize && (record.attacker.members.length < 1 || record.attacker.members.length > expectedSize)) errors.push("invalid-attacker-size");
   if (record.format === "fleet" && (record.defender.members.length < 4 || record.attacker.members.length < 4)) errors.push("invalid-fleet-size");
   errors.push(...datacronConstraintErrors(record.attackerDatacron, "attacker"));
   errors.push(...datacronConstraintErrors(record.defenderDatacron, "defender"));
