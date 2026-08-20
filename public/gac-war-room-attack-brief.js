@@ -9,6 +9,7 @@ import {
   unitsForIds,
 } from "./gac-counter-inspector-model.js";
 import { buildAttackBrief, matchupDelta, signed } from "./gac-attack-brief-model.js";
+import { findStrategyGuidance } from "./gac-strategy-catalog.js";
 
 const state = {
   key: "",
@@ -63,8 +64,8 @@ function resetContext() {
   state.evidenceLoaded = false;
 }
 async function loadContext(current, force = false) {
+  if (state.key === current.key && state.contextPromise) return state.contextPromise;
   if (!force && state.key === current.key && state.context) return state.context;
-  if (!force && state.key === current.key && state.contextPromise) return state.contextPromise;
   const promise = Promise.all([
     fetchJson(`/api/player/${current.mine}`),
     fetchJson(`/api/player/${current.opponent}`),
@@ -105,8 +106,8 @@ function evidenceBatch(context) {
 async function loadEvidence(context, force = false) {
   const batch = evidenceBatch(context);
   if (!batch.leaders.length) return new Map();
+  if (state.evidenceKey === batch.key && state.evidencePromise) return state.evidencePromise;
   if (!force && state.evidenceKey === batch.key && state.evidenceLoaded) return state.evidenceByLeader;
-  if (!force && state.evidenceKey === batch.key && state.evidencePromise) return state.evidencePromise;
   state.evidenceKey = batch.key;
   state.evidenceLoaded = false;
   const promise = fetchJson(`/api/gac/counters/batch?format=${context.identity.format}&leaders=${encodeURIComponent(batch.leaders.join(","))}&limit=40`)
@@ -127,9 +128,7 @@ async function loadEvidence(context, force = false) {
   return promise;
 }
 async function loadEligibility() {
-  if (!state.eligibilityPromise) {
-    state.eligibilityPromise = loadEligibilityContext().catch(() => null);
-  }
+  if (!state.eligibilityPromise) state.eligibilityPromise = loadEligibilityContext().catch(() => null);
   return state.eligibilityPromise;
 }
 function primaryIds(card) {
@@ -169,15 +168,53 @@ function evidenceLine(match) {
   const rateText = rate == null ? "rate unknown" : `${number.format(rate)}% observed`;
   return `<div class="gac-brief-evidence"><strong>${escapeHtml(match.reliability?.label || "Historical sample")} · ${number.format(Number(match.wins || 0))}/${number.format(Number(match.battles || 0))} observed wins</strong><span>${escapeHtml(rateText)} · ${number.format(Number(match.holds || 0))} holds · ${number.format(Number(match.draws || 0))} draws · not a predicted win rate</span></div>`;
 }
+function datacronMechanicIds(datacron) {
+  return [...new Set((Array.isArray(datacron?.affixes) ? datacron.affixes : Array.isArray(datacron?.affix) ? datacron.affix : [])
+    .map((entry) => clean(entry?.abilityId || entry?.ability_id || entry?.mechanicId || entry?.mechanic_id))
+    .filter(Boolean))].sort();
+}
+function datacronMatchContext(datacron, known) {
+  if (known !== true) return Object.freeze({ known: false, setId: "", mechanicIds: Object.freeze([]) });
+  return Object.freeze({
+    known: true,
+    setId: clean(datacron?.setId ?? datacron?.set_id),
+    mechanicIds: Object.freeze(datacronMechanicIds(datacron)),
+  });
+}
 function datacronContext(card, context, primary, eligibility) {
   const id = clean(card?.dataset?.recommendedDatacronId);
-  if (!id) return Object.freeze({ selected: false, id: "", label: "", coverage: null });
+  if (!id) return Object.freeze({ selected: false, id: "", label: "", coverage: null, matchContext: datacronMatchContext(null, true) });
   const datacron = (Array.isArray(context.mineRoster?.datacrons) ? context.mineRoster.datacrons : []).find((entry) => clean(entry?.id) === id) || null;
-  if (!datacron || !eligibility) return Object.freeze({ selected: true, id, label: `Datacron ${id}`, coverage: null });
+  if (!datacron) return Object.freeze({ selected: true, id, label: `Datacron ${id}`, coverage: null, matchContext: datacronMatchContext(null, false) });
+  if (!eligibility) return Object.freeze({ selected: true, id, label: `Datacron ${id}`, coverage: null, matchContext: datacronMatchContext(datacron, true) });
   const coverage = squadCoverage(datacron, primary, eligibility.unitIndex, eligibility.datacronCatalog);
-  return Object.freeze({ selected: true, id, label: datacronLabel(datacron, eligibility.datacronCatalog), coverage });
+  return Object.freeze({
+    selected: true,
+    id,
+    label: datacronLabel(datacron, eligibility.datacronCatalog),
+    coverage,
+    matchContext: datacronMatchContext(datacron, true),
+  });
 }
-function renderBrief(body, card, context, defense, primary, defenders, evidenceMatch, heuristicMatch, datacron, attackerReadiness, defenderReadiness) {
+function defenseDatacronMatchContext(defense, opponentRoster) {
+  const inline = defense?.datacron && typeof defense.datacron === "object" ? defense.datacron : null;
+  const id = clean(defense?.datacronId || defense?.datacron_id || inline?.id);
+  if (inline) return datacronMatchContext(inline, true);
+  if (!id) return datacronMatchContext(null, false);
+  const datacron = (Array.isArray(opponentRoster?.datacrons) ? opponentRoster.datacrons : []).find((entry) => clean(entry?.id) === id) || null;
+  return datacron ? datacronMatchContext(datacron, true) : datacronMatchContext(null, false);
+}
+function strategyLookupContext(current, defense, attackerIds, datacron, opponentRoster) {
+  return Object.freeze({
+    format: current.format,
+    defenderMembers: Object.freeze((Array.isArray(defense?.members) ? defense.members : []).map(normalizeBaseId).filter(Boolean)),
+    attackerMembers: Object.freeze(attackerIds.map(normalizeBaseId).filter(Boolean)),
+    attackerDatacron: datacron.matchContext,
+    defenderDatacron: defenseDatacronMatchContext(defense, opponentRoster),
+    now: Date.now(),
+  });
+}
+function renderBrief(body, card, primary, defenders, evidenceMatch, heuristicMatch, datacron, attackerReadiness, defenderReadiness, executionGuidance = {}) {
   const delta = matchupDelta(primary, defenders, {
     attackerScore: attackerReadiness?.known === true ? attackerReadiness.score : null,
     defenderScore: defenderReadiness?.known === true ? defenderReadiness.score : null,
@@ -191,7 +228,7 @@ function renderBrief(body, card, context, defense, primary, defenders, evidenceM
     abilityKnown: attackerReadiness?.known === true,
     datacron,
     allocationReason,
-    executionGuidance: {},
+    executionGuidance,
   });
   const dcText = datacron.selected
     ? `${datacron.label || datacron.id}${datacron.coverage ? ` · ${datacron.coverage.eligibleMembers}/${datacron.coverage.squadSize} resolved ability-target coverage` : " · coverage unresolved"}`
@@ -268,7 +305,9 @@ async function renderCard(card, details = shell(card), { force = false } = {}) {
     const attackerReadiness = squadAbilityReadiness(primary);
     const defenderReadiness = squadAbilityReadiness(defenders);
     const datacron = datacronContext(card, context, primary, eligibility);
-    renderBrief(body, card, context, defense, primary, defenders, evidenceMatch, heuristicMatch, datacron, attackerReadiness, defenderReadiness);
+    const strategy = await findStrategyGuidance(strategyLookupContext(current, defense, attackerIds, datacron, context.opponentRoster)).catch(() => null);
+    if (details.dataset.renderToken !== token || !details.open) return;
+    renderBrief(body, card, primary, defenders, evidenceMatch, heuristicMatch, datacron, attackerReadiness, defenderReadiness, strategy?.guidance || {});
     details.dataset.stale = "false";
   } catch (error) {
     if (details.dataset.renderToken !== token || !details.open) return;
@@ -301,7 +340,7 @@ function injectStyles() {
   if (document.querySelector('link[data-gac-attack-brief="true"]')) return;
   const link = document.createElement("link");
   link.rel = "stylesheet";
-  link.href = "/gac-war-room-attack-brief.css?v=20260820-brief1";
+  link.href = "/gac-war-room-attack-brief.css?v=20260820-brief2";
   link.dataset.gacAttackBrief = "true";
   document.head.append(link);
 }
@@ -329,4 +368,13 @@ function bind() {
 
 if (typeof window !== "undefined" && typeof document !== "undefined") bind();
 
-export { evidenceBatch, evidenceMapFromBatch, identity, loadContext, primaryIds };
+export {
+  datacronMatchContext,
+  defenseDatacronMatchContext,
+  evidenceBatch,
+  evidenceMapFromBatch,
+  identity,
+  loadContext,
+  primaryIds,
+  strategyLookupContext,
+};
