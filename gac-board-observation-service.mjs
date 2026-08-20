@@ -1,6 +1,8 @@
 import { gacCurrentOpponentConfirmationService } from "./gac-current-opponent-confirmation-service.mjs";
 import { supabaseCoreStore } from "./supabase-core-store.mjs";
 
+const DATACRON_STATES = new Set(["unknown", "none", "assigned"]);
+
 function clean(value) { return String(value ?? "").trim(); }
 function asArray(value) { return Array.isArray(value) ? value : []; }
 function normalizeAllyCode(value) {
@@ -70,6 +72,14 @@ function sanitizeDatacron(value) {
     rerollCount: Number.isFinite(Number(value?.rerollCount)) ? Number(value.rerollCount) : null,
     affixes: Object.freeze(asArray(value?.affixes).slice(0, 12).map(sanitizeAffix)),
   });
+}
+function validDatacronState(value, datacron = null) {
+  const state = clean(value).toLowerCase();
+  if (!state) return datacron?.id ? "assigned" : "unknown";
+  if (!DATACRON_STATES.has(state)) return datacron?.id ? "assigned" : "unknown";
+  if (state === "assigned") return datacron?.id ? "assigned" : "unknown";
+  if (datacron?.id) return "assigned";
+  return state;
 }
 function boardMutationPolicy(plan) {
   if (!plan?.id) return Object.freeze({ allowed: true, code: "no-plan", status: "", attempts: 0 });
@@ -205,6 +215,7 @@ export function createGacBoardObservationService(options = {}) {
     const zone = clean(input.zone).slice(0, 100) || null;
     const slot = validSlot(input.slot);
     const datacron = sanitizeDatacron(input.datacron);
+    const datacronState = validDatacronState(input.datacronState, datacron);
     const source = "user-confirmed-current-board";
     const identityQuery = zone && slot !== null
       ? { zone: `eq.${zone}`, squad_slot: `eq.${slot}` }
@@ -258,7 +269,9 @@ export function createGacBoardObservationService(options = {}) {
         round: resolved.round,
         size,
         boardOwner: owner,
-        datacronConfirmed: Boolean(datacron?.id),
+        datacronState,
+        datacronConfirmed: datacronState === "assigned",
+        datacronAbsenceConfirmed: datacronState === "none",
       },
     }]));
 
@@ -276,6 +289,7 @@ export function createGacBoardObservationService(options = {}) {
         zone: zone || "",
         slot,
         datacron,
+        datacronState,
       }),
       observedAt,
       id: inserted[0]?.id ?? null,
@@ -306,17 +320,22 @@ export function createGacBoardObservationService(options = {}) {
         name: clean(resolved.confirmed?.opponent?.name),
         playerId: clean(resolved.confirmed?.opponent?.playerId),
       }),
-      defenses: Object.freeze(rows.map((row) => Object.freeze({
-        id: row.id ?? null,
-        leaderBaseId: normalizeBaseId(row.leader_base_id),
-        members: Object.freeze(asArray(row.members).map(normalizeBaseId).filter(Boolean)),
-        zone: clean(row.zone),
-        slot: validSlot(row.squad_slot),
-        datacron: sanitizeDatacron(row.datacron),
-        confidence: Number(row.confidence || 0),
-        observedAt: clean(row.observed_at),
-        source: clean(row.source),
-      }))),
+      defenses: Object.freeze(rows.map((row) => {
+        const datacron = sanitizeDatacron(row.datacron);
+        const datacronState = validDatacronState(row?.metadata?.datacronState, datacron);
+        return Object.freeze({
+          id: row.id ?? null,
+          leaderBaseId: normalizeBaseId(row.leader_base_id),
+          members: Object.freeze(asArray(row.members).map(normalizeBaseId).filter(Boolean)),
+          zone: clean(row.zone),
+          slot: validSlot(row.squad_slot),
+          datacron,
+          datacronState,
+          confidence: Number(row.confidence || 0),
+          observedAt: clean(row.observed_at),
+          source: clean(row.source),
+        });
+      })),
     });
   }
 
@@ -378,4 +397,14 @@ export function createGacBoardObservationService(options = {}) {
 
 export const gacBoardObservationService = createGacBoardObservationService();
 
-export { boardMutationPolicy, normalizeBaseId, normalizedMembers, sanitizeDatacron, validOwner, validPlanStatus, validRound, validSize };
+export {
+  boardMutationPolicy,
+  normalizeBaseId,
+  normalizedMembers,
+  sanitizeDatacron,
+  validDatacronState,
+  validOwner,
+  validPlanStatus,
+  validRound,
+  validSize,
+};

@@ -28,6 +28,8 @@ Every record requires:
 - `format: 3v3|5v5|fleet`
 - exact defender leader and exact defender member composition
 - exact attacker leader and exact attacker member composition
+- explicit attacker Datacron `presence`
+- explicit defender Datacron `presence`
 - at least one structured guidance item
 - source name
 - source reference
@@ -42,13 +44,36 @@ Optional validity metadata:
 - `gameDataVersion`
 - notes
 
-Optional Datacron constraints can require:
+## Datacron presence contract
+
+Every attacker and defender Datacron constraint must explicitly declare one of:
+
+- `presence: "any"` — the source explicitly supports the tactic regardless of whether a Datacron is assigned.
+- `presence: "none"` — the tactic may be used only when the current board is **verified as having no assigned Datacron**.
+- `presence: "assigned"` — the tactic requires a verified assigned Datacron.
+
+Optional assigned-Datacron constraints can additionally require:
 
 - one of a set of Datacron set IDs
 - specific resolved mechanic/ability IDs
-- presence of a known selected Datacron
 
-If a record has a Datacron constraint and the current Datacron context is unknown, the record does **not** match.
+`presence: "none"` cannot also require a set or mechanic.
+
+`presence: "assigned"` fails when the assigned state is unknown. Set/mechanic-specific tactics additionally fail unless those details resolve and match.
+
+`presence: "any"` is a strong source claim. With no set/mechanic rule it can match an unknown current Datacron state because the source explicitly says Datacron presence does not change the tactic. If a set/mechanic rule is present, assigned evidence must resolve.
+
+### Current-board truth state
+
+Verified board persistence exposes three states:
+
+- `unknown` — the user did not confirm whether a Datacron is assigned.
+- `none` — the user explicitly confirmed in-game that no Datacron is assigned.
+- `assigned` — an exact current live Datacron ID was selected and revalidated.
+
+Old saved boards with neither an assigned Datacron snapshot nor truth metadata remain `unknown`. They are **not** upgraded to `none`.
+
+This distinction is required so an older no-Datacron-era guide cannot silently unlock against a current Datacron-modified defense.
 
 ## Exact-match rule
 
@@ -110,11 +135,12 @@ Game updates, character reworks, Omicron changes, Datacron rotations and bug fix
 During ingestion/review:
 
 1. Record the source update/publication date.
-2. Add `validFrom` when the tactic is tied to a known release/Datacron era.
-3. Add `validUntil` when a tactic is known to expire.
-4. Record `gameDataVersion` when available.
-5. Disable or expire the old row instead of silently rewriting its provenance.
-6. If multiple exact valid rows exist, the newest sourced row wins deterministically.
+2. Record explicit attacker/defender Datacron presence scope.
+3. Add `validFrom` when the tactic is tied to a known release/Datacron era.
+4. Add `validUntil` when a tactic is known to expire.
+5. Record `gameDataVersion` when available.
+6. Disable or expire the old row instead of silently rewriting its provenance.
+7. If multiple exact valid rows exist, the newest sourced row wins deterministically.
 
 ## Runtime truth boundary
 
@@ -125,7 +151,8 @@ Exact current defense
 + exact selected attacker composition
 + record is active
 + record is inside validity window
-+ all configured Datacron constraints resolve and match
++ attacker Datacron presence/rules match
++ defender Datacron presence/rules match
 + source provenance validates
 + guidance content validates
 = sourced execution guidance may be shown
@@ -154,11 +181,13 @@ The Command Center continues to show its evidence-derived Known Risks and pre-ba
     "members": ["ATT_LEAD", "ATT_2", "ATT_3"]
   },
   "attackerDatacron": {
+    "presence": "any",
     "required": false,
     "setIds": [],
     "mechanicIds": []
   },
   "defenderDatacron": {
+    "presence": "none",
     "required": false,
     "setIds": [],
     "mechanicIds": []

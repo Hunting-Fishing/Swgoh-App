@@ -173,36 +173,52 @@ function datacronMechanicIds(datacron) {
     .map((entry) => clean(entry?.abilityId || entry?.ability_id || entry?.mechanicId || entry?.mechanic_id))
     .filter(Boolean))].sort();
 }
-function datacronMatchContext(datacron, known) {
-  if (known !== true) return Object.freeze({ known: false, setId: "", mechanicIds: Object.freeze([]) });
+function datacronMatchContext(datacron, known, stateInput = "") {
+  if (known !== true) return Object.freeze({ known: false, state: "unknown", setId: "", mechanicIds: Object.freeze([]) });
+  const requestedState = clean(stateInput).toLowerCase();
+  const resolvedState = requestedState === "none"
+    ? "none"
+    : requestedState === "assigned" || datacron
+      ? "assigned"
+      : "none";
   return Object.freeze({
     known: true,
-    setId: clean(datacron?.setId ?? datacron?.set_id),
-    mechanicIds: Object.freeze(datacronMechanicIds(datacron)),
+    state: resolvedState,
+    setId: resolvedState === "assigned" ? clean(datacron?.setId ?? datacron?.set_id) : "",
+    mechanicIds: Object.freeze(resolvedState === "assigned" ? datacronMechanicIds(datacron) : []),
   });
 }
 function datacronContext(card, context, primary, eligibility) {
   const id = clean(card?.dataset?.recommendedDatacronId);
-  if (!id) return Object.freeze({ selected: false, id: "", label: "", coverage: null, matchContext: datacronMatchContext(null, true) });
+  if (!id) return Object.freeze({ selected: false, id: "", label: "", coverage: null, matchContext: datacronMatchContext(null, true, "none") });
   const datacron = (Array.isArray(context.mineRoster?.datacrons) ? context.mineRoster.datacrons : []).find((entry) => clean(entry?.id) === id) || null;
-  if (!datacron) return Object.freeze({ selected: true, id, label: `Datacron ${id}`, coverage: null, matchContext: datacronMatchContext(null, false) });
-  if (!eligibility) return Object.freeze({ selected: true, id, label: `Datacron ${id}`, coverage: null, matchContext: datacronMatchContext(datacron, true) });
+  if (!datacron) return Object.freeze({ selected: true, id, label: `Datacron ${id}`, coverage: null, matchContext: datacronMatchContext(null, false, "unknown") });
+  if (!eligibility) return Object.freeze({ selected: true, id, label: `Datacron ${id}`, coverage: null, matchContext: datacronMatchContext(datacron, true, "assigned") });
   const coverage = squadCoverage(datacron, primary, eligibility.unitIndex, eligibility.datacronCatalog);
   return Object.freeze({
     selected: true,
     id,
     label: datacronLabel(datacron, eligibility.datacronCatalog),
     coverage,
-    matchContext: datacronMatchContext(datacron, true),
+    matchContext: datacronMatchContext(datacron, true, "assigned"),
   });
 }
 function defenseDatacronMatchContext(defense, opponentRoster) {
   const inline = defense?.datacron && typeof defense.datacron === "object" ? defense.datacron : null;
   const id = clean(defense?.datacronId || defense?.datacron_id || inline?.id);
-  if (inline) return datacronMatchContext(inline, true);
-  if (!id) return datacronMatchContext(null, false);
-  const datacron = (Array.isArray(opponentRoster?.datacrons) ? opponentRoster.datacrons : []).find((entry) => clean(entry?.id) === id) || null;
-  return datacron ? datacronMatchContext(datacron, true) : datacronMatchContext(null, false);
+  const savedState = clean(defense?.datacronState).toLowerCase();
+  if (savedState === "none") return datacronMatchContext(null, true, "none");
+  if (inline) return datacronMatchContext(inline, true, "assigned");
+  if (id) {
+    const datacron = (Array.isArray(opponentRoster?.datacrons) ? opponentRoster.datacrons : []).find((entry) => clean(entry?.id) === id) || null;
+    return datacron
+      ? datacronMatchContext(datacron, true, "assigned")
+      : savedState === "assigned"
+        ? datacronMatchContext(null, true, "assigned")
+        : datacronMatchContext(null, false, "unknown");
+  }
+  if (savedState === "assigned") return datacronMatchContext(null, true, "assigned");
+  return datacronMatchContext(null, false, "unknown");
 }
 function strategyLookupContext(current, defense, attackerIds, datacron, opponentRoster) {
   return Object.freeze({
@@ -340,7 +356,7 @@ function injectStyles() {
   if (document.querySelector('link[data-gac-attack-brief="true"]')) return;
   const link = document.createElement("link");
   link.rel = "stylesheet";
-  link.href = "/gac-war-room-attack-brief.css?v=20260820-brief2";
+  link.href = "/gac-war-room-attack-brief.css?v=20260820-brief3";
   link.dataset.gacAttackBrief = "true";
   document.head.append(link);
 }

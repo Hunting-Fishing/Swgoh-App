@@ -100,6 +100,7 @@ const validBody = {
   leaderBaseId: "DEF_LEAD",
   members: ["DEF_LEAD", "DEF_2", "DEF_3"],
   datacronId: "DC-ENEMY-9",
+  datacronState: "assigned",
 };
 const ownBody = {
   round: 3,
@@ -107,6 +108,7 @@ const ownBody = {
   leaderBaseId: "MY_LEAD",
   members: ["MY_LEAD", "MY_2", "MY_3"],
   datacronId: "DC-MINE-9",
+  datacronState: "assigned",
 };
 
 test("verified opponent-board save validates the opponent live roster and exact datacron snapshot", async () => {
@@ -117,6 +119,44 @@ test("verified opponent-board save validates the opponent live roster and exact 
   assert.equal(writes[0].headers["X-GAC-Board-Owner"], "opponent");
   assert.equal(saveCalls[0].owner, "opponent");
   assert.equal(saveCalls[0].input.datacron.id, "DC-ENEMY-9");
+  assert.equal(saveCalls[0].input.datacronState, "assigned");
+});
+
+test("verified current board can explicitly confirm no assigned Datacron", async () => {
+  const { api, saveCalls, writes } = harness();
+  await api.handle(postRequest({ ...validBody, datacronId: "", datacronState: "none" }), {}, new URL("https://app.test/api/gac/current-board/732764286/defense"));
+  assert.equal(writes[0].status, 200);
+  assert.equal(saveCalls[0].input.datacron, null);
+  assert.equal(saveCalls[0].input.datacronState, "none");
+});
+
+test("legacy save without Datacron ID or state stays unknown rather than becoming none", async () => {
+  const { api, saveCalls, writes } = harness();
+  const { datacronId, datacronState, ...legacyBody } = validBody;
+  void datacronId;
+  void datacronState;
+  await api.handle(postRequest(legacyBody), {}, new URL("https://app.test/api/gac/current-board/732764286/defense"));
+  assert.equal(writes[0].status, 200);
+  assert.equal(saveCalls[0].input.datacron, null);
+  assert.equal(saveCalls[0].input.datacronState, "unknown");
+});
+
+test("assigned Datacron state requires an exact current live Datacron ID", async () => {
+  const { api, saveCalls, writes } = harness();
+  await api.handle(postRequest({ ...validBody, datacronId: "", datacronState: "assigned" }), {}, new URL("https://app.test/api/gac/current-board/732764286/defense"));
+  assert.equal(writes[0].status, 400);
+  assert.match(writes[0].body.error, /requires an exact Datacron ID/i);
+  assert.equal(saveCalls.length, 0);
+});
+
+test("a real Datacron ID cannot be submitted as none or unknown", async () => {
+  for (const datacronState of ["none", "unknown"]) {
+    const { api, saveCalls, writes } = harness();
+    await api.handle(postRequest({ ...validBody, datacronState }), {}, new URL("https://app.test/api/gac/current-board/732764286/defense"));
+    assert.equal(writes[0].status, 400);
+    assert.match(writes[0].body.error, /requires datacronState=assigned/i);
+    assert.equal(saveCalls.length, 0);
+  }
 });
 
 test("verified own-defense save validates Warm Bacon live roster rather than the opponent roster", async () => {
@@ -126,6 +166,7 @@ test("verified own-defense save validates Warm Bacon live roster rather than the
   assert.equal(writes[0].headers["X-GAC-Board-Owner"], "player");
   assert.equal(saveCalls[0].owner, "player");
   assert.equal(saveCalls[0].input.datacron.id, "DC-MINE-9");
+  assert.equal(saveCalls[0].input.datacronState, "assigned");
   assert.ok(gatewayCalls.some((call) => call.pathname === "/v1/player/732764286"));
   assert.equal(gatewayCalls.some((call) => call.pathname === "/v1/player/123456789"), false);
 });

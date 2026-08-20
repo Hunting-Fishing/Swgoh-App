@@ -1,6 +1,7 @@
 const FORMAT_VALUES = new Set(["3v3", "5v5", "fleet"]);
 const STATUS_VALUES = new Set(["active", "disabled"]);
 const SOURCE_TYPES = new Set(["video", "article", "tool", "community", "first-party", "curated"]);
+const DATACRON_PRESENCE = new Set(["any", "none", "assigned"]);
 const SCHEMA_VERSION = 1;
 
 function clean(value) { return String(value ?? "").trim(); }
@@ -46,6 +47,7 @@ function normalizeDatacronConstraint(value = {}) {
   const setIds = [...new Set((Array.isArray(value?.setIds) ? value.setIds : []).map(clean).filter(Boolean))].sort();
   const mechanicIds = [...new Set((Array.isArray(value?.mechanicIds) ? value.mechanicIds : []).map(clean).filter(Boolean))].sort();
   return Object.freeze({
+    presence: clean(value?.presence).toLowerCase(),
     setIds: Object.freeze(setIds),
     mechanicIds: Object.freeze(mechanicIds),
     required: value?.required === true,
@@ -79,7 +81,7 @@ function normalizeValidity(value = {}) {
   });
 }
 function normalizeRecord(value = {}) {
-  const record = Object.freeze({
+  return Object.freeze({
     schemaVersion: Number(value.schemaVersion),
     id: clean(value.id),
     status: clean(value.status || "active").toLowerCase(),
@@ -92,7 +94,15 @@ function normalizeRecord(value = {}) {
     provenance: normalizeProvenance(value.provenance),
     validity: normalizeValidity(value.validity),
   });
-  return record;
+}
+function datacronConstraintErrors(constraint, side) {
+  const errors = [];
+  if (!DATACRON_PRESENCE.has(constraint?.presence)) errors.push(`invalid-${side}-datacron-presence`);
+  if (constraint?.presence === "none" && (constraint.required === true || constraint.setIds.length || constraint.mechanicIds.length)) {
+    errors.push(`invalid-${side}-datacron-none-constraints`);
+  }
+  if (constraint?.required === true && constraint?.presence !== "assigned") errors.push(`invalid-${side}-datacron-required-state`);
+  return errors;
 }
 function validateRecord(value = {}) {
   const record = normalizeRecord(value);
@@ -107,6 +117,8 @@ function validateRecord(value = {}) {
   if (expectedSize && record.defender.members.length !== expectedSize) errors.push("invalid-defender-size");
   if (expectedSize && record.attacker.members.length !== expectedSize) errors.push("invalid-attacker-size");
   if (record.format === "fleet" && (record.defender.members.length < 4 || record.attacker.members.length < 4)) errors.push("invalid-fleet-size");
+  errors.push(...datacronConstraintErrors(record.attackerDatacron, "attacker"));
+  errors.push(...datacronConstraintErrors(record.defenderDatacron, "defender"));
   if (!record.guidance.hasContent) errors.push("missing-guidance");
   if (!record.provenance.sourceName) errors.push("missing-source-name");
   if (!record.provenance.sourceRef) errors.push("missing-source-ref");
@@ -126,11 +138,18 @@ function withinValidity(record, now = Date.now()) {
   return true;
 }
 function constraintMatches(constraint = {}, context = {}) {
+  const presence = clean(constraint?.presence).toLowerCase();
+  if (!DATACRON_PRESENCE.has(presence)) return false;
+  const state = clean(context?.state).toLowerCase();
   const setIds = Array.isArray(constraint?.setIds) ? constraint.setIds : [];
   const mechanicIds = Array.isArray(constraint?.mechanicIds) ? constraint.mechanicIds : [];
-  const hasRules = setIds.length > 0 || mechanicIds.length > 0 || constraint?.required === true;
-  if (!hasRules) return true;
-  if (context?.known !== true) return false;
+  const hasSpecificRules = setIds.length > 0 || mechanicIds.length > 0 || constraint?.required === true;
+
+  if (presence === "none") return context?.known === true && state === "none" && !hasSpecificRules;
+  if (presence === "assigned" && (context?.known !== true || state !== "assigned")) return false;
+  if (presence === "any" && !hasSpecificRules) return true;
+  if (context?.known !== true || state !== "assigned") return false;
+
   const selectedSetId = clean(context?.setId);
   const selectedMechanics = new Set((Array.isArray(context?.mechanicIds) ? context.mechanicIds : []).map(clean).filter(Boolean));
   if (constraint?.required === true && !selectedSetId && !selectedMechanics.size) return false;
@@ -181,6 +200,7 @@ function findExactStrategy(records = [], context = {}) {
 }
 
 export {
+  DATACRON_PRESENCE,
   SCHEMA_VERSION,
   constraintMatches,
   exactComposition,
