@@ -11,6 +11,7 @@ import {
 } from "../public/gac-live-matchup-truth-model.js";
 
 const ROOT = path.resolve(process.cwd());
+const liveRoster = (allyCode) => ({ source: "live", player: { allyCode }, units: [] });
 
 test("recorded round history never converts unknown imported rounds into wins or losses", () => {
   const result = recordedRoundHistory({
@@ -72,7 +73,7 @@ test("verified manual board only counts when it belongs to the exact current opp
   }).source, "manual-required");
 });
 
-test("current matchup recommendations are gated until exact identity, both rosters and current board exist", () => {
+test("current matchup recommendations are gated until exact identity, live rosters and current board exist", () => {
   const base = {
     matchup: {
       opponentResolution: { exact: true, method: "live-event-payload", source: "comlink-live" },
@@ -82,8 +83,8 @@ test("current matchup recommendations are gated until exact identity, both roste
       },
       defense: { opponent: [] },
     },
-    mineRoster: { player: { allyCode: "732764286" }, units: [] },
-    opponentRoster: { player: { allyCode: "123456789" }, units: [] },
+    mineRoster: liveRoster("732764286"),
+    opponentRoster: liveRoster("123456789"),
     scouting: { coverage: { offensiveBattleRows: 10, defensiveBattleRows: 8 }, offensiveTendencies: [], defensiveTendencies: [] },
     roundHistory: { rounds: [] },
   };
@@ -102,6 +103,20 @@ test("current matchup recommendations are gated until exact identity, both roste
   assert.equal(ready.recommendationMode, "evidence-first-with-roster-fit");
 });
 
+test("canonical or stale roster payload cannot satisfy the live roster gate", () => {
+  const model = truthDashboardModel({
+    matchup: {
+      opponentResolution: { exact: true },
+      matchup: { me: { allyCode: "732764286" }, opponent: { allyCode: "123456789" } },
+      defense: { opponent: [{ members: ["A", "B", "C"] }] },
+    },
+    mineRoster: { source: "canonical", player: { allyCode: "732764286" }, units: [] },
+    opponentRoster: liveRoster("123456789"),
+  });
+  assert.equal(model.actionable, false);
+  assert.equal(model.rosters.mineLoaded, false);
+});
+
 test("no history keeps current board actionable but forces explicitly labeled roster-fit fallback", () => {
   const model = truthDashboardModel({
     matchup: {
@@ -109,8 +124,8 @@ test("no history keeps current board actionable but forces explicitly labeled ro
       matchup: { me: { allyCode: "732764286" }, opponent: { allyCode: "123456789" } },
       defense: { opponent: [{ leaderBaseId: "LEADER", members: ["LEADER", "A", "B"] }] },
     },
-    mineRoster: { player: { allyCode: "732764286" }, units: [] },
-    opponentRoster: { player: { allyCode: "123456789" }, units: [] },
+    mineRoster: liveRoster("732764286"),
+    opponentRoster: liveRoster("123456789"),
     scouting: null,
     roundHistory: null,
   });
@@ -127,8 +142,7 @@ test("truth dashboard browser controller is read-only and listens for manual boa
   assert.match(controller, /roster-fit heuristic/i);
 });
 
-test("browser activation is isolated to the existing board evidence module", () => {
-  const source = fs.readFileSync(path.join(ROOT, "public/gac-board-evidence-events.js"), "utf8");
-  assert.match(source, /gac-live-matchup-truth-dashboard\.js/);
-  assert.match(source, /typeof window !== "undefined"/);
+test("browser activation comes from an existing top-level GAC module", () => {
+  const source = fs.readFileSync(path.join(ROOT, "public/gac-datacron-mechanics-ui.js"), "utf8");
+  assert.match(source, /import "\.\/gac-live-matchup-truth-dashboard\.js"/);
 });
