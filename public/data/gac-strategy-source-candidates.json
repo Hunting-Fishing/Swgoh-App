@@ -1,0 +1,92 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-08-20T00:00:00Z",
+  "policy": "Research candidates are quarantined from runtime. A candidate must pass every review flag and the production strategy-record validator before promotion into gac-strategy-records.json.",
+  "candidates": [
+    {
+      "schemaVersion": 1,
+      "candidateId": "research:baylan-shin-marrok:jml-jkl-hyoda:3v3:2026-01",
+      "proposedRecord": {
+        "schemaVersion": 1,
+        "id": "strategy:baylan-shin-marrok:jml-jkl-hyoda:3v3",
+        "status": "active",
+        "format": "3v3",
+        "defender": {
+          "leaderBaseId": "BAYLANSKOLL",
+          "members": ["BAYLANSKOLL", "SHINHATI", "MARROK"]
+        },
+        "attacker": {
+          "leaderBaseId": "JEDIMASTERLUKE",
+          "members": ["JEDIMASTERLUKE", "JEDIKNIGHTLUKE", "HERMITYODA"]
+        },
+        "attackerDatacron": {
+          "presence": "",
+          "required": false,
+          "setIds": [],
+          "mechanicIds": []
+        },
+        "defenderDatacron": {
+          "presence": "",
+          "required": false,
+          "setIds": [],
+          "mechanicIds": []
+        },
+        "guidance": {
+          "opening": [
+            {
+              "text": "Open by using Jedi Master Luke's targeted special on Hermit Yoda.",
+              "note": "Paraphrased from the referenced 3v3 counter guide; exact ability naming still requires source-review confirmation."
+            }
+          ],
+          "targets": [
+            { "text": "Eliminate Baylan Skoll first." },
+            { "text": "After Baylan, eliminate Marrok." },
+            { "text": "Finish Shin Hati last." }
+          ],
+          "mechanics": [],
+          "avoid": []
+        },
+        "provenance": {
+          "sourceName": "SWGOH GA3 Counter Guide",
+          "sourceRef": "https://www.swgoh-ga3.online-server.info/index.php?id=baylan_skoll&mode=leaders",
+          "sourceType": "tool",
+          "author": "",
+          "sourcePublishedAt": "2026-01-16T00:00:00Z",
+          "sourceUpdatedAt": "2026-01-16T00:00:00Z",
+          "capturedAt": "2026-08-20T00:00:00Z"
+        },
+        "validity": {
+          "validFrom": "",
+          "validUntil": "",
+          "gameDataVersion": "",
+          "notes": "Quarantined pending current-version and Datacron-scope validation."
+        }
+      },
+      "review": {
+        "status": "quarantined",
+        "flags": {
+          "sourceVerified": true,
+          "exactCompositionVerified": true,
+          "baseIdsVerified": false,
+          "guidanceParaphraseVerified": true,
+          "datacronScopeVerified": false,
+          "versionValidityVerified": false,
+          "copyrightParaphraseReviewed": true
+        },
+        "blockers": [
+          "datacron-scope-unverified",
+          "current-version-validity-unverified",
+          "base-ids-unverified"
+        ],
+        "reviewer": "",
+        "reviewedAt": "",
+        "notes": "The January 2026 source predates later Baylan-focused Datacron conditions seen during research. Do not promote until attacker and defender Datacron scope and current-version validity are verified."
+      },
+      "research": {
+        "discoveredAt": "2026-08-20T00:00:00Z",
+        "sourceSnapshotDate": "2026-01-16",
+        "sourceNotes": "Source describes the exact Baylan Skoll / Shin Hati / Marrok defense and Jedi Master Luke / Jedi Knight Luke / Hermit Yoda attack sequence. Runtime remains unaffected while quarantined."
+      }
+    }
+  ]
+}
