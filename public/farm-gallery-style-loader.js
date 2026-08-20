@@ -5,3 +5,15 @@ if (!document.querySelector('link[data-farm-gallery-tabs="true"]')) {
   link.dataset.farmGalleryTabs = 'true';
   document.head.appendChild(link);
 }
+
+if (!document.querySelector('style[data-farm-gallery-compat="true"]')) {
+  const style = document.createElement('style');
+  style.dataset.farmGalleryCompat = 'true';
+  style.textContent = `
+    .farm-gallery-tabs-active [data-farm-v3-command],
+    .farm-gallery-tabs-active #farmMasterPlan {
+      display: none !important;
+    }
+  `;
+  document.head.appendChild(style);
+}
