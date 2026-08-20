@@ -20,8 +20,8 @@ function record(overrides = {}) {
     format: "3v3",
     defender: { leaderBaseId: "DEF_LEAD", members: ["DEF_LEAD", "DEF_2", "DEF_3"] },
     attacker: { leaderBaseId: "ATT_LEAD", members: ["ATT_LEAD", "ATT_2", "ATT_3"] },
-    attackerDatacron: { required: false, setIds: [], mechanicIds: [] },
-    defenderDatacron: { required: false, setIds: [], mechanicIds: [] },
+    attackerDatacron: { presence: "any", required: false, setIds: [], mechanicIds: [] },
+    defenderDatacron: { presence: "none", required: false, setIds: [], mechanicIds: [] },
     guidance: {
       opening: [{ text: "Use the sourced opening sequence." }],
       targets: [{ text: "Follow the sourced target priority." }],
@@ -49,16 +49,23 @@ const exactContext = {
   format: "3v3",
   defenderMembers: ["DEF_3", "DEF_LEAD", "DEF_2"],
   attackerMembers: ["ATT_2", "ATT_3", "ATT_LEAD"],
-  attackerDatacron: { known: true, setId: "", mechanicIds: [] },
-  defenderDatacron: { known: false, setId: "", mechanicIds: [] },
+  attackerDatacron: { known: true, state: "none", setId: "", mechanicIds: [] },
+  defenderDatacron: { known: true, state: "none", setId: "", mechanicIds: [] },
   now: Date.parse("2026-08-20T12:00:00Z"),
 };
 
-test("valid strategy records require exact squads, guidance and provenance", () => {
+test("valid strategy records require exact squads, explicit Datacron presence, guidance and provenance", () => {
   const result = validateRecord(record());
   assert.equal(result.valid, true);
   assert.equal(result.record.defender.members.length, 3);
   assert.equal(result.record.guidance.hasContent, true);
+  assert.equal(result.record.defenderDatacron.presence, "none");
+
+  const missingPresence = validateRecord(record({
+    defenderDatacron: { required: false, setIds: [], mechanicIds: [] },
+  }));
+  assert.equal(missingPresence.valid, false);
+  assert.ok(missingPresence.errors.includes("invalid-defender-datacron-presence"));
 
   const missingProvenance = validateRecord(record({ provenance: { sourceName: "Only a name" } }));
   assert.equal(missingProvenance.valid, false);
@@ -82,14 +89,42 @@ test("validity windows fail closed for future and expired tactics", () => {
   assert.equal(withinValidity(validated, Date.parse("2026-09-02T00:00:00Z")), false);
 });
 
-test("Datacron-constrained tactics require known matching Datacron evidence", () => {
+test("no-Datacron tactics match verified none but never unknown", () => {
+  const constraint = validateRecord(record()).record.defenderDatacron;
+  assert.equal(constraintMatches(constraint, { known: true, state: "none", setId: "", mechanicIds: [] }), true);
+  assert.equal(constraintMatches(constraint, { known: false, state: "unknown", setId: "", mechanicIds: [] }), false);
+  assert.equal(constraintMatches(constraint, { known: true, state: "assigned", setId: "SET_1", mechanicIds: [] }), false);
+  assert.equal(recordMatches(validateRecord(record()).record, { ...exactContext, defenderDatacron: { known: false, state: "unknown" } }), false);
+});
+
+test("assigned Datacron tactics reject none and set/mechanic rules require resolved assigned evidence", () => {
   const constrained = validateRecord(record({
-    attackerDatacron: { required: true, setIds: ["SET_17"], mechanicIds: ["MECH_A"] },
+    defenderDatacron: { presence: "assigned", required: true, setIds: ["SET_17"], mechanicIds: ["MECH_A"] },
   })).record;
-  assert.equal(constraintMatches(constrained.attackerDatacron, { known: false }), false);
-  assert.equal(constraintMatches(constrained.attackerDatacron, { known: true, setId: "SET_17", mechanicIds: ["MECH_A"] }), true);
-  assert.equal(constraintMatches(constrained.attackerDatacron, { known: true, setId: "SET_18", mechanicIds: ["MECH_A"] }), false);
-  assert.equal(recordMatches(constrained, { ...exactContext, attackerDatacron: { known: false } }), false);
+  assert.equal(constraintMatches(constrained.defenderDatacron, { known: false, state: "unknown" }), false);
+  assert.equal(constraintMatches(constrained.defenderDatacron, { known: true, state: "none", setId: "", mechanicIds: [] }), false);
+  assert.equal(constraintMatches(constrained.defenderDatacron, { known: true, state: "assigned", setId: "SET_17", mechanicIds: ["MECH_A"] }), true);
+  assert.equal(constraintMatches(constrained.defenderDatacron, { known: true, state: "assigned", setId: "SET_18", mechanicIds: ["MECH_A"] }), false);
+  assert.equal(constraintMatches(constrained.defenderDatacron, { known: true, state: "assigned", setId: "SET_17", mechanicIds: [] }), false);
+});
+
+test("presence any is an explicit source claim and can match unknown only without specific Datacron rules", () => {
+  const unconstrained = validateRecord(record()).record.attackerDatacron;
+  assert.equal(constraintMatches(unconstrained, { known: false, state: "unknown" }), true);
+
+  const setSpecific = validateRecord(record({
+    attackerDatacron: { presence: "any", required: false, setIds: ["SET_21"], mechanicIds: [] },
+  })).record.attackerDatacron;
+  assert.equal(constraintMatches(setSpecific, { known: false, state: "unknown" }), false);
+  assert.equal(constraintMatches(setSpecific, { known: true, state: "assigned", setId: "SET_21", mechanicIds: [] }), true);
+});
+
+test("invalid no-Datacron records cannot also require set/mechanic evidence", () => {
+  const result = validateRecord(record({
+    defenderDatacron: { presence: "none", required: false, setIds: ["SET_BAD"], mechanicIds: [] },
+  }));
+  assert.equal(result.valid, false);
+  assert.ok(result.errors.includes("invalid-defender-datacron-none-constraints"));
 });
 
 test("when several exact records are valid the newest sourced record wins deterministically", () => {
@@ -136,9 +171,10 @@ test("production strategy catalog is intentionally empty until sourced ingestion
   assert.match(body.sourcePolicy, /No unsourced opening move/i);
 });
 
-test("Attack Brief wires exact strategy lookup but keeps the controller read-only", async () => {
+test("Attack Brief wires exact strategy lookup, defender truth state, and remains read-only", async () => {
   const controller = await readFile(new URL("../public/gac-war-room-attack-brief.js", import.meta.url), "utf8");
   assert.match(controller, /findStrategyGuidance\(strategyLookupContext/);
   assert.match(controller, /defenseDatacronMatchContext/);
+  assert.match(controller, /defense\?\.datacronState/);
   assert.doesNotMatch(controller, /method\s*:\s*["'](?:POST|PUT|PATCH|DELETE)["']/i);
 });
