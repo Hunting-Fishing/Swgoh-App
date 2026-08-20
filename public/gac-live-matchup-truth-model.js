@@ -6,7 +6,7 @@ function allyCode(value) { const code = clean(value).replace(/\D/g, ""); return 
 function rosterLoaded(body, expectedAllyCode = "") {
   const expected = allyCode(expectedAllyCode);
   const actual = allyCode(body?.player?.allyCode || body?.player?.ally_code || body?.allyCode || body?.ally_code);
-  return Boolean(body?.player && Array.isArray(body?.units) && (!expected || !actual || actual === expected));
+  return Boolean(body?.source === "live" && body?.player && Array.isArray(body?.units) && (!expected || !actual || actual === expected));
 }
 
 function aggregateOffense(tendencies = []) {
