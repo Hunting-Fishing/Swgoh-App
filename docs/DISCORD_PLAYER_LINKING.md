@@ -2,9 +2,9 @@
 
 ## Purpose
 
-Discord player linking must never accept an arbitrary Ally Code and silently attach it to a Discord identity. Member-controlled TB state must likewise never target an unlinked or unrelated SWGOH account.
+Discord player linking must never accept an arbitrary Ally Code and silently attach it to a Discord identity. Member-controlled TB state and outbound TB @mentions must likewise never target an unlinked or unrelated SWGOH account.
 
-The current production-safe pilot is guild-scoped: player linking remains officer-mediated, while already-linked members may use tightly scoped self-service for their own player record, unit donation preferences, and TB availability.
+The current production-safe model is guild-scoped: player linking remains officer-mediated, already-linked members may use tightly scoped self-service for their own player record/preferences/availability, and Stage 10 assignment publishing uses only those durable links when an officer explicitly enables member @mentions.
 
 ## Current implementation
 
@@ -17,9 +17,11 @@ The identity and member-control path is implemented end-to-end for the pilot Dis
 - `discord-donation-preference-service.mjs` verifies current guild membership and unit ownership before GIVE/KEEP writes;
 - `discord-member-availability-service.mjs` verifies current bound-guild membership before an UNAVAILABLE exclusion is persisted;
 - `discord-tb-live.mjs` feeds persisted GIVE/KEEP and UNAVAILABLE controls into the mission-safe ROTE planner;
+- `guild-discord-admin-service.mjs` supports exact normalized guild-mate registration and durable verified Discord channels;
+- `tb-stage10-discord-delivery-service.mjs` consumes only officer-approved immutable assignment artifacts and resolves linked identities for safe public @mentions;
 - `discord-tb.mjs` exposes officer and member-safe interaction handlers;
-- `scripts/register-discord-tb-commands.mjs` contains the guild-scoped Discord command definitions;
-- focused tests cover durable state, transaction routing, duplicate-safe identity, unit ownership validation, availability verification, planner consumption, self-target authorization, signed Discord interactions, and fail-closed storage behavior.
+- `scripts/register-discord-tb-commands.mjs` plus the Stage 9/10 schema patchers contain the guild-scoped Discord command definitions;
+- focused tests cover durable state, transaction routing, duplicate-safe identity, unit ownership validation, availability verification, planner consumption, self-target authorization, signed Discord interactions, exact mention allowlists, verified channel selection, idempotency, and fail-closed storage/delivery behavior.
 
 ## Guild membership verification
 
@@ -48,15 +50,17 @@ After that officer-created mapping exists, self-service commands use the signed 
 
 A future self-service linking flow would still require an additional ownership challenge or explicit officer approval mechanism before it could be described as verified account ownership.
 
-## Slash commands
-
-### `/tb me`
-
-Available to a linked member. Resolves only the calling Discord user ID, checks that the linked Ally Code is still present in the bound guild roster, and returns that player's current roster summary. It cannot target another Discord user and performs no mutation.
+## Registration paths
 
 ### `/tb link member:<user> ally_code:<code>`
 
-Officer-only. Verifies guild membership first, then persists the Discord user ↔ SWGOH player mapping with an audit event.
+Officer-only explicit registration. Verifies current bound-guild membership first, then persists the Discord user ↔ SWGOH player mapping with an audit event.
+
+### `/guild register-mates`
+
+Officer-only bulk assistant. It reads the current Discord server member list and current bound SWGOH Guild roster, normalizes names, and considers only unambiguous exact matches for automatic registration. Fuzzy guesses are never auto-linked. Ambiguous/unmatched users remain unresolved for officer review.
+
+This is the preferred way to populate the mention registry before a TB assignment publish, followed by `/tb link` for members who cannot be matched safely.
 
 ### `/tb unlink member:<user>`
 
@@ -64,22 +68,19 @@ Officer-only. Removes an existing durable mapping through an audited transaction
 
 ### `/tb links`
 
-Officer-only. Lists durable mappings for the Discord server. Discord mentions are suppressed so the listing does not ping members.
+Officer-only. Lists durable mappings for the Discord server. Discord mentions are suppressed so the registry listing itself does not ping members.
+
+## Member self-service
+
+### `/tb me`
+
+Available to a linked member. Resolves only the calling Discord user ID, checks that the linked Ally Code is still present in the bound guild roster, and returns that player's current roster summary. It cannot target another Discord user and performs no mutation.
 
 ### `/tb preference member:<optional-user> unit:<base-id> preference:<give|default|keep>`
 
 A linked normal member may omit `member` or explicitly select themselves. They cannot target another Discord user. Authorized officers may select another linked guild member.
 
-For `GIVE` and `KEEP`, the service requires:
-
-- durable guild setup;
-- a durable Discord user ↔ SWGOH player link;
-- the linked player to still be present in the bound guild roster;
-- the linked player to currently own the selected Base ID.
-
-Only after those checks does the durable state write occur.
-
-`DEFAULT` removes the explicit override and is intentionally allowed to clear durable state without requiring the live gateway. This allows a stale or unwanted control to be removed during an upstream outage.
+For `GIVE` and `KEEP`, the service requires durable guild setup, an existing durable link, current guild membership, and current ownership of the selected unit. `DEFAULT` removes the explicit override and is intentionally allowed to clear durable state without requiring the live gateway.
 
 ### `/tb preferences member:<optional-user>`
 
@@ -87,17 +88,11 @@ A normal linked member is automatically scoped to their own Discord user ID and 
 
 ### `/tb availability member:<optional-user> state:<optional-available|unavailable>`
 
-A linked normal member may read or change only their own availability. Authorized officers may target another linked guild member.
-
-When `state` is omitted, the command is read-only and reports the current durable state.
-
-`UNAVAILABLE` requires the linked player to resolve successfully against the current bound guild roster before persistence. Once stored, the player's stable member ID is passed to the ROTE planner as an ignored member and removed from Operation donor candidates.
-
-`AVAILABLE` clears the explicit exclusion. Clearing is intentionally allowed without the live gateway so a player can recover from an old exclusion during an upstream outage.
+A linked normal member may read or change only their own availability. Authorized officers may target another linked guild member. `UNAVAILABLE` removes that member from planner donor candidates; `AVAILABLE` clears the explicit exclusion.
 
 ## Planner integration
 
-Discord member controls feed the same mission-safe ROTE planner used by `/tb assignments` and `/tb phase`.
+Discord member controls feed the same mission-safe ROTE planner used by `/tb assignments`, `/tb phase`, and immutable Stage 9/10 artifacts.
 
 The planner contract is:
 
@@ -109,7 +104,23 @@ The planner contract is:
 - mission protections and hard reserves remain independent safety constraints;
 - forced KEEP/protection usage remains visible as HELP/risk rather than being hidden.
 
-Discord planning output reports how many GIVE/KEEP controls and unavailable-member exclusions were consumed.
+## Outbound TB mention safety
+
+Stage 10.1 permits public assignment @mentions only from the already-approved immutable artifact and only for durably linked assigned members.
+
+The delivery contract is:
+
+- `mentions` defaults ON for TB public delivery but can be explicitly set OFF;
+- linked assigned members render as `<@discordUserId>`;
+- unlinked assigned members remain visible by SWGOH player name and are counted in PREVIEW/STATUS;
+- Discord requests use `allowed_mentions.parse = []` and an explicit `users` allowlist;
+- `@everyone`, `@here`, and role parsing remain disabled even if the bot role itself has broader Discord permissions;
+- each linked member is notification-allowlisted at most once across a multi-message delivery;
+- member DMs remain disabled in this Stage 10.1 lane;
+- a deterministic mention-audience fingerprint is stored in delivery receipts so a partially delivered run cannot silently resume after the Discord↔SWGOH link registry changes;
+- the selected channel must be a durable verified destination owned by the currently bound Discord server.
+
+See `docs/STAGE10_1_TB_MEMBER_MENTIONS.md` for the full delivery contract.
 
 ## Authorization
 
@@ -132,9 +143,7 @@ Normal Discord members are admitted only for the explicit self-service subcomman
 - `/tb preferences` for their own linked Discord user ID;
 - `/tb availability` for their own linked Discord user ID.
 
-A normal member cannot use self-service authorization to call `/tb sync`, `/tb phase`, `/tb assignments`, `/tb farms`, `/tb links`, `/tb link`, `/tb unlink`, or `/tb setup`.
-
-A valid target belonging to a different Discord user fails authorization before the preference or availability transaction executes.
+A normal member cannot use self-service authorization to call Guild-wide planning, link administration, immutable approval, or delivery commands.
 
 ## Persistence and safety guarantees
 
@@ -152,25 +161,24 @@ The state layer preserves:
 - updated timestamps;
 - audited actor and action metadata.
 
-A single Ally Code cannot be durably assigned to two different Discord users in the same Discord server.
-
-Preferences and availability are cleared when a Discord member is relinked to a different Ally Code or unlinked, preventing stale controls from leaking to a different SWGOH identity.
+A single Ally Code cannot be durably assigned to two different Discord users in the same Discord server. Preferences and availability are cleared when a Discord member is relinked to a different Ally Code or unlinked, preventing stale controls from leaking to a different SWGOH identity.
 
 ## Still disabled
 
-This identity/member-control layer does **not** enable:
+This identity/member-control and Stage 10.1 layer does **not** enable:
 
 - self-service account claiming/link creation;
-- direct messages;
-- public assignment publishing;
-- automatic @mentions;
-- Operation locks from Discord;
-- automated officer actions;
+- member assignment DMs;
+- fuzzy automatic identity linking;
+- `@everyone`, `@here`, or role notifications;
+- automatic/proactive TB publishing;
+- scheduled TB execution;
+- publishing to unverified Discord destinations;
 - cross-guild linking.
 
 ## Next safe transport steps
 
-1. Replace raw Base ID entry with a user-friendly verified unit search/autocomplete path while keeping Base IDs as the canonical stored key.
-2. Persist immutable assignment-plan versions and explicit officer approval before any outbound publishing.
-3. Add a rate-limited delivery queue and per-member delivery status before enabling DMs or proactive Discord posts.
-4. Add officer-readable member-control summaries for fast pre-ROTE readiness review.
+1. Complete live acceptance of mention-enabled delivery in a dedicated verified TB pilot channel.
+2. Populate the Guild link registry with `/guild register-mates`, then manually resolve remaining unmatched/ambiguous members with `/tb link`.
+3. Consolidate a professional guild registration/status matrix showing linked, ignored, and unregistered members plus verified channels.
+4. Treat member DMs and automated/scheduled delivery as separate future acceptance lanes.

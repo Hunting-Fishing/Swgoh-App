@@ -33,25 +33,38 @@ function lifecycle(version = {}) {
   return 'AWAITING APPROVAL';
 }
 
+function mentionSummary(result = {}) {
+  if (result.includeMentions === false) return '**Member @mentions: OFF** · names only';
+  const coverage = result.mentionCoverage || {};
+  return `**Member @mentions: ON** · linked assigned members **${Number(coverage.linkedMembers || 0)}/${Number(coverage.assignedMembers || 0)}** · unlinked **${Number(coverage.unlinkedMembers || 0)}**`;
+}
+
+function channelLabel(result = {}) {
+  const id = safe(result.channelId);
+  return /^\d{16,22}$/.test(id) ? `<#${id}> · \`${id}\`` : `\`${id}\``;
+}
+
 function formatPreview(result = {}) {
   const artifact = result.artifact || {};
   const destination = result.destination || {};
   const existing = Number(result.delivered || 0);
+  const mentionChoice = result.includeMentions === false ? 'OFF' : 'ON';
   const lines = [
     '**SWGOH Command Center · Stage 10 ROTE Delivery Preview**',
     `Guild: **${safe(result?.context?.guild?.name)}** · Phase: **${safe(artifact.rotePhase)}** · Immutable: **v${Number(artifact.versionNumber || 0)}**`,
     `Approved hash: \`${shortHash(artifact.planHash)}\` · publishability: **PASS ✅**`,
     `Artifact: **${array(artifact.assignments).length} assigned** · **${array(artifact.unfilled).length} unfilled**`,
-    `Verified destination: **${safe(destination.display_name, 'Guild command channel')}** · channel \`${safe(result.channelId)}\``,
-    `Channel messages required: **${array(result.chunks).length}** · already delivered for this exact artifact: **${existing}**`,
+    `Verified destination: **${safe(destination.display_name, 'Guild TB channel')}** · ${channelLabel(result)}`,
+    mentionSummary(result),
+    `Channel messages required: **${array(result.chunks).length}** · already delivered for this exact artifact/destination/policy: **${existing}**`,
     `Idempotency: \`${shortKey(result.idempotencyKey)}\``,
     '',
     result.deliveryEnabled
       ? '**Safety gate: ARMED** · publishing still requires action:PUBLISH + exact hash + confirm:PUBLISH.'
       : '**Safety gate: LOCKED** · DISCORD_STAGE10_TB_CHANNEL_ENABLED is not enabled.',
-    '**Member mentions: OFF · Member DMs: OFF · Webhook fallback: OFF**',
+    '**Member DMs: OFF · @everyone/@here/role parsing: OFF · Webhook fallback: OFF**',
     '',
-    `Publish only this exact artifact with: \`/tb plan-delivery action:PUBLISH phase:${safe(artifact.rotePhase)} version:${Number(artifact.versionNumber || 0)} hash:${text(artifact.planHash).slice(0, 12)} confirm:PUBLISH\``,
+    `Publish only this exact artifact with: \`/tb plan-delivery action:PUBLISH phase:${safe(artifact.rotePhase)} version:${Number(artifact.versionNumber || 0)} channel:<#${safe(result.channelId)}> mentions:${mentionChoice} hash:${text(artifact.planHash).slice(0, 12)} confirm:PUBLISH\``,
     '',
     '_Read-only preview. No Discord assignment messages were sent._',
   ];
@@ -65,13 +78,14 @@ function formatPublished(result = {}) {
     `**SWGOH Command Center · Stage 10 ROTE ${replay ? 'Idempotent Replay' : 'Channel Delivery Complete'}**`,
     `Guild: **${safe(result?.context?.guild?.name)}** · Phase: **${safe(artifact.rotePhase)}** · Immutable: **v${Number(artifact.versionNumber || 0)}**`,
     `Approved hash: \`${shortHash(artifact.planHash)}\``,
-    `Verified channel: \`${safe(result.channelId)}\``,
+    `Verified channel: ${channelLabel(result)}`,
+    mentionSummary(result),
     `Chunks: **${Number(result.chunks || 0)}** · new messages: **${Number(result.newMessages || 0)}** · reused receipts: **${Number(result.reusedChunks || 0)}**`,
     `Idempotency: \`${shortKey(result.idempotencyKey)}\``,
-    '**Member mentions: OFF · Member DMs sent: 0 · Webhook fallback: OFF**',
+    '**Member DMs sent: 0 · @everyone/@here/role parsing: OFF · Webhook fallback: OFF**',
     '',
     replay
-      ? '_The exact approved artifact was already delivered. No duplicate Discord messages were sent._'
+      ? '_The exact approved artifact/destination/mention policy was already delivered. No duplicate Discord messages were sent._'
       : '_Delivery receipts were persisted for every channel message. Automatic/proactive publishing remains disabled._',
   ];
   return lines.join('\n').slice(0, 1900);
@@ -89,7 +103,8 @@ function formatStatus(result = {}) {
     '**SWGOH Command Center · Stage 10 ROTE Delivery Status**',
     `Guild: **${safe(result?.context?.guild?.name)}** · Phase: **${safe(artifact.rotePhase)}** · Immutable: **v${Number(artifact.versionNumber || 0)}**`,
     `Lifecycle: **${lifecycle(artifact)}** · hash ${result?.verification?.valid ? '✅' : '❌'} \`${shortHash(artifact.planHash)}\``,
-    `Verified channel: \`${safe(result.channelId)}\` · idempotency \`${shortKey(result.idempotencyKey)}\``,
+    `Verified channel: ${channelLabel(result)} · idempotency \`${shortKey(result.idempotencyKey)}\``,
+    mentionSummary(result),
     `Receipts: **${receipts.length}** · delivered **${Number(counts.delivered || 0)}** · sending **${Number(counts.sending || 0)}** · failed **${Number(counts.failed || 0)}**`,
   ];
   if (receipts.length) {
@@ -99,7 +114,7 @@ function formatStatus(result = {}) {
     }
     if (receipts.length > 8) lines.push(`• +${receipts.length - 8} more receipts`);
   } else {
-    lines.push('', 'No Stage 10 delivery receipts exist for this exact immutable artifact and destination.');
+    lines.push('', 'No Stage 10 delivery receipts exist for this exact immutable artifact, destination, and mention policy.');
   }
   lines.push('', '_Read-only receipt view. This action cannot publish or send DMs._');
   return lines.join('\n').slice(0, 1900);

@@ -1,3 +1,13 @@
+import {
+  historicalDatacronSummary,
+  predictionBroadSummary,
+  predictionEvidenceLabel,
+  predictionEvidenceTone,
+  predictionVerifiedSummary,
+  predictionZoneSummary,
+  visiblePredictions,
+} from "./gac-defense-forecast-model.js";
+
 const state = {
   requestId: 0,
   report: null,
@@ -54,11 +64,19 @@ function setStatus(text, kind = "") {
   element.dataset.kind = kind;
 }
 
+function renderPredictionEmpty(message) {
+  const meta = byId("gacScoutPredictionMeta");
+  const grid = byId("gacScoutPredictionGrid");
+  if (meta) meta.textContent = message;
+  if (grid) grid.innerHTML = `<div class="workspace-note">${escapeHtml(message)}</div>`;
+}
+
 function renderEmpty(message) {
   const defense = byId("gacScoutDefenseGrid");
   const offense = byId("gacScoutOffenseGrid");
   if (defense) defense.innerHTML = `<div class="workspace-note">${escapeHtml(message)}</div>`;
   if (offense) offense.innerHTML = `<div class="workspace-note">${escapeHtml(message)}</div>`;
+  renderPredictionEmpty(message);
 }
 
 function trendUnits(trend) {
@@ -103,6 +121,66 @@ function offenseCard(trend, index) {
     </article>`;
 }
 
+function predictionCard(prediction, index, coverage) {
+  const evidence = predictionEvidenceLabel(prediction?.evidenceClass);
+  const tone = predictionEvidenceTone(prediction?.evidenceClass);
+  const zone = predictionZoneSummary(prediction);
+  const broad = predictionBroadSummary(prediction, coverage);
+  const verified = predictionVerifiedSummary(prediction, coverage);
+  const datacron = historicalDatacronSummary(prediction?.latestVerifiedDatacron);
+  return `
+    <article class="gac-scout-card gac-scout-prediction-card" data-evidence-tone="${escapeAttr(tone)}">
+      <div class="gac-scout-card-head">
+        <div>
+          <span>#${index + 1} FORECAST PRIORITY · ${escapeHtml(String(prediction?.format || "").toUpperCase())}</span>
+          <strong>${escapeHtml(unitName(prediction?.leaderBaseId))}</strong>
+        </div>
+        <button type="button" class="gac-action gac-scout-prepare" data-scout-prediction="${index}">Prepare Counter</button>
+      </div>
+      <div class="gac-scout-forecast-badge" data-tone="${escapeAttr(tone)}">${escapeHtml(evidence)}</div>
+      <div class="gac-scout-units">${trendUnits(prediction)}</div>
+      <div class="gac-scout-metrics gac-scout-prediction-metrics">
+        <strong>${escapeHtml(broad)}</strong>
+        <span>${escapeHtml(verified)}</span>
+        <span>${escapeHtml(zone)}</span>
+        <span>${number.format(Number(prediction?.observedByPlayers || 0))} historical observers</span>
+        <span>${number.format(Number(prediction?.seasons || 0))} seasons</span>
+        <span>last ${escapeHtml(dateLabel(prediction?.lastSeenAt))}</span>
+      </div>
+      ${datacron ? `<div class="gac-scout-historical-datacron">${escapeHtml(datacron)} · historical only</div>` : ""}
+      <div class="gac-scout-caution">Forecast priority is historical evidence, not a claim that this team is on the current hidden board.</div>
+    </article>`;
+}
+
+function renderPrediction() {
+  const report = state.report;
+  const prediction = report?.defensePrediction;
+  const meta = byId("gacScoutPredictionMeta");
+  const grid = byId("gacScoutPredictionGrid");
+  if (!meta || !grid) return;
+  if (!report) {
+    renderPredictionEmpty("Select or enter an opponent to build a historical defense forecast.");
+    return;
+  }
+  if (!prediction || prediction?.unavailable) {
+    renderPredictionEmpty(prediction?.error || "Historical defense forecast evidence is unavailable.");
+    return;
+  }
+
+  const mode = byId("gacMode")?.value || "";
+  const predictions = visiblePredictions(prediction, mode, 8);
+  const c = prediction.coverage || {};
+  const withheld = Number(c.withheldCurrentOrUnresolvedBoardRows || 0);
+  const modeText = mode === "3" ? "3v3" : mode === "5" ? "5v5" : "all formats";
+  meta.textContent = `${number.format(Number(c.battleObservedMatchups || 0))} published historical matchups · ${number.format(Number(c.verifiedHistoricalBoards || 0))} completed verified boards · ${modeText}${withheld ? ` · ${number.format(withheld)} current/completion-unresolved verified rows withheld` : ""}`;
+  grid.innerHTML = predictions.length
+    ? predictions.map((entry, index) => predictionCard(entry, index, c)).join("")
+    : `<div class="workspace-note">No historical ${escapeHtml(modeText)} defense forecast evidence is available yet. No current-board placement was inferred.</div>`;
+  grid.querySelectorAll(".gac-scout-prepare").forEach((button) => {
+    button.addEventListener("click", () => loadDefenseIntoAnalyzer(predictions[Number(button.dataset.scoutPrediction)]));
+  });
+}
+
 function renderReport() {
   const report = state.report;
   const defense = byId("gacScoutDefenseGrid");
@@ -119,6 +197,7 @@ function renderReport() {
   const offensive = Array.isArray(report.offensiveTendencies) ? report.offensiveTendencies : [];
   const c = report.coverage || {};
   coverage.textContent = `${number.format(Number(c.defensiveBattleRows || 0))} defensive battle observations · ${number.format(Number(c.offensiveBattleRows || 0))} offense records · ${number.format(Number(c.observedByPlayers || 0))} independent historical observers`;
+  renderPrediction();
   defense.innerHTML = defensive.length
     ? defensive.slice(0, 10).map(defenseCard).join("")
     : `<div class="workspace-note">No imported battles currently reconstruct this player's historical defenses. This does not mean the player has no history; it means our dataset has not observed their board from another imported player's attack record yet.</div>`;
@@ -194,7 +273,8 @@ async function loadScouting() {
     state.report = report;
     state.roster = roster;
     renderReport();
-    setStatus(report?.coverage?.hasDefenseEvidence || report?.coverage?.hasOffenseEvidence ? "Scouting evidence loaded" : "No imported scouting evidence yet", report?.coverage?.hasDefenseEvidence || report?.coverage?.hasOffenseEvidence ? "ready" : "warning");
+    const ready = Boolean(report?.coverage?.hasDefenseEvidence || report?.coverage?.hasOffenseEvidence || report?.coverage?.hasDefensePrediction);
+    setStatus(ready ? "Scouting evidence loaded" : "No imported scouting evidence yet", ready ? "ready" : "warning");
   } catch (error) {
     if (requestId !== state.requestId) return;
     state.report = null;
@@ -208,7 +288,7 @@ function injectStylesheet() {
   if (document.querySelector('link[data-gac-scouting="true"]')) return;
   const link = document.createElement("link");
   link.rel = "stylesheet";
-  link.href = "/gac-scouting-enhancer.css?v=20260818-gac-scout1";
+  link.href = "/gac-scouting-enhancer.css?v=20260820-gac-scout2";
   link.dataset.gacScouting = "true";
   document.head.append(link);
 }
@@ -225,7 +305,15 @@ function mount() {
       <div><div class="kicker">IMPORTED GAC INTELLIGENCE</div><h4>Opponent Scouting Report</h4><p id="gacScoutCoverage">Select or enter an opponent to load imported scouting evidence.</p></div>
       <div id="gacScoutStatus" class="gac-scout-status">Awaiting opponent</div>
     </div>
-    <div class="gac-scout-truth">Defense patterns are reconstructed from historical battles where imported players attacked this opponent. They are evidence of past placements—not a claim about the current hidden board.</div>
+    <div class="gac-scout-truth">Historical forecast and scouting data are evidence of past behavior only. Current hidden defenses are never inferred or presented as verified until you explicitly save the current board.</div>
+    <section class="gac-scout-prediction">
+      <div class="gac-scout-subhead">
+        <span>PRE-MATCH DEFENSE FORECAST</span>
+        <strong>Historical priority · NOT current board</strong>
+      </div>
+      <div id="gacScoutPredictionMeta" class="gac-scout-prediction-meta">Select or enter an opponent to build a historical defense forecast.</div>
+      <div id="gacScoutPredictionGrid" class="gac-scout-prediction-grid"><div class="workspace-note">No historical defense forecast loaded.</div></div>
+    </section>
     <div class="gac-scout-columns">
       <section><div class="gac-scout-subhead"><span>DEFENSE SCOUT</span><strong>Recurring historical placements</strong></div><div id="gacScoutDefenseGrid" class="gac-scout-grid"><div class="workspace-note">No opponent scouting report loaded.</div></div></section>
       <section><div class="gac-scout-subhead"><span>OFFENSE SCOUT</span><strong>Teams they prefer to attack with</strong></div><div id="gacScoutOffenseGrid" class="gac-scout-grid"><div class="workspace-note">No opponent scouting report loaded.</div></div></section>
@@ -238,6 +326,7 @@ function mount() {
   else comparison.insertAdjacentElement("afterend", panel);
 
   byId("gacMatchupForm")?.addEventListener("submit", () => void loadScouting());
+  byId("gacMode")?.addEventListener("change", () => renderPrediction());
   return true;
 }
 

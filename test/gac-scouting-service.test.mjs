@@ -95,7 +95,43 @@ test("scouting report combines target offense with defenses observed by other pl
   assert.equal(report.offensiveTendencies[0].leaderBaseId, "TARGET_ATTACK");
   assert.equal(report.offensiveTendencies[0].attempts, 2);
   assert.equal(report.offensiveTendencies[0].winRate, 1);
+  assert.equal(report.defensePrediction.unavailable, true);
+  assert.equal(report.coverage.hasDefensePrediction, false);
   assert.match(report.notes[0], /explicitly owner-confirmed completed battles/i);
   assert.match(report.notes[0], /historical observations, not a claim about the current hidden board/i);
   assert.match(report.notes[1], /sourced imports and explicitly owner-confirmed completed battles/i);
+});
+
+test("scouting payload carries the historical-only defense forecast as a separate evidence layer", async () => {
+  const targetAllyCode = "222222222";
+  const store = {
+    async select(table, query) {
+      if (table === "players") return [{ id: "PLAYER-ID", ally_code: targetAllyCode, swgoh_player_id: "TARGET", name: "Navygators" }];
+      if (table === "gac_battles" && query.ally_code === `eq.${targetAllyCode}`) return [];
+      if (table === "gac_battles" && query.opponent_ally_code === `eq.${targetAllyCode}`) return [battle({ swgoh_player_id: "P1" })];
+      if (table === "gac_battles" && query.swgoh_player_id === "eq.TARGET") return [];
+      return [];
+    },
+  };
+  const prediction = {
+    async getDefensePrediction(code, options) {
+      assert.equal(code, targetAllyCode);
+      assert.equal(options.limit, 2000);
+      return {
+        source: "historical-gac-defense-intelligence",
+        truth: "historical-prediction-not-current-board",
+        coverage: { predictions: 1, withheldCurrentOrUnresolvedBoardRows: 2 },
+        predictions: [{ leaderBaseId: "DEFENSE_LEAD", format: "5v5", members: ["DEFENSE_LEAD", "D2", "D3", "D4", "D5"] }],
+      };
+    },
+  };
+
+  const service = createGacScoutingService({ store, prediction });
+  const report = await service.getScoutingReport(targetAllyCode);
+  assert.equal(report.coverage.hasDefensePrediction, true);
+  assert.equal(report.defensePrediction.truth, "historical-prediction-not-current-board");
+  assert.equal(report.defensePrediction.predictions[0].leaderBaseId, "DEFENSE_LEAD");
+  assert.equal(report.defensePrediction.coverage.withheldCurrentOrUnresolvedBoardRows, 2);
+  assert.match(report.notes[2], /historical-only layer/i);
+  assert.match(report.notes[2], /completed-event verified boards/i);
 });
