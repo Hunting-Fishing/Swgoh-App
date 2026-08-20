@@ -1,3 +1,7 @@
+import './gac-war-room-provenance-inspector.js';
+import './gac-manual-board-context-bridge.js';
+import './gac-manual-board-workspace.js';
+
 const TAB_ORDER = ['matchup', 'board', 'delta', 'history', 'diagnostics'];
 
 const state = {
@@ -27,9 +31,16 @@ function text(selector, root = document) {
 }
 
 function selectedDefenseCount(root) {
+  const manualRaw = text('.gac-board-progress b', root);
+  const manualMatch = manualRaw.match(/(\d+)\s*\/\s*(\d+)/);
+  if (manualMatch) {
+    return { selected: Number(manualMatch[1]), required: Number(manualMatch[2]), source: 'manual-board' };
+  }
   const raw = text('[data-gacv2-defense-count]', root);
   const match = raw.match(/(\d+)\s*\/\s*(\d+)/);
-  return match ? { selected: Number(match[1]), required: Number(match[2]) } : { selected: 0, required: 0 };
+  return match
+    ? { selected: Number(match[1]), required: Number(match[2]), source: 'sandbox' }
+    : { selected: 0, required: 0, source: 'none' };
 }
 
 function hideSupersededWorkspaceScaffolding(root) {
@@ -70,8 +81,8 @@ function missionStripMarkup() {
       <div class="gacv3-hud-cell" data-gacv3-hud="round"><span>ROUND</span><strong>—</strong><small>Awaiting event evidence</small></div>
       <div class="gacv3-hud-cell" data-gacv3-hud="format"><span>FORMAT</span><strong>5v5</strong><small>Board squad size</small></div>
       <div class="gacv3-hud-cell" data-gacv3-hud="opponent"><span>OPPONENT</span><strong>—</strong><small>Exact pairing not loaded</small></div>
-      <div class="gacv3-hud-cell" data-gacv3-hud="board"><span>BOARD</span><strong>0/5</strong><small>No defense selected</small></div>
-      <div class="gacv3-hud-cell" data-gacv3-hud="counter"><span>COUNTER MODE</span><strong>—</strong><small>Select visible defense</small></div>
+      <div class="gacv3-hud-cell" data-gacv3-hud="board"><span>BOARD</span><strong>0/5</strong><small>No defense entered</small></div>
+      <div class="gacv3-hud-cell" data-gacv3-hud="counter"><span>COUNTER MODE</span><strong>—</strong><small>Enter visible defenses</small></div>
     </div>
   </div>`;
 }
@@ -99,41 +110,54 @@ function updateMissionStrip(root) {
     root,
     'round',
     roundValue ? `ROUND ${roundValue}` : '—',
-    roundValue ? 'Current round selected' : 'Awaiting event evidence',
+    roundValue ? 'Current round selected' : 'Select Round 1, 2, or 3',
     roundValue ? 'ready' : 'unknown',
   );
 
   const mode = Number(root.querySelector('[data-gacv2-mode]')?.value) === 3 ? 3 : 5;
-  updateHudCell(root, 'format', `${mode}v${mode}`, 'Board squad size', 'ready');
+  updateHudCell(root, 'format', `${mode}v${mode}`, 'Enemy and counter squad size', 'ready');
 
   const opponentInput = allyCode(root.querySelector('[data-gacv2-opponent]')?.value);
   const matchupName = text('.gacv2-versus article.enemy strong', root);
   updateHudCell(
     root,
     'opponent',
-    matchupName || (opponentInput ? formatAllyCode(opponentInput) : '—'),
-    root.querySelector('.gacv2-versus') ? 'Roster comparison loaded' : (opponentInput ? 'Ally Code entered; comparison pending' : 'Exact pairing not loaded'),
-    root.querySelector('.gacv2-versus') ? 'ready' : 'unknown',
+    matchupName || (opponentInput ? formatAllyCode(opponentInput) : 'MANUAL BOARD'),
+    root.querySelector('.gacv2-versus') ? 'Public opponent roster loaded' : (opponentInput ? 'Ally Code entered; board input available' : 'Ally Code optional for local board entry'),
+    root.querySelector('.gacv2-versus') ? 'ready' : opponentInput ? 'warn' : 'unknown',
   );
 
   const count = selectedDefenseCount(root);
-  const boardComplete = count.required > 0 && count.selected === count.required;
+  const boardComplete = count.required > 0 && count.selected >= count.required;
+  const boardDetail = count.source === 'manual-board'
+    ? boardComplete
+      ? 'Expected squad defenses entered'
+      : count.selected
+        ? 'Visible board partially entered'
+        : 'Use Board & Counters to enter defenses'
+    : boardComplete
+      ? 'Quick sandbox defense selected'
+      : count.selected
+        ? 'Quick sandbox partial selection'
+        : 'No defense entered';
   updateHudCell(
     root,
     'board',
     `${count.selected}/${count.required || mode}`,
-    boardComplete ? 'Visible defense fully selected' : count.selected ? 'Partial visible defense selection' : 'No defense selected',
+    boardDetail,
     boardComplete ? 'ready' : count.selected ? 'warn' : 'unknown',
   );
 
-  const source = text('.gacv2-counter-source', root).toUpperCase();
-  const hasEvidence = source.includes('HISTORICAL EVIDENCE');
-  const hasFallback = source.includes('ROSTER-FIT FALLBACK');
+  const boardCounterText = [...root.querySelectorAll('.gac-board-smart-counter strong')].map((node) => clean(node.textContent).toUpperCase()).join(' ');
+  const oldSource = text('.gacv2-counter-source', root).toUpperCase();
+  const hasEvidence = boardCounterText.includes('HISTORICAL EVIDENCE') || oldSource.includes('HISTORICAL EVIDENCE');
+  const hasBoardFit = boardCounterText.includes('ROSTER-FIT HEURISTIC') || boardCounterText.includes('IDENTITY-ONLY HEURISTIC');
+  const hasFallback = hasBoardFit || oldSource.includes('ROSTER-FIT FALLBACK');
   updateHudCell(
     root,
     'counter',
-    hasEvidence ? 'EVIDENCE' : hasFallback ? 'ROSTER FIT' : '—',
-    hasEvidence ? 'Historical counter evidence matched' : hasFallback ? 'Heuristic roster-fit fallback' : 'Select visible defense',
+    hasEvidence ? 'EVIDENCE' : hasFallback ? 'SMART PLAN' : '—',
+    hasEvidence ? 'Historical evidence used in board allocation' : hasFallback ? 'Non-overlapping smart counters allocated' : 'Enter a visible enemy defense',
     hasEvidence ? 'ready' : hasFallback ? 'warn' : 'unknown',
   );
 
@@ -159,7 +183,7 @@ function addQuickActions(root) {
   actions.className = 'gacv3-quick-actions';
   actions.dataset.gacv3Actions = 'true';
   actions.innerHTML = `
-    <button type="button" data-gacv3-open-tab="board">⌖ Plan Attack</button>
+    <button type="button" data-gacv3-open-tab="board">⌖ Enter Board</button>
     <button type="button" data-gacv3-open-tab="history">◷ Scout</button>
     <button type="button" data-gacv3-open-tab="diagnostics">⚙ Truth Gate</button>`;
   top.appendChild(actions);
