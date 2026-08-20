@@ -30,6 +30,42 @@ test("recorded round history never converts unknown imported rounds into wins or
   assert.equal(result.winRate, 0.5);
 });
 
+test("duplicate source rows for one event round count once and preserve the known result", () => {
+  const result = recordedRoundHistory({
+    rounds: [
+      {
+        id: "source-a",
+        round: 2,
+        event: { id: "event-77", seasonId: "season-77" },
+        result: "unknown",
+        verified: true,
+        confidence: 1,
+      },
+      {
+        id: "source-b",
+        round: 2,
+        event: { id: "event-77", seasonId: "season-77" },
+        result: "win",
+        verified: false,
+        confidence: 0.95,
+      },
+      {
+        id: "source-c",
+        round: 3,
+        event: { id: "event-77", seasonId: "season-77" },
+        result: "loss",
+        verified: true,
+        confidence: 1,
+      },
+    ],
+  });
+  assert.equal(result.rounds, 2);
+  assert.equal(result.recordedResults, 2);
+  assert.equal(result.wins, 1);
+  assert.equal(result.losses, 1);
+  assert.equal(result.unknown, 0);
+});
+
 test("battle scouting aggregates observed offense and defense without inventing missing rates", () => {
   const offense = aggregateOffense([
     { attempts: 4, wins: 3, losses: 1, draws: 0, unknown: 0 },
@@ -103,18 +139,33 @@ test("current matchup recommendations are gated until exact identity, live roste
   assert.equal(ready.recommendationMode, "evidence-first-with-roster-fit");
 });
 
-test("canonical or stale roster payload cannot satisfy the live roster gate", () => {
-  const model = truthDashboardModel({
-    matchup: {
-      opponentResolution: { exact: true },
-      matchup: { me: { allyCode: "732764286" }, opponent: { allyCode: "123456789" } },
-      defense: { opponent: [{ members: ["A", "B", "C"] }] },
-    },
+test("canonical, missing-code or mismatched roster payload cannot satisfy the live roster gate", () => {
+  const matchup = {
+    opponentResolution: { exact: true },
+    matchup: { me: { allyCode: "732764286" }, opponent: { allyCode: "123456789" } },
+    defense: { opponent: [{ members: ["A", "B", "C"] }] },
+  };
+  const canonical = truthDashboardModel({
+    matchup,
     mineRoster: { source: "canonical", player: { allyCode: "732764286" }, units: [] },
     opponentRoster: liveRoster("123456789"),
   });
-  assert.equal(model.actionable, false);
-  assert.equal(model.rosters.mineLoaded, false);
+  assert.equal(canonical.rosters.mineLoaded, false);
+
+  const missingCode = truthDashboardModel({
+    matchup,
+    mineRoster: { source: "live", player: {}, units: [] },
+    opponentRoster: liveRoster("123456789"),
+  });
+  assert.equal(missingCode.rosters.mineLoaded, false);
+
+  const mismatch = truthDashboardModel({
+    matchup,
+    mineRoster: liveRoster("999999999"),
+    opponentRoster: liveRoster("123456789"),
+  });
+  assert.equal(mismatch.rosters.mineLoaded, false);
+  assert.equal(mismatch.actionable, false);
 });
 
 test("no history keeps current board actionable but forces explicitly labeled roster-fit fallback", () => {
