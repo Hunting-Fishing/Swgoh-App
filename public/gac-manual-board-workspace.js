@@ -8,6 +8,7 @@ const state = {
   catalog: null,
   serverDefenses: [],
   drafts: [],
+  reservedBaseIds: [],
   leagueOverride: localStorage.getItem('swgoh:gac-board:league-override') || '',
   editor: null,
   plan: null,
@@ -104,11 +105,15 @@ function mergedDefenses() {
   for (const row of state.serverDefenses) index.set(boardKey(row), {...row, storage:'server'});
   return [...index.values()].sort((a,b) => clean(a.zone).localeCompare(clean(b.zone)) || n(a.slot)-n(b.slot));
 }
-function zoneDefenses(zone) { return mergedDefenses().filter((row) => clean(row.zone).toUpperCase() === zone); }
+function activeSquadDefenses() {
+  return mergedDefenses().filter((row) => clean(row.zone).toUpperCase() !== 'BACK-TOP');
+}
+function zoneDefenses(zone) { return activeSquadDefenses().filter((row) => clean(row.zone).toUpperCase() === zone); }
 function nextSlot(zone) {
   const used = new Set(zoneDefenses(zone).map((row) => Number(row.slot)).filter((value) => Number.isInteger(value) && value >= 0));
-  for (let slot = 0; slot < 100; slot += 1) if (!used.has(slot)) return slot;
-  return 0;
+  const capacity = currentRule().territories?.find((entry) => entry.value === zone)?.capacity || 100;
+  for (let slot = 0; slot < capacity; slot += 1) if (!used.has(slot)) return slot;
+  return Math.max(0, capacity - 1);
 }
 
 async function loadCatalog() {
@@ -179,17 +184,17 @@ async function loadEvidence(defenses) {
   catch{return new Map();}
 }
 async function buildPlan() {
-  const defenses=mergedDefenses().filter((row)=>Array.isArray(row.members)&&row.members.length===squadSize());
+  const defenses=activeSquadDefenses().filter((row)=>Array.isArray(row.members)&&row.members.length===squadSize());
+  state.reservedBaseIds=await ownDefenseReserve();
   if(!state.ownerRoster||!defenses.length){state.plan=null;state.planMode='none';return;}
   const evidence=await loadEvidence(defenses);
-  const excludeBaseIds=await ownDefenseReserve();
   const opponent=state.opponentRoster||fallbackOpponent(defenses);
   const entries=defenses.map((defense,index)=>({defenseId:Number.isInteger(Number(defense.id))&&Number(defense.id)>0?Number(defense.id):900000+index,defense}));
-  state.plan=hybridBoardPlan(state.ownerRoster,opponent,entries,evidence,{size:squadSize(),excludeBaseIds});
+  state.plan=hybridBoardPlan(state.ownerRoster,opponent,entries,evidence,{size:squadSize(),excludeBaseIds:state.reservedBaseIds});
   state.planMode=state.opponentRoster?'full-roster':'identity-only';
 }
 function assignmentFor(defense){
-  const defenses=mergedDefenses().filter((row)=>Array.isArray(row.members)&&row.members.length===squadSize());
+  const defenses=activeSquadDefenses().filter((row)=>Array.isArray(row.members)&&row.members.length===squadSize());
   const index=defenses.findIndex((row)=>boardKey(row)===boardKey(defense));
   return index<0?null:state.plan?.assignments?.find((row)=>Number(row.sourceIndex)===index)||state.plan?.assignments?.[index]||null;
 }
@@ -213,7 +218,7 @@ function selectedSlot(unit,index){
   return `<div class="gac-board-picked-slot ${leader?'is-leader':''}"><span>${leader?'LEADER':'UNIT '+(index+1)}</span>${portrait(unit,true)}<div><button type="button" data-gac-board-make-leader="${escapeAttr(id)}" ${leader?'disabled':''}>Leader</button><button type="button" data-gac-board-remove-unit="${escapeAttr(id)}">×</button></div></div>`;
 }
 function editorHtml(){
-  if(!state.editor)return `<div class="gac-board-editor-placeholder"><strong>Choose a territory position</strong><span>Click “Enter Defense” where the squad appears in your game.</span></div>`;
+  if(!state.editor)return `<div class="gac-board-editor-placeholder"><strong>Choose a territory slot</strong><span>Click an empty squad slot where the defense appears in your game.</span></div>`;
   const size=squadSize();const selected=state.editor.members.map(editorUnit);const query=clean(state.editor.query).toLowerCase();
   const results=editorUnits().filter((unit)=>!state.editor.members.includes(normalizeId(unit.baseId))&&(!query||clean(unit.name).toLowerCase().includes(query)||normalizeId(unit.baseId).toLowerCase().includes(query))).slice(0,64);
   return `<section class="gac-board-editor"><header><div><span>VISIBLE ENEMY LINEUP</span><strong>${escapeHtml(zoneLabel(state.editor.zone))} · Slot ${Number(state.editor.slot)+1}</strong><small>Select ${size} characters exactly as they appear in-game.</small></div><button type="button" data-gac-board-close>Close</button></header><div class="gac-board-picked">${Array.from({length:size},(_,index)=>selectedSlot(selected[index],index)).join('')}</div><div class="gac-board-search"><input data-gac-board-search placeholder="Search ${state.opponentRoster?'opponent roster':'all characters'}…" value="${escapeAttr(state.editor.query||'')}"><b>${state.editor.members.length}/${size}</b></div><div class="gac-board-unit-results">${results.map((unit)=>`<button type="button" data-gac-board-add-unit="${escapeAttr(unit.baseId)}">${portrait(unit,true)}<span><strong>${escapeHtml(unit.name)}</strong><small>${state.opponentRoster?`R${n(unit.relic)} · ${number.format(n(unit.power))} GP · ${number.format(n(unit.speed))} spd`:'Static game catalog fallback'}</small></span></button>`).join('')||'<div class="gac-board-no-results">No matching characters.</div>'}</div><footer><label>Datacron<select data-gac-board-dc><option value="unknown" ${state.editor.datacronState==='unknown'?'selected':''}>Not confirmed</option><option value="none" ${state.editor.datacronState==='none'?'selected':''}>Confirmed none</option></select></label><button type="button" data-gac-board-save ${state.editor.members.length===size&&state.editor.members.includes(state.editor.leaderBaseId)?'':'disabled'}>${state.busy?'Saving…':'Save Defense'}</button></footer><p>Verified opponent + round → canonical current-board save. Otherwise this remains a local manual observation and still feeds the smart planner.</p></section>`;
@@ -221,7 +226,7 @@ function editorHtml(){
 
 function defenseCard(defense){
   const units=resolveUnits(defense);const verified=defense.storage==='server';
-  return `<article class="gac-visible-defense"><header><div><span>SLOT ${Number(defense.slot)+1}</span><strong>${escapeHtml(units[0]?.name||defense.leaderBaseId||'Defense')}</strong></div><b class="${verified?'is-verified':''}">${verified?'VERIFIED SAVED':'LOCAL DRAFT'}</b></header><div class="gac-visible-defense-units">${units.map((unit)=>portrait(unit,true)).join('')}</div>${counterHtml(defense)}<footer><button type="button" data-gac-board-edit="${escapeAttr(boardKey(defense))}">Edit</button><button type="button" data-gac-board-delete="${escapeAttr(boardKey(defense))}">Delete</button></footer></article>`;
+  return `<article class="gac-visible-defense" data-gac-board-key="${escapeAttr(boardKey(defense))}"><header><div><span>SLOT ${Number(defense.slot)+1}</span><strong>${escapeHtml(units[0]?.name||defense.leaderBaseId||'Defense')}</strong></div><b class="${verified?'is-verified':''}">${verified?'VERIFIED SAVED':'LOCAL DRAFT'}</b></header><div class="gac-visible-defense-units">${units.map((unit)=>portrait(unit,true)).join('')}</div>${counterHtml(defense)}<footer><button type="button" data-gac-board-edit="${escapeAttr(boardKey(defense))}">Edit</button><button type="button" data-gac-board-delete="${escapeAttr(boardKey(defense))}">Delete</button></footer></article>`;
 }
 function zoneCard(zone){
   const defenses=zoneDefenses(zone.value);
@@ -232,10 +237,31 @@ function sourceLabel(){
   if(opponentCode())return 'STATIC CATALOG FALLBACK · OPPONENT ROSTER UNAVAILABLE';
   return 'STATIC CATALOG FALLBACK · OPPONENT ALLY CODE OPTIONAL';
 }
+function boardSnapshot(){
+  return Object.freeze({
+    ownerCode: ownerCode(),
+    opponentCode: opponentCode(),
+    round: currentRound(),
+    format: currentFormat(),
+    squadSize: squadSize(),
+    rule: currentRule(),
+    ownerRoster: state.ownerRoster,
+    opponentRoster: state.opponentRoster,
+    catalog: state.catalog,
+    defenses: Object.freeze(activeSquadDefenses()),
+    legacyFleetZoneSquads: Object.freeze(mergedDefenses().filter((row)=>clean(row.zone).toUpperCase()==='BACK-TOP')),
+    reservedBaseIds: Object.freeze([...state.reservedBaseIds]),
+    plan: state.plan,
+    planMode: state.planMode,
+    busy: state.busy,
+  });
+}
 function render(){
   const host=document.querySelector('[data-gac-board-workspace]');if(!host)return;
-  const rule=currentRule();const observed=mergedDefenses().length;const division=divisionFromRoster(state.ownerRoster);const detected=leagueFromRoster(state.ownerRoster);
-  host.innerHTML=`<section class="gac-visible-board"><div class="gac-visible-board-head"><div><span>MANUAL CURRENT-BOARD INPUT</span><strong>Enter the opponent lineup you actually see</strong><p>Pick a territory, enter that squad, and Command Center allocates non-overlapping counters from your roster.</p></div><aside><b>${escapeHtml(sourceLabel())}</b><small>${state.opponentRoster?'Exact opponent relic, speed and progression can be compared.':'Counter evidence can still use lineup identity; opponent stat deltas stay unknown.'}</small></aside></div><div class="gac-board-config"><label>League<select data-gac-board-league><option value="" ${!state.leagueOverride?'selected':''}>Auto${detected?` · ${escapeHtml(detected)}`:''}</option>${LEAGUES.map((league)=>`<option value="${league}" ${state.leagueOverride===league?'selected':''}>${league}</option>`).join('')}</select></label><label>Format<select data-gac-board-format><option value="5" ${squadSize()===5?'selected':''}>5v5</option><option value="3" ${squadSize()===3?'selected':''}>3v3</option></select></label><div><span>EXPECTED SQUADS</span><strong>${rule.squadTeams}</strong><small>${observed} entered</small></div><div><span>EXPECTED FLEETS</span><strong>${rule.fleetTeams}</strong><small>Fleet editor separate</small></div><div><span>GAC LEVEL</span><strong>${escapeHtml(rule.league)}${division?` ${division}`:''}</strong><small>${state.leagueOverride?'Manual override':'Auto from your profile'}</small></div><button type="button" data-gac-board-sync>${state.busy?'Working…':'Confirm Opponent + Sync'}</button></div><div class="gac-board-progress"><i style="--gac-board-progress:${Math.min(100,rule.squadTeams?observed/rule.squadTeams*100:0)}%"></i><b>${observed}/${rule.squadTeams} squad defenses observed</b><small>Enter only revealed territories now; add the back wall after you unlock it.</small></div><div class="gac-visible-zones">${ZONES.map(zoneCard).join('')}</div><div data-gac-board-editor-host>${editorHtml()}</div></section>`;
+  const rule=currentRule();const observed=activeSquadDefenses().length;const division=divisionFromRoster(state.ownerRoster);const detected=leagueFromRoster(state.ownerRoster);
+  const squadZones=ZONES.filter((zone)=>zone.value!=='BACK-TOP');
+  host.innerHTML=`<section class="gac-visible-board"><div class="gac-visible-board-head"><div><span>MANUAL CURRENT-BOARD INPUT</span><strong>Enter the opponent lineup you actually see</strong><p>Pick a territory slot, enter that squad, and Command Center allocates non-overlapping counters from your roster.</p></div><aside><b>${escapeHtml(sourceLabel())}</b><small>${state.opponentRoster?'Exact opponent relic, speed and progression can be compared.':'Counter evidence can still use lineup identity; opponent stat deltas stay unknown.'}</small></aside></div><div class="gac-board-config"><label>League<select data-gac-board-league><option value="" ${!state.leagueOverride?'selected':''}>Auto${detected?` · ${escapeHtml(detected)}`:''}</option>${LEAGUES.map((league)=>`<option value="${league}" ${state.leagueOverride===league?'selected':''}>${league}</option>`).join('')}</select></label><label>Format<select data-gac-board-format><option value="5" ${squadSize()===5?'selected':''}>5v5</option><option value="3" ${squadSize()===3?'selected':''}>3v3</option></select></label><div><span>EXPECTED SQUADS</span><strong>${rule.squadTeams}</strong><small>${observed} entered</small></div><div><span>EXPECTED FLEETS</span><strong>${rule.fleetTeams}</strong><small>Fleet territory in Board v2</small></div><div><span>GAC LEVEL</span><strong>${escapeHtml(rule.league)}${division?` ${division}`:''}</strong><small>${state.leagueOverride?'Manual override':'Auto from your profile'}</small></div><button type="button" data-gac-board-sync>${state.busy?'Working…':'Confirm Opponent + Sync'}</button></div><div class="gac-board-progress"><i style="--gac-board-progress:${Math.min(100,rule.squadTeams?observed/rule.squadTeams*100:0)}%"></i><b>${observed}/${rule.squadTeams} squad defenses observed</b><small>Enter only revealed territories now; add the back wall after you unlock it.</small></div><div class="gac-visible-zones">${squadZones.map(zoneCard).join('')}</div><div data-gac-board-editor-host>${editorHtml()}</div></section>`;
+  window.dispatchEvent(new CustomEvent('gac-visible-board-rendered',{detail:{observed,expected:rule.squadTeams,format:currentFormat()}}));
 }
 
 function ensureQuickSandbox(panel, boardHost){
@@ -255,9 +281,17 @@ function mount(){
   ensureQuickSandbox(panel,host);render();return true;
 }
 
-function startEditor(zone,defense=null){
-  state.editor={zone,slot:defense?.slot==null?nextSlot(zone):Number(defense.slot),members:Array.isArray(defense?.members)?defense.members.map(normalizeId).filter(Boolean):[],leaderBaseId:normalizeId(defense?.leaderBaseId),datacronState:clean(defense?.datacronState).toLowerCase()==='none'?'none':'unknown',query:''};
+function startEditor(zone,defense=null,forcedSlot=null){
+  const slot=defense?.slot==null?(Number.isInteger(Number(forcedSlot))?Number(forcedSlot):nextSlot(zone)):Number(defense.slot);
+  state.editor={zone,slot,members:Array.isArray(defense?.members)?defense.members.map(normalizeId).filter(Boolean):[],leaderBaseId:normalizeId(defense?.leaderBaseId),datacronState:clean(defense?.datacronState).toLowerCase()==='none'?'none':'unknown',query:''};
   if(!state.editor.leaderBaseId&&state.editor.members.length)state.editor.leaderBaseId=state.editor.members[0];render();document.querySelector('[data-gac-board-editor-host]')?.scrollIntoView?.({behavior:'smooth',block:'center'});
+}
+function openSquadSlot(zone,slot){
+  const normalizedZone=clean(zone).toUpperCase();
+  if(normalizedZone==='BACK-TOP')return false;
+  const numericSlot=Number(slot);if(!Number.isInteger(numericSlot)||numericSlot<0)return false;
+  const defense=activeSquadDefenses().find((row)=>clean(row.zone).toUpperCase()===normalizedZone&&Number(row.slot)===numericSlot)||null;
+  startEditor(normalizedZone,defense,numericSlot);return true;
 }
 function addUnit(id){if(!state.editor||state.editor.members.length>=squadSize())return;id=normalizeId(id);if(!id||state.editor.members.includes(id))return;state.editor.members.push(id);if(!state.editor.leaderBaseId)state.editor.leaderBaseId=id;state.editor.query='';render();}
 function removeUnit(id){if(!state.editor)return;id=normalizeId(id);state.editor.members=state.editor.members.filter((value)=>value!==id);if(state.editor.leaderBaseId===id)state.editor.leaderBaseId=state.editor.members[0]||'';render();}
@@ -298,6 +332,7 @@ async function confirmAndSync(){
 async function refresh(force=false){
   const requestId=++state.requestId;await loadCatalog();await Promise.all([loadOwnerRoster(force),loadOpponentRoster(force)]);if(requestId!==state.requestId)return;migrateAnonymousOpponentDrafts();state.drafts=readDrafts();await loadServerDefenses();if(requestId!==state.requestId)return;await buildPlan();render();
 }
+function requestBoardRefresh(force=false){return refresh(force);}
 function schedule(delay=120,force=false){clearTimeout(state.timer);state.timer=setTimeout(()=>{if(mount())void refresh(force);},Math.max(0,delay));}
 function bind(){
   if(document.documentElement.dataset.gacVisibleBoardBound==='true')return;document.documentElement.dataset.gacVisibleBoardBound='true';
@@ -306,7 +341,7 @@ function bind(){
     const add=event.target.closest?.('[data-gac-board-add-unit]');if(add){addUnit(add.dataset.gacBoardAddUnit);return;}
     const remove=event.target.closest?.('[data-gac-board-remove-unit]');if(remove){removeUnit(remove.dataset.gacBoardRemoveUnit);return;}
     const leader=event.target.closest?.('[data-gac-board-make-leader]');if(leader){makeLeader(leader.dataset.gacBoardMakeLeader);return;}
-    const edit=event.target.closest?.('[data-gac-board-edit]');if(edit){const defense=mergedDefenses().find((row)=>boardKey(row)===edit.dataset.gacBoardEdit);if(defense)startEditor(defense.zone,defense);return;}
+    const edit=event.target.closest?.('[data-gac-board-edit]');if(edit){const defense=activeSquadDefenses().find((row)=>boardKey(row)===edit.dataset.gacBoardEdit);if(defense)startEditor(defense.zone,defense);return;}
     const del=event.target.closest?.('[data-gac-board-delete]');if(del){void deleteDefense(del.dataset.gacBoardDelete);return;}
     if(event.target.closest?.('[data-gac-board-close]')){state.editor=null;render();return;}
     if(event.target.closest?.('[data-gac-board-save]')){void saveEditor();return;}
@@ -331,4 +366,4 @@ if(typeof document!=='undefined'){
   injectStyle();bind();schedule(220,true);document.addEventListener('DOMContentLoaded',()=>schedule(100,true),{once:true});window.addEventListener('hashchange',()=>schedule(140,true));new MutationObserver(()=>{if(!document.querySelector('[data-gac-board-workspace]'))schedule(60,false);}).observe(document.documentElement,{childList:true,subtree:true});
 }
 
-export { boardKey, currentRule, mergedDefenses, nextSlot, selectedLeague };
+export { activeSquadDefenses, boardKey, boardSnapshot, currentRule, mergedDefenses, nextSlot, openSquadSlot, requestBoardRefresh, selectedLeague };
