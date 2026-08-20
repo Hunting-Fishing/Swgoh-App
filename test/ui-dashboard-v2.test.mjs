@@ -16,7 +16,7 @@ test('Dashboard v2 exposes a first-class Journey Guide launch that reuses the ex
   assert.match(dashboard, /JOURNEY_PRESETS/);
   assert.match(dashboard, /data-ccv2-launch="journey"/);
   assert.match(dashboard, /openWorkspace\("farm"\)/);
-  assert.match(dashboard, /data-farm-view=\\?"map/);
+  assert.match(dashboard, /data-farm-view="map"/);
 });
 
 test('Dashboard v2 keeps deep evidence available rather than deleting it', () => {
