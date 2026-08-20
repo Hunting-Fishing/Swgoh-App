@@ -97,8 +97,8 @@ function installStyle() {
   const style = document.createElement('style');
   style.dataset.assetResilience = 'true';
   style.textContent = `
-    .asset-resilience-fallback{display:grid;place-items:center;width:100%;height:100%;min-width:2rem;min-height:2rem;background:linear-gradient(145deg,#16324a,#071522);color:#75e8ff;font-weight:900;letter-spacing:.04em;border-radius:inherit}
-    img[hidden]+.asset-resilience-fallback{position:absolute;inset:0}
+    .asset-resilience-fallback{display:grid;place-items:center;width:100%;height:100%;min-width:2rem;min-height:2rem;background:linear-gradient(145deg,#16324a,#071522);color:#75e8ff;font-weight:900;letter-spacing:.04em;border-radius:inherit;overflow:hidden}
+    img[hidden]+.asset-resilience-fallback{visibility:visible}
   `;
   document.head.appendChild(style);
 }
