@@ -15,6 +15,8 @@ const state = {
   account: null,
   viewer: null,
   error: '',
+  errorCode: '',
+  errorStatus: 0,
   message: '',
   phase: 'All',
   planet: 'All',
@@ -171,9 +173,19 @@ function unitLabel(baseId) {
 }
 
 function requirementLabel(slot = {}) {
-  if (slot.requiredRelic !== null && slot.requiredRelic !== undefined) return `R${Number(slot.requiredRelic)}`;
+  const relic = Number(slot.requiredRelic);
+  if (slot.requiredRelic !== null && slot.requiredRelic !== undefined && Number.isFinite(relic) && relic > 0) return `R${relic}`;
   if (slot.requiredRarity !== null && slot.requiredRarity !== undefined) return `${Number(slot.requiredRarity)}★`;
+  if (slot.requiredRelic !== null && slot.requiredRelic !== undefined && Number.isFinite(relic)) return `R${relic}`;
   return 'Requirement unknown';
+}
+
+function contributionProgressionLabel(contribution = {}) {
+  const relic = Number(contribution?.relic);
+  if (contribution?.relic !== null && contribution?.relic !== undefined && Number.isFinite(relic) && relic > 0) return `R${relic}`;
+  if (contribution?.rarity !== null && contribution?.rarity !== undefined) return `${Number(contribution.rarity)}★`;
+  if (contribution?.relic !== null && contribution?.relic !== undefined && Number.isFinite(relic)) return `R${relic}`;
+  return '';
 }
 
 function stateClass(value) { return text(value).toLowerCase(); }
@@ -232,12 +244,13 @@ function officerTableMarkup(rows) {
     const slot = entry.slot || {};
     const status = operationLedgerState(entry);
     const contribution = entry.effectiveContribution;
+    const progression = contributionProgressionLabel(contribution);
     return `<tr data-rote-ledger-slot="${escapeHtml(slot.id)}">
       <td><strong>${escapeHtml(slot.phase || '—')}</strong><small>${escapeHtml(slot.planetId || 'Unknown planet')}</small></td>
       <td><strong>${escapeHtml(slot.operationName || slot.operationId || 'Operation')}</strong><small>Slot ${Number(slot.slotIndex || 0)}</small></td>
       <td><strong>${escapeHtml(unitLabel(slot.requiredBaseId))}</strong><small>${escapeHtml(slot.requiredBaseId)} · ${escapeHtml(requirementLabel(slot))}</small></td>
       <td><strong>${escapeHtml(assignmentLabel(entry))}</strong>${entry.assignment ? `<small>${escapeHtml(dateTime(entry.assignment.assignedAt))}</small>` : ''}</td>
-      <td><strong>${escapeHtml(actualLabel(entry))}</strong>${contribution ? `<small>${escapeHtml(text(contribution.baseId) || slot.requiredBaseId)}${contribution.relic !== null && contribution.relic !== undefined ? ` · R${Number(contribution.relic)}` : ''}</small>` : ''}</td>
+      <td><strong>${escapeHtml(actualLabel(entry))}</strong>${contribution ? `<small>${escapeHtml(text(contribution.baseId) || slot.requiredBaseId)}${progression ? ` · ${escapeHtml(progression)}` : ''}</small>` : ''}</td>
       <td>${statePill(status)}${contribution?.mismatchReasons?.length ? `<small>${escapeHtml(contribution.mismatchReasons.join(', '))}</small>` : ''}</td>
       <td><small>${escapeHtml(sourceLabel(entry))}</small>${auditMarkup(entry)}</td>
       <td><button type="button" class="secondary" data-rote-ledger-confirm="${escapeHtml(slot.id)}">Confirm Actual</button></td>
