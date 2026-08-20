@@ -2,6 +2,7 @@ import { displaySlotFromBackend, readBoardPosition, ZONES, zoneLabel } from "./g
 import { loadEligibilityContext } from "./gac-datacron-eligibility.js";
 import { assessDefenseDatacron, exposureLabel } from "./gac-defense-datacron-risk.js";
 
+const NONE_KEY = "__NONE__";
 const state = {
   opponentCode: "",
   roster: null,
@@ -27,7 +28,7 @@ function injectStyles() {
   if (document.querySelector('link[data-gac-defense-datacron-risk="true"]')) return;
   const link = document.createElement("link");
   link.rel = "stylesheet";
-  link.href = "/gac-defense-datacron-risk.css?v=20260819-gacdefdc3";
+  link.href = "/gac-defense-datacron-risk.css?v=20260820-gacdefdc4";
   link.dataset.gacDefenseDatacronRisk = "true";
   document.head.append(link);
 }
@@ -69,8 +70,14 @@ function datacronKey(datacron, index) {
 
 function selectedDatacron() {
   const values = datacrons();
-  if (!Array.isArray(values) || !state.selectedKey) return null;
+  if (!Array.isArray(values) || !state.selectedKey || state.selectedKey === NONE_KEY) return null;
   return values.find((datacron, index) => datacronKey(datacron, index) === state.selectedKey) || null;
+}
+
+function selectedDatacronState() {
+  if (state.selectedKey === NONE_KEY) return "none";
+  const datacron = selectedDatacron();
+  return clean(datacron?.id) ? "assigned" : "unknown";
 }
 
 function optionLabel(datacron, index) {
@@ -115,8 +122,9 @@ function ensureControl() {
   const wrapper = document.createElement("div");
   wrapper.className = "gac-defense-datacron-control";
   wrapper.innerHTML = `
-    <select id="gacDefenseDatacron" disabled>
-      <option value="">Enemy Datacron · none confirmed</option>
+    <select id="gacDefenseDatacron">
+      <option value="">Enemy Datacron · not confirmed</option>
+      <option value="${NONE_KEY}">Enemy Datacron · confirmed none</option>
     </select>
     <div class="gac-board-position-controls">
       <select id="gacDefenseZone">
@@ -129,7 +137,7 @@ function ensureControl() {
       <select id="gacSavedDefense" disabled><option value="">Saved defenses · none</option></select>
       <button id="gacSaveDefense" type="button" disabled>Save Current Defense</button>
     </div>
-    <small id="gacDefenseDatacronStatus">Select only the exact datacron you can see assigned to this defense in-game. Zone and slot are optional, but if one is entered both are required.</small>`;
+    <small id="gacDefenseDatacronStatus">Leave Datacron unconfirmed unless you checked the defense in-game. Choose confirmed none only when you can verify no Datacron is assigned.</small>`;
   leader.insertAdjacentElement("afterend", wrapper);
   select = byId("gacDefenseDatacron");
   select?.addEventListener("change", () => {
@@ -153,30 +161,23 @@ function renderSelector(message = "") {
   const status = byId("gacDefenseDatacronStatus");
   if (!select) return;
   const values = datacrons();
-  if (values === null) {
-    select.disabled = true;
-    select.innerHTML = `<option value="">Enemy Datacron · details unavailable</option>`;
-    if (status) status.textContent = message || "The opponent live roster did not expose individual datacrons. No assignment is inferred.";
-    updateSaveState();
-    return;
-  }
-  if (!values.length) {
-    select.disabled = true;
-    select.innerHTML = `<option value="">Enemy Datacron · none returned</option>`;
-    if (status) status.textContent = message || "No opponent datacron instances were returned by the live roster.";
-    updateSaveState();
-    return;
-  }
-
-  select.disabled = false;
-  const options = values.map((datacron, index) => {
+  const baseOptions = `<option value="">Enemy Datacron · not confirmed</option><option value="${NONE_KEY}">Enemy Datacron · confirmed none</option>`;
+  const inventoryOptions = Array.isArray(values) ? values.map((datacron, index) => {
     const key = datacronKey(datacron, index);
     return `<option value="${escapeHtml(key)}" ${key === state.selectedKey ? "selected" : ""}>${escapeHtml(optionLabel(datacron, index))}</option>`;
-  }).join("");
-  select.innerHTML = `<option value="">Enemy Datacron · none confirmed</option>${options}`;
-  if (!values.some((datacron, index) => datacronKey(datacron, index) === state.selectedKey)) state.selectedKey = "";
+  }).join("") : "";
+  select.disabled = false;
+  select.innerHTML = `${baseOptions}${inventoryOptions}`;
+  const validKeys = new Set(["", NONE_KEY, ...(Array.isArray(values) ? values.map(datacronKey) : [])]);
+  if (!validKeys.has(state.selectedKey)) state.selectedKey = "";
   select.value = state.selectedKey;
-  if (status) status.textContent = message || "USER-CONFIRMED BOARD EVIDENCE · choose only the datacron visibly assigned to this defense. Add zone + slot when known for exact board identity.";
+
+  if (status) {
+    if (message) status.textContent = message;
+    else if (values === null) status.textContent = "Opponent individual Datacron inventory is unavailable. Assignment remains unknown unless you explicitly confirm no Datacron in-game.";
+    else if (!values.length) status.textContent = "No opponent Datacron instances were returned. This alone does not prove this defense has none; confirm only what you can see in-game.";
+    else status.textContent = "USER-CONFIRMED BOARD EVIDENCE · leave unconfirmed unless checked in-game; choose confirmed none only for a visibly DC-free defense.";
+  }
   updateSaveState();
 }
 
@@ -220,13 +221,18 @@ async function recomputeAssessment() {
   const token = ++state.requestId;
   const datacron = selectedDatacron();
   const squad = selectedDefenseSquad();
+  const status = byId("gacDefenseDatacronStatus");
   if (!datacron) {
     state.assessment = null;
     decorateCounterCards();
+    if (status) {
+      status.textContent = selectedDatacronState() === "none"
+        ? "CONFIRMED NONE · this defense will be saved as visibly having no assigned Datacron."
+        : "DATACRON UNKNOWN · no assigned Datacron and no absence are inferred.";
+    }
     updateSaveState();
     return;
   }
-  const status = byId("gacDefenseDatacronStatus");
   if (status) status.textContent = "Resolving exact target categories and relic gates…";
   try {
     const context = await loadEligibilityContext();
@@ -264,16 +270,27 @@ function updateSaveState() {
   const mine = allyCode(byId("allyCode")?.value);
   const opponent = allyCode(byId("gacOpponentCode")?.value);
   const position = currentBoardPosition();
-  const ready = /^\d{9}$/.test(mine) && /^\d{9}$/.test(opponent) && Boolean(currentRound()) && members.length === size && members.includes(leader) && position.complete;
+  const selected = selectedDatacron();
+  const assignedWithoutStableId = Boolean(selected) && !clean(selected?.id);
+  const ready = /^\d{9}$/.test(mine) && /^\d{9}$/.test(opponent) && Boolean(currentRound()) && members.length === size && members.includes(leader) && position.complete && !assignedWithoutStableId;
   button.disabled = state.saveBusy || !ready;
   button.textContent = state.saveBusy ? "Saving Defense…" : "Save Current Defense";
-  button.title = position.complete ? "" : "Enter both board zone and slot, or leave both blank.";
+  button.title = !position.complete
+    ? "Enter both board zone and slot, or leave both blank."
+    : assignedWithoutStableId
+      ? "This Datacron has no stable instance ID and cannot be persisted as an exact assignment."
+      : "";
 }
 
 function savedDefenseLabel(defense, index) {
   const unitIndex = new Map((state.roster?.units || []).map((unit) => [clean(unit?.baseId), clean(unit?.name)]));
   const leader = unitIndex.get(clean(defense?.leaderBaseId)) || clean(defense?.leaderBaseId) || `Defense ${index + 1}`;
-  const dc = clean(defense?.datacron?.id) ? ` · DC L${Number(defense?.datacron?.level || 0)}` : "";
+  const datacronState = clean(defense?.datacronState).toLowerCase() || "unknown";
+  const dc = clean(defense?.datacron?.id)
+    ? ` · DC L${Number(defense?.datacron?.level || 0)}`
+    : datacronState === "none"
+      ? " · DC none"
+      : " · DC ?";
   const zone = clean(defense?.zone) ? ` · ${zoneLabel(defense.zone)}` : "";
   const slot = displaySlotFromBackend(defense?.slot);
   const slotLabel = slot ? ` · Slot ${slot}` : "";
@@ -323,18 +340,20 @@ function restoreDefense(defense) {
   if (slot) slot.value = displaySlotFromBackend(defense?.slot);
 
   const datacronId = clean(defense?.datacron?.id);
+  const datacronState = clean(defense?.datacronState).toLowerCase() || (datacronId ? "assigned" : "unknown");
   const values = datacrons();
   const matchIndex = Array.isArray(values) ? values.findIndex((datacron) => clean(datacron?.id) === datacronId) : -1;
-  state.selectedKey = matchIndex >= 0 ? datacronKey(values[matchIndex], matchIndex) : "";
+  state.selectedKey = datacronState === "none" ? NONE_KEY : matchIndex >= 0 ? datacronKey(values[matchIndex], matchIndex) : "";
   const dcSelect = byId("gacDefenseDatacron");
   if (dcSelect) dcSelect.value = state.selectedKey;
   const status = byId("gacDefenseDatacronStatus");
   if (status) {
     const position = currentBoardPosition();
     const positionLabel = position.specified && position.complete ? ` · ${zoneLabel(position.zone)} Slot ${position.displaySlot}` : "";
-    status.textContent = datacronId && matchIndex < 0
-      ? `Saved defense restored${positionLabel}. Its saved datacron is not present in the opponent's current live inventory, so the assignment was not re-selected.`
-      : `Saved current-round defense restored from verified owner evidence${positionLabel}.`;
+    if (datacronState === "none") status.textContent = `Saved current-round defense restored${positionLabel} · verified no Datacron assigned.`;
+    else if (datacronId && matchIndex < 0) status.textContent = `Saved defense restored${positionLabel}. Its verified assigned Datacron is no longer present in the opponent's current live inventory; choose the current board state before re-saving.`;
+    else if (datacronState === "unknown") status.textContent = `Saved current-round defense restored${positionLabel} · Datacron assignment was not verified.`;
+    else status.textContent = `Saved current-round defense restored from verified owner evidence${positionLabel}.`;
   }
   void recomputeAssessment();
   renderSavedDefenses(defense?.id);
@@ -373,8 +392,10 @@ async function saveCurrentDefense() {
   const members = selectedMemberIds();
   const leaderBaseId = clean(byId("gacDefenseLeader")?.value);
   const datacron = selectedDatacron();
+  const datacronState = selectedDatacronState();
   const position = currentBoardPosition();
   if (!mine || !opponent || !round || members.length !== size || !members.includes(leaderBaseId) || !position.complete) return;
+  if (datacron && !clean(datacron?.id)) return;
 
   state.saveBusy = true;
   updateSaveState();
@@ -388,14 +409,18 @@ async function saveCurrentDefense() {
       leaderBaseId,
       members,
       datacronId: clean(datacron?.id),
+      datacronState,
       zone: position.zone,
       slot: position.slot,
     });
     if (status) {
       const positionLabel = position.specified ? ` at ${zoneLabel(position.zone)} Slot ${position.displaySlot}` : "";
-      status.textContent = datacron && !clean(datacron?.id)
-        ? `Defense saved${positionLabel}. This live datacron had no stable instance ID, so its assignment was not persisted.`
-        : `Defense saved for Round ${result.round}${positionLabel}. Server revalidated the opponent roster${result?.defense?.datacron?.id ? " and exact datacron ID" : ""}.`;
+      const savedState = clean(result?.defense?.datacronState).toLowerCase();
+      status.textContent = savedState === "none"
+        ? `Defense saved for Round ${result.round}${positionLabel} · verified no Datacron assigned.`
+        : savedState === "assigned"
+          ? `Defense saved for Round ${result.round}${positionLabel}. Server revalidated the opponent roster and exact Datacron ID.`
+          : `Defense saved for Round ${result.round}${positionLabel} · Datacron assignment remains unknown.`;
     }
     await loadSavedDefenses();
     renderSavedDefenses(result?.id);
@@ -422,7 +447,7 @@ async function loadOpponentDatacrons() {
   }
   const token = ++state.requestId;
   const status = byId("gacDefenseDatacronStatus");
-  if (status) status.textContent = "Loading opponent live datacron inventory…";
+  if (status) status.textContent = "Loading opponent live Datacron inventory…";
   try {
     const roster = await fetchJson(`/api/player/${code}`);
     if (token !== state.requestId) return;
@@ -436,7 +461,7 @@ async function loadOpponentDatacrons() {
     state.selectedKey = "";
     state.assessment = null;
     state.savedDefenses = [];
-    renderSelector(error?.message || "Opponent datacron inventory unavailable.");
+    renderSelector(error?.message || "Opponent Datacron inventory unavailable. Assignment remains unknown unless you explicitly confirm none in-game.");
     renderSavedDefenses();
     decorateCounterCards();
   }
@@ -496,12 +521,14 @@ if (typeof document !== "undefined") {
 }
 
 export {
+  NONE_KEY,
   assessmentHtml,
   currentBoardPosition,
   datacronKey,
   optionLabel,
   restoreDefense,
   savedDefenseLabel,
+  selectedDatacronState,
   selectedDefenseSquad,
   selectedMemberIds,
 };
