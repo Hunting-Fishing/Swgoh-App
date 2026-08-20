@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-20T00:00:00Z",
-  "policy": "Research candidates are quarantined from runtime. A candidate must pass every review flag and the production strategy-record validator before promotion into gac-strategy-records.json.",
+  "generatedAt": "2026-08-20T12:00:00Z",
+  "policy": "Research candidates are quarantined from runtime. Current-season statistics can validate matchup relevance but cannot invent execution guidance or Datacron scope. A candidate must pass every review flag, canonical Base-ID audit, and the production strategy-record validator before promotion.",
   "candidates": [
     {
       "schemaVersion": 1,
@@ -16,26 +16,16 @@
           "members": ["BAYLANSKOLL", "SHINHATI", "MARROK"]
         },
         "attacker": {
-          "leaderBaseId": "JEDIMASTERLUKE",
-          "members": ["JEDIMASTERLUKE", "JEDIKNIGHTLUKE", "HERMITYODA"]
+          "leaderBaseId": "GRANDMASTERLUKE",
+          "members": ["GRANDMASTERLUKE", "JEDIKNIGHTLUKE", "HERMITYODA"]
         },
-        "attackerDatacron": {
-          "presence": "",
-          "required": false,
-          "setIds": [],
-          "mechanicIds": []
-        },
-        "defenderDatacron": {
-          "presence": "",
-          "required": false,
-          "setIds": [],
-          "mechanicIds": []
-        },
+        "attackerDatacron": { "presence": "", "required": false, "setIds": [], "mechanicIds": [] },
+        "defenderDatacron": { "presence": "", "required": false, "setIds": [], "mechanicIds": [] },
         "guidance": {
           "opening": [
             {
               "text": "Open by using Jedi Master Luke's targeted special on Hermit Yoda.",
-              "note": "Paraphrased from the referenced 3v3 counter guide; exact ability naming still requires source-review confirmation."
+              "note": "Paraphrased from the exact 3v3 counter guide; exact ability naming remains source-review scoped."
             }
           ],
           "targets": [
@@ -53,13 +43,96 @@
           "author": "",
           "sourcePublishedAt": "2026-01-16T00:00:00Z",
           "sourceUpdatedAt": "2026-01-16T00:00:00Z",
-          "capturedAt": "2026-08-20T00:00:00Z"
+          "capturedAt": "2026-08-20T12:00:00Z"
         },
         "validity": {
           "validFrom": "",
           "validUntil": "",
           "gameDataVersion": "",
-          "notes": "Quarantined pending current-version and Datacron-scope validation."
+          "notes": "Season 81 still shows Baylan as a major 3v3 defense, but this exact execution source predates the current Datacron era."
+        }
+      },
+      "review": {
+        "status": "quarantined",
+        "flags": {
+          "sourceVerified": true,
+          "exactCompositionVerified": true,
+          "baseIdsVerified": true,
+          "guidanceParaphraseVerified": true,
+          "datacronScopeVerified": false,
+          "versionValidityVerified": false,
+          "copyrightParaphraseReviewed": true
+        },
+        "blockers": ["datacron-scope-unverified", "current-version-validity-unverified"],
+        "reviewer": "SWGOH Command Center",
+        "reviewedAt": "2026-08-20T12:00:00Z",
+        "notes": "JML canonical Base ID corrected to GRANDMASTERLUKE. Do not promote until current attacker/defender Datacron scope is proven."
+      },
+      "research": {
+        "discoveredAt": "2026-08-20T00:00:00Z",
+        "sourceSnapshotDate": "2026-01-16",
+        "sourceNotes": "Exact Baylan/Shin/Marrok versus JML/JKL/Hermit Yoda execution sequence. Current Season 81 relevance is supported separately, not treated as proof that the old sequence survives every current Datacron.",
+        "validationRefs": [
+          {
+            "kind": "current-statistics",
+            "sourceName": "SWGOH.GG",
+            "sourceRef": "https://swgoh.gg/gac/counters/BAYLANSKOLL/",
+            "capturedAt": "2026-08-20T12:00:00Z",
+            "note": "Season 81 3v3 Baylan counter page; tens of thousands of analyzed battles."
+          },
+          {
+            "kind": "recent-battle-video",
+            "sourceName": "Vexitron",
+            "sourceRef": "https://swgoh.tv/video/48656-this-character-is-not-balanced-pure-insanity-kyber-1-gac",
+            "capturedAt": "2026-08-20T12:00:00Z",
+            "note": "June 2026 3v3 video includes JML vs Baylan, supporting recent matchup relevance but not this exact composition/DC scope."
+          }
+        ]
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "candidateId": "research:queen-pow-mqg:bane-marauder:3v3:2026-01",
+      "proposedRecord": {
+        "schemaVersion": 1,
+        "id": "strategy:queen-pow-mqg:bane-marauder:3v3",
+        "status": "active",
+        "format": "3v3",
+        "defender": {
+          "leaderBaseId": "QUEENAMIDALA",
+          "members": ["QUEENAMIDALA", "PADAWANOBIWAN", "MASTERQUIGON"]
+        },
+        "attacker": {
+          "leaderBaseId": "DARTHBANE",
+          "members": ["DARTHBANE", "SITHMARAUDER"]
+        },
+        "attackerDatacron": { "presence": "", "required": false, "setIds": [], "mechanicIds": [] },
+        "defenderDatacron": { "presence": "", "required": false, "setIds": [], "mechanicIds": [] },
+        "guidance": {
+          "opening": [],
+          "targets": [],
+          "mechanics": [
+            {
+              "text": "The source reports this exact Darth Bane and Sith Marauder duo as an easy full-auto win.",
+              "note": "Treat as observed source behavior, not a guarantee; no manual turn sequence is inferred."
+            }
+          ],
+          "avoid": []
+        },
+        "provenance": {
+          "sourceName": "SWGOH GA3 Counter Guide",
+          "sourceRef": "https://swgoh-ga3.online-server.info/index.php?detail_id=69908&mode=detailed",
+          "sourceType": "tool",
+          "author": "",
+          "sourcePublishedAt": "2026-01-16T00:00:00Z",
+          "sourceUpdatedAt": "2026-01-16T00:00:00Z",
+          "capturedAt": "2026-08-20T12:00:00Z"
+        },
+        "validity": {
+          "validFrom": "",
+          "validUntil": "",
+          "gameDataVersion": "",
+          "notes": "Undersized 2-character source candidate. Current Datacron scope and Base IDs require canonical audit before promotion."
         }
       },
       "review": {
@@ -73,19 +146,170 @@
           "versionValidityVerified": false,
           "copyrightParaphraseReviewed": true
         },
-        "blockers": [
-          "datacron-scope-unverified",
-          "current-version-validity-unverified",
-          "base-ids-unverified"
-        ],
+        "blockers": ["base-ids-unverified", "datacron-scope-unverified", "current-version-validity-unverified"],
         "reviewer": "",
         "reviewedAt": "",
-        "notes": "The January 2026 source predates later Baylan-focused Datacron conditions seen during research. Do not promote until attacker and defender Datacron scope and current-version validity are verified."
+        "notes": "B03 undersized-contract fixture from a real source. No fake third attacker is added."
       },
       "research": {
-        "discoveredAt": "2026-08-20T00:00:00Z",
+        "discoveredAt": "2026-08-20T12:00:00Z",
         "sourceSnapshotDate": "2026-01-16",
-        "sourceNotes": "Source describes the exact Baylan Skoll / Shin Hati / Marrok defense and Jedi Master Luke / Jedi Knight Luke / Hermit Yoda attack sequence. Runtime remains unaffected while quarantined."
+        "sourceNotes": "Exact Queen Amidala / Padawan Obi-Wan / Master Qui-Gon defense and Bane / Sith Marauder duo. Current Season 81 Queen activity is high, but the old guide does not establish current Datacron scope.",
+        "validationRefs": [
+          {
+            "kind": "current-statistics",
+            "sourceName": "SWGOH.GG",
+            "sourceRef": "https://swgoh.gg/gac/counters/QUEENAMIDALA/",
+            "capturedAt": "2026-08-20T12:00:00Z",
+            "note": "Season 81 3v3 Queen Amidala counter page with a large current battle sample."
+          }
+        ]
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "candidateId": "research:pkh-hondo-vane:slkr-fosftp-hux:3v3:2026-01",
+      "proposedRecord": {
+        "schemaVersion": 1,
+        "id": "strategy:pkh-hondo-vane:slkr-fosftp-hux:3v3",
+        "status": "active",
+        "format": "3v3",
+        "defender": {
+          "leaderBaseId": "GLHONDO",
+          "members": ["GLHONDO", "HONDO", "VANE"]
+        },
+        "attacker": {
+          "leaderBaseId": "SUPREMELEADERKYLOREN",
+          "members": ["SUPREMELEADERKYLOREN", "FIRSTORDERSPECIALFORCESPILOT", "GENERALHUX"]
+        },
+        "attackerDatacron": { "presence": "", "required": false, "setIds": [], "mechanicIds": [] },
+        "defenderDatacron": { "presence": "", "required": false, "setIds": [], "mechanicIds": [] },
+        "guidance": { "opening": [], "targets": [], "mechanics": [], "avoid": [] },
+        "provenance": {
+          "sourceName": "SWGOH GA3 Counter Guide",
+          "sourceRef": "https://swgoh-ga3.online-server.info/index.php?id=pirate_king_hondo_ohnaka",
+          "sourceType": "tool",
+          "author": "",
+          "sourcePublishedAt": "2026-01-16T00:00:00Z",
+          "sourceUpdatedAt": "2026-01-16T00:00:00Z",
+          "capturedAt": "2026-08-20T12:00:00Z"
+        },
+        "validity": {
+          "validFrom": "",
+          "validUntil": "",
+          "gameDataVersion": "",
+          "notes": "Exact historical team pairing only; tactical execution guidance is still missing."
+        }
+      },
+      "review": {
+        "status": "quarantined",
+        "flags": {
+          "sourceVerified": true,
+          "exactCompositionVerified": true,
+          "baseIdsVerified": true,
+          "guidanceParaphraseVerified": false,
+          "datacronScopeVerified": false,
+          "versionValidityVerified": false,
+          "copyrightParaphraseReviewed": true
+        },
+        "blockers": ["guidance-sequence-missing", "datacron-scope-unverified", "current-version-validity-unverified"],
+        "reviewer": "SWGOH Command Center",
+        "reviewedAt": "2026-08-20T12:00:00Z",
+        "notes": "Canonical IDs for GL Hondo, Hondo, Vane, SLKR, FO SF TIE Pilot and Hux are already present in the app journey/catalog data."
+      },
+      "research": {
+        "discoveredAt": "2026-08-20T12:00:00Z",
+        "sourceSnapshotDate": "2026-01-16",
+        "sourceNotes": "Exact historical matchup shows the SLKR/FOSFTP/Hux trio versus PKH/Hondo/Vane. A May 2026 video separately shows SLKR vs PKHO/Hondo/Vane with a Vane Datacron, but does not prove this exact attacker trio or execution sequence.",
+        "validationRefs": [
+          {
+            "kind": "current-statistics",
+            "sourceName": "SWGOH.GG",
+            "sourceRef": "https://swgoh.gg/gac/counters/GLHONDO/",
+            "capturedAt": "2026-08-20T12:00:00Z",
+            "note": "Season 81 3v3 Pirate King Hondo counter page with more than 100K analyzed battles."
+          },
+          {
+            "kind": "recent-battle-video",
+            "sourceName": "Xaereth Prevails",
+            "sourceRef": "https://swgoh.tv/video/48466-counters-you-need-may-3v3-w-timestamps-swgoh-gac-galaxyofheroes-starwars",
+            "capturedAt": "2026-08-20T12:00:00Z",
+            "note": "May 2026 3v3 video includes SLKR vs PKHO/Hondo/Vane with Vane cron; used only as supporting recency evidence."
+          }
+        ]
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "candidateId": "research:jmmw-aayla-depa:traya-nihilus-savage:3v3:2026-01",
+      "proposedRecord": {
+        "schemaVersion": 1,
+        "id": "strategy:jmmw-aayla-depa:traya-nihilus-savage:3v3",
+        "status": "active",
+        "format": "3v3",
+        "defender": {
+          "leaderBaseId": "JEDIMASTERMACEWINDU",
+          "members": ["JEDIMASTERMACEWINDU", "AAYLASECURA", "DEPABILLABA"]
+        },
+        "attacker": {
+          "leaderBaseId": "DARTHTRAYA",
+          "members": ["DARTHTRAYA", "DARTHNIHILUS", "SAVAGEOPRESS"]
+        },
+        "attackerDatacron": { "presence": "", "required": false, "setIds": [], "mechanicIds": [] },
+        "defenderDatacron": { "presence": "", "required": false, "setIds": [], "mechanicIds": [] },
+        "guidance": { "opening": [], "targets": [], "mechanics": [], "avoid": [] },
+        "provenance": {
+          "sourceName": "SWGOH GA3 Counter Guide",
+          "sourceRef": "https://swgoh-ga3.online-server.info/index.php?id=jedi_master_mace_windu",
+          "sourceType": "tool",
+          "author": "",
+          "sourcePublishedAt": "2026-01-16T00:00:00Z",
+          "sourceUpdatedAt": "2026-01-16T00:00:00Z",
+          "capturedAt": "2026-08-20T12:00:00Z"
+        },
+        "validity": {
+          "validFrom": "",
+          "validUntil": "",
+          "gameDataVersion": "",
+          "notes": "Exact historical composition pairing with no sourced execution sequence captured yet."
+        }
+      },
+      "review": {
+        "status": "quarantined",
+        "flags": {
+          "sourceVerified": true,
+          "exactCompositionVerified": true,
+          "baseIdsVerified": false,
+          "guidanceParaphraseVerified": false,
+          "datacronScopeVerified": false,
+          "versionValidityVerified": false,
+          "copyrightParaphraseReviewed": true
+        },
+        "blockers": ["base-ids-unverified", "guidance-sequence-missing", "datacron-scope-unverified", "current-version-validity-unverified"],
+        "reviewer": "",
+        "reviewedAt": "",
+        "notes": "Recent 2026 3v3 videos continue to show Traya versus Master Mace, but exact composition and current Datacron execution still require verification."
+      },
+      "research": {
+        "discoveredAt": "2026-08-20T12:00:00Z",
+        "sourceSnapshotDate": "2026-01-16",
+        "sourceNotes": "GA3 source shows Traya/Nihilus/Savage at 100% historical observation against exact JMMW/Aayla/Depa and JMMW/Depa/Temple Guard variants. Only this exact Aayla/Depa variant is represented by this candidate.",
+        "validationRefs": [
+          {
+            "kind": "current-statistics",
+            "sourceName": "SWGOH.GG",
+            "sourceRef": "https://swgoh.gg/gac/counters/JEDIMASTERMACEWINDU/",
+            "capturedAt": "2026-08-20T12:00:00Z",
+            "note": "Season 81 3v3 Jedi Master Mace Windu counter page with a large current battle sample."
+          },
+          {
+            "kind": "recent-battle-video",
+            "sourceName": "Vexitron",
+            "sourceRef": "https://swgoh.tv/video/48656-this-character-is-not-balanced-pure-insanity-kyber-1-gac",
+            "capturedAt": "2026-08-20T12:00:00Z",
+            "note": "June 2026 video includes Traya vs Master Mace, supporting recent matchup relevance but not this exact trio/DC scope."
+          }
+        ]
       }
     }
   ]
