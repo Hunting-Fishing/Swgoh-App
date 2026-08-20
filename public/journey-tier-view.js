@@ -89,7 +89,7 @@ function rosterMap() {
 
 function trackedIds() {
   const panel = document.getElementById('workspace-farm');
-  return new Set([...array(panel?.querySelectorAll?.('[data-journey-card]'))]
+  return new Set(Array.from(panel?.querySelectorAll?.('[data-journey-card]') || [])
     .map((node) => text(node.dataset.journeyCard))
     .filter(Boolean));
 }
