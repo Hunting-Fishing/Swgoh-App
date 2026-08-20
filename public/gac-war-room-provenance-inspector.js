@@ -8,9 +8,9 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => 
 
 function identity() {
   const mine = allyCode(document.getElementById('allyCode')?.value || window.__swgohAccountAllyCode);
-  const opponent = allyCode(document.getElementById('gacOpponentCode')?.value || document.querySelector('[data-gacv2-opponent]')?.value);
-  const round = Number(document.getElementById('gacBracketRound')?.value || document.querySelector('[data-gacv2-round]')?.value);
-  const size = Number(document.getElementById('gacMode')?.value || document.querySelector('[data-gacv2-mode]')?.value) === 3 ? 3 : 5;
+  const opponent = allyCode(document.querySelector('[data-gacv2-opponent]')?.value || document.getElementById('gacOpponentCode')?.value);
+  const round = Number(document.querySelector('[data-gacv2-round]')?.value || document.getElementById('gacBracketRound')?.value);
+  const size = Number(document.querySelector('[data-gacv2-mode]')?.value || document.getElementById('gacMode')?.value) === 3 ? 3 : 5;
   return /^\d{9}$/.test(mine) && /^\d{9}$/.test(opponent) && Number.isInteger(round) && round >= 1 && round <= 3
     ? Object.freeze({ mine, opponent, round, size, format: size === 3 ? '3v3' : '5v5', key: `${mine}|${opponent}|${round}|${size}` })
     : null;
@@ -80,6 +80,33 @@ function renderPanel(provenance, executionUnlocked) {
   </section>`;
 }
 
+function v2CounterContext(card) {
+  const root = card.closest('[data-gacv2-root]');
+  if (!root) return null;
+  const size = Number(root.querySelector('[data-gacv2-mode]')?.value) === 3 ? 3 : 5;
+  const defenderMembers = [...root.querySelectorAll('[data-gacv2-defender].selected')]
+    .map((button) => normalizeId(button.dataset.gacv2Defender)).filter(Boolean);
+  const attackerMembers = [...card.querySelectorAll('.gacv2-counter-units [data-inspect-base-id]')]
+    .map((node) => normalizeId(node.dataset.inspectBaseId)).filter(Boolean);
+  if (defenderMembers.length !== size || !attackerMembers.length) return null;
+  return Object.freeze({ format: size === 3 ? '3v3' : '5v5', defenderMembers, attackerMembers });
+}
+
+function renderV2Chip(provenance) {
+  if (!provenance || provenance.status === 'none') return `<div class="gacv2-prov-chip is-none"><strong>TACTIC SOURCE</strong><span>No exact sourced execution record</span></div>`;
+  const blockers = Array.isArray(provenance.blockers) ? provenance.blockers : [];
+  return `<details class="gacv2-prov-chip is-${escapeHtml(provenance.status)}"><summary><strong>TACTIC SOURCE FOUND</strong><span>${provenance.status === 'locked' ? 'EXECUTION LOCKED' : escapeHtml(provenance.status.toUpperCase())}</span></summary><div>${sourceAnchor(provenance.sourceName, provenance.sourceRef)}<small>${blockers.length ? `${blockers.length} review gate${blockers.length === 1 ? '' : 's'} · ` : ''}updated ${dateLabel(provenance.sourceUpdatedAt)}</small><p>${escapeHtml(provenance.validityNotes || provenance.detail || '')}</p>${blockers.length ? `<ul>${blockers.slice(0,5).map((label) => `<li>${escapeHtml(label)}</li>`).join('')}</ul>` : ''}<em>Metadata only. Quarantined execution guidance is not loaded.</em></div></details>`;
+}
+
+async function inspectV2Counter(card) {
+  if (card.querySelector('.gacv2-prov-chip')) return;
+  const context = v2CounterContext(card);
+  if (!context) return;
+  const provenance = await findStrategyProvenance(context);
+  if (!card.isConnected || card.querySelector('.gacv2-prov-chip')) return;
+  card.insertAdjacentHTML('beforeend', renderV2Chip(provenance));
+}
+
 async function inspectCard(card) {
   const details = card?.querySelector('.gac-war-room-attack-brief');
   const body = details?.querySelector('.gac-war-room-attack-brief-body');
@@ -112,12 +139,13 @@ async function inspectCard(card) {
 }
 
 function inspectAll() {
+  for (const card of document.querySelectorAll('[data-gacv2-root] .gacv2-counter-card')) void inspectV2Counter(card);
   for (const card of document.querySelectorAll('#gacBoardPlannerGrid .gac-saved-board-card')) void inspectCard(card);
 }
 
 function invalidate() {
   state.boardKey = ''; state.board = null; state.boardPromise = null;
-  document.querySelectorAll('[data-gac-provenance-panel]').forEach((node) => node.remove());
+  document.querySelectorAll('[data-gac-provenance-panel], .gacv2-prov-chip').forEach((node) => node.remove());
 }
 
 function schedule(delay = 80) {
@@ -128,7 +156,7 @@ function schedule(delay = 80) {
 function injectStyle() {
   if (document.querySelector('link[data-gac-provenance-inspector]')) return;
   const link = document.createElement('link');
-  link.rel = 'stylesheet'; link.href = '/gac-war-room-provenance-inspector.css?v=20260821-b05'; link.dataset.gacProvenanceInspector = 'true';
+  link.rel = 'stylesheet'; link.href = '/gac-war-room-provenance-inspector.css?v=20260821-b05b'; link.dataset.gacProvenanceInspector = 'true';
   document.head.appendChild(link);
 }
 
@@ -138,10 +166,13 @@ if (typeof document !== 'undefined') {
   document.addEventListener('change', (event) => {
     if (['allyCode','gacOpponentCode','gacBracketRound','gacMode'].includes(event.target?.id) || event.target?.matches?.('[data-gacv2-round],[data-gacv2-mode],[data-gacv2-opponent]')) { invalidate(); schedule(140); }
   }, true);
+  document.addEventListener('click', (event) => {
+    if (event.target?.closest?.('[data-gacv2-defender]')) { document.querySelectorAll('.gacv2-prov-chip').forEach((node) => node.remove()); schedule(90); }
+  }, true);
   window.addEventListener('gac-war-room-updated', () => { invalidate(); schedule(100); });
   window.addEventListener('gac-board-evidence-updated', () => { invalidate(); schedule(120); });
   new MutationObserver(() => schedule(60)).observe(document.documentElement, { childList:true, subtree:true });
   schedule(300);
 }
 
-export { identity, ids, renderPanel };
+export { identity, ids, renderPanel, renderV2Chip, v2CounterContext };
