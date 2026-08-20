@@ -35,6 +35,9 @@ async function loadFarmWorkspace() {
     await import("/farm-gallery-style-loader.js?v=20260820-farmgallery1");
     await import("/farm-gallery-tabs.js?v=20260820-farmgallery1");
 
+    // Alternate Journey Gallery presentation: current SWGOH-style Solo tiers / Guild Journeys / Galactic Legends.
+    await import("/journey-tier-view.js?v=20260821-tier1");
+
     loaded = true;
     window.dispatchEvent(new CustomEvent("swgoh:farm-workspace-loaded"));
   })().catch((error) => {
