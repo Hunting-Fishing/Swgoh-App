@@ -31,7 +31,8 @@ async function loadFarmWorkspace() {
     // Farm v3 owns canonical target/readiness state while retaining the durable tracker underneath.
     await import("/farm-tracker-v3-enhancer.js?v=20260820-farmv3c");
 
-    // Gallery tabs reorganize, rather than remove, Tracked / Journey / Requirements / Shopping / Priority / Era information.
+    // Load portrait-first tab styling before the final Farm Gallery controller paints.
+    await import("/farm-gallery-style-loader.js?v=20260820-farmgallery1");
     await import("/farm-gallery-tabs.js?v=20260820-farmgallery1");
 
     loaded = true;
