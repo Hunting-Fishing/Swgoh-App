@@ -21,9 +21,16 @@ test('Farm v3 enhancer activates after durable tracking and eligibility shells a
   assert.ok(enhancer > tracker);
   assert.ok(enhancer > eligibility);
   assert.match(loader, /swgoh:farm-workspace-loaded/);
-  assert.match(loader, /farmv3b/);
+  assert.match(loader, /farmv3c/);
 });
 
-test('main shell cache-busts the Farm v3 matrix loader', () => {
+test('Farm Gallery loads after Farm v3 and uses a separately cache-versioned module', () => {
+  const enhancer = loader.indexOf('/farm-tracker-v3-enhancer.js');
+  const gallery = loader.indexOf('/farm-gallery-tabs.js');
+  assert.ok(gallery > enhancer);
+  assert.match(loader, /farmgallery1/);
+});
+
+test('main shell still lazy-loads the Farm workspace module', () => {
   assert.match(index, /farm-workspace-loader\.js\?v=20260820-farmv3b/);
 });
