@@ -11,19 +11,26 @@ async function loadFarmWorkspace() {
   if (loadPromise) return loadPromise;
 
   loadPromise = (async () => {
+    // Canonicalize known legacy/typo Base IDs before any Farm/Journey renderer imports the shared presets.
+    await import("/journey-preset-canonicalizer.js?v=20260820-farmv3a");
+
     // Journey Tracker owns the Farm shell, so it must initialize first.
-    await import("/journey-tracker-v2.js?v=20260819-account-goals1");
+    await import("/journey-tracker-v2.js?v=20260820-farmv3a");
     await new Promise((resolve) => requestAnimationFrame(() => resolve()));
 
     // These modules enhance the shell but no longer need to exist while Farm is hidden.
     await Promise.all([
       import("/farm-material-drilldown.js?v=20260815-pro14"),
       import("/farm-master-plan-pro.js?v=20260815-lazy1"),
-      import("/farm-journey-map-pro.js?v=20260815-pro14"),
+      import("/farm-journey-map-pro.js?v=20260820-farmv3a"),
     ]);
 
     // Eligibility depends on the Journey Map shell being installed.
     await import("/journey-event-eligibility-pro.js?v=20260815-pro13");
+
+    // Farm v3 adds canonical data-quality reporting plus explicit Active/Ready/Completed states.
+    await import("/farm-tracker-v3-enhancer.js?v=20260820-farmv3a");
+
     loaded = true;
     window.dispatchEvent(new CustomEvent("swgoh:farm-workspace-loaded"));
   })().catch((error) => {

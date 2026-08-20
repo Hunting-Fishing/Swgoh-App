@@ -211,7 +211,7 @@ export function createSupabaseAuthSession(env = process.env, options = {}) {
     });
   }
 
-  async function currentUser(request) {
+  async function verifyCookieUser(request) {
     const cookies = parseCookies(request);
     const accessToken = clean(cookies[ACCESS_COOKIE]);
     if (!accessToken) return null;
@@ -223,6 +223,49 @@ export function createSupabaseAuthSession(env = process.env, options = {}) {
     }
   }
 
+  async function refreshFromCookie(request) {
+    const cookies = parseCookies(request);
+    const refreshToken = clean(cookies[REFRESH_COOKIE]);
+    if (!refreshToken) return Object.freeze({ user: null, setCookies: [] });
+    try {
+      const session = await authFetch(config, fetchImpl, '/auth/v1/token?grant_type=refresh_token', {
+        body: { refresh_token: refreshToken },
+      });
+      if (!session?.access_token || !session?.refresh_token) {
+        throw Object.assign(new Error('Authentication service did not return a refreshed session.'), { status: 502 });
+      }
+      const user = session?.user?.id
+        ? session.user
+        : await verifier.verifyAccessToken(session.access_token);
+      if (!user?.id) {
+        throw Object.assign(new Error('Authentication service did not return a valid refreshed user.'), { status: 502 });
+      }
+      return Object.freeze({
+        user,
+        setCookies: sessionCookies(session, config.secureCookies),
+      });
+    } catch (error) {
+      if ([400, 401, 403].includes(Number(error?.status))) {
+        return Object.freeze({
+          user: null,
+          setCookies: clearSessionCookies(config.secureCookies),
+        });
+      }
+      throw error;
+    }
+  }
+
+  async function sessionState(request, { allowRefresh = false } = {}) {
+    const user = await verifyCookieUser(request);
+    if (user || !allowRefresh) return Object.freeze({ user, setCookies: [] });
+    return refreshFromCookie(request);
+  }
+
+  async function currentUser(request) {
+    const state = await sessionState(request, { allowRefresh: false });
+    return state.user;
+  }
+
   async function handle(request, response, url) {
     if (!url.pathname.startsWith('/api/auth/')) return false;
 
@@ -231,18 +274,22 @@ export function createSupabaseAuthSession(env = process.env, options = {}) {
 
     try {
       if (request.method === 'GET' && url.pathname === '/api/auth/status') {
-        const user = await currentUser(request);
-        json(response, 200, { authenticated: Boolean(user), user: user ? safeUser(user) : null, auth: status() });
+        const session = await sessionState(request, { allowRefresh: true });
+        json(response, 200, {
+          authenticated: Boolean(session.user),
+          user: session.user ? safeUser(session.user) : null,
+          auth: status(),
+        }, session.setCookies.length ? { 'Set-Cookie': session.setCookies } : {});
         return true;
       }
 
       if (request.method === 'GET' && url.pathname === '/api/auth/me') {
-        const user = await currentUser(request);
-        if (!user) {
-          json(response, 401, { authenticated: false, error: 'A signed-in Command Center session is required.' });
+        const session = await sessionState(request, { allowRefresh: true });
+        if (!session.user) {
+          json(response, 401, { authenticated: false, error: 'A signed-in Command Center session is required.' }, session.setCookies.length ? { 'Set-Cookie': session.setCookies } : {});
           return true;
         }
-        json(response, 200, { authenticated: true, user: safeUser(user) });
+        json(response, 200, { authenticated: true, user: safeUser(session.user) }, session.setCookies.length ? { 'Set-Cookie': session.setCookies } : {});
         return true;
       }
 
@@ -286,18 +333,15 @@ export function createSupabaseAuthSession(env = process.env, options = {}) {
 
       if (request.method === 'POST' && url.pathname === '/api/auth/refresh') {
         assertSameOrigin(request);
-        const cookies = parseCookies(request);
-        const refreshToken = clean(cookies[REFRESH_COOKIE]);
-        if (!refreshToken) {
-          json(response, 401, { authenticated: false, error: 'No refresh session is available.' }, {
-            'Set-Cookie': clearSessionCookies(config.secureCookies),
+        const session = await refreshFromCookie(request);
+        if (!session.user) {
+          json(response, 401, { authenticated: false, error: 'No valid refresh session is available.' }, {
+            'Set-Cookie': session.setCookies.length ? session.setCookies : clearSessionCookies(config.secureCookies),
           });
           return true;
         }
-        const session = await authFetch(config, fetchImpl, '/auth/v1/token?grant_type=refresh_token', { body: { refresh_token: refreshToken } });
-        if (!session?.access_token || !session?.refresh_token) throw Object.assign(new Error('Authentication service did not return a refreshed session.'), { status: 502 });
         json(response, 200, { authenticated: true, user: safeUser(session.user) }, {
-          'Set-Cookie': sessionCookies(session, config.secureCookies),
+          'Set-Cookie': session.setCookies,
         });
         return true;
       }
