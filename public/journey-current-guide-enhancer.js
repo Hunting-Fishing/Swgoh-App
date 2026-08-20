@@ -1,6 +1,6 @@
 import { CURRENT_JOURNEY_GUIDES } from "./journey-current-guide-data.js";
 
-const state = { catalog: [], loading: null };
+const state = { catalog: [], loading: null, dashboardObserver: null };
 const array = (value) => Array.isArray(value) ? value : [];
 const text = (value) => String(value ?? "").trim();
 const escapeHtml = (value) => String(value ?? "")
@@ -131,14 +131,66 @@ async function renderCurrentBand() {
     ${guides.length ? `<div class="journey-current-grid">${guides.map((guide) => cardMarkup(guide, catalog)).join("")}</div>` : '<div class="journey-map-empty">No current Journey / Era guide matches this search.</div>'}`;
 }
 
-function schedule() {
+function dashboardRowMarkup(guide, catalog) {
+  const unit = resolveJourneyCatalogUnit(guide.targetName, catalog);
+  const image = unitImage(unit || {});
+  const tier = guide.journeyTier ? `T${guide.journeyTier}` : "ERA";
+  return `<div class="ccv2-journey-current-row">
+    <span class="ccv2-journey-current-art">${image ? `<img src="${escapeAttr(image)}" alt="" loading="lazy">` : "✦"}</span>
+    <span><strong>${escapeHtml(guide.name)}</strong><small>${escapeHtml(guide.availabilityLabel)} · ${escapeHtml(tier)}</small></span>
+    <b>${guide.progressionSystem === "era" ? "EL ?" : "REF"}</b>
+  </div>`;
+}
+
+async function enhanceDashboardJourney() {
+  const module = document.querySelector(".ccv2-journey-module");
+  if (!module || module.dataset.currentJourneysEnhanced === "true") return false;
+  module.dataset.currentJourneysEnhanced = "true";
+  let catalog = [];
+  try { catalog = await loadCatalog(); } catch { catalog = []; }
+  if (!module.isConnected) return false;
+  const current = [
+    CURRENT_JOURNEY_GUIDES.find((guide) => guide.id === "CURRENT_DARTH_JAR_JAR"),
+    CURRENT_JOURNEY_GUIDES.find((guide) => guide.id === "CURRENT_JMMW"),
+    CURRENT_JOURNEY_GUIDES.find((guide) => guide.id === "CURRENT_CASSIAN_UNDERCOVER"),
+  ].filter(Boolean);
+  const host = document.createElement("div");
+  host.className = "ccv2-journey-current-list";
+  host.innerHTML = current.map((guide) => dashboardRowMarkup(guide, catalog)).join("");
+  const note = module.querySelector(".ccv2-journey-note");
+  (note || module.querySelector(".ccv2-module-metrics"))?.insertAdjacentElement("beforebegin", host);
+  return true;
+}
+
+function scheduleMap() {
   setTimeout(() => renderCurrentBand().catch(() => {}), 0);
 }
 
-window.addEventListener("swgoh:journey-map-rendered", schedule);
+function scheduleDashboard() {
+  setTimeout(() => enhanceDashboardJourney().catch(() => {}), 0);
+}
+
+window.addEventListener("swgoh:journey-map-rendered", scheduleMap);
 window.addEventListener("swgoh:farm-view-changed", (event) => {
-  if (event?.detail?.mode === "map") setTimeout(schedule, 80);
+  if (event?.detail?.mode === "map") setTimeout(scheduleMap, 80);
 });
 
-if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", schedule, { once: true });
-else schedule();
+function installDashboardObserver() {
+  scheduleDashboard();
+  if (state.dashboardObserver) return;
+  state.dashboardObserver = new MutationObserver(() => {
+    const module = document.querySelector(".ccv2-journey-module");
+    if (module && module.dataset.currentJourneysEnhanced !== "true") scheduleDashboard();
+  });
+  state.dashboardObserver.observe(document.body, { childList: true, subtree: true });
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", () => {
+    installDashboardObserver();
+    scheduleMap();
+  }, { once: true });
+} else {
+  installDashboardObserver();
+  scheduleMap();
+}
