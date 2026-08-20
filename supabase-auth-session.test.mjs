@@ -89,6 +89,97 @@ test('current user is resolved from the HttpOnly access cookie', async () => {
   assert.equal(user.id, '0f4c45c0-b8f6-4b22-aad7-56ad6390b010');
 });
 
+test('auth status silently refreshes an expired access cookie when the 30-day refresh session is valid', async () => {
+  const calls = [];
+  const session = createSupabaseAuthSession(env, {
+    verifier: {
+      async verifyAccessToken(value) {
+        if (value === 'expired-access') throw Object.assign(new Error('expired'), { status: 401 });
+        if (value === 'fresh-access') return { id: '0f4c45c0-b8f6-4b22-aad7-56ad6390b010', email: 'pilot@example.com' };
+        throw Object.assign(new Error('bad token'), { status: 401 });
+      },
+    },
+    fetch: async (url, options) => {
+      calls.push({ url, options });
+      return {
+        ok: true,
+        status: 200,
+        async text() {
+          return JSON.stringify({
+            access_token: 'fresh-access',
+            refresh_token: 'rotated-refresh',
+            expires_in: 3600,
+            user: { id: '0f4c45c0-b8f6-4b22-aad7-56ad6390b010', email: 'pilot@example.com' },
+          });
+        },
+      };
+    },
+  });
+  const req = request({ headers: { cookie: 'swgoh_cc_access=expired-access; swgoh_cc_refresh=long-lived-refresh' } });
+  const res = response();
+  await session.handle(req, res, new URL('https://command.example/api/auth/status'));
+
+  assert.equal(res.status, 200);
+  assert.equal(JSON.parse(res.body).authenticated, true);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, 'https://example.supabase.co/auth/v1/token?grant_type=refresh_token');
+  assert.match(String(calls[0].options.body), /long-lived-refresh/);
+  assert.equal(Array.isArray(res.headers['Set-Cookie']), true);
+  assert.equal(res.headers['Set-Cookie'].length, 2);
+  assert.ok(res.headers['Set-Cookie'].some((value) => value.includes('fresh-access')));
+  assert.ok(res.headers['Set-Cookie'].some((value) => value.includes('rotated-refresh')));
+  assert.equal(res.body.includes('fresh-access'), false);
+  assert.equal(res.body.includes('rotated-refresh'), false);
+});
+
+test('auth status can recover from a missing access cookie using the refresh session', async () => {
+  const session = createSupabaseAuthSession(env, {
+    verifier: { verifyAccessToken: async () => { throw new Error('access verifier should not be needed when refresh response includes user'); } },
+    fetch: async () => ({
+      ok: true,
+      status: 200,
+      async text() {
+        return JSON.stringify({
+          access_token: 'fresh-access',
+          refresh_token: 'rotated-refresh',
+          expires_in: 3600,
+          user: { id: '0f4c45c0-b8f6-4b22-aad7-56ad6390b010', email: 'pilot@example.com' },
+        });
+      },
+    }),
+  });
+  const res = response();
+  await session.handle(
+    request({ headers: { cookie: 'swgoh_cc_refresh=long-lived-refresh' } }),
+    res,
+    new URL('https://command.example/api/auth/status'),
+  );
+  assert.equal(res.status, 200);
+  assert.equal(JSON.parse(res.body).authenticated, true);
+  assert.equal(res.headers['Set-Cookie'].length, 2);
+});
+
+test('invalid refresh state is cleared instead of forcing repeated provider authentication loops', async () => {
+  const session = createSupabaseAuthSession(env, {
+    verifier: { verifyAccessToken: async () => { throw Object.assign(new Error('expired'), { status: 401 }); } },
+    fetch: async () => ({
+      ok: false,
+      status: 401,
+      async text() { return JSON.stringify({ message: 'refresh token expired' }); },
+    }),
+  });
+  const res = response();
+  await session.handle(
+    request({ headers: { cookie: 'swgoh_cc_access=expired-access; swgoh_cc_refresh=expired-refresh' } }),
+    res,
+    new URL('https://command.example/api/auth/status'),
+  );
+  assert.equal(res.status, 200);
+  assert.equal(JSON.parse(res.body).authenticated, false);
+  assert.equal(res.headers['Set-Cookie'].length, 2);
+  for (const value of res.headers['Set-Cookie']) assert.match(value, /Max-Age=0/);
+});
+
 test('cross-origin sign-in is rejected before contacting Supabase', async () => {
   let calls = 0;
   const session = createSupabaseAuthSession(env, {
