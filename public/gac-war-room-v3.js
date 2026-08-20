@@ -1,6 +1,7 @@
 import './gac-war-room-provenance-inspector.js';
 import './gac-manual-board-context-bridge.js';
 import './gac-manual-board-workspace.js';
+import './gac-board-v2-slot-command.js';
 
 const TAB_ORDER = ['matchup', 'board', 'delta', 'history', 'diagnostics'];
 
@@ -31,6 +32,11 @@ function text(selector, root = document) {
 }
 
 function selectedDefenseCount(root) {
+  const boardV2Raw = text('.gac-board-v2-progress b', root);
+  const boardV2Match = boardV2Raw.match(/(\d+)\s*\/\s*(\d+)/);
+  if (boardV2Match) {
+    return { selected: Number(boardV2Match[1]), required: Number(boardV2Match[2]), source: 'board-v2' };
+  }
   const manualRaw = text('.gac-board-progress b', root);
   const manualMatch = manualRaw.match(/(\d+)\s*\/\s*(\d+)/);
   if (manualMatch) {
@@ -129,17 +135,23 @@ function updateMissionStrip(root) {
 
   const count = selectedDefenseCount(root);
   const boardComplete = count.required > 0 && count.selected >= count.required;
-  const boardDetail = count.source === 'manual-board'
+  const boardDetail = count.source === 'board-v2'
     ? boardComplete
-      ? 'Expected squad defenses entered'
+      ? 'Expected squad + fleet defenses captured'
       : count.selected
-        ? 'Visible board partially entered'
-        : 'Use Board & Counters to enter defenses'
-    : boardComplete
-      ? 'Quick sandbox defense selected'
-      : count.selected
-        ? 'Quick sandbox partial selection'
-        : 'No defense entered';
+        ? 'Known board partially captured'
+        : 'Use Board & Counters to enter visible slots'
+    : count.source === 'manual-board'
+      ? boardComplete
+        ? 'Expected squad defenses entered'
+        : count.selected
+          ? 'Visible board partially entered'
+          : 'Use Board & Counters to enter defenses'
+      : boardComplete
+        ? 'Quick sandbox defense selected'
+        : count.selected
+          ? 'Quick sandbox partial selection'
+          : 'No defense entered';
   updateHudCell(
     root,
     'board',
@@ -148,11 +160,13 @@ function updateMissionStrip(root) {
     boardComplete ? 'ready' : count.selected ? 'warn' : 'unknown',
   );
 
+  const boardV2CounterText = [...root.querySelectorAll('.gac-board-v2-counter>span,.gac-board-v2-order-counter>span')].map((node) => clean(node.textContent).toUpperCase()).join(' ');
   const boardCounterText = [...root.querySelectorAll('.gac-board-smart-counter strong')].map((node) => clean(node.textContent).toUpperCase()).join(' ');
   const oldSource = text('.gacv2-counter-source', root).toUpperCase();
-  const hasEvidence = boardCounterText.includes('HISTORICAL EVIDENCE') || oldSource.includes('HISTORICAL EVIDENCE');
-  const hasBoardFit = boardCounterText.includes('ROSTER-FIT HEURISTIC') || boardCounterText.includes('IDENTITY-ONLY HEURISTIC');
-  const hasFallback = hasBoardFit || oldSource.includes('ROSTER-FIT FALLBACK');
+  const combined = `${boardV2CounterText} ${boardCounterText} ${oldSource}`;
+  const hasEvidence = combined.includes('HISTORICAL EVIDENCE') || combined.includes('EVIDENCE');
+  const hasBoardFit = combined.includes('ROSTER-FIT HEURISTIC') || combined.includes('IDENTITY-ONLY HEURISTIC') || combined.includes('ALLOCATED');
+  const hasFallback = hasBoardFit || combined.includes('ROSTER-FIT FALLBACK');
   updateHudCell(
     root,
     'counter',
@@ -220,6 +234,7 @@ if (typeof document !== 'undefined') {
   document.addEventListener('DOMContentLoaded', schedule, { once: true });
   window.addEventListener('hashchange', schedule);
   window.addEventListener('swgoh:workspace-activated', schedule);
+  window.addEventListener('gac-board-v2-rendered', schedule);
   document.addEventListener('input', schedule, true);
   document.addEventListener('change', schedule, true);
   new MutationObserver(schedule).observe(document.documentElement, { childList: true, subtree: true, characterData: true });
