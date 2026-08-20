@@ -74,21 +74,51 @@ test("a candidate cannot promote merely because its proposed runtime record is s
   assert.throws(() => promoteCandidate(candidate), /not promotion-ready/i);
 });
 
-test("staged Baylan research is quarantined and cannot affect the live strategy catalog", async () => {
+test("B03 current-season research pack remains entirely quarantined from live Attack Brief", async () => {
   const candidates = JSON.parse(await readFile(new URL("../public/data/gac-strategy-source-candidates.json", import.meta.url), "utf8"));
   const production = JSON.parse(await readFile(new URL("../public/data/gac-strategy-records.json", import.meta.url), "utf8"));
   assert.equal(candidates.schemaVersion, 1);
-  assert.equal(candidates.candidates.length, 1);
-  const staged = candidates.candidates[0];
+  assert.equal(candidates.candidates.length, 4);
+  assert.equal(candidates.candidates.every((candidate) => candidate.review.status === "quarantined"), true);
+  assert.equal(candidates.candidates.every((candidate) => candidateSummary(candidate).promotionReady === false), true);
+  assert.deepEqual(production.records, []);
+});
+
+test("Baylan candidate uses corrected canonical JML Base ID and remains blocked only by live-era truth gates", async () => {
+  const body = JSON.parse(await readFile(new URL("../public/data/gac-strategy-source-candidates.json", import.meta.url), "utf8"));
+  const staged = body.candidates.find((candidate) => candidate.candidateId.startsWith("research:baylan-shin-marrok"));
   const summary = candidateSummary(staged);
+  assert.equal(staged.proposedRecord.attacker.leaderBaseId, "GRANDMASTERLUKE");
+  assert.equal(staged.review.flags.baseIdsVerified, true);
   assert.equal(summary.status, "quarantined");
   assert.equal(summary.promotionReady, false);
   assert.ok(summary.blockers.includes("datacron-scope-unverified"));
   assert.ok(summary.blockers.includes("current-version-validity-unverified"));
-  assert.ok(summary.blockers.includes("base-ids-unverified"));
+  assert.equal(summary.blockers.includes("base-ids-unverified"), false);
   assert.ok(summary.blockers.some((entry) => entry.startsWith("record:invalid-attacker-datacron-presence")));
   assert.ok(summary.blockers.some((entry) => entry.startsWith("record:invalid-defender-datacron-presence")));
-  assert.deepEqual(production.records, []);
+  assert.ok(Array.isArray(staged.research.validationRefs));
+  assert.ok(staged.research.validationRefs.some((entry) => entry.sourceName === "SWGOH.GG"));
+});
+
+test("Queen Amidala duo candidate proves the research pipeline accepts legitimate undersized attacks without a fake third", async () => {
+  const body = JSON.parse(await readFile(new URL("../public/data/gac-strategy-source-candidates.json", import.meta.url), "utf8"));
+  const staged = body.candidates.find((candidate) => candidate.candidateId.startsWith("research:queen-pow-mqg"));
+  assert.equal(staged.proposedRecord.attacker.members.length, 2);
+  assert.deepEqual(staged.proposedRecord.attacker.members, ["DARTHBANE", "SITHMARAUDER"]);
+  assert.equal(staged.review.status, "quarantined");
+});
+
+test("statistical validation references do not satisfy missing execution or Datacron review flags", async () => {
+  const body = JSON.parse(await readFile(new URL("../public/data/gac-strategy-source-candidates.json", import.meta.url), "utf8"));
+  const pkh = body.candidates.find((candidate) => candidate.candidateId.startsWith("research:pkh-hondo-vane"));
+  const jmmw = body.candidates.find((candidate) => candidate.candidateId.startsWith("research:jmmw-aayla-depa"));
+  assert.ok(pkh.research.validationRefs.some((entry) => entry.kind === "current-statistics"));
+  assert.equal(pkh.review.flags.guidanceParaphraseVerified, false);
+  assert.equal(pkh.review.flags.datacronScopeVerified, false);
+  assert.equal(jmmw.review.flags.guidanceParaphraseVerified, false);
+  assert.equal(promotionReady(pkh), false);
+  assert.equal(promotionReady(jmmw), false);
 });
 
 test("source-review model has no browser or persistence side effects", async () => {
