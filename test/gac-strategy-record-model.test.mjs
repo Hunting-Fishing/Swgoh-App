@@ -109,6 +109,25 @@ test("catalog payload rejects malformed rows instead of making them usable", () 
   assert.ok(payload.rejected[0].errors.length > 0);
 });
 
+test("catalog payload fails closed on unsupported top-level schema", () => {
+  const payload = catalogPayload({ schemaVersion: 2, records: [record()] });
+  assert.equal(payload.records.length, 0);
+  assert.equal(payload.rejected.length, 1);
+  assert.equal(payload.rejected[0].id, "$catalog");
+  assert.deepEqual(payload.rejected[0].errors, ["unsupported-catalog-schema-version"]);
+});
+
+test("catalog payload rejects duplicate stable strategy IDs", () => {
+  const payload = catalogPayload({
+    schemaVersion: 1,
+    records: [record(), record({ provenance: { ...record().provenance, sourceUpdatedAt: "2026-08-21T00:00:00Z" } })],
+  });
+  assert.equal(payload.records.length, 1);
+  assert.equal(payload.rejected.length, 1);
+  assert.equal(payload.rejected[0].id, "strategy:test:3v3");
+  assert.deepEqual(payload.rejected[0].errors, ["duplicate-id"]);
+});
+
 test("production strategy catalog is intentionally empty until sourced ingestion", async () => {
   const body = JSON.parse(await readFile(new URL("../public/data/gac-strategy-records.json", import.meta.url), "utf8"));
   assert.equal(body.schemaVersion, 1);
