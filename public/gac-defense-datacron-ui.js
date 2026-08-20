@@ -3,6 +3,7 @@ import { loadEligibilityContext } from "./gac-datacron-eligibility.js";
 import { assessDefenseDatacron, exposureLabel } from "./gac-defense-datacron-risk.js";
 
 const NONE_KEY = "__NONE__";
+const ASSIGNED_UNRESOLVED_KEY = "__ASSIGNED_UNRESOLVED__";
 const state = {
   opponentCode: "",
   roster: null,
@@ -70,12 +71,13 @@ function datacronKey(datacron, index) {
 
 function selectedDatacron() {
   const values = datacrons();
-  if (!Array.isArray(values) || !state.selectedKey || state.selectedKey === NONE_KEY) return null;
+  if (!Array.isArray(values) || !state.selectedKey || [NONE_KEY, ASSIGNED_UNRESOLVED_KEY].includes(state.selectedKey)) return null;
   return values.find((datacron, index) => datacronKey(datacron, index) === state.selectedKey) || null;
 }
 
 function selectedDatacronState() {
   if (state.selectedKey === NONE_KEY) return "none";
+  if (state.selectedKey === ASSIGNED_UNRESOLVED_KEY) return "assigned";
   const datacron = selectedDatacron();
   return clean(datacron?.id) ? "assigned" : "unknown";
 }
@@ -161,19 +163,23 @@ function renderSelector(message = "") {
   const status = byId("gacDefenseDatacronStatus");
   if (!select) return;
   const values = datacrons();
-  const baseOptions = `<option value="">Enemy Datacron · not confirmed</option><option value="${NONE_KEY}">Enemy Datacron · confirmed none</option>`;
+  const unresolvedOption = state.selectedKey === ASSIGNED_UNRESOLVED_KEY
+    ? `<option value="${ASSIGNED_UNRESOLVED_KEY}" disabled>Enemy Datacron · assigned snapshot unavailable</option>`
+    : "";
+  const baseOptions = `<option value="">Enemy Datacron · not confirmed</option><option value="${NONE_KEY}">Enemy Datacron · confirmed none</option>${unresolvedOption}`;
   const inventoryOptions = Array.isArray(values) ? values.map((datacron, index) => {
     const key = datacronKey(datacron, index);
     return `<option value="${escapeHtml(key)}" ${key === state.selectedKey ? "selected" : ""}>${escapeHtml(optionLabel(datacron, index))}</option>`;
   }).join("") : "";
   select.disabled = false;
   select.innerHTML = `${baseOptions}${inventoryOptions}`;
-  const validKeys = new Set(["", NONE_KEY, ...(Array.isArray(values) ? values.map(datacronKey) : [])]);
+  const validKeys = new Set(["", NONE_KEY, ASSIGNED_UNRESOLVED_KEY, ...(Array.isArray(values) ? values.map(datacronKey) : [])]);
   if (!validKeys.has(state.selectedKey)) state.selectedKey = "";
   select.value = state.selectedKey;
 
   if (status) {
     if (message) status.textContent = message;
+    else if (state.selectedKey === ASSIGNED_UNRESOLVED_KEY) status.textContent = "ASSIGNED DATACRON SNAPSHOT UNRESOLVED · choose the current visible Datacron, confirmed none, or not confirmed before re-saving.";
     else if (values === null) status.textContent = "Opponent individual Datacron inventory is unavailable. Assignment remains unknown unless you explicitly confirm no Datacron in-game.";
     else if (!values.length) status.textContent = "No opponent Datacron instances were returned. This alone does not prove this defense has none; confirm only what you can see in-game.";
     else status.textContent = "USER-CONFIRMED BOARD EVIDENCE · leave unconfirmed unless checked in-game; choose confirmed none only for a visibly DC-free defense.";
@@ -226,9 +232,12 @@ async function recomputeAssessment() {
     state.assessment = null;
     decorateCounterCards();
     if (status) {
-      status.textContent = selectedDatacronState() === "none"
-        ? "CONFIRMED NONE · this defense will be saved as visibly having no assigned Datacron."
-        : "DATACRON UNKNOWN · no assigned Datacron and no absence are inferred.";
+      const dcState = selectedDatacronState();
+      status.textContent = state.selectedKey === ASSIGNED_UNRESOLVED_KEY
+        ? "ASSIGNED DATACRON SNAPSHOT UNRESOLVED · current assignment must be reconfirmed before this defense can be re-saved."
+        : dcState === "none"
+          ? "CONFIRMED NONE · this defense will be saved as visibly having no assigned Datacron."
+          : "DATACRON UNKNOWN · no assigned Datacron and no absence are inferred.";
     }
     updateSaveState();
     return;
@@ -272,14 +281,17 @@ function updateSaveState() {
   const position = currentBoardPosition();
   const selected = selectedDatacron();
   const assignedWithoutStableId = Boolean(selected) && !clean(selected?.id);
-  const ready = /^\d{9}$/.test(mine) && /^\d{9}$/.test(opponent) && Boolean(currentRound()) && members.length === size && members.includes(leader) && position.complete && !assignedWithoutStableId;
+  const assignedUnresolved = state.selectedKey === ASSIGNED_UNRESOLVED_KEY;
+  const ready = /^\d{9}$/.test(mine) && /^\d{9}$/.test(opponent) && Boolean(currentRound()) && members.length === size && members.includes(leader) && position.complete && !assignedWithoutStableId && !assignedUnresolved;
   button.disabled = state.saveBusy || !ready;
   button.textContent = state.saveBusy ? "Saving Defense…" : "Save Current Defense";
   button.title = !position.complete
     ? "Enter both board zone and slot, or leave both blank."
-    : assignedWithoutStableId
-      ? "This Datacron has no stable instance ID and cannot be persisted as an exact assignment."
-      : "";
+    : assignedUnresolved
+      ? "The previously assigned Datacron is no longer resolved in the current live inventory. Reconfirm the current board state before saving."
+      : assignedWithoutStableId
+        ? "This Datacron has no stable instance ID and cannot be persisted as an exact assignment."
+        : "";
 }
 
 function savedDefenseLabel(defense, index) {
@@ -343,15 +355,20 @@ function restoreDefense(defense) {
   const datacronState = clean(defense?.datacronState).toLowerCase() || (datacronId ? "assigned" : "unknown");
   const values = datacrons();
   const matchIndex = Array.isArray(values) ? values.findIndex((datacron) => clean(datacron?.id) === datacronId) : -1;
-  state.selectedKey = datacronState === "none" ? NONE_KEY : matchIndex >= 0 ? datacronKey(values[matchIndex], matchIndex) : "";
-  const dcSelect = byId("gacDefenseDatacron");
-  if (dcSelect) dcSelect.value = state.selectedKey;
+  state.selectedKey = datacronState === "none"
+    ? NONE_KEY
+    : datacronState === "assigned" && matchIndex < 0
+      ? ASSIGNED_UNRESOLVED_KEY
+      : matchIndex >= 0
+        ? datacronKey(values[matchIndex], matchIndex)
+        : "";
+  renderSelector();
   const status = byId("gacDefenseDatacronStatus");
   if (status) {
     const position = currentBoardPosition();
     const positionLabel = position.specified && position.complete ? ` · ${zoneLabel(position.zone)} Slot ${position.displaySlot}` : "";
     if (datacronState === "none") status.textContent = `Saved current-round defense restored${positionLabel} · verified no Datacron assigned.`;
-    else if (datacronId && matchIndex < 0) status.textContent = `Saved defense restored${positionLabel}. Its verified assigned Datacron is no longer present in the opponent's current live inventory; choose the current board state before re-saving.`;
+    else if (datacronState === "assigned" && matchIndex < 0) status.textContent = `Saved defense restored${positionLabel}. Its verified assigned Datacron is no longer present in the opponent's current live inventory; choose the current board state before re-saving.`;
     else if (datacronState === "unknown") status.textContent = `Saved current-round defense restored${positionLabel} · Datacron assignment was not verified.`;
     else status.textContent = `Saved current-round defense restored from verified owner evidence${positionLabel}.`;
   }
@@ -395,6 +412,7 @@ async function saveCurrentDefense() {
   const datacronState = selectedDatacronState();
   const position = currentBoardPosition();
   if (!mine || !opponent || !round || members.length !== size || !members.includes(leaderBaseId) || !position.complete) return;
+  if (datacronState === "assigned" && !clean(datacron?.id)) return;
   if (datacron && !clean(datacron?.id)) return;
 
   state.saveBusy = true;
@@ -521,6 +539,7 @@ if (typeof document !== "undefined") {
 }
 
 export {
+  ASSIGNED_UNRESOLVED_KEY,
   NONE_KEY,
   assessmentHtml,
   currentBoardPosition,
