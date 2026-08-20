@@ -3,10 +3,12 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const router = await readFile(new URL('../public/guild-tw-router.js', import.meta.url), 'utf8');
+const index = await readFile(new URL('../public/index.html', import.meta.url), 'utf8');
 const ui = await readFile(new URL('../public/rote-operation-ledger-ui.js', import.meta.url), 'utf8');
 
-test('Guild shell imports the additive ROTE Operation ledger enhancer', () => {
+test('Guild shell imports the additive ROTE Operation ledger enhancer and the app entry loads that shell', () => {
   assert.match(router, /import\s+["']\.\/rote-operation-ledger-ui\.js["'];/);
+  assert.match(index, /src=["']\/guild-tw-router\.js[^"']*["']/);
 });
 
 test('A4 exposes separate officer and member-safe ledger hosts', () => {
@@ -33,6 +35,13 @@ test('A4 preserves transport retry identity instead of converting technical fail
   assert.match(ui, /Railway\/server\/network failures do not create FAILED or SKIPPED battle outcomes/);
   assert.match(ui, /sessionStorage\.getItem/);
   assert.match(ui, /sessionStorage\.removeItem/);
+});
+
+test('MutationObserver rehydration uses rendered host markers instead of continuously re-rendering its own mutations', () => {
+  assert.match(ui, /dataset\.roteLedgerRendered\s*=\s*["']true["']/);
+  assert.match(ui, /officer\.dataset\.roteLedgerRendered\s*!==\s*["']true["']/);
+  assert.match(ui, /member\.dataset\.roteLedgerRendered\s*!==\s*["']true["']/);
+  assert.match(ui, /new MutationObserver\(\(\) => schedule\(\)\)/);
 });
 
 test('A4 does not introduce fabricated predictive or win-percentage language', () => {
