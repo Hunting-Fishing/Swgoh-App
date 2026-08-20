@@ -14,8 +14,9 @@ function currentRound() {
 function format() {
   return Number(document.querySelector('[data-gacv2-mode]')?.value || document.getElementById('gacMode')?.value) === 3 ? '3v3' : '5v5';
 }
-function storageKey({ owner = ownerCode() || 'anonymous', opponent = opponentCode() || 'manual', round = currentRound(), formatName = format() } = {}) {
-  return `swgoh:gac-visible-board:v1:${owner}:${opponent}:${round}:${formatName}`;
+function storageKey({ owner = ownerCode() || 'anonymous', opponent = opponentCode() || 'manual', round = currentRound(), formatName = format(), scope = '' } = {}) {
+  const base = `swgoh:gac-visible-board:v1:${owner}:${opponent}:${round}:${formatName}`;
+  return scope ? `${base}:${clean(scope)}` : base;
 }
 function parseRows(key) {
   try {
@@ -23,26 +24,31 @@ function parseRows(key) {
     return Array.isArray(rows) ? rows : [];
   } catch { return []; }
 }
+function parseObject(key) {
+  try {
+    const value = JSON.parse(localStorage.getItem(key) || '{}');
+    return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  } catch { return {}; }
+}
 function mergeRows(left = [], right = []) {
   const index = new Map();
   const key = (row) => `${clean(row?.zone).toUpperCase()}|${Number.isInteger(Number(row?.slot)) ? Number(row.slot) : ''}`;
   for (const row of [...left, ...right]) index.set(key(row), row);
   return [...index.values()];
 }
-function migrateDraftContext() {
-  const owner = ownerCode() || 'anonymous';
-  const opponent = opponentCode() || 'manual';
-  const round = currentRound();
-  if (!round) return false;
-  const targetKey = storageKey({ owner, opponent, round });
-  let target = parseRows(targetKey);
-  const candidates = [
-    storageKey({ owner, opponent, round: 0 }),
-    storageKey({ owner, opponent: 'manual', round: 0 }),
-    storageKey({ owner, opponent: 'manual', round }),
+function migrationCandidates({ owner, opponent, round, formatName, scope = '' }) {
+  const targetKey = storageKey({ owner, opponent, round, formatName, scope });
+  return [
+    storageKey({ owner, opponent, round: 0, formatName, scope }),
+    storageKey({ owner, opponent: 'manual', round: 0, formatName, scope }),
+    storageKey({ owner, opponent: 'manual', round, formatName, scope }),
   ].filter((value, index, rows) => value !== targetKey && rows.indexOf(value) === index);
+}
+function migrateRowScope({ owner, opponent, round, formatName, scope = '' }) {
+  const targetKey = storageKey({ owner, opponent, round, formatName, scope });
+  let target = parseRows(targetKey);
   let changed = false;
-  for (const sourceKey of candidates) {
+  for (const sourceKey of migrationCandidates({ owner, opponent, round, formatName, scope })) {
     const source = parseRows(sourceKey);
     if (!source.length) continue;
     target = mergeRows(source, target).map((row) => ({ ...row, opponentAllyCode: opponent === 'manual' ? clean(row?.opponentAllyCode) : opponent }));
@@ -51,6 +57,32 @@ function migrateDraftContext() {
   }
   if (changed) localStorage.setItem(targetKey, JSON.stringify(target));
   return changed;
+}
+function migrateRevealScope({ owner, opponent, round, formatName }) {
+  const scope = 'reveal';
+  const targetKey = storageKey({ owner, opponent, round, formatName, scope });
+  let target = parseObject(targetKey);
+  let changed = false;
+  for (const sourceKey of migrationCandidates({ owner, opponent, round, formatName, scope })) {
+    const source = parseObject(sourceKey);
+    if (!Object.keys(source).length) continue;
+    target = { ...source, ...target };
+    localStorage.removeItem(sourceKey);
+    changed = true;
+  }
+  if (changed) localStorage.setItem(targetKey, JSON.stringify(target));
+  return changed;
+}
+function migrateDraftContext() {
+  const owner = ownerCode() || 'anonymous';
+  const opponent = opponentCode() || 'manual';
+  const round = currentRound();
+  const formatName = format();
+  if (!round) return false;
+  const squadChanged = migrateRowScope({ owner, opponent, round, formatName });
+  const fleetChanged = migrateRowScope({ owner, opponent, round, formatName, scope: 'fleet' });
+  const revealChanged = migrateRevealScope({ owner, opponent, round, formatName });
+  return squadChanged || fleetChanged || revealChanged;
 }
 
 function dispatchMatchupRefresh() {
@@ -86,4 +118,4 @@ function bind() {
 
 if (typeof document !== 'undefined') bind();
 
-export { mergeRows, migrateDraftContext, storageKey };
+export { mergeRows, migrateDraftContext, migrationCandidates, storageKey };
