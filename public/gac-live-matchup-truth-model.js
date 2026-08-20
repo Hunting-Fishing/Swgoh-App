@@ -57,8 +57,28 @@ function scoutingHistory(scouting = {}) {
     observedRows,
     offense,
     defense,
-    matchRecordKnown: false,
-    truthLabel: "Character battle-level history; overall GAC match W/L is not inferred without verified final scores.",
+    truthLabel: "Character battle-level scouting evidence. Rates are observed history, not predicted win probabilities.",
+  });
+}
+
+function recordedRoundHistory(history = {}) {
+  const rounds = asArray(history?.rounds);
+  const known = rounds.filter((row) => ["win", "loss"].includes(clean(row?.result).toLowerCase()));
+  const wins = known.filter((row) => clean(row?.result).toLowerCase() === "win").length;
+  const losses = known.filter((row) => clean(row?.result).toLowerCase() === "loss").length;
+  const verifiedKnown = known.filter((row) => row?.verified === true).length;
+  return Object.freeze({
+    rounds: rounds.length,
+    recordedResults: known.length,
+    wins,
+    losses,
+    unknown: Math.max(0, rounds.length - known.length),
+    winRate: known.length ? wins / known.length : null,
+    verifiedRecordedResults: verifiedKnown,
+    known: known.length > 0,
+    truthLabel: known.length
+      ? "Recorded GAC round results only; unknown imported rounds remain unknown."
+      : "No verified/recorded GAC round W/L is available yet; imported history is not converted into a match result.",
   });
 }
 
@@ -103,6 +123,7 @@ function truthDashboardModel(input = {}) {
   const mineLoaded = rosterLoaded(input.mineRoster, myCode);
   const opponentLoaded = rosterLoaded(input.opponentRoster, opponentCode);
   const history = scoutingHistory(input.scouting);
+  const rounds = recordedRoundHistory(input.roundHistory);
   const board = boardState(matchup, input.savedBoard);
   const actionable = identityExact && mineLoaded && opponentLoaded && board.ready;
   const recommendationMode = actionable
@@ -127,6 +148,7 @@ function truthDashboardModel(input = {}) {
     }),
     rosters: Object.freeze({ mineLoaded, opponentLoaded }),
     history,
+    rounds,
     board,
   });
 }
@@ -136,6 +158,7 @@ export {
   aggregateOffense,
   allyCode,
   boardState,
+  recordedRoundHistory,
   rosterLoaded,
   scoutingHistory,
   truthDashboardModel,
