@@ -145,7 +145,7 @@ function operationNumber(value) {
 
 export function normalizeRoteOperationReference(payload, options = {}) {
   const aggregated = Array.isArray(payload?.slots) ? payload : aggregateRoteOperations(payload);
-  const normalized = [];
+  const slots = [];
   const skipped = [];
   for (const sourceSlot of array(aggregated?.slots)) {
     const slotPhase = phase(sourceSlot.phase);
@@ -169,7 +169,7 @@ export function normalizeRoteOperationReference(payload, options = {}) {
     const logicalSlotId = `${slotPhase}:${conflictId}:${squadId}:${slotIndex}`;
     const operationId = `${conflictId}:${squadId}`;
     const planet = ROTE_PLANETS.find((candidate) => candidate.id === planetId);
-    normalized.push(Object.freeze({
+    slots.push(Object.freeze({
       phase: slotPhase,
       planetId,
       operationId,
@@ -193,7 +193,7 @@ export function normalizeRoteOperationReference(payload, options = {}) {
   return Object.freeze({
     source: text(aggregated?.source || 'swgoh-utils/gamedata:swgoh_rote_operations.json'),
     territoryBattleId: text(aggregated?.territoryBattleId || 't05D'),
-    slots: Object.freeze(normalized),
+    slots: Object.freeze(slots),
     skipped: Object.freeze(skipped),
   });
 }
@@ -289,6 +289,19 @@ export function createTbOperationContributionService(options = {}) {
     if (!store.status?.().configured) throw httpError('Command Center persistence is not configured.', 503, 'PERSISTENCE_NOT_CONFIGURED');
   }
 
+  async function selectPaged(table, query = {}, maxRows = 50_000) {
+    const rows = [];
+    const pageSize = 1000;
+    let offset = 0;
+    while (true) {
+      const page = array(await store.select(table, { ...query, limit: pageSize, offset }));
+      rows.push(...page);
+      if (page.length < pageSize) return rows;
+      if (rows.length >= maxRows) throw httpError(`${table} exceeded the safe ledger read limit.`, 503, 'TB_OPERATION_LEDGER_READ_LIMIT');
+      offset += page.length;
+    }
+  }
+
   async function verifiedIdentity(userId) {
     const user = text(userId);
     if (!user) throw httpError('A signed-in Command Center account is required.', 401, 'AUTH_REQUIRED');
@@ -302,9 +315,7 @@ export function createTbOperationContributionService(options = {}) {
     const link = links.find((row) => row.is_primary === true) || links[0];
     if (!link?.player_id) throw httpError('A verified SWGOH player is required for ROTE Operations evidence.', 403, 'VERIFIED_PLAYER_REQUIRED');
     const player = first(await store.select('players', {
-      select: 'id,ally_code,swgoh_player_id,name,current_guild_id,last_synced_at',
-      id: `eq.${link.player_id}`,
-      limit: 1,
+      select: 'id,ally_code,swgoh_player_id,name,current_guild_id,last_synced_at', id: `eq.${link.player_id}`, limit: 1,
     }));
     if (!player?.id || !allyCode(player.ally_code)) throw httpError('Verified SWGOH player identity is unavailable.', 404, 'VERIFIED_PLAYER_NOT_FOUND');
     if (!player.current_guild_id) throw httpError('Your verified player is not currently attached to a Guild.', 409, 'ACTIVE_GUILD_REQUIRED');
@@ -346,24 +357,17 @@ export function createTbOperationContributionService(options = {}) {
     const identity = await verifiedIdentity(userId);
     const event = await eventFor(identity, syncOptions.eventId);
     const normalized = normalizeRoteOperationReference(payload, syncOptions);
-    const existingRows = array(await store.select('guild_tb_operation_slots', {
-      select: '*',
-      event_id: `eq.${event.id}`,
-      order: 'phase.asc,planet_id.asc,operation_id.asc,slot_index.asc',
-      limit: 5000,
-    }));
+    const existingRows = await selectPaged('guild_tb_operation_slots', {
+      select: '*', event_id: `eq.${event.id}`, order: 'phase.asc,planet_id.asc,operation_id.asc,slot_index.asc',
+    }, 5000);
     const existing = new Map(existingRows.map((row) => [`${row.phase}|${row.operation_id}|${row.slot_id}`, row]));
     const conflicts = [];
     for (const slot of normalized.slots) {
       const current = existing.get(`${slot.phase}|${slot.operationId}|${slot.slotId}`);
       if (current && cleanBaseId(current.required_base_id) !== slot.requiredBaseId) {
         conflicts.push(Object.freeze({
-          slotRecordId: text(current.id),
-          phase: slot.phase,
-          operationId: slot.operationId,
-          slotId: slot.slotId,
-          persistedBaseId: cleanBaseId(current.required_base_id),
-          incomingBaseId: slot.requiredBaseId,
+          slotRecordId: text(current.id), phase: slot.phase, operationId: slot.operationId, slotId: slot.slotId,
+          persistedBaseId: cleanBaseId(current.required_base_id), incomingBaseId: slot.requiredBaseId,
         }));
       }
     }
@@ -393,21 +397,13 @@ export function createTbOperationContributionService(options = {}) {
       metadata: { ...slot.metadata, territoryBattleId: normalized.territoryBattleId },
       updated_at: now().toISOString(),
     }));
-
     const saved = [];
     for (const batch of chunks(rows)) {
-      saved.push(...array(await store.upsert('guild_tb_operation_slots', batch, {
-        onConflict: 'event_id,phase,operation_id,slot_id',
-        returning: true,
-      })));
+      saved.push(...array(await store.upsert('guild_tb_operation_slots', batch, { onConflict: 'event_id,phase,operation_id,slot_id', returning: true })));
     }
     return Object.freeze({
-      source: 'guild-tb-operation-ledger-v1',
-      eventId: text(event.id),
-      guildId: identity.guildId,
-      savedSlots: saved.length,
-      slots: Object.freeze(saved.map(sanitizeSlot)),
-      skipped: normalized.skipped,
+      source: 'guild-tb-operation-ledger-v1', eventId: text(event.id), guildId: identity.guildId,
+      savedSlots: saved.length, slots: Object.freeze(saved.map(sanitizeSlot)), skipped: normalized.skipped,
       evidenceBoundary: 'Operation slot definitions are reference/event state only. They do not prove that any member was assigned or contributed.',
     });
   }
@@ -419,11 +415,9 @@ export function createTbOperationContributionService(options = {}) {
     if (input.phase && !slotPhase) throw httpError('A valid ROTE phase P1-P6 is required.', 400, 'TB_OPERATION_PHASE_INVALID');
     if (!slotRecordId && !logicalSlotId) throw httpError('An Operation slot ID is required.', 400, 'TB_OPERATION_SLOT_REQUIRED');
     const rows = array(await store.select('guild_tb_operation_slots', {
-      select: '*',
-      event_id: `eq.${event.id}`,
+      select: '*', event_id: `eq.${event.id}`,
       ...(slotRecordId ? { id: `eq.${slotRecordId}` } : { slot_id: `eq.${logicalSlotId}` }),
-      ...(slotPhase ? { phase: `eq.${slotPhase}` } : {}),
-      limit: 2,
+      ...(slotPhase ? { phase: `eq.${slotPhase}` } : {}), limit: 2,
     }));
     if (!rows.length) throw httpError('That Operation slot is not registered for this ROTE event.', 404, 'TB_OPERATION_SLOT_NOT_FOUND');
     if (rows.length > 1) throw httpError('The Operation slot reference is ambiguous; include phase or the durable slot record ID.', 409, 'TB_OPERATION_SLOT_AMBIGUOUS');
@@ -439,15 +433,9 @@ export function createTbOperationContributionService(options = {}) {
       throw httpError('A current Guild contributor identity is required.', 400, 'TB_OPERATION_CONTRIBUTOR_REQUIRED');
     }
     let player = null;
-    if (requestedPlayerId) {
-      player = first(await store.select('players', { select: 'id,ally_code,swgoh_player_id,name,current_guild_id,last_synced_at', id: `eq.${requestedPlayerId}`, current_guild_id: `eq.${guildId}`, limit: 1 }));
-    }
-    if (!player && requestedAlly) {
-      player = first(await store.select('players', { select: 'id,ally_code,swgoh_player_id,name,current_guild_id,last_synced_at', ally_code: `eq.${requestedAlly}`, current_guild_id: `eq.${guildId}`, limit: 1 }));
-    }
-    if (!player && requestedGameId) {
-      player = first(await store.select('players', { select: 'id,ally_code,swgoh_player_id,name,current_guild_id,last_synced_at', swgoh_player_id: `eq.${requestedGameId}`, current_guild_id: `eq.${guildId}`, limit: 1 }));
-    }
+    if (requestedPlayerId) player = first(await store.select('players', { select: 'id,ally_code,swgoh_player_id,name,current_guild_id,last_synced_at', id: `eq.${requestedPlayerId}`, current_guild_id: `eq.${guildId}`, limit: 1 }));
+    if (!player && requestedAlly) player = first(await store.select('players', { select: 'id,ally_code,swgoh_player_id,name,current_guild_id,last_synced_at', ally_code: `eq.${requestedAlly}`, current_guild_id: `eq.${guildId}`, limit: 1 }));
+    if (!player && requestedGameId) player = first(await store.select('players', { select: 'id,ally_code,swgoh_player_id,name,current_guild_id,last_synced_at', swgoh_player_id: `eq.${requestedGameId}`, current_guild_id: `eq.${guildId}`, limit: 1 }));
     if (!player && !allowUnknown) throw httpError('The reported contributor is not a current member of this Guild.', 409, 'TB_OPERATION_CONTRIBUTOR_NOT_CURRENT_MEMBER');
     return player;
   }
@@ -456,21 +444,14 @@ export function createTbOperationContributionService(options = {}) {
     if (!playerId || !baseId) return normalizeUnitSnapshot({}, baseId);
     const row = first(await store.select('player_units_current', {
       select: 'player_id,base_id,unit_name,combat_type,rarity,level,gear_level,relic_tier,galactic_power,zeta_count,omicron_count,last_synced_at,metadata',
-      player_id: `eq.${playerId}`,
-      base_id: `eq.${baseId}`,
-      limit: 1,
+      player_id: `eq.${playerId}`, base_id: `eq.${baseId}`, limit: 1,
     }));
     return row ? snapshotFromPersistedRow(row) : normalizeUnitSnapshot({ source: 'player_units_current' }, baseId);
   }
 
   async function activeAssignment(slotRecordId) {
     return first(await store.select('guild_tb_operation_assignments', {
-      select: '*',
-      slot_id: `eq.${slotRecordId}`,
-      assignment_state: 'eq.assigned',
-      superseded_at: 'is.null',
-      order: 'assigned_at.desc',
-      limit: 1,
+      select: '*', slot_id: `eq.${slotRecordId}`, assignment_state: 'eq.assigned', superseded_at: 'is.null', order: 'assigned_at.desc', limit: 1,
     }));
   }
 
@@ -483,14 +464,11 @@ export function createTbOperationContributionService(options = {}) {
   }
 
   async function existingContribution(contributionKey) {
-    return first(await store.select('guild_tb_operation_contributions', {
-      select: '*', contribution_key: `eq.${contributionKey}`, limit: 1,
-    }));
+    return first(await store.select('guild_tb_operation_contributions', { select: '*', contribution_key: `eq.${contributionKey}`, limit: 1 }));
   }
 
   function assertSameContribution(existing, prepared) {
-    if (!existing) return;
-    if (text(existing.evidence_fingerprint) !== prepared.evidenceFingerprint) {
+    if (existing && text(existing.evidence_fingerprint) !== prepared.evidenceFingerprint) {
       throw httpError('This contribution ID already exists with different evidence. Record a new correction/observation instead of rewriting history.', 409, 'TB_OPERATION_CONTRIBUTION_EVIDENCE_CONFLICT');
     }
   }
@@ -516,21 +494,16 @@ export function createTbOperationContributionService(options = {}) {
 
   async function prepareContribution({ event, guildId, slot, contributor, unresolvedAlly = '', input = {}, source, evidenceClass, reportedByUserId = null, trustedSnapshot = false, requestedStatus = 'filled' }) {
     const logicalId = logicalContributionId(input);
-    const assignment = await activeAssignment(slot.id);
     let contributedBaseId = cleanBaseId(input.baseId || input.contributedBaseId);
-    let baseIdKnown = Boolean(contributedBaseId);
+    const baseIdKnown = Boolean(contributedBaseId);
     if (!contributedBaseId) contributedBaseId = cleanBaseId(slot.required_base_id);
-    const persistedSnapshot = contributor?.id ? await currentUnitSnapshot(contributor.id, contributedBaseId) : normalizeUnitSnapshot({}, contributedBaseId);
-    const suppliedSnapshot = trustedSnapshot ? normalizeUnitSnapshot(input.unitSnapshot, contributedBaseId) : null;
-    const unitSnapshot = suppliedSnapshot && suppliedSnapshot.baseId ? suppliedSnapshot : persistedSnapshot;
-    const reasons = mismatchReasons(slot, assignment, contributor, contributedBaseId);
-    let status = contributionStatus(requestedStatus, 'filled');
-    if (!contributor && GAME_SOURCES.has(source)) status = 'unknown';
-    if (!baseIdKnown && GAME_SOURCES.has(source)) status = 'unknown';
-    if (reasons.length) status = 'mismatch';
-    const observedAt = iso(input.observedAt) || now().toISOString();
+    const normalizedRequestedStatus = contributionStatus(requestedStatus, 'filled');
     const contributionKey = hash(['rote-operation-contribution-v1', event.id, slot.id, source, logicalId].join('|'));
-    const material = {
+
+    // The fingerprint intentionally excludes current roster snapshot and assignment context.
+    // Those can legitimately change after the first write; a retry must still resolve to the
+    // original append-only observation. A changed contributor/base/status remains a conflict.
+    const evidenceFingerprint = hash({
       eventId: event.id,
       guildId,
       phase: slot.phase,
@@ -538,14 +511,23 @@ export function createTbOperationContributionService(options = {}) {
       contributorPlayerId: contributor?.id || null,
       contributorAllyCode: contributor ? allyCode(contributor.ally_code) : (allyCode(unresolvedAlly) || null),
       contributedBaseId,
-      status,
+      requestedStatus: normalizedRequestedStatus,
       evidenceClass,
       sourceKind: source,
-      unitSnapshot,
-      mismatchReasons: reasons,
       baseIdKnown,
-    };
-    const evidenceFingerprint = hash(material);
+    });
+
+    const assignment = await activeAssignment(slot.id);
+    const persistedSnapshot = contributor?.id ? await currentUnitSnapshot(contributor.id, contributedBaseId) : normalizeUnitSnapshot({}, contributedBaseId);
+    const suppliedSnapshot = trustedSnapshot ? normalizeUnitSnapshot(input.unitSnapshot, contributedBaseId) : null;
+    const unitSnapshot = suppliedSnapshot && suppliedSnapshot.baseId ? suppliedSnapshot : persistedSnapshot;
+    const reasons = mismatchReasons(slot, assignment, contributor, contributedBaseId);
+    let status = normalizedRequestedStatus;
+    if (!contributor && GAME_SOURCES.has(source)) status = 'unknown';
+    if (!baseIdKnown && GAME_SOURCES.has(source)) status = 'unknown';
+    if (reasons.length) status = 'mismatch';
+    const observedAt = iso(input.observedAt) || now().toISOString();
+
     return Object.freeze({
       contributionKey,
       evidenceFingerprint,
@@ -594,16 +576,9 @@ export function createTbOperationContributionService(options = {}) {
       throw httpError('Members may only confirm their own Operation contributions.', 403, 'TB_OPERATION_MEMBER_SELF_CONFIRM_ONLY');
     }
     const prepared = await prepareContribution({
-      event,
-      guildId: identity.guildId,
-      slot,
-      contributor: identity.player,
+      event, guildId: identity.guildId, slot, contributor: identity.player,
       input: { ...input, baseId: cleanBaseId(slot.required_base_id) },
-      source: 'member_web',
-      evidenceClass: 'GUILD_DATA',
-      reportedByUserId: identity.userId,
-      trustedSnapshot: false,
-      requestedStatus: 'filled',
+      source: 'member_web', evidenceClass: 'GUILD_DATA', reportedByUserId: identity.userId, trustedSnapshot: false, requestedStatus: 'filled',
     });
     const result = await persistPrepared(prepared);
     return Object.freeze({ source: 'guild-tb-operation-contributions-v1', ...result });
@@ -615,19 +590,12 @@ export function createTbOperationContributionService(options = {}) {
     if (!OFFICER_ROLES.has(roleOf(identity))) throw httpError('Guild officer authorization is required to confirm another member’s Operation contribution.', 403, 'OFFICER_REQUIRED');
     const event = await eventFor(identity, input.eventId);
     const slot = await resolveSlot(event, input);
-    const contributor = await resolveCurrentGuildPlayer(identity.guildId, input, { allowUnknown: contributionStatus(input.status, 'verified') === 'unknown' });
+    const requested = contributionStatus(input.status, 'verified');
+    const contributor = await resolveCurrentGuildPlayer(identity.guildId, input, { allowUnknown: requested === 'unknown' });
     const prepared = await prepareContribution({
-      event,
-      guildId: identity.guildId,
-      slot,
-      contributor,
-      unresolvedAlly: input.allyCode || input.contributorAllyCode,
-      input,
-      source: 'officer_web',
-      evidenceClass: 'GUILD_DATA',
-      reportedByUserId: identity.userId,
-      trustedSnapshot: false,
-      requestedStatus: contributionStatus(input.status, 'verified'),
+      event, guildId: identity.guildId, slot, contributor,
+      unresolvedAlly: input.allyCode || input.contributorAllyCode, input,
+      source: 'officer_web', evidenceClass: 'GUILD_DATA', reportedByUserId: identity.userId, trustedSnapshot: false, requestedStatus: requested,
     });
     const result = await persistPrepared(prepared);
     return Object.freeze({ source: 'guild-tb-operation-contributions-v1', ...result });
@@ -639,22 +607,34 @@ export function createTbOperationContributionService(options = {}) {
     const event = await eventForGuild(guildId, gameOptions.eventId || input.eventId);
     const slot = await resolveSlot(event, input);
     const contributor = await resolveCurrentGuildPlayer(guildId, input, { allowUnknown: true });
-    const source = GAME_SOURCES.has(sourceKind(gameOptions.sourceKind, 'game_gateway')) ? sourceKind(gameOptions.sourceKind, 'game_gateway') : 'game_gateway';
+    const requestedSource = sourceKind(gameOptions.sourceKind, 'game_gateway');
+    const source = GAME_SOURCES.has(requestedSource) ? requestedSource : 'game_gateway';
     const prepared = await prepareContribution({
-      event,
-      guildId,
-      slot,
-      contributor,
-      unresolvedAlly: input.allyCode || input.contributorAllyCode,
-      input,
-      source,
-      evidenceClass: 'GAME_DATA',
-      reportedByUserId: null,
-      trustedSnapshot: true,
+      event, guildId, slot, contributor,
+      unresolvedAlly: input.allyCode || input.contributorAllyCode, input,
+      source, evidenceClass: 'GAME_DATA', reportedByUserId: null, trustedSnapshot: true,
       requestedStatus: contributor ? 'verified' : 'unknown',
     });
     const result = await persistPrepared(prepared);
     return Object.freeze({ source: 'guild-tb-operation-contributions-v1', ...result });
+  }
+
+  async function activeAssignmentsForSlots(slotIds = []) {
+    const rows = [];
+    for (const batch of chunks(slotIds, 100)) {
+      if (!batch.length) continue;
+      rows.push(...array(await store.select('guild_tb_operation_assignments', {
+        select: '*',
+        slot_id: `in.(${batch.join(',')})`,
+        assignment_state: 'eq.assigned',
+        superseded_at: 'is.null',
+        order: 'assigned_at.desc',
+        limit: 1000,
+      })));
+    }
+    const map = new Map();
+    for (const row of rows) if (!map.has(text(row.slot_id))) map.set(text(row.slot_id), row);
+    return map;
   }
 
   async function ledger(userId, filters = {}) {
@@ -663,35 +643,42 @@ export function createTbOperationContributionService(options = {}) {
     const event = await eventFor(identity, filters.eventId);
     const requestedPhase = filters.phase ? phase(filters.phase) : '';
     if (filters.phase && !requestedPhase) throw httpError('A valid ROTE phase P1-P6 is required.', 400, 'TB_OPERATION_PHASE_INVALID');
-    const slotRows = array(await store.select('guild_tb_operation_slots', {
-      select: '*',
-      event_id: `eq.${event.id}`,
-      ...(requestedPhase ? { phase: `eq.${requestedPhase}` } : {}),
-      ...(cleanPlanetId(filters.planetId) ? { planet_id: `eq.${cleanPlanetId(filters.planetId)}` } : {}),
-      order: 'phase.asc,planet_id.asc,operation_id.asc,slot_index.asc',
-      limit: 5000,
-    }));
-    const output = [];
-    for (const slot of slotRows) {
-      const [assignment, contributions] = await Promise.all([
-        activeAssignment(slot.id),
-        store.select('guild_tb_operation_contributions', {
-          select: '*', slot_id: `eq.${slot.id}`, order: 'observed_at.desc,created_at.desc', limit: 100,
-        }),
-      ]);
-      const evidence = array(contributions).map(sanitizeContribution);
-      output.push(Object.freeze({
+    const requestedPlanet = filters.planetId ? cleanPlanetId(filters.planetId) : '';
+    if (filters.planetId && !requestedPlanet) throw httpError('A valid canonical ROTE planet ID is required.', 400, 'TB_OPERATION_PLANET_INVALID');
+
+    const [slotRows, contributionRows] = await Promise.all([
+      selectPaged('guild_tb_operation_slots', {
+        select: '*', event_id: `eq.${event.id}`,
+        ...(requestedPhase ? { phase: `eq.${requestedPhase}` } : {}),
+        ...(requestedPlanet ? { planet_id: `eq.${requestedPlanet}` } : {}),
+        order: 'phase.asc,planet_id.asc,operation_id.asc,slot_index.asc',
+      }, 5000),
+      selectPaged('guild_tb_operation_contributions', {
+        select: '*', event_id: `eq.${event.id}`,
+        ...(requestedPhase ? { phase: `eq.${requestedPhase}` } : {}),
+        order: 'observed_at.desc,created_at.desc',
+      }),
+    ]);
+
+    const slotIds = slotRows.map((row) => text(row.id)).filter(Boolean);
+    const assignmentMap = await activeAssignmentsForSlots(slotIds);
+    const contributionMap = new Map();
+    for (const row of contributionRows) {
+      const id = text(row.slot_id);
+      if (!contributionMap.has(id)) contributionMap.set(id, []);
+      contributionMap.get(id).push(sanitizeContribution(row));
+    }
+    const output = slotRows.map((slot) => {
+      const evidence = contributionMap.get(text(slot.id)) || [];
+      return Object.freeze({
         slot: sanitizeSlot(slot),
-        assignment: sanitizeAssignment(assignment),
+        assignment: sanitizeAssignment(assignmentMap.get(text(slot.id))),
         effectiveContribution: effectiveOperationContribution(evidence),
         contributions: Object.freeze(evidence),
-      }));
-    }
+      });
+    });
     return Object.freeze({
-      source: 'guild-tb-operation-ledger-v1',
-      guildId: identity.guildId,
-      eventId: text(event.id),
-      phase: requestedPhase,
+      source: 'guild-tb-operation-ledger-v1', guildId: identity.guildId, eventId: text(event.id), phase: requestedPhase,
       slots: Object.freeze(output),
       evidenceBoundary: 'ASSIGNED and CONTRIBUTED are separate evidence. Missing contribution evidence remains unreported/unknown and is never converted to filled or skipped.',
     });
