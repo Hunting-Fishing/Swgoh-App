@@ -286,15 +286,21 @@ function memberHost() {
   return host;
 }
 
+function markRendered(host) {
+  if (host) host.dataset.roteLedgerRendered = 'true';
+}
+
 function renderOfficer() {
   const host = officerHost();
   if (!host) return;
+  markRendered(host);
   if (state.loading && !state.loaded) {
     host.innerHTML = '<div class="rote-ledger-note">Loading durable ROTE Operation ledger…</div>';
     return;
   }
   if (state.error) {
-    host.innerHTML = `<div class="kicker">ROTE OPERATION LEDGER</div><h3>Contribution evidence unavailable</h3><div class="rote-ledger-note danger">${escapeHtml(state.error)}</div>`;
+    host.innerHTML = `<div class="kicker">ROTE OPERATION LEDGER</div><h3>Contribution evidence unavailable</h3><div class="rote-ledger-note danger">${escapeHtml(state.error)}</div><div class="rote-ledger-actions"><button type="button" class="secondary" id="roteLedgerOfficerRetry">Retry Ledger</button></div>`;
+    document.getElementById('roteLedgerOfficerRetry')?.addEventListener('click', () => refresh(true));
     return;
   }
   const entries = array(state.ledger?.slots);
@@ -326,13 +332,15 @@ function canSelfConfirm(entry, viewer) {
 function renderMember() {
   const host = memberHost();
   if (!host) return;
+  markRendered(host);
   if (state.loading && !state.loaded) {
     host.innerHTML = '<div class="rote-ledger-note">Loading your durable ROTE Operation assignments…</div>';
     return;
   }
   if (state.error) {
     const signedOut = state.errorCode === 'AUTH_REQUIRED' || state.errorStatus === 401;
-    host.innerHTML = `<div class="kicker">MY ROTE OPERATIONS</div><h3>${signedOut ? 'Sign in to view your assignments' : 'Operation ledger unavailable'}</h3><div class="rote-ledger-note ${signedOut ? '' : 'danger'}">${escapeHtml(state.error)}</div>`;
+    host.innerHTML = `<div class="kicker">MY ROTE OPERATIONS</div><h3>${signedOut ? 'Sign in to view your assignments' : 'Operation ledger unavailable'}</h3><div class="rote-ledger-note ${signedOut ? '' : 'danger'}">${escapeHtml(state.error)}</div><div class="rote-ledger-actions"><button type="button" class="secondary" id="roteLedgerMemberRetry">Retry</button></div>`;
+    document.getElementById('roteLedgerMemberRetry')?.addEventListener('click', () => refresh(true));
     return;
   }
   const currentPhase = text(state.event?.event?.currentPhase || state.ledger?.phase || '');
@@ -479,16 +487,19 @@ async function refresh(force = false) {
   }
 }
 
-function relevantSurfacePresent() {
-  return Boolean(officerHost() || memberHost());
-}
-
 function schedule() {
   clearTimeout(state.timer);
   state.timer = setTimeout(() => {
-    if (!relevantSurfacePresent()) return;
+    const officer = officerHost();
+    const member = memberHost();
+    if (!officer && !member) return;
     ensureStylesheet();
-    refresh(false);
+    if (!state.loaded && !state.loading && !state.error) {
+      refresh(false);
+      return;
+    }
+    if (officer && officer.dataset.roteLedgerRendered !== 'true') renderOfficer();
+    if (member && member.dataset.roteLedgerRendered !== 'true') renderMember();
   }, 40);
 }
 
@@ -499,7 +510,13 @@ function install() {
   observer.observe(document.body, { childList: true, subtree: true });
   window.addEventListener('hashchange', schedule);
   window.addEventListener('popstate', schedule);
-  window.addEventListener('swgoh:guild-command-snapshot', () => { state.loaded = false; schedule(); });
+  window.addEventListener('swgoh:guild-command-snapshot', () => {
+    state.loaded = false;
+    state.error = '';
+    state.errorCode = '';
+    state.errorStatus = 0;
+    schedule();
+  });
 }
 
 if (typeof document !== 'undefined') {
