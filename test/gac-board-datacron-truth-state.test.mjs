@@ -152,9 +152,14 @@ test("saved rows recover assigned and confirmed-none truth from canonical metada
 test("board editor exposes unknown / confirmed-none / assigned states and submits the state", async () => {
   const source = await readFile(new URL("../public/gac-defense-datacron-ui.js", import.meta.url), "utf8");
   assert.match(source, /const NONE_KEY = "__NONE__"/);
+  assert.match(source, /const ASSIGNED_UNRESOLVED_KEY = "__ASSIGNED_UNRESOLVED__"/);
   assert.match(source, /Enemy Datacron · not confirmed/);
   assert.match(source, /Enemy Datacron · confirmed none/);
+  assert.match(source, /assigned snapshot unavailable/i);
   assert.match(source, /datacronState,/);
   assert.match(source, /selectedDatacronState\(\)/);
   assert.match(source, /DATACRON UNKNOWN/);
+  assert.match(source, /const assignedUnresolved = state\.selectedKey === ASSIGNED_UNRESOLVED_KEY/);
+  assert.match(source, /Reconfirm the current board state before saving/i);
+  assert.match(source, /datacronState === "assigned" && !clean\(datacron\?\.id\)/);
 });
