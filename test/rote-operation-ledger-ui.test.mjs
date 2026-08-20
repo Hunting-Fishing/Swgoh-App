@@ -84,8 +84,9 @@ test('pending evidence key is deterministic for the same action and contributor 
   assert.equal(roteLedgerPendingKey('self', 'slot-1'), 'swgoh:rote-operation-pending:self:slot-1:self');
 });
 
-test('requirement labels preserve character Relic and ship/star style requirements', () => {
+test('requirement labels preserve character Relics and use stars for ship-style R0 requirements', () => {
   assert.equal(operationLedgerRequirementLabel({ requiredRelic: 7, requiredRarity: 7 }), 'R7');
+  assert.equal(operationLedgerRequirementLabel({ requiredRelic: 0, requiredRarity: 7 }), '7★');
   assert.equal(operationLedgerRequirementLabel({ requiredRelic: null, requiredRarity: 7 }), '7★');
   assert.equal(operationLedgerRequirementLabel({ requiredRelic: null, requiredRarity: null }), 'Requirement unknown');
 });
