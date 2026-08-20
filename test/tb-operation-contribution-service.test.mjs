@@ -19,6 +19,12 @@ function eq(value) {
   return raw.startsWith('eq.') ? raw.slice(3) : null;
 }
 
+function inValues(value) {
+  const raw = String(value || '');
+  if (!raw.startsWith('in.(') || !raw.endsWith(')')) return null;
+  return raw.slice(4, -1).split(',').map((entry) => entry.trim()).filter(Boolean);
+}
+
 function matches(row, query = {}) {
   for (const [key, value] of Object.entries(query)) {
     if (['select','order','limit','offset'].includes(key)) continue;
@@ -26,18 +32,18 @@ function matches(row, query = {}) {
       if (row?.[key] !== null && row?.[key] !== undefined && row?.[key] !== '') return false;
       continue;
     }
+    const expectedList = inValues(value);
+    if (expectedList && !expectedList.includes(String(row?.[key] ?? ''))) return false;
+    if (expectedList) continue;
     const expected = eq(value);
     if (expected !== null && String(row?.[key] ?? '') !== expected) return false;
   }
   return true;
 }
 
-function id(prefix, number) {
-  return `${prefix}-${String(number).padStart(4, '0')}`;
-}
-
 function fakeStore() {
   let sequence = 0;
+  const selectCalls = [];
   const tables = {
     user_player_links: [
       { user_id: MEMBER_USER_ID, player_id: MEMBER_PLAYER_ID, is_primary: true, verification_status: 'verified', verified_at: '2026-08-20T00:00:00.000Z' },
@@ -63,8 +69,10 @@ function fakeStore() {
 
   return {
     tables,
+    selectCalls,
     status() { return { configured: true }; },
     async select(table, query = {}) {
+      selectCalls.push({ table, query: { ...query } });
       const rows = (tables[table] || []).filter((row) => matches(row, query));
       const offset = Number(query.offset || 0);
       const limit = Number(query.limit || rows.length || 0);
@@ -250,7 +258,37 @@ test('same logical contribution retry is idempotent and a changed contributor fo
   );
 });
 
-test('ledger keeps assignment separate and prefers known GAME DATA over lower-precedence Guild confirmation', async () => {
+test('retry remains idempotent after roster progression and assignment context change', async () => {
+  const store = fakeStore();
+  const service = createTbOperationContributionService({ store });
+  await service.syncReferenceSlots(MEMBER_USER_ID, operationsPayload());
+  const slot = store.tables.guild_tb_operation_slots[0];
+  store.tables.guild_tb_operation_assignments.push({
+    id: '77777777-7777-4777-8777-777777777780', slot_id: slot.id,
+    assigned_player_id: MEMBER_PLAYER_ID, assigned_ally_code: '123456789', assigned_base_id: 'CEREJUNDA',
+    assignment_state: 'assigned', assignment_source: 'stage9', assigned_at: '2026-08-20T06:30:00.000Z', superseded_at: null,
+  });
+  const input = { id: 'member-retry-stable-001', slotRecordId: slot.id };
+  const first = await service.recordMemberConfirmation(MEMBER_USER_ID, input);
+  assert.equal(first.contribution.relic, 8);
+  assert.equal(first.contribution.unitSnapshot.stats.speed, 318);
+  assert.equal(first.contribution.metadata.assignmentMatched, true);
+
+  const unit = store.tables.player_units_current.find((row) => row.player_id === MEMBER_PLAYER_ID && row.base_id === 'CEREJUNDA');
+  unit.relic_tier = 9;
+  unit.metadata.speed = 350;
+  store.tables.guild_tb_operation_assignments[0].assigned_player_id = OFFICER_PLAYER_ID;
+  store.tables.guild_tb_operation_assignments[0].assigned_ally_code = '987654321';
+
+  const retry = await service.recordMemberConfirmation(MEMBER_USER_ID, input);
+  assert.equal(retry.alreadyRecorded, true);
+  assert.equal(store.tables.guild_tb_operation_contributions.length, 1);
+  assert.equal(retry.contribution.relic, 8);
+  assert.equal(retry.contribution.unitSnapshot.stats.speed, 318);
+  assert.equal(retry.contribution.metadata.assignmentMatched, true);
+});
+
+test('ledger keeps assignment separate, uses bulk evidence reads, and prefers known GAME DATA over lower-precedence Guild confirmation', async () => {
   const store = fakeStore();
   const service = createTbOperationContributionService({ store });
   await service.syncReferenceSlots(OFFICER_USER_ID, operationsPayload());
@@ -262,12 +300,22 @@ test('ledger keeps assignment separate and prefers known GAME DATA over lower-pr
   });
   await service.recordOfficerConfirmation(OFFICER_USER_ID, { id: 'officer-ledger-001', slotRecordId: slot.id, contributorAllyCode: '123456789' });
   await service.recordGameEvidence({ id: 'game-ledger-001', slotRecordId: slot.id, contributorAllyCode: '123456789', contributedBaseId: 'CEREJUNDA', unitSnapshot: { baseId: 'CEREJUNDA', relic: 8, stars: 7 } }, { guildId: GUILD_ID, eventId: EVENT_ID, sourceKind: 'canonical' });
+
+  store.selectCalls.length = 0;
   const ledger = await service.ledger(MEMBER_USER_ID, { phase: 'P2' });
   assert.equal(ledger.slots.length, 1);
   assert.equal(ledger.slots[0].assignment.playerId, MEMBER_PLAYER_ID);
   assert.equal(ledger.slots[0].contributions.length, 2);
   assert.equal(ledger.slots[0].effectiveContribution.sourceKind, 'canonical');
   assert.match(ledger.evidenceBoundary, /ASSIGNED and CONTRIBUTED are separate/i);
+
+  const contributionReads = store.selectCalls.filter((call) => call.table === 'guild_tb_operation_contributions');
+  assert.equal(contributionReads.length, 1);
+  assert.equal(contributionReads[0].query.event_id, `eq.${EVENT_ID}`);
+  assert.equal(Object.hasOwn(contributionReads[0].query, 'slot_id'), false);
+  const assignmentReads = store.selectCalls.filter((call) => call.table === 'guild_tb_operation_assignments');
+  assert.equal(assignmentReads.length, 1);
+  assert.match(String(assignmentReads[0].query.slot_id), /^in\.\(/);
 });
 
 test('effective contribution ignores UNKNOWN when known evidence exists', () => {
