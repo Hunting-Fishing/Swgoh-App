@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 
 const source = await readFile(new URL('../public/farm-gallery-tabs.js', import.meta.url), 'utf8');
 const css = await readFile(new URL('../public/farm-gallery-tabs.css', import.meta.url), 'utf8');
+const styleLoader = await readFile(new URL('../public/farm-gallery-style-loader.js', import.meta.url), 'utf8');
 const loader = await readFile(new URL('../public/farm-workspace-loader.js', import.meta.url), 'utf8');
 
 test('Farm Gallery exposes the six primary command tabs', () => {
@@ -61,8 +62,8 @@ test('Era Journey evidence remains separate and does not fabricate readiness per
 });
 
 test('legacy visual surfaces are hidden only after the tabbed gallery is active', () => {
-  assert.match(css, /farm-gallery-tabs-active \[data-farm-v3-surface\]/);
-  assert.match(css, /farm-gallery-tabs-active #farmMasterPlan/);
+  assert.match(styleLoader, /farm-gallery-tabs-active \[data-farm-v3-command\]/);
+  assert.match(styleLoader, /farm-gallery-tabs-active #farmMasterPlan/);
   assert.match(source, /panel\.classList\.add\('farm-gallery-tabs-active'\)/);
 });
 
