@@ -12,24 +12,27 @@ async function loadFarmWorkspace() {
 
   loadPromise = (async () => {
     // Canonicalize known legacy/typo Base IDs before any Farm/Journey renderer imports the shared presets.
-    await import("/journey-preset-canonicalizer.js?v=20260820-farmv3b");
+    await import("/journey-preset-canonicalizer.js?v=20260820-farmv3c");
 
-    // Journey Tracker owns durable track/untrack state underneath the v3 command surface.
-    await import("/journey-tracker-v2.js?v=20260820-farmv3b");
+    // Journey Tracker owns durable track/untrack state underneath the visual command surface.
+    await import("/journey-tracker-v2.js?v=20260820-farmv3c");
     await new Promise((resolve) => requestAnimationFrame(() => resolve()));
 
-    // Existing planning modules remain available below the compact v3 target surface.
+    // Existing planning modules remain authoritative data producers underneath the tabbed workspace.
     await Promise.all([
       import("/farm-material-drilldown.js?v=20260815-pro14"),
       import("/farm-master-plan-pro.js?v=20260815-lazy1"),
-      import("/farm-journey-map-pro.js?v=20260820-farmv3b"),
+      import("/farm-journey-map-pro.js?v=20260820-farmv3c"),
     ]);
 
     // Eligibility depends on the Journey shell being installed.
     await import("/journey-event-eligibility-pro.js?v=20260815-pro13");
 
-    // Farm v3 owns the visible compact target/matrix experience while reusing the durable tracker underneath.
-    await import("/farm-tracker-v3-enhancer.js?v=20260820-farmv3b");
+    // Farm v3 owns canonical target/readiness state while retaining the durable tracker underneath.
+    await import("/farm-tracker-v3-enhancer.js?v=20260820-farmv3c");
+
+    // Gallery tabs reorganize, rather than remove, Tracked / Journey / Requirements / Shopping / Priority / Era information.
+    await import("/farm-gallery-tabs.js?v=20260820-farmgallery1");
 
     loaded = true;
     window.dispatchEvent(new CustomEvent("swgoh:farm-workspace-loaded"));
