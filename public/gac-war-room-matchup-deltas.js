@@ -1,5 +1,6 @@
 import { squadAbilityReadiness } from "./gac-ability-intelligence.js";
 import "./gac-war-room-counter-inspector.js";
+import "./gac-war-room-attack-brief.js";
 
 const state = {
   requestId: 0,
