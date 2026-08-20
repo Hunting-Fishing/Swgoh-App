@@ -1,4 +1,4 @@
-import { findExactStrategy, strategyGuidance, validateRecord } from "./gac-strategy-record-model.js";
+import { SCHEMA_VERSION, findExactStrategy, strategyGuidance, validateRecord } from "./gac-strategy-record-model.js";
 
 const state = {
   promise: null,
@@ -6,16 +6,37 @@ const state = {
 };
 
 function catalogPayload(body = {}) {
+  const schemaVersion = Number(body?.schemaVersion || 0);
   const records = Array.isArray(body?.records) ? body.records.slice(0, 5000) : [];
   const accepted = [];
   const rejected = [];
+  if (schemaVersion !== SCHEMA_VERSION) {
+    rejected.push(Object.freeze({ id: "$catalog", errors: Object.freeze(["unsupported-catalog-schema-version"]) }));
+    return Object.freeze({
+      schemaVersion,
+      generatedAt: body?.generatedAt || null,
+      records: Object.freeze([]),
+      rejected: Object.freeze(rejected),
+      sourcePolicy: String(body?.sourcePolicy || "").trim(),
+    });
+  }
+
+  const seenIds = new Set();
   for (const source of records) {
     const result = validateRecord(source);
-    if (result.valid) accepted.push(result.record);
-    else rejected.push(Object.freeze({ id: String(source?.id || "").trim(), errors: result.errors }));
+    if (!result.valid) {
+      rejected.push(Object.freeze({ id: String(source?.id || "").trim(), errors: result.errors }));
+      continue;
+    }
+    if (seenIds.has(result.record.id)) {
+      rejected.push(Object.freeze({ id: result.record.id, errors: Object.freeze(["duplicate-id"]) }));
+      continue;
+    }
+    seenIds.add(result.record.id);
+    accepted.push(result.record);
   }
   return Object.freeze({
-    schemaVersion: Number(body?.schemaVersion || 0),
+    schemaVersion,
     generatedAt: body?.generatedAt || null,
     records: Object.freeze(accepted),
     rejected: Object.freeze(rejected),
