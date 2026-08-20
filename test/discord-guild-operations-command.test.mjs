@@ -93,9 +93,26 @@ test('/guild register-mates previews exact unique names but never fuzzy or dupli
     { nick: 'Warm Baconn', user: { id: '623456789012345678', username: 'typo', global_name: 'Warm Baconn', bot: false } },
   ] });
   const result = await executeDiscordGuildCommand(interaction('register-mates', [{ type: 3, name: 'action', value: 'preview' }]), config, f);
-  assert.match(result, /Ambiguous: \*\*1\*\*/);
-  assert.match(result, /Unmatched Discord: \*\*1\*\*/);
+  assert.match(result, /Guild roster: \*\*3\*\* · linked: \*\*1\*\* · unlinked: \*\*2\*\*/);
+  assert.match(result, /Discord humans scanned: \*\*2\*\*/);
+  assert.match(result, /available to match: \*\*2\*\*/);
+  assert.match(result, /ambiguous: \*\*1\*\*/i);
+  assert.match(result, /unmatched Discord: \*\*1\*\*/i);
+  assert.match(result, /Guild mention-link coverage: \*\*1\/3 \(33%\)\*\*/);
   assert.equal(f.links.length, 0, 'preview must not mutate player links');
+});
+
+test('/guild register-mates explains linked-only Discord inventory instead of misleading 0/0/0', async () => {
+  const f = fixture({ discordMembers: [
+    { nick: 'Warm Bacon', user: { id: ACTOR, username: 'warmbacon', global_name: 'Warm Bacon', bot: false } },
+    { nick: null, user: { id: '723456789012345678', username: 'some-bot', global_name: null, bot: true } },
+  ] });
+  const result = await executeDiscordGuildCommand(interaction('register-mates', [{ type: 3, name: 'action', value: 'preview' }]), config, f);
+  assert.match(result, /Discord humans scanned: \*\*1\*\* · already linked here: \*\*1\*\* · available to match: \*\*0\*\* · bots skipped: \*\*1\*\*/);
+  assert.match(result, /2 SWGOH Guild members remain unlinked/);
+  assert.match(result, /\/tb link member:<Discord user> ally_code:<Ally Code>/);
+  assert.match(result, /SWGOH members still unlinked/);
+  assert.equal(f.links.length, 0);
 });
 
 test('/guild register-mates apply links only a single exact unique match', async () => {
@@ -104,9 +121,24 @@ test('/guild register-mates apply links only a single exact unique match', async
   ] });
   f.roster.members.push({ persistentId: '44444444-4444-4444-8444-444444444444', playerId: 'swgoh-new', allyCode: '777888999', name: 'New Pilot' });
   const result = await executeDiscordGuildCommand(interaction('register-mates', [{ type: 3, name: 'action', value: 'apply' }]), config, f);
-  assert.match(result, /Applied: \*\*1\*\*/);
+  assert.match(result, /applied: \*\*1\*\*/i);
+  assert.match(result, /Guild roster: \*\*4\*\* · linked: \*\*2\*\* · unlinked: \*\*2\*\*/);
   assert.equal(f.links.length, 1);
   assert.equal(f.links[0].swgohAllyCode, '777888999');
+});
+
+test('/guild register-mates reports Server Members Intent requirement on Discord 403', async () => {
+  const f = fixture();
+  f.fetch = async (url) => {
+    if (String(url).includes('/guilds/') && String(url).includes('/members')) {
+      return { ok: false, status: 403, async text() { return JSON.stringify({ message: 'Missing Access', code: 50001 }); } };
+    }
+    return { ok: true, status: 200, async text() { return '{}'; } };
+  };
+  await assert.rejects(
+    executeDiscordGuildCommand(interaction('register-mates', [{ type: 3, name: 'action', value: 'preview' }]), config, f),
+    /SERVER MEMBERS INTENT/,
+  );
 });
 
 test('/guild ignore persists a shared timed Operations exclusion and days=0 clears it', async () => {
