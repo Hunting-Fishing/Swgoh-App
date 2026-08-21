@@ -40,7 +40,7 @@ function ownDatacron(candidate){
 }
 function disableLegacyLossRetry(card){
   const assignment=assignmentFor(Number(card?.dataset?.defenseId));
-  if(clean(assignment?.status).toLowerCase()!=='loss')return;
+  if(clean(assignment?.status).toLowerCase()!=='loss'&&!card?.classList?.contains('gac-war-is-loss'))return;
   card.dataset.recommendedAttackerMembers='';card.dataset.recommendedAttackerLeader='';card.dataset.recommendedDatacronId='';
   const lane=card.querySelector('.gac-war-room-counter-lane .gac-board-units');
   if(lane)lane.innerHTML='<div class="gac-board-no-counter">Original-defense retry disabled. Cleanup uses only confirmed surviving defenders.</div>';
@@ -117,7 +117,7 @@ function bind(){
   injectStyle();
   document.addEventListener('click',(event)=>{
     const legacy=event.target.closest?.('#gacBoardPlannerGrid [data-war-action="lock"]');
-    if(legacy){const card=legacy.closest('.gac-saved-board-card');const assignment=assignmentFor(Number(card?.dataset?.defenseId));if(clean(assignment?.status).toLowerCase()==='loss'){event.preventDefault();event.stopImmediatePropagation();renderCard(card,identity());card.querySelector('[data-gac-b10-cleanup]')?.scrollIntoView?.({behavior:'smooth',block:'center'});return;}}
+    if(legacy){const card=legacy.closest('.gac-saved-board-card');const assignment=assignmentFor(Number(card?.dataset?.defenseId));if(card?.classList?.contains('gac-war-is-loss')||clean(assignment?.status).toLowerCase()==='loss'){event.preventDefault();event.stopImmediatePropagation();disableLegacyLossRetry(card);if(assignment)renderCard(card,identity());card.querySelector('[data-gac-b10-cleanup]')?.scrollIntoView?.({behavior:'smooth',block:'center'});return;}}
     const lock=event.target.closest?.('[data-gac-b10-lock]');if(lock){event.preventDefault();const card=lock.closest('.gac-saved-board-card');if(card)void lockCleanup(lock);}
   },true);
   document.addEventListener('change',(event)=>{if(['allyCode','gacOpponentCode','gacBracketRound','gacMode'].includes(event.target?.id)||event.target?.matches?.('[data-gacv2-opponent],[data-gacv2-round],[data-gacv2-mode]'))schedule(120,true);},true);
