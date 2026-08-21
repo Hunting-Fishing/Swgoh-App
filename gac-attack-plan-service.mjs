@@ -125,6 +125,32 @@ function sanitizeAttempt(value = {}) {
 function sanitizeAttemptLog(value) {
   return Object.freeze(asArray(value).map(sanitizeAttempt).filter(Boolean).slice(-20));
 }
+function cleanupContextFromAttemptLog(value, defenseMembers = []) {
+  const attempts = [...sanitizeAttemptLog(value)];
+  const defenseIds = [...new Set(asArray(defenseMembers).map(normalizeBaseId).filter(Boolean))];
+  for (let index = attempts.length - 1; index >= 0; index -= 1) {
+    const attempt = attempts[index];
+    if (attempt.status !== "loss") continue;
+    const post = attempt.postAttempt || {};
+    if (post.defenseState !== "survivors-confirmed") {
+      return Object.freeze({ ready: false, attemptIndex: index, survivorBaseIds: Object.freeze([]), code: "survivors-unknown" });
+    }
+    const survivors = [...new Set(asArray(post.survivorBaseIds).map(normalizeBaseId).filter(Boolean))];
+    const invalid = survivors.filter((id) => !defenseIds.includes(id));
+    if (!survivors.length || invalid.length) {
+      return Object.freeze({ ready: false, attemptIndex: index, survivorBaseIds: Object.freeze(survivors), code: invalid.length ? "survivor-mismatch" : "survivors-empty" });
+    }
+    return Object.freeze({ ready: true, attemptIndex: index, survivorBaseIds: Object.freeze(survivors), code: "survivors-confirmed" });
+  }
+  return Object.freeze({ ready: false, attemptIndex: null, survivorBaseIds: Object.freeze([]), code: "loss-log-missing" });
+}
+function resultDefenseMembersForAssignment(assignment = {}, defenseMembers = []) {
+  const metadata = assignment?.metadata && typeof assignment.metadata === "object" ? assignment.metadata : {};
+  if (clean(metadata.planKind).toLowerCase() !== "cleanup") {
+    return Object.freeze([...new Set(asArray(defenseMembers).map(normalizeBaseId).filter(Boolean))]);
+  }
+  return Object.freeze([...new Set(asArray(metadata.cleanupSurvivorBaseIds).map(normalizeBaseId).filter(Boolean))]);
+}
 
 export function createGacAttackPlanService(options = {}) {
   const store = options.store || supabaseCoreStore;
@@ -201,7 +227,7 @@ export function createGacAttackPlanService(options = {}) {
       throw error;
     }
     const existing = await selectOne("gac_attack_plan_assignments", {
-      select: "id,round_id,defense_squad_id,status,attempt_count,attempt_log,planned_at",
+      select: "id,round_id,defense_squad_id,status,attempt_count,attempt_log,planned_at,metadata",
       round_id: `eq.${resolved.roundRow.id}`,
       defense_squad_id: `eq.${defense.id}`,
     });
@@ -216,9 +242,17 @@ export function createGacAttackPlanService(options = {}) {
       error.status = 409;
       throw error;
     }
+    const cleanupContext = cleanupContextFromAttemptLog(existing?.attempt_log, defense.members);
+    const requiresCleanup = cleanupContext.attemptIndex !== null;
+    if (requiresCleanup && cleanupContext.ready !== true) {
+      const error = new Error("Confirm the surviving enemy defenders in the recorded loss before locking a cleanup counter. Survivor-specific cleanup cannot be generated from unknown post-battle state.");
+      error.status = 409;
+      throw error;
+    }
     await assertNoUsedOverlap(resolved, defense.id, members, existing?.id || null);
 
     const timestamp = now().toISOString();
+    const isCleanup = requiresCleanup && cleanupContext.ready === true;
     const row = {
       round_id: resolved.roundRow.id,
       defense_squad_id: defense.id,
@@ -230,7 +264,7 @@ export function createGacAttackPlanService(options = {}) {
       attempt_log: sanitizeAttemptLog(existing?.attempt_log),
       banners: null,
       source: "verified-owner-war-room",
-      source_ref: clean(input.sourceRef || "gac-command-center-war-room"),
+      source_ref: isCleanup ? "gac-command-center-cleanup-intelligence" : clean(input.sourceRef || "gac-command-center-war-room"),
       planned_at: clean(existing?.planned_at) || timestamp,
       updated_at: timestamp,
       completed_at: null,
@@ -240,7 +274,11 @@ export function createGacAttackPlanService(options = {}) {
         eventInstanceId: resolved.eventInstanceId,
         round: resolved.round,
         size,
-        verificationMethod: "verified-owner-saved-board-plan",
+        verificationMethod: isCleanup ? "verified-owner-confirmed-survivor-cleanup-plan" : "verified-owner-saved-board-plan",
+        planKind: isCleanup ? "cleanup" : "standard",
+        cleanupAttemptIndex: isCleanup ? cleanupContext.attemptIndex : null,
+        cleanupSurvivorBaseIds: isCleanup ? cleanupContext.survivorBaseIds : [],
+        cleanupTelemetryState: isCleanup ? "unknown" : null,
       },
     };
     const saved = asArray(await store.upsert("gac_attack_plan_assignments", [row], {
@@ -305,7 +343,13 @@ export function createGacAttackPlanService(options = {}) {
     const attemptLog = [...sanitizeAttemptLog(assignment.attempt_log)];
     const closesAttempt = ["win", "loss"].includes(status) && !["win", "loss"].includes(previousStatus);
     if (closesAttempt) {
-      const postAttempt = confirmedPostAttempt(input.postAttempt, status, defense.members);
+      const resultDefenseMembers = resultDefenseMembersForAssignment(assignment, defense.members);
+      if (clean(assignment?.metadata?.planKind).toLowerCase() === "cleanup" && !resultDefenseMembers.length) {
+        const error = new Error("The cleanup attempt no longer has a valid pre-attempt survivor set. Rebuild cleanup intelligence before recording a residual result.");
+        error.status = 409;
+        throw error;
+      }
+      const postAttempt = confirmedPostAttempt(input.postAttempt, status, resultDefenseMembers);
       attemptLog.push(Object.freeze({
         members: Object.freeze(asArray(assignment.attacker_members).map(normalizeBaseId).filter(Boolean)),
         leaderBaseId: normalizeBaseId(assignment.attacker_leader_base_id),
@@ -372,6 +416,12 @@ export function createGacAttackPlanService(options = {}) {
 
   function normalizeAssignment(row, defense = null) {
     if (!row) return null;
+    const metadata = row.metadata && typeof row.metadata === "object" ? row.metadata : {};
+    const planKind = clean(metadata.planKind).toLowerCase() === "cleanup" ? "cleanup" : "standard";
+    const cleanupAttemptIndex = planKind === "cleanup" && Number.isInteger(Number(metadata.cleanupAttemptIndex)) ? Number(metadata.cleanupAttemptIndex) : null;
+    const cleanupSurvivorBaseIds = planKind === "cleanup"
+      ? Object.freeze([...new Set(asArray(metadata.cleanupSurvivorBaseIds).map(normalizeBaseId).filter(Boolean))])
+      : Object.freeze([]);
     return Object.freeze({
       id: row.id ?? null,
       defenseId: Number(row.defense_squad_id),
@@ -392,6 +442,13 @@ export function createGacAttackPlanService(options = {}) {
       updatedAt: clean(row.updated_at),
       completedAt: clean(row.completed_at),
       source: clean(row.source || "verified-owner-war-room"),
+      sourceRef: clean(row.source_ref),
+      planKind,
+      cleanup: Object.freeze({
+        attemptIndex: cleanupAttemptIndex,
+        survivorBaseIds: cleanupSurvivorBaseIds,
+        telemetryState: planKind === "cleanup" ? "unknown" : "not-applicable",
+      }),
     });
   }
 
@@ -407,10 +464,12 @@ export function createGacAttackPlanService(options = {}) {
 export const gacAttackPlanService = createGacAttackPlanService();
 
 export {
+  cleanupContextFromAttemptLog,
   completedStatus,
   confirmedPostAttempt,
   normalizeBaseId,
   normalizedMembers,
+  resultDefenseMembersForAssignment,
   sanitizeAttempt,
   sanitizeAttemptLog,
   sanitizeDatacron,
