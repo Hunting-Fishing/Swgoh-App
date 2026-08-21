@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-21T01:30:00+08:00",
+  "generatedAt": "2026-08-21T12:20:00+08:00",
   "policy": "Research candidates are quarantined from runtime. Current-season statistics may establish matchup relevance but cannot invent execution guidance or Datacron scope. Promotion requires every review flag, canonical Base-ID audit, exact-composition review, explicit Datacron scope and the production strategy-record validator.",
   "candidates": [
     {
@@ -87,21 +87,28 @@
         "defenderDatacron": { "presence": "", "required": false, "setIds": [], "mechanicIds": [] },
         "guidance": { "opening": [], "targets": [], "mechanics": [], "avoid": [] },
         "provenance": { "sourceName": "SWGOH GA3 Counter Guide", "sourceRef": "https://www.swgoh-ga3.online-server.info/index.php?id=jedi_master_mace_windu", "sourceType": "tool", "author": "", "sourcePublishedAt": "2026-01-16T00:00:00Z", "sourceUpdatedAt": "2026-01-16T00:00:00Z", "capturedAt": "2026-08-21T01:30:00+08:00" },
-        "validity": { "validFrom": "", "validUntil": "", "gameDataVersion": "", "notes": "Historical exact-composition pairing only; canonical Base-ID completion, execution sequence and current Datacron scope remain review gates." }
+        "validity": { "validFrom": "", "validUntil": "", "gameDataVersion": "", "notes": "Historical exact-composition pairing plus current-era tactical-context evidence are captured. Canonical Base IDs are verified; exact current execution sequence, exact active Datacron mechanic scope and current exact-composition validity remain gated." }
       },
       "review": {
         "status": "quarantined",
-        "flags": { "sourceVerified": true, "exactCompositionVerified": true, "baseIdsVerified": false, "guidanceParaphraseVerified": false, "datacronScopeVerified": false, "versionValidityVerified": false, "copyrightParaphraseReviewed": true },
-        "blockers": ["base-ids-unverified", "guidance-sequence-missing", "datacron-scope-unverified", "current-version-validity-unverified"],
-        "reviewer": "", "reviewedAt": "",
-        "notes": "Current Season 81 shows Jedi Master Mace Windu as a high-volume defense and Traya/Nihilus/Savage as a current 3v3 attack squad, but exact current matchup/DC execution remains unproven."
+        "flags": { "sourceVerified": true, "exactCompositionVerified": true, "baseIdsVerified": true, "guidanceParaphraseVerified": false, "datacronScopeVerified": false, "versionValidityVerified": false, "copyrightParaphraseReviewed": true },
+        "blockers": ["guidance-sequence-missing", "datacron-scope-unverified", "current-version-validity-unverified"],
+        "reviewer": "SWGOH Command Center", "reviewedAt": "2026-08-21T12:20:00+08:00",
+        "notes": "All six canonical Base IDs were independently verified against current SWGOH.GG unit records on 2026-08-21. The May 21, 2026 Xaereth 3v3 counter index explicitly includes Nihilus/Traya/Savage vs. Mace (Depa cron) under Datacron Sets 28/29/30, but the indexed source does not expose a reviewable move sequence or prove the full Mace/Aayla/Depa lineup at that timestamp. Runtime execution remains locked."
       },
       "research": {
         "discoveredAt": "2026-08-20T12:00:00Z", "sourceSnapshotDate": "2026-01-16",
-        "sourceNotes": "Historical source identifies exact JMMW/Aayla/Depa and Traya/Nihilus/Savage pairing. Current evidence supports relevance only.",
+        "sourceNotes": "The January source identifies the exact JMMW/Aayla/Depa and Traya/Nihilus/Savage pairing. A May 21, 2026 Xaereth source independently confirms current-era Nihilus/Traya/Savage vs Mace usage with a Depa Datacron context under Sets 28/29/30. That recent timestamp is treated only as tactical-context evidence: it does not prove the exact defender teammate composition, a move sequence, or the exact Datacron mechanic required for this proposed record.",
         "validationRefs": [
           { "kind": "current-statistics", "sourceName": "SWGOH.GG", "sourceRef": "https://swgoh.gg/gac/counters/JEDIMASTERMACEWINDU/", "capturedAt": "2026-08-21T01:30:00+08:00", "note": "Season 81 3v3 Jedi Master Mace Windu counter page has a large current sample." },
-          { "kind": "current-squad-meta", "sourceName": "SWGOH.GG", "sourceRef": "https://swgoh.gg/tier-list/3v3/", "capturedAt": "2026-08-21T01:30:00+08:00", "note": "Current 3v3 tier data includes Traya / Nihilus / Savage with active Datacron build samples." }
+          { "kind": "current-squad-meta", "sourceName": "SWGOH.GG", "sourceRef": "https://swgoh.gg/tier-list/3v3/", "capturedAt": "2026-08-21T01:30:00+08:00", "note": "Current 3v3 tier data includes Traya / Nihilus / Savage with active Datacron build samples." },
+          { "kind": "recent-tactical-context", "sourceName": "Xaereth Prevails via SWGOH.TV", "sourceRef": "https://swgoh.tv/video/48466-counters-you-need-may-3v3-w-timestamps-swgoh-gac-galaxyofheroes-starwars", "capturedAt": "2026-08-21T12:20:00+08:00", "note": "Published 2026-05-21. The source index states Datacron Sets 28/29/30 and labels timestamp 30:25 as Nihilus/Traya/Savage vs. Mace (Depa cron). Used for current-era matchup/DC context only, not execution guidance." },
+          { "kind": "canonical-unit-id", "sourceName": "SWGOH.GG", "sourceRef": "https://swgoh.gg/units/jedi-master-mace-windu/", "capturedAt": "2026-08-21T12:20:00+08:00", "note": "Current unit record exposes Base ID JEDIMASTERMACEWINDU." },
+          { "kind": "canonical-unit-id", "sourceName": "SWGOH.GG", "sourceRef": "https://swgoh.gg/units/aayla-secura/", "capturedAt": "2026-08-21T12:20:00+08:00", "note": "Current unit record exposes Base ID AAYLASECURA." },
+          { "kind": "canonical-unit-id", "sourceName": "SWGOH.GG", "sourceRef": "https://swgoh.gg/units/depa-billaba/", "capturedAt": "2026-08-21T12:20:00+08:00", "note": "Current unit record exposes Base ID DEPABILLABA." },
+          { "kind": "canonical-unit-id", "sourceName": "SWGOH.GG", "sourceRef": "https://swgoh.gg/units/darth-traya/", "capturedAt": "2026-08-21T12:20:00+08:00", "note": "Current unit record exposes Base ID DARTHTRAYA." },
+          { "kind": "canonical-unit-id", "sourceName": "SWGOH.GG", "sourceRef": "https://swgoh.gg/units/darth-nihilus/", "capturedAt": "2026-08-21T12:20:00+08:00", "note": "Current unit record exposes Base ID DARTHNIHILUS." },
+          { "kind": "canonical-unit-id", "sourceName": "SWGOH.GG", "sourceRef": "https://swgoh.gg/units/savage-opress/", "capturedAt": "2026-08-21T12:20:00+08:00", "note": "Current unit record exposes Base ID SAVAGEOPRESS." }
         ]
       }
     }
