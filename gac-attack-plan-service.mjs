@@ -235,8 +235,9 @@ export function createGacAttackPlanService(options = {}) {
       error.status = 409;
       throw error;
     }
-    const cleanupContext = existingStatus === "loss" ? cleanupContextFromAttemptLog(existing?.attempt_log, defense.members) : null;
-    if (existingStatus === "loss" && cleanupContext?.ready !== true) {
+    const cleanupContext = cleanupContextFromAttemptLog(existing?.attempt_log, defense.members);
+    const requiresCleanup = cleanupContext.attemptIndex !== null;
+    if (requiresCleanup && cleanupContext.ready !== true) {
       const error = new Error("Confirm the surviving enemy defenders in the recorded loss before locking a cleanup counter. Survivor-specific cleanup cannot be generated from unknown post-battle state.");
       error.status = 409;
       throw error;
@@ -244,7 +245,7 @@ export function createGacAttackPlanService(options = {}) {
     await assertNoUsedOverlap(resolved, defense.id, members, existing?.id || null);
 
     const timestamp = now().toISOString();
-    const isCleanup = cleanupContext?.ready === true;
+    const isCleanup = requiresCleanup && cleanupContext.ready === true;
     const row = {
       round_id: resolved.roundRow.id,
       defense_squad_id: defense.id,
