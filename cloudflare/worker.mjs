@@ -41,6 +41,25 @@ function copyResponseHeaders(headers) {
   return output;
 }
 
+function hasOauthCookie(headers) {
+  const cookieHeader = clean(headers?.get?.("cookie"));
+  return /(?:^|;\s*)swgoh_cc_oauth=/.test(cookieHeader);
+}
+
+function rootOauthCallbackRequest(request, url) {
+  if (request.method !== "GET" || url.pathname !== "/") return null;
+  if (!hasOauthCookie(request.headers)) return null;
+  if (!url.searchParams.has("code") && !url.searchParams.has("error")) return null;
+
+  const callback = new URL("/api/auth/oauth/callback", url.origin);
+  callback.search = url.search;
+  return new Request(callback.href, {
+    method: "GET",
+    headers: request.headers,
+    redirect: "manual",
+  });
+}
+
 async function proxyApi(request, env) {
   const origin = railwayOrigin(env);
   if (!origin) {
@@ -90,6 +109,14 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
+    // Supabase can fall back to the configured Site URL and return the OAuth
+    // authorization code at `/?code=...`. Complete that flow at the edge before
+    // the SPA loads so the PKCE callback cannot race the frontend auth guard.
+    const oauthCallbackRequest = rootOauthCallbackRequest(request, url);
+    if (oauthCallbackRequest) {
+      return proxyApi(oauthCallbackRequest, env);
+    }
+
     if (url.pathname.startsWith("/api/")) {
       return proxyApi(request, env);
     }
@@ -98,4 +125,4 @@ export default {
   },
 };
 
-export { copyResponseHeaders, proxyApi, readSetCookies };
+export { copyResponseHeaders, hasOauthCookie, proxyApi, readSetCookies, rootOauthCallbackRequest };
