@@ -1,12 +1,17 @@
 import './gac-cleanup-intelligence-ui.js';
 import { latestPostAttempt, resultDraft, resultTruthLabel } from './gac-attempt-result-model.js';
 
+const BATTLE_CARD_SELECTOR='#gacBoardPlannerGrid .gac-saved-board-card,[data-gac-board-workspace] .gac-visible-defense[data-defense-id]';
+const RESULT_ACTION_SELECTOR='#gacBoardPlannerGrid [data-war-action="win"],#gacBoardPlannerGrid [data-war-action="loss"],[data-gac-board-workspace] [data-war-action="win"],[data-gac-board-workspace] [data-war-action="loss"]';
+const MANUAL_RESULT_SELECTOR='[data-gac-board-workspace] [data-gac-manual-war-action="result"]';
+
 const state = {
   key:'',
   assignments:[],
   defenses:[],
   opponentRoster:null,
   drafts:new Map(),
+  choosing:new Set(),
   errors:new Map(),
   busy:new Set(),
   requestId:0,
@@ -33,6 +38,7 @@ async function fetchJson(pathname,options={}) {
   return body;
 }
 
+function battleCard(node){return node?.closest?.('.gac-saved-board-card,.gac-visible-defense[data-defense-id]')||null;}
 function assignmentForDefense(defenseId){return state.assignments.find((row)=>Number(row?.defenseId)===Number(defenseId))||null;}
 function defenseForId(defenseId){return state.defenses.find((row)=>Number(row?.id)===Number(defenseId))||null;}
 function resultDefenseMembers(assignment={},defense={}){
@@ -50,6 +56,7 @@ function initialDraft(assignment,status){
   if(existing&&existing.status===status)return existing;
   const draft={status,banners:'',lossState:'unknown',survivors:new Set()};
   state.drafts.set(id,draft);
+  state.choosing.delete(id);
   return draft;
 }
 
@@ -61,6 +68,11 @@ function historyHtml(assignment){
   const survivors=post.defenseState==='survivors-confirmed'
     ? `<div class="gac-result-history-survivors">${post.survivorBaseIds.map((id)=>`<span>${escapeHtml(unitLabel(id))}</span>`).join('')}</div>`:'';
   return `<section class="gac-result-history is-${escapeHtml(label.code)}" data-gac-result-history><header><span>ATTEMPT RESULT TRUTH</span><strong>${escapeHtml(label.title)}</strong><b>${escapeHtml(banners)}</b></header><p>${escapeHtml(label.detail)}</p>${survivors}<small>TM / HEALTH / PROTECTION: NOT CAPTURED · no post-battle percentages are inferred.</small></section>`;
+}
+
+function outcomeChoiceHtml(assignment){
+  const id=Number(assignment?.id);
+  return `<section class="gac-result-choice" data-gac-result-choice="${id}"><header><div><span>ATTEMPT RESULT · B09</span><strong>WHAT HAPPENED IN GAME?</strong><small>Choose only after the battle finishes. The next panel records the confirmed result.</small></div><button type="button" data-gac-result-choice-close>Close</button></header><div><button type="button" class="is-win" data-gac-result-choice-status="win">✓ WIN</button><button type="button" class="is-loss" data-gac-result-choice-status="loss">× LOSS</button></div></section>`;
 }
 
 function resultEditorHtml(assignment,defense,draft){
@@ -82,15 +94,18 @@ function resultEditorHtml(assignment,defense,draft){
 }
 
 function renderCard(card){
-  card.querySelectorAll('[data-gac-result-capture],[data-gac-result-history]').forEach((node)=>node.remove());
+  card.querySelectorAll('[data-gac-result-capture],[data-gac-result-history],[data-gac-result-choice]').forEach((node)=>node.remove());
   const defenseId=Number(card?.dataset?.defenseId);const assignment=assignmentForDefense(defenseId);if(!assignment)return;
+  const id=Number(assignment.id);const status=clean(assignment.status).toLowerCase();
   const defense=defenseForId(defenseId)||assignment?.defense||null;
   const war=card.querySelector('.gac-war-room')||card;
   const history=historyHtml(assignment);if(history)war.insertAdjacentHTML('afterend',history);
-  const draft=state.drafts.get(Number(assignment.id));if(!draft||clean(assignment.status).toLowerCase()!=='attempted')return;
-  const anchor=card.querySelector('[data-gac-result-history]')||war;anchor.insertAdjacentHTML('afterend',resultEditorHtml(assignment,defense,draft));
+  let anchor=card.querySelector('[data-gac-result-history]')||war;
+  if(state.choosing.has(id)&&status==='attempted'&&!state.drafts.has(id)){anchor.insertAdjacentHTML('afterend',outcomeChoiceHtml(assignment));anchor=card.querySelector('[data-gac-result-choice]')||anchor;}
+  const draft=state.drafts.get(id);if(!draft||status!=='attempted')return;
+  anchor.insertAdjacentHTML('afterend',resultEditorHtml(assignment,defense,draft));
 }
-function renderAll(){for(const card of document.querySelectorAll('#gacBoardPlannerGrid .gac-saved-board-card'))renderCard(card);}
+function renderAll(){for(const card of document.querySelectorAll(BATTLE_CARD_SELECTOR))renderCard(card);}
 
 async function load(force=false){
   const current=identity();if(!current)return;
@@ -104,11 +119,24 @@ async function load(force=false){
     ]);
     if(requestId!==state.requestId)return;
     if(allyCode(board?.opponent?.allyCode)!==current.opponent)throw new Error('Verified board opponent does not match selected opponent.');
-    if(state.key!==current.key){state.drafts.clear();state.errors.clear();state.busy.clear();}
+    if(state.key!==current.key){state.drafts.clear();state.choosing.clear();state.errors.clear();state.busy.clear();}
     state.key=current.key;state.assignments=Array.isArray(warRoom?.assignments)?warRoom.assignments:[];state.defenses=Array.isArray(board?.defenses)?board.defenses:[];state.opponentRoster=opponentRoster;
     for(const [id] of state.drafts){const assignment=state.assignments.find((row)=>Number(row?.id)===Number(id));if(!assignment||clean(assignment.status).toLowerCase()!=='attempted')state.drafts.delete(id);}
+    for(const id of [...state.choosing]){const assignment=state.assignments.find((row)=>Number(row?.id)===Number(id));if(!assignment||clean(assignment.status).toLowerCase()!=='attempted')state.choosing.delete(id);}
     renderAll();
   }catch(error){if(requestId===state.requestId)console.warn('GAC B09 result capture unavailable',error);}
+}
+
+async function toggleOutcomeChoice(card){
+  const defenseId=Number(card?.dataset?.defenseId);if(!defenseId)return;
+  let assignment=assignmentForDefense(defenseId);
+  if(!assignment?.id){await load(true);assignment=assignmentForDefense(defenseId);}
+  if(!assignment?.id||clean(assignment.status).toLowerCase()!=='attempted')return;
+  const id=Number(assignment.id);
+  state.drafts.delete(id);state.errors.delete(id);
+  if(state.choosing.has(id))state.choosing.delete(id);else state.choosing.add(id);
+  renderCard(card);
+  card.querySelector('[data-gac-result-choice]')?.scrollIntoView?.({behavior:'smooth',block:'center'});
 }
 
 async function submitResult(card){
@@ -120,7 +148,7 @@ async function submitResult(card){
   state.busy.add(id);state.errors.delete(id);renderCard(card);
   try{
     await fetchJson(`/api/gac/attack-plan/${current.mine}`,{method:'PATCH',body:JSON.stringify({id,status:model.status,banners:model.banners,round:current.round,postAttempt:model.postAttempt})});
-    state.drafts.delete(id);window.dispatchEvent(new CustomEvent('gac-war-room-updated',{detail:{action:'attempt-result-recorded',assignmentId:id,defenseId,status:model.status}}));await load(true);
+    state.drafts.delete(id);state.choosing.delete(id);window.dispatchEvent(new CustomEvent('gac-war-room-updated',{detail:{action:'attempt-result-recorded',assignmentId:id,defenseId,status:model.status}}));await load(true);
   }catch(error){state.errors.set(id,clean(error?.message||error));}
   finally{state.busy.delete(id);renderAll();}
 }
@@ -130,30 +158,43 @@ function openResult(card,status){
   initialDraft(assignment,status);state.errors.delete(Number(assignment.id));renderCard(card);
   card.querySelector('[data-gac-result-capture]')?.scrollIntoView?.({behavior:'smooth',block:'center'});
 }
-function closeResult(card){const assignment=assignmentForDefense(Number(card?.dataset?.defenseId));if(assignment?.id){state.drafts.delete(Number(assignment.id));state.errors.delete(Number(assignment.id));}renderCard(card);}
+function closeResult(card){const assignment=assignmentForDefense(Number(card?.dataset?.defenseId));if(assignment?.id){state.drafts.delete(Number(assignment.id));state.choosing.delete(Number(assignment.id));state.errors.delete(Number(assignment.id));}renderCard(card);}
+function closeChoice(card){const assignment=assignmentForDefense(Number(card?.dataset?.defenseId));if(assignment?.id)state.choosing.delete(Number(assignment.id));renderCard(card);}
 
-function injectStyle(){if(document.querySelector('link[data-gac-result-capture-style]'))return;const link=document.createElement('link');link.rel='stylesheet';link.href='/gac-attempt-result-ui.css?v=20260821-b09a';link.dataset.gacResultCaptureStyle='true';document.head.appendChild(link);}
+function injectStyle(){
+  if(!document.querySelector('link[data-gac-result-capture-style]')){const link=document.createElement('link');link.rel='stylesheet';link.href='/gac-attempt-result-ui.css?v=20260821-b09b';link.dataset.gacResultCaptureStyle='true';document.head.appendChild(link);}
+  if(!document.querySelector('link[data-gac-manual-execution-style]')){const link=document.createElement('link');link.rel='stylesheet';link.href='/gac-manual-execution.css?v=20260821-exec1';link.dataset.gacManualExecutionStyle='true';document.head.appendChild(link);}
+}
 function schedule(delay=80,force=false){clearTimeout(state.timer);state.timer=setTimeout(()=>void load(force),Math.max(0,delay));}
 
 function bind(){
   injectStyle();
   document.addEventListener('click',(event)=>{
-    const legacy=event.target.closest?.('#gacBoardPlannerGrid [data-war-action="win"],#gacBoardPlannerGrid [data-war-action="loss"]');
-    if(legacy){event.preventDefault();event.stopImmediatePropagation();const card=legacy.closest('.gac-saved-board-card');if(card)openResult(card,clean(legacy.dataset.warAction).toLowerCase());return;}
-    const close=event.target.closest?.('[data-gac-result-close]');if(close){const card=close.closest('.gac-saved-board-card');if(card)closeResult(card);return;}
-    const submit=event.target.closest?.('[data-gac-result-submit]');if(submit){const card=submit.closest('.gac-saved-board-card');if(card)void submitResult(card);return;}
+    const manual=event.target.closest?.(MANUAL_RESULT_SELECTOR);
+    if(manual){event.preventDefault();event.stopImmediatePropagation();const card=battleCard(manual);if(card)void toggleOutcomeChoice(card);return;}
+    const choiceStatus=event.target.closest?.('[data-gac-result-choice-status]');
+    if(choiceStatus){const card=battleCard(choiceStatus);if(card)openResult(card,clean(choiceStatus.dataset.gacResultChoiceStatus).toLowerCase());return;}
+    const choiceClose=event.target.closest?.('[data-gac-result-choice-close]');if(choiceClose){const card=battleCard(choiceClose);if(card)closeChoice(card);return;}
+    const legacy=event.target.closest?.(RESULT_ACTION_SELECTOR);
+    if(legacy){event.preventDefault();event.stopImmediatePropagation();const card=battleCard(legacy);if(card)openResult(card,clean(legacy.dataset.warAction).toLowerCase());return;}
+    const close=event.target.closest?.('[data-gac-result-close]');if(close){const card=battleCard(close);if(card)closeResult(card);return;}
+    const submit=event.target.closest?.('[data-gac-result-submit]');if(submit){const card=battleCard(submit);if(card)void submitResult(card);return;}
   },true);
   document.addEventListener('input',(event)=>{
     const panel=event.target?.closest?.('[data-gac-result-capture]');if(!panel)return;const id=Number(panel.dataset.gacResultCapture);const draft=state.drafts.get(id);if(!draft)return;
     if(event.target.matches('[data-gac-result-banners]')){draft.banners=event.target.value;return;}
-    if(event.target.matches('[data-gac-result-survivor]')){const baseId=normalizeId(event.target.dataset.gacResultSurvivor);if(event.target.checked)draft.survivors.add(baseId);else draft.survivors.delete(baseId);const card=panel.closest('.gac-saved-board-card');if(card)renderCard(card);}
+    if(event.target.matches('[data-gac-result-survivor]')){const baseId=normalizeId(event.target.dataset.gacResultSurvivor);if(event.target.checked)draft.survivors.add(baseId);else draft.survivors.delete(baseId);const card=battleCard(panel);if(card)renderCard(card);}
   },true);
   document.addEventListener('change',(event)=>{
-    const loss=event.target?.closest?.('[data-gac-result-loss-state]');if(loss){const panel=loss.closest('[data-gac-result-capture]');const id=Number(panel?.dataset?.gacResultCapture);const draft=state.drafts.get(id);if(draft){draft.lossState=loss.value==='survivors-confirmed'?'survivors-confirmed':'unknown';if(draft.lossState==='unknown')draft.survivors.clear();const card=panel.closest('.gac-saved-board-card');if(card)renderCard(card);}return;}
-    if(['allyCode','gacOpponentCode','gacBracketRound','gacMode'].includes(event.target?.id)||event.target?.matches?.('[data-gacv2-opponent],[data-gacv2-round],[data-gacv2-mode]'))schedule(120,true);
+    const loss=event.target?.closest?.('[data-gac-result-loss-state]');if(loss){const panel=loss.closest('[data-gac-result-capture]');const id=Number(panel?.dataset?.gacResultCapture);const draft=state.drafts.get(id);if(draft){draft.lossState=loss.value==='survivors-confirmed'?'survivors-confirmed':'unknown';if(draft.lossState==='unknown')draft.survivors.clear();const card=battleCard(panel);if(card)renderCard(card);}return;}
+    if(['allyCode','gacOpponentCode','gacBracketRound','gacMode'].includes(event.target?.id)||event.target?.matches?.('[data-gacv2-opponent],[data-gacv2-round],[data-gacv2-mode],[data-gac-board-format]'))schedule(120,true);
   },true);
-  window.addEventListener('gac-saved-board-rendered',()=>schedule(60,true));window.addEventListener('gac-war-room-updated',()=>schedule(90,true));window.addEventListener('gac-board-evidence-updated',()=>schedule(100,true));document.addEventListener('DOMContentLoaded',()=>schedule(200,true),{once:true});schedule(400,true);
+  window.addEventListener('gac-saved-board-rendered',()=>schedule(60,true));
+  window.addEventListener('gac-visible-board-rendered',()=>schedule(60,true));
+  window.addEventListener('gac-war-room-updated',()=>schedule(90,true));
+  window.addEventListener('gac-board-evidence-updated',()=>schedule(100,true));
+  document.addEventListener('DOMContentLoaded',()=>schedule(200,true),{once:true});schedule(400,true);
 }
 if(typeof document!=='undefined')bind();
 
-export { identity, openResult, renderAll, resultDefenseMembers, submitResult };
+export { BATTLE_CARD_SELECTOR, MANUAL_RESULT_SELECTOR, RESULT_ACTION_SELECTOR, battleCard, identity, openResult, renderAll, resultDefenseMembers, submitResult, toggleOutcomeChoice };
