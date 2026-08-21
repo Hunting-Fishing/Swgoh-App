@@ -15,11 +15,13 @@ test('GAC v3 loads additively through the existing asset-resilience chain', () =
   assert.match(v3, /command-center-layout-v3\.css/);
 });
 
-test('GAC v3 removes duplicate workspace scaffolding only after v2 exists', () => {
+test('GAC v3 preserves older reference scaffolding after the enhanced workspace exists', () => {
   assert.match(v3, /document\.querySelector\('\[data-gacv2-root\]'\)/);
   assert.match(v3, /gacv3-superseded/);
   assert.match(v3, /#workspaceGacBody/);
-  assert.match(layout, /\.gacv3-superseded\s*\{\s*display:\s*none\s*!important/);
+  assert.match(layout, /Enhancement-only rule: preserve older\/reference GAC information/);
+  assert.match(layout, /\.gacv3-superseded\s*\{[^}]*display:\s*block\s*!important/s);
+  assert.doesNotMatch(layout, /\.gacv3-superseded\s*\{[^}]*display:\s*none/s);
 });
 
 test('tactical HUD exposes observable War Room state without inventing hidden-board evidence', () => {
