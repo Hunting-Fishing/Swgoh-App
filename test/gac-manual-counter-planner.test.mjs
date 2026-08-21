@@ -97,6 +97,17 @@ test('manual UI explicitly removes automatic bracket dependency and shows reques
   assert.doesNotMatch(ui, /\/api\/gac\/current-opponent/);
 });
 
+test('manual selection guard keeps portrait clicks inside planner actions', () => {
+  const model = fs.readFileSync(path.join(root, 'public/gac-manual-counter-planner-model.js'), 'utf8');
+  const guard = fs.readFileSync(path.join(root, 'public/gac-manual-selection-guard.js'), 'utf8');
+  assert.match(model, /import '\.\/gac-manual-selection-guard\.js';/);
+  assert.match(guard, /window\.addEventListener\('click'/);
+  assert.match(guard, /\[data-gac-manual-counter-planner\]/);
+  assert.match(guard, /\[data-inspect-base-id\]/);
+  assert.match(guard, /button\.dispatchEvent\(replay\)/);
+  assert.doesNotMatch(guard, /document\.addEventListener\('click'/);
+});
+
 test('manual planner is loaded before legacy advanced GAC helpers remain available', () => {
   const loader = fs.readFileSync(path.join(root, 'public/asset-resilience.js'), 'utf8');
   assert.match(loader, /import '\.\/gac-manual-counter-planner\.js';/);
