@@ -1,0 +1,296 @@
+/* SWGOH Command Center — populated-state responsive polish.
+   Enhancement-only. This layer targets shared navigation, Guild and TB/ROTE surfaces only. */
+
+:root {
+  --qa-gold: #ffd45f;
+  --qa-orange: #ff9b4a;
+  --qa-cyan: #6fe5ff;
+  --qa-blue: #66a9ff;
+  --qa-purple: #b996ff;
+  --qa-green: #74e8b5;
+  --qa-text: #f4f9ff;
+  --qa-muted: #9eb5c8;
+}
+
+/* Shared workspace command rail */
+.workspace-tabs {
+  gap: 9px;
+  padding: 10px 4px 14px;
+  scroll-padding-inline: 10px;
+  scroll-snap-type: x proximity;
+  overscroll-behavior-inline: contain;
+  scrollbar-gutter: stable;
+  border-bottom: 1px solid rgba(109, 213, 255, .14);
+  background:
+    radial-gradient(circle at 18% 0%, rgba(87, 205, 255, .10), transparent 18rem),
+    linear-gradient(180deg, rgba(8, 23, 40, .98), rgba(6, 17, 31, .95));
+}
+
+.workspace-tab {
+  scroll-snap-align: start;
+  min-height: 46px;
+  padding: 10px 15px;
+  border-color: rgba(104, 194, 241, .25);
+  border-radius: 12px;
+  background: linear-gradient(145deg, rgba(15, 39, 63, .95), rgba(8, 24, 42, .96));
+  color: #b7cadb;
+  font-size: .82rem;
+  font-weight: 850;
+  box-shadow: inset 0 1px rgba(255,255,255,.025);
+}
+
+.workspace-tab:hover {
+  border-color: rgba(111, 229, 255, .56);
+  background: linear-gradient(145deg, rgba(22, 59, 87, .97), rgba(10, 29, 48, .97));
+  color: #f5fbff;
+}
+
+.workspace-tab.active {
+  border-color: rgba(255, 218, 101, .62);
+  background: linear-gradient(135deg, var(--qa-gold), #e9ad39);
+  color: #172738;
+  box-shadow: inset 0 1px rgba(255,255,255,.48), 0 7px 18px rgba(116, 78, 13, .18);
+}
+
+.workspace-tab:focus-visible,
+.guild-pro-enhanced button:focus-visible,
+.guild-pro-enhanced input:focus-visible,
+.guild-pro-enhanced select:focus-visible,
+.tb-rote-phase-deck button:focus-visible,
+.rote-map-card button:focus-visible,
+.rote-mission-board button:focus-visible {
+  outline: 3px solid rgba(111, 229, 255, .42);
+  outline-offset: 2px;
+}
+
+.workspace-intro h2 {
+  font-size: clamp(1.45rem, 2.1vw, 1.8rem);
+}
+
+.workspace-intro p,
+.workspace-note {
+  font-size: .86rem;
+  line-height: 1.58;
+}
+
+.workspace-table {
+  font-size: .82rem;
+}
+
+.workspace-table th {
+  font-size: .69rem;
+}
+
+/* Guild populated-state QA */
+.guild-pro-enhanced .guild-page-tabs {
+  scroll-padding-inline: 8px;
+  overscroll-behavior-inline: contain;
+}
+
+.guild-pro-enhanced .guild-page-tabs button {
+  scroll-snap-align: start;
+}
+
+.guild-pro-enhanced .guild-members-table-wrap {
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable both-edges;
+}
+
+.guild-pro-enhanced .guild-members-table {
+  min-width: 860px;
+}
+
+.guild-pro-enhanced .guild-members-table th {
+  font-size: .72rem;
+  white-space: nowrap;
+}
+
+.guild-pro-enhanced .guild-members-table td,
+.guild-pro-enhanced .guild-members-table td small,
+.guild-pro-enhanced .guild-roster-state {
+  font-size: .74rem;
+}
+
+.guild-pro-enhanced .guild-members-table td:first-child {
+  min-width: 190px;
+}
+
+.guild-pro-enhanced .guild-member-detail {
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.guild-pro-enhanced .guild-top-units > div,
+.guild-pro-enhanced .guild-rank-list > div {
+  min-height: 48px;
+}
+
+.guild-pro-enhanced .guild-change strong,
+.guild-pro-enhanced .guild-change small,
+.guild-pro-enhanced .guild-gl-list span {
+  font-size: .74rem;
+}
+
+/* TB / ROTE populated-state QA */
+.tb-phase-tabs,
+.tb-legacy-phase-tabs,
+.rote-view-switcher {
+  scroll-padding-inline: 8px;
+  overscroll-behavior-inline: contain;
+}
+
+.tb-phase-tab span,
+.tb-phase-tab small,
+.tb-phase-deck-legend span,
+.rote-map-legend span,
+.rote-map-phase-label,
+.rote-map-core small,
+.tb-phase-territory-copy > span:first-child,
+.tb-phase-territory-readiness b,
+.tb-phase-territory-readiness small,
+.tb-phase-mission-icons > b,
+.rote-board-status,
+.rote-board-summary span,
+.rote-board-section-head span,
+.rote-board-section-head button,
+.rote-gate-rank,
+.rote-gate-unit > span,
+.rote-gate-unit button,
+.rote-candidate small,
+.tb-legacy-phase-tabs small,
+.tb-legacy-territory-card small,
+.tb-legacy-territory-card em,
+.tb-legacy-territory-card > b,
+.tb-information-layout .dsgeo-map .dsgeo-territory small,
+.tb-information-layout .dsgeo-map .dsgeo-territory b {
+  font-size: .72rem;
+  line-height: 1.35;
+}
+
+.tb-phase-territory-copy > strong,
+.rote-candidate strong,
+.tb-legacy-territory-card strong {
+  font-size: .86rem;
+}
+
+.rote-gate-unit > strong {
+  font-size: .78rem;
+  line-height: 1.25;
+}
+
+.rote-map-boundary,
+.rote-boundary-note {
+  max-width: 78ch;
+}
+
+.rote-mission-chips span {
+  min-height: 34px;
+  font-size: .75rem;
+}
+
+.rote-candidate {
+  min-height: 64px;
+}
+
+.rote-candidate-portrait {
+  width: 46px;
+  height: 46px;
+}
+
+.tb-legacy-territory-card,
+.tb-information-layout .dsgeo-map .dsgeo-territory {
+  min-height: 80px;
+}
+
+@media (max-width: 1100px) {
+  .workspace-tabs {
+    position: sticky;
+    top: 0;
+  }
+
+  .guild-pro-enhanced .guild-members-table {
+    min-width: 820px;
+  }
+
+  .guild-pro-enhanced .guild-page-tabs {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    scroll-snap-type: x proximity;
+  }
+
+  .guild-pro-enhanced .guild-page-tabs button {
+    flex: 0 0 auto;
+  }
+}
+
+@media (max-width: 760px) {
+  .workspace-tabs {
+    margin-inline: -8px;
+    padding-inline: 8px;
+  }
+
+  .workspace-tab {
+    min-height: 48px;
+    padding-inline: 14px;
+    font-size: .84rem;
+  }
+
+  .guild-pro-enhanced .guild-members-table-wrap {
+    margin-inline: -4px;
+  }
+
+  .tb-phase-tabs,
+  .tb-legacy-phase-tabs,
+  .rote-view-switcher {
+    scrollbar-width: thin;
+  }
+
+  .tb-phase-tab {
+    flex-basis: 154px;
+  }
+
+  .rote-candidate {
+    grid-template-columns: 46px minmax(0, 1fr) auto;
+  }
+}
+
+@media (max-width: 520px) {
+  .workspace-intro {
+    padding: 17px;
+  }
+
+  .workspace-intro p,
+  .workspace-note {
+    font-size: .84rem;
+  }
+
+  .guild-pro-enhanced .guild-page-meta span {
+    min-height: 38px;
+  }
+
+  .guild-pro-enhanced .guild-members-table {
+    min-width: 780px;
+  }
+
+  .rote-candidate {
+    grid-template-columns: 42px minmax(0, 1fr);
+  }
+
+  .rote-candidate > :last-child {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workspace-tab,
+  .guild-pro-enhanced *,
+  .tb-rote-phase-deck *,
+  .rote-map-card *,
+  .rote-mission-board * {
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}

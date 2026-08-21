@@ -5,10 +5,10 @@ import { readFile } from 'node:fs/promises';
 const css = await readFile(new URL('../public/onboarding.css', import.meta.url), 'utf8');
 const html = await readFile(new URL('../public/onboarding/index.html', import.meta.url), 'utf8');
 
-test('verified onboarding gets a dedicated compact desktop layout', () => {
+test('verified onboarding keeps the dedicated responsive success layout', () => {
   assert.match(css, /body:has\(\[data-view="verified"\]:not\(\.hidden\)\)/);
   assert.match(css, /\.verified-grid\s*\{[^}]*grid-template-columns:\s*repeat\(4/s);
-  assert.match(css, /\.verified-stat\s*\{[^}]*min-height:\s*78px/s);
+  assert.match(css, /\.verified-stat\s*\{[^}]*min-height:\s*108px/s);
 });
 
 test('onboarding still exposes all five verified identity evidence blocks', () => {
@@ -23,6 +23,6 @@ test('verified primary destinations remain visible', () => {
   assert.match(html, /Player Command Center/);
 });
 
-test('onboarding cache-busts the compact v2 stylesheet', () => {
-  assert.match(html, /onboarding\.css\?v=20260820-ui2/);
+test('onboarding cache-busts the bright ui3 stylesheet', () => {
+  assert.match(html, /onboarding\.css\?v=20260821-ui3/);
 });

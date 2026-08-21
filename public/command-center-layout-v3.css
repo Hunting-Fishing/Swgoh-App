@@ -93,11 +93,15 @@ main {
 }
 
 .workspace-panel[data-workspace-panel="gac"].gacv3-workspace {
-  gap: 0;
+  gap: 8px;
 }
 
+/* Enhancement-only rule: preserve older/reference GAC information instead of hiding it. */
 .workspace-panel[data-workspace-panel="gac"].gacv3-workspace > .gacv3-superseded {
-  display: none !important;
+  display: block !important;
+  margin-top: 8px;
+  opacity: .82;
+  filter: saturate(.88);
 }
 
 .workspace-panel[data-workspace-panel="gac"].gacv3-workspace > [data-gacv2-root] {

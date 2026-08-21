@@ -1,0 +1,585 @@
+/* SWGOH Command Center — TB / ROTE professional tactical UI layer.
+   Enhancement-only: preserves existing phase, territory, mission, operation, readiness and audit information. */
+:root {
+  --tbpro-bg: #06111f;
+  --tbpro-panel: rgba(9, 27, 45, .94);
+  --tbpro-line: rgba(104, 202, 246, .23);
+  --tbpro-cyan: #6de4ff;
+  --tbpro-gold: #ffd361;
+  --tbpro-red: #ff7892;
+  --tbpro-purple: #b995ff;
+  --tbpro-green: #77e8b7;
+  --tbpro-text: #f4f9ff;
+  --tbpro-muted: #9db4c8;
+}
+
+.tb-rote-phase-deck,
+.rote-map-card,
+.rote-mission-board,
+.tb-legacy-phase-deck {
+  border-color: var(--tbpro-line) !important;
+  background:
+    radial-gradient(circle at 92% 0%, rgba(100, 187, 255, .08), transparent 22rem),
+    linear-gradient(145deg, rgba(11, 32, 53, .96), rgba(6, 18, 32, .98)) !important;
+  box-shadow: 0 16px 36px rgba(0,0,0,.18), inset 0 1px rgba(255,255,255,.025);
+}
+
+.tb-rote-phase-deck {
+  gap: 16px;
+  padding: 20px;
+  border: 1px solid var(--tbpro-line);
+  border-radius: 18px;
+}
+
+.tb-phase-deck-head {
+  gap: 20px;
+  align-items: center;
+}
+
+.tb-phase-deck-head h3,
+.rote-map-toolbar h3,
+.rote-board-head h3 {
+  color: var(--tbpro-text);
+  font-size: clamp(1.3rem, 2vw, 1.75rem);
+  letter-spacing: -.02em;
+}
+
+.tb-phase-deck-head p,
+.rote-board-head p,
+.rote-map-boundary,
+.rote-boundary-note {
+  color: var(--tbpro-muted);
+  font-size: .82rem;
+  line-height: 1.55;
+}
+
+.tb-phase-deck-legend {
+  gap: 7px;
+}
+
+.tb-phase-deck-legend span,
+.rote-map-legend span {
+  min-height: 30px;
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 9px;
+  border-radius: 999px;
+  font-size: .68rem;
+  font-weight: 900;
+}
+
+.tb-phase-deck-legend .dark,
+.rote-map-legend .blocked { background: rgba(132, 43, 62, .13); }
+.tb-phase-deck-legend .mixed,
+.rote-map-legend .thin { background: rgba(126, 91, 20, .13); }
+.tb-phase-deck-legend .light,
+.rote-map-legend .ready { background: rgba(27, 102, 130, .14); }
+.tb-phase-deck-legend .bonus { background: rgba(92, 58, 148, .14); }
+.rote-map-legend .deep { background: rgba(29, 108, 78, .14); }
+
+.tb-phase-tabs {
+  gap: 8px;
+}
+
+.tb-phase-tab {
+  min-height: 76px;
+  gap: 4px;
+  padding: 11px 12px;
+  border-color: rgba(101, 188, 234, .18);
+  border-radius: 12px;
+  background: linear-gradient(145deg, rgba(13, 35, 57, .94), rgba(7, 20, 35, .96));
+  box-shadow: inset 0 1px rgba(255,255,255,.02);
+}
+
+.tb-phase-tab:hover {
+  border-color: rgba(109, 226, 255, .46);
+  background: linear-gradient(145deg, rgba(18, 54, 80, .96), rgba(8, 23, 39, .96));
+}
+
+.tb-phase-tab.active {
+  border-color: rgba(255, 213, 96, .52);
+  background:
+    radial-gradient(circle at 100% 0%, rgba(255, 210, 90, .16), transparent 12rem),
+    linear-gradient(145deg, rgba(57, 47, 22, .92), rgba(10, 27, 43, .96));
+  box-shadow: inset 0 0 0 1px rgba(255, 215, 102, .08), 0 8px 18px rgba(0,0,0,.14);
+}
+
+.tb-phase-tab span {
+  color: var(--tbpro-cyan);
+  font-size: .70rem;
+}
+
+.tb-phase-tab.active span { color: var(--tbpro-gold); }
+
+.tb-phase-tab strong {
+  color: #eff7ff;
+  font-size: .94rem;
+}
+
+.tb-phase-tab small {
+  color: #829bb0;
+  font-size: .67rem;
+  line-height: 1.3;
+}
+
+.tb-phase-territory-grid {
+  gap: 11px;
+}
+
+.tb-phase-territory-card {
+  grid-template-columns: 76px minmax(0, 1fr) auto;
+  gap: 13px;
+  min-height: 102px;
+  padding: 13px;
+  border-color: rgba(101, 188, 234, .18);
+  border-radius: 15px;
+  background:
+    radial-gradient(circle at 0% 50%, rgba(82, 181, 235, .08), transparent 12rem),
+    linear-gradient(145deg, rgba(12, 32, 52, .97), rgba(6, 18, 32, .98));
+}
+
+.tb-phase-territory-card:hover,
+.tb-phase-territory-card.selected {
+  border-color: rgba(111, 226, 255, .58);
+  box-shadow: 0 0 0 2px rgba(110, 223, 238, .07), 0 14px 32px rgba(0,0,0,.24);
+}
+
+.tb-phase-territory-card.selected {
+  background:
+    radial-gradient(circle at 0% 50%, rgba(87, 206, 255, .15), transparent 13rem),
+    linear-gradient(145deg, rgba(18, 48, 74, .98), rgba(7, 22, 38, .98));
+}
+
+.tb-phase-territory-art {
+  width: 72px;
+  height: 72px;
+}
+
+.tb-phase-territory-image {
+  width: 68px;
+  height: 68px;
+}
+
+.tb-phase-territory-copy {
+  gap: 4px;
+}
+
+.tb-phase-territory-copy > span:first-child {
+  color: #86a0b7;
+  font-size: .67rem;
+}
+
+.tb-phase-territory-copy > strong {
+  color: #f2f8ff;
+  font-size: .98rem;
+}
+
+.tb-phase-territory-copy > small {
+  color: #8ea3b7;
+  font-size: .72rem;
+}
+
+.tb-phase-territory-readiness {
+  min-width: 82px;
+  gap: 3px;
+}
+
+.tb-phase-territory-readiness b {
+  padding: 5px 7px;
+  font-size: .62rem;
+}
+
+.tb-phase-territory-readiness strong {
+  color: #f2f8ff;
+  font-size: 1.2rem;
+}
+
+.tb-phase-territory-readiness small {
+  color: #8299ae;
+  font-size: .65rem;
+}
+
+.tb-phase-mission-icons {
+  min-height: 25px;
+  gap: 5px;
+}
+
+.tb-phase-mission-icons > span {
+  width: 24px;
+  height: 24px;
+  border-color: rgba(107, 194, 236, .20);
+  background: rgba(10, 29, 48, .88);
+}
+
+.tb-phase-mission-icon {
+  width: 19px;
+  height: 19px;
+}
+
+.tb-phase-mission-icons > b {
+  color: #91a8bb;
+  font-size: .67rem;
+}
+
+.rote-map-card {
+  padding: 20px;
+  border: 1px solid var(--tbpro-line);
+  border-radius: 18px;
+}
+
+.rote-map-toolbar {
+  margin-bottom: 15px;
+}
+
+.rote-view-switcher {
+  gap: 7px;
+  padding: 7px;
+  border-color: rgba(102, 194, 240, .22);
+  border-radius: 13px;
+  background: rgba(5, 20, 35, .92);
+}
+
+.rote-view-switcher button {
+  min-height: 40px;
+  padding: 8px 13px;
+  border-radius: 9px;
+  color: #a9bed0;
+  font-size: .76rem;
+  font-weight: 850;
+}
+
+.rote-view-switcher button.active {
+  border-color: rgba(255, 215, 99, .48);
+  background: linear-gradient(135deg, #ffd965, #e8af3d);
+  color: #172a38;
+}
+
+.rote-galaxy-map {
+  min-height: 720px;
+  border-color: rgba(107, 221, 255, .34);
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at 50% 102%, rgba(34,153,189,.27), transparent 31%),
+    radial-gradient(circle at 18% 22%, rgba(147,76,219,.21), transparent 24%),
+    radial-gradient(circle at 78% 18%, rgba(35,133,220,.20), transparent 25%),
+    radial-gradient(circle at 52% 48%, rgba(16,57,91,.57), rgba(5,11,23,.94) 58%),
+    #06101e;
+  box-shadow: inset 0 0 90px rgba(0,0,0,.44), 0 16px 34px rgba(0,0,0,.18);
+}
+
+.rote-map-phase-label {
+  color: rgba(202, 222, 246, .52);
+  font-size: .68rem;
+  letter-spacing: .15em;
+}
+
+.rote-map-core {
+  width: 108px;
+  height: 108px;
+  border-color: rgba(112, 225, 243, .52);
+  background: radial-gradient(circle, #1b5275, #091625 68%);
+  box-shadow: 0 0 42px rgba(84,223,244,.27), inset 0 0 25px rgba(111, 219, 255, .06);
+}
+
+.rote-map-core span { font-size: .84rem; }
+.rote-map-core small { font-size: .66rem; }
+
+.rote-planet-node {
+  width: 150px;
+  min-height: 74px;
+  padding: 9px 11px 9px 64px;
+  border-color: rgba(106, 187, 228, .26);
+  border-radius: 15px;
+  background: rgba(7, 22, 38, .92);
+}
+
+.rote-planet-node:hover,
+.rote-planet-node.selected {
+  border-color: rgba(116, 231, 244, .72);
+  box-shadow: 0 0 0 3px rgba(115,230,241,.08), 0 16px 40px rgba(0,0,0,.40);
+}
+
+.rote-planet-node.selected {
+  background: linear-gradient(145deg, rgba(20, 57, 83, .96), rgba(9, 25, 43, .96));
+}
+
+.rote-planet-orb {
+  left: 11px;
+  width: 44px;
+  height: 44px;
+}
+
+.rote-planet-copy strong {
+  color: #f1f7ff;
+  font-size: .86rem;
+}
+
+.rote-planet-copy small {
+  color: #93a8bd;
+  font-size: .67rem;
+}
+
+/* Existing fan-map detail remains accessible on hover/selection; restore descriptive small text. */
+.tb-rote-fan-map .rote-planet-node.tb-rote-map-pin .rote-planet-copy {
+  max-width: 170px;
+  padding: 6px 8px;
+}
+
+.tb-rote-fan-map .rote-planet-copy strong { font-size: .72rem; }
+.tb-rote-fan-map .rote-planet-copy small {
+  display: block !important;
+  margin-top: 3px;
+  color: #9ab0c3;
+  font-size: .62rem;
+  white-space: normal;
+}
+
+.rote-mission-board {
+  gap: 17px;
+  padding: 20px;
+  border: 1px solid var(--tbpro-line);
+  border-radius: 18px;
+}
+
+.rote-board-status {
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 9px;
+  font-size: .69rem;
+}
+
+.rote-board-summary {
+  gap: 9px;
+}
+
+.rote-board-summary > div {
+  min-height: 76px;
+  padding: 12px;
+  border-color: rgba(99, 183, 226, .18);
+  border-radius: 12px;
+  background: linear-gradient(145deg, rgba(13, 35, 56, .94), rgba(7, 20, 34, .96));
+}
+
+.rote-board-summary span {
+  color: #89a1b7;
+  font-size: .66rem;
+  font-weight: 900;
+}
+
+.rote-board-summary strong {
+  margin-top: 6px;
+  color: #f3f8ff;
+  font-size: 1.05rem;
+}
+
+.rote-board-section {
+  gap: 12px;
+  padding-top: 10px;
+  border-color: rgba(77, 126, 157, .28);
+}
+
+.rote-board-section-head span {
+  color: var(--tbpro-cyan);
+  font-size: .69rem;
+}
+
+.rote-board-section-head h4 {
+  color: #edf6ff;
+  font-size: 1.04rem;
+}
+
+.rote-board-section-head > b {
+  color: #c5d7e6;
+  font-size: .86rem;
+}
+
+.rote-board-section-head button {
+  min-height: 36px;
+  padding: 7px 10px;
+  font-size: .72rem;
+}
+
+.rote-mission-chips {
+  gap: 7px;
+}
+
+.rote-mission-chips span {
+  min-height: 31px;
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 9px;
+  border-color: rgba(104, 188, 229, .20);
+  background: rgba(12, 31, 51, .87);
+  color: #d2e0ec;
+  font-size: .72rem;
+}
+
+.rote-gate-core {
+  gap: 8px;
+}
+
+.rote-gate-unit {
+  min-height: 145px;
+  padding: 10px;
+  border-color: rgba(103, 188, 231, .18);
+  border-radius: 13px;
+  background: linear-gradient(145deg, rgba(12, 32, 52, .96), rgba(6, 19, 33, .98));
+}
+
+.rote-gate-rank {
+  color: var(--tbpro-cyan);
+  font-size: .63rem;
+}
+
+.rote-gate-portrait {
+  width: 58px;
+  height: 58px;
+  border-color: rgba(106, 202, 242, .34);
+}
+
+.rote-gate-unit > strong {
+  color: #eef7ff;
+  font-size: .74rem;
+}
+
+.rote-gate-unit > span {
+  color: #879caf;
+  font-size: .66rem;
+}
+
+.rote-gate-unit button {
+  min-height: 34px;
+  font-size: .66rem;
+}
+
+.rote-candidate-grid {
+  gap: 8px;
+}
+
+.rote-candidate {
+  grid-template-columns: 42px minmax(0,1fr) auto;
+  gap: 10px;
+  min-height: 58px;
+  padding: 9px;
+  border-color: rgba(101, 184, 226, .18);
+  border-radius: 10px;
+  background: rgba(8, 25, 42, .86);
+}
+
+.rote-candidate:hover {
+  border-color: rgba(103, 220, 245, .52);
+  background: rgba(13, 39, 61, .92);
+}
+
+.rote-candidate-portrait {
+  width: 42px;
+  height: 42px;
+}
+
+.rote-candidate strong { font-size: .79rem; }
+.rote-candidate small { font-size: .67rem; }
+
+.tb-legacy-phase-deck {
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--tbpro-line);
+  border-radius: 14px;
+}
+
+.tb-legacy-phase-tabs {
+  gap: 7px;
+}
+
+.tb-legacy-phase-tabs button {
+  min-height: 42px;
+  padding: 8px 10px;
+  border-color: rgba(102, 188, 231, .20);
+  border-radius: 9px;
+  background: rgba(8, 24, 41, .90);
+}
+
+.tb-legacy-phase-tabs button.active {
+  border-color: rgba(255, 213, 96, .46);
+  background: rgba(100, 76, 24, .18);
+}
+
+.tb-legacy-phase-tabs span { font-size: .70rem; }
+.tb-legacy-phase-tabs small { font-size: .64rem; }
+
+.tb-legacy-territory-grid {
+  gap: 8px;
+}
+
+.tb-legacy-territory-card {
+  min-height: 72px;
+  padding: 10px 11px;
+  border-color: rgba(101, 184, 226, .18);
+  border-radius: 10px;
+  background: rgba(8, 24, 41, .88);
+}
+
+.tb-legacy-territory-card strong { font-size: .82rem; }
+.tb-legacy-territory-card small,
+.tb-legacy-territory-card em { font-size: .64rem; }
+.tb-legacy-territory-card > b { font-size: .61rem; }
+
+/* Preserve the legacy territory detail text that earlier density styling hid. */
+.tb-information-layout .dsgeo-map .dsgeo-territory small {
+  display: block !important;
+  margin-top: 3px;
+  color: #8da4b8;
+  font-size: .61rem;
+  line-height: 1.2;
+}
+
+.tb-information-layout .dsgeo-map .dsgeo-territory {
+  min-height: 72px;
+}
+
+.tb-information-layout .dsgeo-map .dsgeo-territory b {
+  font-size: .62rem;
+}
+
+@media (max-width: 1200px) {
+  .tb-phase-tabs { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .rote-map-layout { grid-template-columns: 1fr; }
+  .rote-mission-board { position: static; max-height: none; }
+}
+
+@media (max-width: 900px) {
+  .tb-phase-territory-grid,
+  .tb-phase-territory-grid.bonus,
+  .tb-legacy-territory-grid { grid-template-columns: 1fr; }
+  .rote-gate-core { grid-template-columns: repeat(3, minmax(0,1fr)); }
+}
+
+@media (max-width: 760px) {
+  .tb-phase-deck-head { display: grid; }
+  .tb-phase-tabs { display: flex; overflow-x: auto; }
+  .tb-phase-tab { flex: 0 0 140px; }
+  .tb-phase-territory-card { grid-template-columns: 64px minmax(0, 1fr); }
+  .tb-phase-territory-readiness { grid-column: 1 / -1; justify-items: start; grid-template-columns: auto auto auto; align-items: center; }
+  .tb-phase-territory-art { width: 60px; height: 60px; }
+  .tb-phase-territory-image { width: 56px; height: 56px; }
+  .rote-galaxy-map { min-height: 760px; overflow-x: auto; }
+  .rote-planet-node { width: 132px; padding-left: 56px; }
+  .rote-planet-orb { width: 38px; height: 38px; left: 9px; }
+  .rote-gate-core { grid-template-columns: repeat(2, minmax(0,1fr)); }
+}
+
+@media (max-width: 520px) {
+  .tb-rote-phase-deck,
+  .rote-map-card,
+  .rote-mission-board { padding: 14px; }
+  .rote-board-summary { grid-template-columns: 1fr; }
+  .rote-gate-core { grid-template-columns: 1fr; }
+  .tb-phase-territory-card { grid-template-columns: 1fr; }
+  .tb-phase-territory-readiness { grid-column: auto; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tb-rote-phase-deck *,
+  .rote-map-card *,
+  .rote-mission-board * { transition: none !important; }
+}

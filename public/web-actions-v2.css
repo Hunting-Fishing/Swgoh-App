@@ -1,1 +1,217 @@
-.action-form select{min-height:42px;border:1px solid rgba(122,182,241,.22);border-radius:10px;background:#070d19;color:#f1f7ff;padding:9px 34px 9px 11px;font:inherit;max-width:100%}.action-form select:focus-visible,.action-form input:focus-visible,.journey-goal-toolbar input:focus-visible{outline:2px solid rgba(102,199,255,.75);outline-offset:2px}.action-card[data-action-card="tb-farm-plan"]{background:linear-gradient(145deg,rgba(9,25,41,.94),rgba(11,17,35,.9))}.action-card[data-action-card="tb-farm-plan"]:before{background:linear-gradient(90deg,#63d4ff,#9978ff,transparent)}.journey-goal-panel{margin-top:18px;padding:22px;border:1px solid rgba(139,203,255,.2);border-radius:18px;background:linear-gradient(145deg,rgba(10,22,42,.92),rgba(13,13,31,.92));box-shadow:0 18px 50px rgba(0,0,0,.2)}.journey-goal-panel h2{margin:6px 0}.journey-goal-panel p{max-width:820px;color:#aebfd4;line-height:1.55}.journey-goal-summary{display:grid;min-width:130px;padding:10px 14px;border-radius:12px;border:1px solid rgba(114,201,255,.2);background:rgba(72,142,214,.08);text-align:center}.journey-goal-summary strong{font-size:1.45rem}.journey-goal-summary span{font-size:.78rem;color:#9eb2c8}.journey-goal-toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:16px 0 8px}.journey-goal-toolbar input{min-height:42px;flex:1 1 260px;border:1px solid rgba(122,182,241,.22);border-radius:10px;background:#070d19;color:#f1f7ff;padding:9px 11px;font:inherit}.journey-goal-toolbar button{min-height:42px;border:1px solid rgba(112,192,255,.3);border-radius:10px;background:linear-gradient(180deg,#1e6ca7,#164f7a);color:#fff;padding:9px 14px;font:inherit;font-weight:750;cursor:pointer}.journey-goal-toolbar button.secondary{background:#0c1627}.journey-goal-status{min-height:25px;color:#90a7bf}.journey-goal-status.visible{padding:7px 0}.journey-goal-status.error{color:#ffaaaa}.journey-goal-groups{display:grid;gap:14px;margin-top:8px}.journey-goal-group{padding:13px;border:1px solid rgba(112,188,255,.12);border-radius:14px;background:rgba(255,255,255,.02)}.journey-goal-group-head{display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:9px}.journey-goal-group-head h3{margin:0;font-size:.96rem}.journey-goal-group-head span{color:#8299b1;font-size:.78rem}.journey-goal-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:8px}.journey-goal-card{position:relative;display:flex;align-items:center;gap:9px;min-height:64px;padding:10px;border:1px solid rgba(128,176,225,.15);border-radius:11px;background:rgba(7,13,25,.72);cursor:pointer}.journey-goal-card:hover{border-color:rgba(111,199,255,.38)}.journey-goal-card.selected{border-color:rgba(107,218,255,.48);background:linear-gradient(135deg,rgba(52,137,194,.18),rgba(98,79,187,.12))}.journey-goal-card input{position:absolute;opacity:0;pointer-events:none}.journey-goal-check{display:grid;place-items:center;flex:0 0 26px;height:26px;border-radius:50%;border:1px solid rgba(120,192,248,.3);color:#91d7ff;font-weight:900}.journey-goal-card.selected .journey-goal-check{background:#1f729f;color:#fff}.journey-goal-copy{display:grid;gap:3px;min-width:0}.journey-goal-copy strong{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.journey-goal-copy small{color:#8499b1}.journey-goal-card b{position:absolute;top:5px;right:6px;color:#ffd47c;font-size:.57rem;letter-spacing:.08em}.personalization-strip{display:grid;gap:4px;margin:12px 0;padding:13px;border:1px solid rgba(100,218,255,.26);border-radius:13px;background:linear-gradient(90deg,rgba(25,112,159,.13),rgba(100,75,170,.09))}.personalization-strip strong{color:#bcecff}.personalization-strip span{color:#e3f4ff}.personalization-strip small{color:#91a7bf}.personalization-strip.fallback{border-color:rgba(255,194,98,.24);background:rgba(116,72,10,.08)}.my-goal-badge{display:inline-flex;margin-left:5px;padding:3px 7px;border:1px solid rgba(113,232,255,.45);border-radius:999px;background:rgba(52,166,204,.14);color:#a9efff;font-size:.67rem;letter-spacing:.07em}.attempt-card.my-goal-farm{border-color:rgba(97,217,255,.34);box-shadow:inset 3px 0 rgba(86,209,255,.45)}.attempt-chip.tracked{border-color:rgba(105,230,255,.4);background:rgba(44,157,198,.13);color:#d9f8ff}@media(max-width:700px){.action-form label,.action-form select,.action-form input{width:100%}.journey-goal-panel{padding:16px}.journey-goal-toolbar{display:grid}.journey-goal-toolbar input,.journey-goal-toolbar button{width:100%}.journey-goal-grid{grid-template-columns:1fr}.journey-goal-summary{min-width:0}}
+.action-form select {
+  min-height: 46px;
+  border: 1px solid rgba(110,231,255,.24);
+  border-radius: 12px;
+  background: rgba(5,8,22,.78);
+  color: #f1f7ff;
+  padding: 10px 36px 10px 12px;
+  font: inherit;
+  max-width: 100%;
+}
+
+.action-form select:focus-visible,
+.action-form input:focus-visible,
+.journey-goal-toolbar input:focus-visible {
+  outline: 2px solid rgba(110,231,255,.8);
+  outline-offset: 2px;
+}
+
+.action-card[data-action-card="tb-farm-plan"] {
+  background:
+    radial-gradient(circle at 100% 0%, rgba(180,140,255,.12), transparent 18rem),
+    linear-gradient(145deg, rgba(21,35,67,.95), rgba(15,18,43,.92));
+}
+
+.action-card[data-action-card="tb-farm-plan"]::before {
+  background: linear-gradient(90deg, #6ee7ff, #b48cff, #ff72b7, transparent 85%);
+}
+
+.journey-goal-panel {
+  position: relative;
+  overflow: hidden;
+  margin-top: 18px;
+  padding: 24px;
+  border: 1px solid rgba(180,140,255,.25);
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at 95% 0%, rgba(180,140,255,.18), transparent 23rem),
+    radial-gradient(circle at 0% 100%, rgba(255,213,95,.08), transparent 18rem),
+    linear-gradient(145deg, rgba(23,28,60,.94), rgba(13,14,34,.94));
+  box-shadow: 0 20px 54px rgba(0,0,0,.22), inset 0 1px 0 rgba(255,255,255,.055);
+}
+
+.journey-goal-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 3px;
+  background: linear-gradient(90deg, #ffd55f, #ff8a3d, #b48cff, #6ee7ff);
+}
+
+.journey-goal-panel h2 { margin: 6px 0; font-size: clamp(1.45rem, 3vw, 2rem); }
+.journey-goal-panel p { max-width: 840px; color: #b9c7d9; line-height: 1.58; }
+
+.journey-goal-summary {
+  display: grid;
+  min-width: 150px;
+  padding: 12px 15px;
+  border-radius: 14px;
+  border: 1px solid rgba(110,231,255,.22);
+  background: linear-gradient(145deg, rgba(110,231,255,.09), rgba(180,140,255,.06));
+  text-align: center;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.045);
+}
+
+.journey-goal-summary strong { font-size: 1.55rem; color: #f5fbff; }
+.journey-goal-summary span { font-size: .76rem; color: #9fb2c8; }
+
+.journey-goal-toolbar {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin: 18px 0 9px;
+  padding: 12px;
+  border: 1px solid rgba(255,255,255,.07);
+  border-radius: 15px;
+  background: rgba(255,255,255,.03);
+}
+
+.journey-goal-toolbar input {
+  min-height: 46px;
+  flex: 1 1 280px;
+  border: 1px solid rgba(110,231,255,.24);
+  border-radius: 12px;
+  background: rgba(5,8,22,.76);
+  color: #f1f7ff;
+  padding: 10px 12px;
+  font: inherit;
+}
+
+.journey-goal-toolbar button {
+  min-height: 46px;
+  border: 1px solid rgba(255,229,143,.58);
+  border-radius: 12px;
+  background: linear-gradient(135deg, #ffe27a, #ffb52d 58%, #ff8a3d);
+  color: #251707;
+  padding: 10px 15px;
+  font: inherit;
+  font-size: .76rem;
+  font-weight: 950;
+  cursor: pointer;
+  box-shadow: 0 10px 24px rgba(255,138,61,.14);
+}
+
+.journey-goal-toolbar button.secondary {
+  border-color: rgba(110,231,255,.24);
+  background: linear-gradient(135deg, rgba(46,82,113,.9), rgba(31,39,78,.9));
+  color: #ddf7ff;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.07);
+}
+
+.journey-goal-status { min-height: 25px; color: #9eb0c5; }
+.journey-goal-status.visible { padding: 7px 0; }
+.journey-goal-status.error { color: #ffb5bc; }
+.journey-goal-groups { display: grid; gap: 14px; margin-top: 9px; }
+
+.journey-goal-group {
+  padding: 14px;
+  border: 1px solid rgba(255,255,255,.075);
+  border-radius: 16px;
+  background: rgba(255,255,255,.028);
+}
+
+.journey-goal-group-head { display: flex; justify-content: space-between; gap: 10px; align-items: center; margin-bottom: 10px; }
+.journey-goal-group-head h3 { margin: 0; font-size: 1rem; }
+.journey-goal-group-head span { color: #879bb2; font-size: .76rem; }
+.journey-goal-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(225px,1fr)); gap: 9px; }
+
+.journey-goal-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 70px;
+  padding: 11px;
+  border: 1px solid rgba(110,231,255,.14);
+  border-radius: 13px;
+  background: linear-gradient(145deg, rgba(13,24,46,.82), rgba(8,12,29,.82));
+  cursor: pointer;
+  transition: transform .16s ease, border-color .16s ease, background .16s ease, box-shadow .16s ease;
+}
+
+.journey-goal-card:hover {
+  transform: translateY(-1px);
+  border-color: rgba(110,231,255,.36);
+  box-shadow: 0 10px 22px rgba(0,0,0,.16);
+}
+
+.journey-goal-card.selected {
+  border-color: rgba(110,231,255,.5);
+  background: linear-gradient(135deg, rgba(34,211,238,.15), rgba(180,140,255,.12));
+  box-shadow: inset 0 0 24px rgba(110,231,255,.04);
+}
+
+.journey-goal-card input { position: absolute; opacity: 0; pointer-events: none; }
+
+.journey-goal-check {
+  display: grid;
+  place-items: center;
+  flex: 0 0 29px;
+  height: 29px;
+  border-radius: 9px;
+  border: 1px solid rgba(110,231,255,.32);
+  color: #a8edff;
+  font-weight: 1000;
+  background: rgba(110,231,255,.05);
+}
+
+.journey-goal-card.selected .journey-goal-check {
+  border-color: rgba(113,246,178,.55);
+  background: linear-gradient(145deg, #97ffd0, #52d99d);
+  color: #092318;
+}
+
+.journey-goal-copy { display: grid; gap: 3px; min-width: 0; }
+.journey-goal-copy strong { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.journey-goal-copy small { color: #899eb7; }
+.journey-goal-card b { position: absolute; top: 6px; right: 7px; color: #ffd97b; font-size: .56rem; letter-spacing: .08em; }
+
+.personalization-strip {
+  display: grid;
+  gap: 4px;
+  margin: 13px 0;
+  padding: 14px;
+  border: 1px solid rgba(110,231,255,.26);
+  border-radius: 14px;
+  background: linear-gradient(90deg, rgba(34,211,238,.11), rgba(180,140,255,.08));
+}
+
+.personalization-strip strong { color: #c6f3ff; }
+.personalization-strip span { color: #edf9ff; }
+.personalization-strip small { color: #98aac0; }
+.personalization-strip.fallback { border-color: rgba(255,213,95,.24); background: rgba(116,72,10,.08); }
+
+.my-goal-badge {
+  display: inline-flex;
+  margin-left: 5px;
+  padding: 4px 8px;
+  border: 1px solid rgba(110,231,255,.4);
+  border-radius: 999px;
+  background: rgba(34,211,238,.11);
+  color: #bdf4ff;
+  font-size: .65rem;
+  letter-spacing: .07em;
+}
+
+.attempt-card.my-goal-farm { border-color: rgba(110,231,255,.34); box-shadow: inset 3px 0 rgba(110,231,255,.5); }
+.attempt-chip.tracked { border-color: rgba(110,231,255,.4); background: rgba(34,211,238,.11); color: #dcfbff; }
+
+@media (max-width: 700px) {
+  .action-form label, .action-form select, .action-form input { width: 100%; }
+  .journey-goal-panel { padding: 18px; }
+  .journey-goal-toolbar { display: grid; }
+  .journey-goal-toolbar input, .journey-goal-toolbar button { width: 100%; }
+  .journey-goal-grid { grid-template-columns: 1fr; }
+  .journey-goal-summary { min-width: 0; }
+}

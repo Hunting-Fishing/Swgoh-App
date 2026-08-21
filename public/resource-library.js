@@ -4,7 +4,7 @@ function ensureVisualLibraryStyles() {
   if (document.querySelector('link[data-workspace-visual-library="true"]')) return;
   const link = document.createElement("link");
   link.rel = "stylesheet";
-  link.href = "/workspace-visual-library.css?v=20260820-ui5";
+  link.href = "/workspace-visual-library.css?v=20260821-ui6";
   link.dataset.workspaceVisualLibrary = "true";
   document.head.appendChild(link);
 }
@@ -21,7 +21,7 @@ const NATIVE_TARGETS = Object.freeze([
   Object.freeze({ title: "GAC Scout / Compare", status: "BUILDING", icon: "⚔", action: "gac", description: "Opponent evidence, matchup deltas, board state and sourced tactical planning." }),
   Object.freeze({ title: "Event Calendar", status: "NEXT", icon: "▣", action: "events", description: "Recurring events, eligibility and roster readiness in one native calendar." }),
   Object.freeze({ title: "Datacron Analyzer", status: "BUILDING", icon: "◇", action: "datacrons", description: "Current Datacron inventory, resolved effects and matchup truth where evidence is available." }),
-  Object.freeze({ title: "Conquest Planner", status: "PLANNED", icon: "◎", description: "Sector and feat planning tied to owned characters and viable squads." }),
+  Object.freeze({ title: "Conquest Planner", status: "PLANNED", icon: "◎", description: "Sector and feat planning tied to owned units and squads." }),
   Object.freeze({ title: "Raid Planner", status: "PLANNED", icon: "☄", description: "Raid eligibility, teams, Relic gates and score planning from live roster evidence." }),
   Object.freeze({ title: "Assault Battle Readiness", status: "PLANNED", icon: "⚑", description: "Event-by-event eligible factions and strongest qualifying teams." }),
 ]);
@@ -68,27 +68,38 @@ function compactHeader(kicker, title, copy) {
   return `<section class="card workspace-intro ccv2-library-header"><div><div class="kicker">${escapeHtml(kicker)}</div><h2>${escapeHtml(title)}</h2><p>${escapeHtml(copy)}</p></div></section>`;
 }
 
-function replaceEventsPanel() {
+function librarySurface(kicker, title, copy, items, extraClass = "") {
+  const surface = document.createElement("div");
+  surface.className = `ccv2-library-surface ${extraClass}`.trim();
+  surface.dataset.resourceLibrarySurface = "true";
+  surface.innerHTML = `${compactHeader(kicker, title, copy)}<section class="ccv2-library-grid ${extraClass}">${items.map(visualCard).join("")}</section>`;
+  return surface;
+}
+
+function enhanceEventsPanel() {
   const panel = document.querySelector('[data-workspace-panel="events"]');
   if (!panel || panel.dataset.nativeEventsReady === "true") return false;
   panel.dataset.nativeEventsReady = "true";
-  panel.innerHTML = `${compactHeader(
+  panel.prepend(librarySurface(
     "EVENT COMMAND",
     "Events & Journey Guide",
-    "Open the live modes immediately. Planned modes remain visible as roadmap context but never masquerade as current game data."
-  )}<section class="ccv2-library-grid ccv2-event-grid">${EVENT_TARGETS.map(visualCard).join("")}</section>`;
+    "Open the live modes immediately. Planned modes remain visible as roadmap context but never masquerade as current game data.",
+    EVENT_TARGETS,
+    "ccv2-event-grid"
+  ));
   return true;
 }
 
-function replaceResourcesPanel() {
+function enhanceResourcesPanel() {
   const panel = document.querySelector('[data-workspace-panel="resources"]');
   if (!panel || panel.dataset.resourceLibraryReady === "true") return false;
   panel.dataset.resourceLibraryReady = "true";
-  panel.innerHTML = `${compactHeader(
+  panel.prepend(librarySurface(
     "COMMAND CENTER TOOL LIBRARY",
     "Tools & Resources",
-    "A compact status map of native Command Center capabilities. LIVE means the workflow is available now; BUILDING, NEXT and PLANNED remain explicitly non-live."
-  )}<section class="ccv2-library-grid">${NATIVE_TARGETS.map(visualCard).join("")}</section>`;
+    "A visual status map of native Command Center capabilities. Existing detailed resource content remains mounted below this navigation layer.",
+    NATIVE_TARGETS
+  ));
   return true;
 }
 
@@ -123,8 +134,8 @@ function bindActions() {
 
 function enhanceNativeWorkspaces() {
   ensureVisualLibraryStyles();
-  replaceEventsPanel();
-  replaceResourcesPanel();
+  enhanceEventsPanel();
+  enhanceResourcesPanel();
   bindActions();
   return Boolean(
     document.querySelector('[data-workspace-panel="events"][data-native-events-ready="true"]')
