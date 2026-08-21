@@ -1,3 +1,5 @@
+import './gac-canonical-faction-filter-ui.js';
+
 const REPLAY = Symbol('gac-manual-selection-replay');
 
 function manualActionButton(target) {
