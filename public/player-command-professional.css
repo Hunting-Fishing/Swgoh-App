@@ -1,0 +1,343 @@
+/* SWGOH Command Center — populated Player workspace professional layer.
+   Enhancement-only: preserves existing roster, farm, Journey, Mods and resource detail. */
+:root {
+  --player-pro-gold:#ffd45f;
+  --player-pro-orange:#ff9448;
+  --player-pro-cyan:#6fe8ff;
+  --player-pro-blue:#64a8ff;
+  --player-pro-purple:#b894ff;
+  --player-pro-pink:#ff78ba;
+  --player-pro-green:#70f0b4;
+  --player-pro-red:#ff7b87;
+  --player-pro-bg:#090b1b;
+  --player-pro-panel:rgba(17,21,45,.94);
+  --player-pro-line:rgba(119,205,255,.20);
+}
+
+body.player-pro-enhanced [data-workspace-panel="roster"],
+body.player-pro-enhanced [data-workspace-panel="farm"],
+body.player-pro-enhanced [data-workspace-panel="mods"],
+body.player-pro-enhanced [data-workspace-panel="resources"],
+body.player-pro-enhanced [data-workspace-panel="events"] {
+  gap:16px;
+}
+
+/* Preserve detailed surfaces that older replacement layers deliberately hid. */
+body.player-pro-enhanced #controls.pro-legacy-roster {
+  display:grid !important;
+}
+body.player-pro-enhanced #roster.pro-legacy-roster {
+  display:grid !important;
+}
+body.player-pro-enhanced .farm-gallery-tabs-active [data-farm-v3-command],
+body.player-pro-enhanced .farm-gallery-tabs-active [data-farm-v3-surface],
+body.player-pro-enhanced .farm-gallery-tabs-active #farmMasterPlan {
+  display:grid !important;
+}
+body.player-pro-enhanced [data-player-pro-reference="true"] {
+  position:relative;
+  margin-top:14px;
+  border-color:rgba(184,148,255,.26) !important;
+  box-shadow:inset 0 2px 0 rgba(184,148,255,.10);
+}
+body.player-pro-enhanced [data-player-pro-reference="true"]::before {
+  content:"DETAILED REFERENCE · RETAINED";
+  display:block;
+  grid-column:1/-1;
+  width:max-content;
+  max-width:100%;
+  margin:0 0 7px;
+  padding:4px 8px;
+  border:1px solid rgba(184,148,255,.30);
+  border-radius:999px;
+  background:rgba(109,69,177,.16);
+  color:#d9c8ff;
+  font-size:.68rem;
+  font-weight:900;
+  letter-spacing:.08em;
+}
+
+/* Roster Commander */
+body.player-pro-enhanced .pro-command-shell { gap:18px; }
+body.player-pro-enhanced .pro-command-header {
+  position:relative;
+  overflow:hidden;
+  min-height:150px;
+  padding:24px 26px;
+  border:1px solid rgba(111,232,255,.30);
+  border-radius:20px;
+  background:
+    radial-gradient(circle at 84% 18%,rgba(184,148,255,.22),transparent 24rem),
+    radial-gradient(circle at 10% 120%,rgba(255,148,72,.16),transparent 26rem),
+    linear-gradient(135deg,#121736,#10132b 52%,#181335);
+  box-shadow:0 18px 45px rgba(0,0,0,.26),inset 0 1px rgba(255,255,255,.06);
+}
+body.player-pro-enhanced .pro-command-header::after {
+  content:"ROSTER";
+  position:absolute;
+  right:20px;
+  bottom:-17px;
+  color:rgba(255,255,255,.035);
+  font-size:5.2rem;
+  font-weight:950;
+  letter-spacing:.06em;
+  pointer-events:none;
+}
+body.player-pro-enhanced .pro-command-header .kicker { color:var(--player-pro-cyan); font-size:.78rem; }
+body.player-pro-enhanced .pro-command-header h2 { margin:5px 0 8px; font-size:clamp(1.8rem,3vw,3rem); }
+body.player-pro-enhanced .pro-command-header p { max-width:900px; color:#bac7df; font-size:.92rem; line-height:1.58; }
+body.player-pro-enhanced .pro-command-header>div:last-child { display:grid;gap:10px;justify-items:end;position:relative;z-index:1; }
+body.player-pro-enhanced #proRosterLiveRefresh {
+  min-height:44px;
+  padding:10px 16px;
+  border:1px solid rgba(255,212,95,.54);
+  border-radius:11px;
+  background:linear-gradient(180deg,var(--player-pro-gold),#eaa93b);
+  color:#251a0c;
+  font-weight:950;
+  cursor:pointer;
+}
+body.player-pro-enhanced .pro-filter-card {
+  padding:20px;
+  border:1px solid rgba(111,232,255,.20);
+  border-radius:18px;
+  background:
+    radial-gradient(circle at 96% -10%,rgba(100,168,255,.11),transparent 22rem),
+    linear-gradient(180deg,rgba(18,27,53,.96),rgba(11,17,35,.96));
+}
+body.player-pro-enhanced .pro-preset-row { gap:9px;margin-bottom:16px; }
+body.player-pro-enhanced .pro-preset-row button,
+body.player-pro-enhanced .pro-view-row button {
+  min-height:40px;
+  padding:9px 12px;
+  border-color:rgba(111,232,255,.25);
+  background:linear-gradient(180deg,rgba(33,65,103,.90),rgba(21,39,70,.92));
+  color:#e9f8ff;
+  font-size:.78rem;
+  font-weight:850;
+}
+body.player-pro-enhanced .pro-preset-row button:first-child {
+  border-color:rgba(255,212,95,.45);
+  background:linear-gradient(180deg,rgba(124,92,27,.72),rgba(71,49,17,.80));
+  color:#ffe59a;
+}
+body.player-pro-enhanced .pro-filter-grid { grid-template-columns:repeat(4,minmax(150px,1fr));gap:12px; }
+body.player-pro-enhanced .pro-filter-grid label { gap:6px;color:#9fb4ce;font-size:.76rem; }
+body.player-pro-enhanced .pro-filter-grid input,
+body.player-pro-enhanced .pro-filter-grid select,
+body.player-pro-enhanced .pro-view-row input,
+body.player-pro-enhanced .pro-view-row select {
+  min-height:43px;
+  border-color:rgba(111,232,255,.18);
+  background:#0c142b;
+  color:#f1f7ff;
+}
+body.player-pro-enhanced .pro-summary-grid { grid-template-columns:repeat(4,minmax(145px,1fr));gap:11px; }
+body.player-pro-enhanced .pro-summary-stat {
+  min-height:88px;
+  align-content:center;
+  padding:15px 16px;
+  border-color:rgba(111,232,255,.18);
+  background:linear-gradient(145deg,rgba(19,35,62,.92),rgba(15,19,42,.94));
+}
+body.player-pro-enhanced .pro-summary-stat:nth-child(4n+1){border-top:3px solid var(--player-pro-cyan)}
+body.player-pro-enhanced .pro-summary-stat:nth-child(4n+2){border-top:3px solid var(--player-pro-gold)}
+body.player-pro-enhanced .pro-summary-stat:nth-child(4n+3){border-top:3px solid var(--player-pro-purple)}
+body.player-pro-enhanced .pro-summary-stat:nth-child(4n+4){border-top:3px solid var(--player-pro-green)}
+body.player-pro-enhanced .pro-summary-stat span { font-size:.74rem;color:#9db2ce; }
+body.player-pro-enhanced .pro-summary-stat strong { font-size:1.35rem;color:#f6fbff; }
+body.player-pro-enhanced .pro-table-wrap { border:1px solid rgba(111,232,255,.16);border-radius:14px; }
+body.player-pro-enhanced .pro-roster-table { font-size:.82rem; }
+body.player-pro-enhanced .pro-roster-table th { padding:11px 10px;background:#111b37;color:#9fdcf0;font-size:.72rem; }
+body.player-pro-enhanced .pro-roster-table td { padding:10px; }
+body.player-pro-enhanced .pro-unit-link { font-size:.86rem; }
+body.player-pro-enhanced .pro-unit-cell small { font-size:.72rem; }
+body.player-pro-enhanced .pro-actions button { min-height:34px; }
+
+/* Original roster controls and card grid remain available as detailed reference. */
+body.player-pro-enhanced #controls.pro-legacy-roster {
+  grid-template-columns:minmax(260px,2fr) repeat(3,minmax(145px,1fr)) auto;
+  gap:10px;
+  padding:14px;
+  border:1px solid rgba(184,148,255,.18);
+  border-radius:15px;
+  background:rgba(21,17,42,.72);
+}
+body.player-pro-enhanced #controls.pro-legacy-roster input,
+body.player-pro-enhanced #controls.pro-legacy-roster select { min-height:42px; }
+body.player-pro-enhanced #roster.pro-legacy-roster { gap:14px; }
+
+/* Journey / Farm Gallery */
+body.player-pro-enhanced .farm-gallery-shell { gap:15px; }
+body.player-pro-enhanced .farm-gallery-tabs {
+  top:58px;
+  gap:7px;
+  padding:8px;
+  border-color:rgba(255,212,95,.20);
+  border-radius:15px;
+  background:linear-gradient(180deg,rgba(17,19,42,.97),rgba(10,13,29,.97));
+}
+body.player-pro-enhanced .farm-gallery-tabs button { min-height:46px;padding:8px 10px;font-size:.72rem; }
+body.player-pro-enhanced .farm-gallery-tabs button.active {
+  border-color:rgba(255,212,95,.58);
+  background:linear-gradient(180deg,rgba(255,212,95,.90),rgba(229,158,51,.90));
+  color:#261a0b;
+}
+body.player-pro-enhanced .farm-gallery-tabs button.active b { background:rgba(50,28,4,.13);color:#351d05; }
+body.player-pro-enhanced .farm-gallery-panel { gap:14px;padding:16px;border-radius:16px;background:linear-gradient(180deg,rgba(19,24,49,.94),rgba(10,15,32,.95)); }
+body.player-pro-enhanced .farm-gallery-panel-head>div:first-child>span,
+body.player-pro-enhanced .farm-gallery-selected-target>div>span { font-size:.7rem;color:var(--player-pro-cyan); }
+body.player-pro-enhanced .farm-gallery-panel-head h3,
+body.player-pro-enhanced .farm-gallery-requirement-head h3 { font-size:1.35rem; }
+body.player-pro-enhanced .farm-gallery-panel-head p,
+body.player-pro-enhanced .farm-gallery-requirement-head p { font-size:.78rem;color:#a9b9ce; }
+body.player-pro-enhanced .farm-gallery-target-grid { grid-template-columns:repeat(4,minmax(0,1fr));gap:11px; }
+body.player-pro-enhanced .farm-gallery-target { border-radius:14px; }
+body.player-pro-enhanced .farm-gallery-target-art { min-height:145px; }
+body.player-pro-enhanced .farm-gallery-target-info { gap:7px;padding:11px; }
+body.player-pro-enhanced .farm-gallery-category { font-size:.62rem;color:#85a9c5; }
+body.player-pro-enhanced .farm-gallery-target-info>strong { font-size:.84rem; }
+body.player-pro-enhanced .farm-gallery-statline,
+body.player-pro-enhanced .farm-gallery-card-footer { font-size:.64rem; }
+body.player-pro-enhanced .farm-gallery-state,
+body.player-pro-enhanced .farm-unit-status { padding:4px 7px;font-size:.61rem; }
+body.player-pro-enhanced .farm-gallery-card-actions button,
+body.player-pro-enhanced .farm-gallery-owned { min-height:36px;font-size:.68rem; }
+body.player-pro-enhanced .farm-gallery-subtabs button { min-height:36px;padding:7px 11px;font-size:.68rem; }
+body.player-pro-enhanced .farm-gallery-search,
+body.player-pro-enhanced .farm-gallery-requirement-head>label { font-size:.68rem; }
+body.player-pro-enhanced .farm-gallery-search input,
+body.player-pro-enhanced .farm-gallery-requirement-head select { min-height:42px; }
+body.player-pro-enhanced .farm-unit-grid { grid-template-columns:repeat(5,minmax(0,1fr));gap:10px; }
+body.player-pro-enhanced .farm-unit-tile { border-radius:12px; }
+body.player-pro-enhanced .farm-unit-portrait { height:160px; }
+body.player-pro-enhanced .farm-unit-copy { gap:7px;padding:9px; }
+body.player-pro-enhanced .farm-unit-copy>strong { min-height:34px;font-size:.72rem; }
+body.player-pro-enhanced .farm-unit-stats span { padding:5px 3px;font-size:.62rem; }
+body.player-pro-enhanced .farm-unit-target,
+body.player-pro-enhanced .farm-unit-delta { font-size:.63rem; }
+body.player-pro-enhanced .farm-gallery-master-summary>summary { padding:10px 12px;font-size:.7rem; }
+
+/* Current Journey Guide — preserve every tier, source and requirement but make it readable. */
+body.player-pro-enhanced .journey-current-band { gap:14px;padding:18px;border-radius:18px;background:radial-gradient(circle at 94% 0,rgba(255,212,95,.15),transparent 25rem),linear-gradient(145deg,#1a1a3d,#10162e 58%,#16102d); }
+body.player-pro-enhanced .journey-current-band-head span { font-size:.72rem; }
+body.player-pro-enhanced .journey-current-band-head h3 { font-size:1.45rem; }
+body.player-pro-enhanced .journey-current-band-head p { font-size:.82rem;line-height:1.5; }
+body.player-pro-enhanced .journey-current-band-head>b { font-size:.78rem; }
+body.player-pro-enhanced .journey-current-grid { grid-template-columns:repeat(4,minmax(0,1fr));gap:10px; }
+body.player-pro-enhanced .journey-current-card { padding:12px;border-radius:13px;background:linear-gradient(180deg,rgba(22,28,56,.90),rgba(12,18,37,.94)); }
+body.player-pro-enhanced .journey-current-card-head { grid-template-columns:52px minmax(0,1fr);gap:10px; }
+body.player-pro-enhanced .journey-current-target { width:52px;height:52px; }
+body.player-pro-enhanced .journey-current-title>span,
+body.player-pro-enhanced .journey-current-title small { font-size:.65rem; }
+body.player-pro-enhanced .journey-current-title h4 { font-size:.86rem; }
+body.player-pro-enhanced .journey-current-readiness { padding:5px 8px;font-size:.66rem; }
+body.player-pro-enhanced .journey-current-card>p { min-height:48px;font-size:.72rem;line-height:1.42; }
+body.player-pro-enhanced .journey-current-boundary { padding:7px 9px;font-size:.68rem; }
+body.player-pro-enhanced .journey-current-source,
+body.player-pro-enhanced .journey-current-tier-details summary { font-size:.68rem; }
+body.player-pro-enhanced .journey-current-tier { padding:9px; }
+body.player-pro-enhanced .journey-current-tier header { font-size:.7rem; }
+body.player-pro-enhanced .journey-current-tier>small { font-size:.64rem; }
+body.player-pro-enhanced .journey-current-requirement { max-width:150px;padding:5px 6px;font-size:.62rem; }
+body.player-pro-enhanced .journey-current-requirement img { width:24px;height:24px; }
+body.player-pro-enhanced .ccv2-journey-current-row { grid-template-columns:40px minmax(0,1fr) auto;min-height:46px;padding:6px 8px; }
+body.player-pro-enhanced .ccv2-journey-current-art { width:40px;height:40px; }
+body.player-pro-enhanced .ccv2-journey-current-row strong { font-size:.72rem; }
+body.player-pro-enhanced .ccv2-journey-current-row small,
+body.player-pro-enhanced .ccv2-journey-current-row>b { font-size:.64rem; }
+
+/* Mods Audit */
+body.player-pro-enhanced .mods-pro-heading { padding:20px 22px;border:1px solid rgba(184,148,255,.24);border-radius:18px;background:radial-gradient(circle at 90% 0,rgba(184,148,255,.20),transparent 22rem),linear-gradient(145deg,#171431,#10172d); }
+body.player-pro-enhanced .mods-pro-heading h2 { font-size:1.8rem; }
+body.player-pro-enhanced .mods-pro-toolbar { grid-template-columns:repeat(3,minmax(170px,1fr)) minmax(240px,1.25fr) auto;gap:11px; }
+body.player-pro-enhanced .mods-pro-toolbar label { font-size:.76rem; }
+body.player-pro-enhanced .mods-pro-toolbar input,
+body.player-pro-enhanced .mods-pro-toolbar select,
+body.player-pro-enhanced .mods-pro-toolbar button { min-height:43px; }
+body.player-pro-enhanced .mods-summary-grid { grid-template-columns:repeat(4,minmax(145px,1fr));gap:10px; }
+body.player-pro-enhanced .mods-summary-card { min-height:88px;align-content:center;padding:14px;border-color:rgba(184,148,255,.18);background:linear-gradient(145deg,rgba(26,25,57,.88),rgba(15,22,43,.92)); }
+body.player-pro-enhanced .mods-summary-card:nth-child(4n+1){border-top:3px solid var(--player-pro-purple)}
+body.player-pro-enhanced .mods-summary-card:nth-child(4n+2){border-top:3px solid var(--player-pro-cyan)}
+body.player-pro-enhanced .mods-summary-card:nth-child(4n+3){border-top:3px solid var(--player-pro-gold)}
+body.player-pro-enhanced .mods-summary-card:nth-child(4n+4){border-top:3px solid var(--player-pro-green)}
+body.player-pro-enhanced .mods-summary-card span { font-size:.74rem; }
+body.player-pro-enhanced .mods-summary-card strong { font-size:1.5rem; }
+body.player-pro-enhanced .mods-summary-card small { font-size:.72rem; }
+body.player-pro-enhanced .mods-pip-grid { grid-template-columns:repeat(6,minmax(105px,1fr));gap:9px; }
+body.player-pro-enhanced .mods-pip-card { min-height:54px;padding:11px 13px; }
+body.player-pro-enhanced .mods-character-table,
+body.player-pro-enhanced .mods-all-table { font-size:.82rem; }
+body.player-pro-enhanced .mods-character-table small,
+body.player-pro-enhanced .mods-all-table small { font-size:.72rem; }
+body.player-pro-enhanced .mods-badge,
+body.player-pro-enhanced .mods-pip-badge { padding:4px 8px;font-size:.72rem; }
+
+/* Mod Optimizer */
+body.player-pro-enhanced .mods-optimizer-section { gap:18px; }
+body.player-pro-enhanced .mod-opt-hero { border-color:rgba(255,120,186,.23);background:radial-gradient(circle at 88% 0,rgba(255,120,186,.12),transparent 22rem),linear-gradient(145deg,rgba(26,20,48,.95),rgba(12,20,40,.96)); }
+body.player-pro-enhanced .mod-opt-reference { padding:13px 15px;font-size:.84rem; }
+body.player-pro-enhanced .mod-opt-controls { grid-template-columns:repeat(3,minmax(180px,1fr)) repeat(3,auto);gap:10px; }
+body.player-pro-enhanced .mod-opt-controls label,
+body.player-pro-enhanced .mod-opt-search { font-size:.75rem; }
+body.player-pro-enhanced .mod-opt-controls select,
+body.player-pro-enhanced .mod-opt-search input,
+body.player-pro-enhanced .mod-opt-controls button { min-height:43px; }
+body.player-pro-enhanced .mod-opt-controls button.primary,
+body.player-pro-enhanced .mod-opt-dialog-actions button.primary { border-color:rgba(255,212,95,.55);background:linear-gradient(180deg,#f3c958,#d99437);color:#25180a;font-weight:900; }
+body.player-pro-enhanced .mod-opt-assignment { padding:14px 15px;border-radius:14px; }
+body.player-pro-enhanced .mod-opt-priority-pill,
+body.player-pro-enhanced .mod-opt-mod-chip { font-size:.74rem; }
+body.player-pro-enhanced .mod-opt-donor-grid article { padding:12px; }
+
+/* Resource/Event library now supplements rather than replaces detailed content. */
+body.player-pro-enhanced .ccv2-library-surface { display:grid;gap:12px;margin-bottom:18px; }
+body.player-pro-enhanced [data-workspace-panel="resources"]>.ccv2-library-surface~*,
+body.player-pro-enhanced [data-workspace-panel="events"]>.ccv2-library-surface~* {
+  scroll-margin-top:70px;
+}
+
+@media (max-width:1280px) {
+  body.player-pro-enhanced .pro-filter-grid { grid-template-columns:repeat(3,minmax(150px,1fr)); }
+  body.player-pro-enhanced .pro-summary-grid { grid-template-columns:repeat(3,minmax(145px,1fr)); }
+  body.player-pro-enhanced .farm-gallery-target-grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
+  body.player-pro-enhanced .farm-unit-grid { grid-template-columns:repeat(4,minmax(0,1fr)); }
+  body.player-pro-enhanced .journey-current-grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
+  body.player-pro-enhanced .mods-pro-toolbar { grid-template-columns:repeat(3,minmax(160px,1fr)); }
+  body.player-pro-enhanced .mods-summary-grid { grid-template-columns:repeat(3,minmax(140px,1fr)); }
+}
+@media (max-width:900px) {
+  body.player-pro-enhanced .pro-command-header { display:grid; }
+  body.player-pro-enhanced .pro-command-header>div:last-child { justify-items:start; }
+  body.player-pro-enhanced .pro-filter-grid,
+  body.player-pro-enhanced .mods-pro-toolbar,
+  body.player-pro-enhanced .mod-opt-controls { grid-template-columns:repeat(2,minmax(150px,1fr)); }
+  body.player-pro-enhanced .pro-summary-grid,
+  body.player-pro-enhanced .mods-summary-grid { grid-template-columns:repeat(2,minmax(135px,1fr)); }
+  body.player-pro-enhanced .farm-gallery-tabs { grid-template-columns:repeat(3,minmax(0,1fr));position:static; }
+  body.player-pro-enhanced .farm-gallery-target-grid,
+  body.player-pro-enhanced .journey-current-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  body.player-pro-enhanced .farm-unit-grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
+  body.player-pro-enhanced .mods-pip-grid { grid-template-columns:repeat(3,1fr); }
+  body.player-pro-enhanced #controls.pro-legacy-roster { grid-template-columns:1fr 1fr; }
+}
+@media (max-width:620px) {
+  body.player-pro-enhanced .pro-command-header { padding:18px; }
+  body.player-pro-enhanced .pro-command-header::after { font-size:3.2rem; }
+  body.player-pro-enhanced .pro-filter-grid,
+  body.player-pro-enhanced .mods-pro-toolbar,
+  body.player-pro-enhanced .mod-opt-controls,
+  body.player-pro-enhanced .pro-summary-grid,
+  body.player-pro-enhanced .mods-summary-grid,
+  body.player-pro-enhanced .farm-gallery-target-grid,
+  body.player-pro-enhanced .journey-current-grid,
+  body.player-pro-enhanced #controls.pro-legacy-roster { grid-template-columns:1fr; }
+  body.player-pro-enhanced .farm-gallery-tabs { display:flex;overflow-x:auto; }
+  body.player-pro-enhanced .farm-gallery-tabs button { flex:0 0 140px; }
+  body.player-pro-enhanced .farm-unit-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  body.player-pro-enhanced .mods-pip-grid { grid-template-columns:repeat(2,1fr); }
+  body.player-pro-enhanced .journey-current-band-head { display:grid; }
+}
+@media (prefers-reduced-motion:reduce) {
+  body.player-pro-enhanced * { scroll-behavior:auto !important; }
+}
