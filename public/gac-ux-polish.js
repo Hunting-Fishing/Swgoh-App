@@ -164,7 +164,9 @@ function renderMoveTargets() {
   host.classList.add('gac-ux-moving');
   const map = host.querySelector('.gac-manual-gac-map');
   if (!map) return;
-  map.insertAdjacentHTML('beforebegin', `<div class="gac-ux-move-banner" data-gac-ux-move-banner><div><span>REARRANGE BOARD</span><strong>${moveState.type === 'fleet' ? 'Move fleet' : 'Move squad'} · choose an empty slot or occupied slot to swap</strong></div><button type="button" data-gac-ux-move-cancel>Cancel</button></div>`);
+  if (!host.querySelector('[data-gac-ux-move-banner]')) {
+    map.insertAdjacentHTML('beforebegin', `<div class="gac-ux-move-banner" data-gac-ux-move-banner><div><span>REARRANGE BOARD</span><strong>${moveState.type === 'fleet' ? 'Move fleet' : 'Move squad'} · choose an empty slot or occupied slot to swap</strong></div><button type="button" data-gac-ux-move-cancel>Cancel</button></div>`);
+  }
   for (const node of map.querySelectorAll('[data-gac-league-slot-add]')) {
     if (compatible(moveState.type, clean(node.dataset.zone).toUpperCase())) node.classList.add('gac-ux-move-target');
   }
@@ -234,7 +236,8 @@ function applyOwnDefenseCollapse() {
     button.dataset.gacUxCollapseDefense = 'true';
     header.appendChild(button);
   }
-  button.textContent = collapsed ? 'Show roster' : 'Collapse roster';
+  const label = collapsed ? 'Show roster' : 'Collapse roster';
+  if (button.textContent !== label) button.textContent = label;
 }
 
 function ensureWorkspaceNav() {
@@ -260,11 +263,7 @@ async function decorate(root = document) {
   decorateMoveButtons(root);
   ensureWorkspaceNav();
   applyOwnDefenseCollapse();
-  if (moveState) {
-    document.querySelector('[data-gac-ux-move-banner]')?.remove();
-    for (const node of document.querySelectorAll('.gac-ux-move-target,.gac-ux-swap-target')) node.classList.remove('gac-ux-move-target', 'gac-ux-swap-target');
-    renderMoveTargets();
-  }
+  if (moveState && !document.querySelector('[data-gac-ux-move-banner]')) renderMoveTargets();
 }
 
 function scheduleDecorate() {
