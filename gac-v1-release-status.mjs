@@ -37,6 +37,7 @@ const GAC_V1_RELEASE_STATUS = Object.freeze({
     freshSeconds: 30,
     staleSeconds: 180,
     maxEntries: 256,
+    maxConcurrentCacheMissLoads: 24,
     sharedAcrossInstances: false,
   }),
 });
