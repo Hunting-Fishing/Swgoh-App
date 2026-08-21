@@ -139,9 +139,8 @@ function bind(){
   },true);
   document.addEventListener('input',(event)=>{
     const panel=event.target?.closest?.('[data-gac-result-capture]');if(!panel)return;const id=Number(panel.dataset.gacResultCapture);const draft=state.drafts.get(id);if(!draft)return;
-    if(event.target.matches('[data-gac-result-banners]'))draft.banners=event.target.value;
-    if(event.target.matches('[data-gac-result-survivor]')){const baseId=normalizeId(event.target.dataset.gacResultSurvivor);if(event.target.checked)draft.survivors.add(baseId);else draft.survivors.delete(baseId);}
-    const card=panel.closest('.gac-saved-board-card');if(card)renderCard(card);
+    if(event.target.matches('[data-gac-result-banners]')){draft.banners=event.target.value;return;}
+    if(event.target.matches('[data-gac-result-survivor]')){const baseId=normalizeId(event.target.dataset.gacResultSurvivor);if(event.target.checked)draft.survivors.add(baseId);else draft.survivors.delete(baseId);const card=panel.closest('.gac-saved-board-card');if(card)renderCard(card);}
   },true);
   document.addEventListener('change',(event)=>{
     const loss=event.target?.closest?.('[data-gac-result-loss-state]');if(loss){const panel=loss.closest('[data-gac-result-capture]');const id=Number(panel?.dataset?.gacResultCapture);const draft=state.drafts.get(id);if(draft){draft.lossState=loss.value==='survivors-confirmed'?'survivors-confirmed':'unknown';if(draft.lossState==='unknown')draft.survivors.clear();const card=panel.closest('.gac-saved-board-card');if(card)renderCard(card);}return;}
