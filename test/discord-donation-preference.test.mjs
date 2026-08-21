@@ -224,6 +224,9 @@ test("Discord live ROTE planner consumes durable KEEP preference and changes don
       return preferenceState;
     },
   };
+  const operationStore = {
+    status: () => ({ configured: false }),
+  };
 
   const guildSnapshot = {
     guild: { id: "guild-test", name: "Preference Guild" },
@@ -289,6 +292,7 @@ test("Discord live ROTE planner consumes durable KEEP preference and changes don
     fetch: fetchImpl,
     stateStore,
     guildRosterService,
+    store: operationStore,
   });
 
   const result = await services.buildPlan({
