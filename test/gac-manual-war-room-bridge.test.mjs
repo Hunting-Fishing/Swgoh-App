@@ -43,3 +43,10 @@ test('manual bridge is wired to the authoritative attack plan and whole-board al
   assert.match(source, /PRE-BATTLE CHECKLIST/);
   assert.match(source, /RECORD WIN \/ LOSS/);
 });
+
+test('authoritative counter markup retains the smart-counter anchor across lifecycle rerenders', () => {
+  const source = fs.readFileSync(path.join(root, 'public/gac-manual-war-room-bridge.js'), 'utf8');
+  assert.match(source, /gac-board-smart-counter gac-manual-war-counter is-locked/);
+  assert.match(source, /gac-board-smart-counter gac-manual-war-counter is-cleared/);
+  assert.match(source, /gac-board-smart-counter gac-manual-war-counter/);
+});
