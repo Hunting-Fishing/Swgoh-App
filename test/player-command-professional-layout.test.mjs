@@ -30,7 +30,7 @@ test('Player professional enhancer does not delete, replace or fetch workspace i
 test('original roster and detailed farm planning surfaces are explicitly retained', () => {
   assert.match(styles, /#controls\.pro-legacy-roster\s*\{[^}]*display:\s*grid\s*!important/s);
   assert.match(styles, /#roster\.pro-legacy-roster\s*\{[^}]*display:\s*grid\s*!important/s);
-  assert.match(styles, /\[data-farm-v3-surface\][^}]*#farmMasterPlan|#farmMasterPlan[^}]*display:\s*grid\s*!important/s);
+  assert.match(styles, /#farmMasterPlan\s*\{[^}]*display:\s*grid\s*!important/s);
   assert.match(styles, /DETAILED REFERENCE · RETAINED/);
   assert.doesNotMatch(farmLoader, /display:\s*none/i);
 });
