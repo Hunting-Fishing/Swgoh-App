@@ -17,6 +17,14 @@ function iso(value) {
 function strings(values = []) {
   return [...new Set((Array.isArray(values) ? values : []).map(clean).filter(Boolean))];
 }
+function normalizeDatacronConstraint(value = {}) {
+  return Object.freeze({
+    presence: clean(value.presence).toLowerCase(),
+    required: value.required === true,
+    setIds: Object.freeze(strings(value.setIds).sort()),
+    mechanicIds: Object.freeze(strings(value.mechanicIds).sort()),
+  });
+}
 function normalizeValidationRef(value = {}) {
   return Object.freeze({
     kind: clean(value.kind),
@@ -41,11 +49,15 @@ function normalizeEntry(value = {}) {
       leaderBaseId: normalizeBaseId(value?.attacker?.leaderBaseId),
       members: Object.freeze(normalizeIds(value?.attacker?.members)),
     }),
+    datacron: Object.freeze({
+      attacker: normalizeDatacronConstraint(value?.datacron?.attacker || value?.attackerDatacron),
+      defender: normalizeDatacronConstraint(value?.datacron?.defender || value?.defenderDatacron),
+    }),
     source: Object.freeze({
       name: clean(value?.source?.name || value.sourceName),
       ref: clean(value?.source?.ref || value.sourceRef),
       type: clean(value?.source?.type || value.sourceType),
-      author: clean(value?.source?.author),
+      author: clean(value?.source?.author || value.sourceAuthor),
       updatedAt: iso(value?.source?.updatedAt || value.sourceUpdatedAt),
       capturedAt: iso(value?.source?.capturedAt || value.capturedAt),
     }),
@@ -64,10 +76,10 @@ function normalizeEntry(value = {}) {
       }),
     }),
     validity: Object.freeze({
-      validFrom: iso(value?.validity?.validFrom),
-      validUntil: iso(value?.validity?.validUntil),
-      gameDataVersion: clean(value?.validity?.gameDataVersion),
-      notes: clean(value?.validity?.notes),
+      validFrom: iso(value?.validity?.validFrom || value.validFrom),
+      validUntil: iso(value?.validity?.validUntil || value.validUntil),
+      gameDataVersion: clean(value?.validity?.gameDataVersion || value.gameDataVersion),
+      notes: clean(value?.validity?.notes || value.validityNotes),
     }),
     research: Object.freeze({
       snapshotDate: clean(value?.research?.snapshotDate || value?.research?.sourceSnapshotDate),
@@ -127,9 +139,24 @@ function provenanceState({ productionGuidance = null, candidate = null } = {}) {
       detail: 'Exact composition, validity and Datacron constraints matched the current battle context.',
       sourceName: clean(productionGuidance.sourceName),
       sourceRef: clean(productionGuidance.sourceRef),
+      sourceType: clean(productionGuidance.sourceType),
+      sourceAuthor: clean(productionGuidance.sourceAuthor),
       sourceUpdatedAt: clean(productionGuidance.sourceUpdatedAt),
       capturedAt: clean(productionGuidance.capturedAt),
       validityNotes: clean(productionGuidance.validityNotes),
+      validity: Object.freeze({
+        validFrom: iso(productionGuidance.validFrom),
+        validUntil: iso(productionGuidance.validUntil),
+        gameDataVersion: clean(productionGuidance.gameDataVersion),
+        notes: clean(productionGuidance.validityNotes),
+      }),
+      datacronScope: Object.freeze({
+        attacker: normalizeDatacronConstraint(productionGuidance.attackerDatacron),
+        defender: normalizeDatacronConstraint(productionGuidance.defenderDatacron),
+      }),
+      datacronScopeVerified: true,
+      versionValidityVerified: true,
+      reviewStatus: 'approved',
       blockers: Object.freeze([]),
       validationRefs: Object.freeze([]),
     });
@@ -142,9 +169,16 @@ function provenanceState({ productionGuidance = null, candidate = null } = {}) {
       detail: 'A source record exists for this exact composition, but unapproved execution guidance remains quarantined.',
       sourceName: entry.source.name,
       sourceRef: entry.source.ref,
+      sourceType: entry.source.type,
+      sourceAuthor: entry.source.author,
       sourceUpdatedAt: entry.source.updatedAt,
       capturedAt: entry.source.capturedAt,
       validityNotes: entry.validity.notes,
+      validity: entry.validity,
+      datacronScope: entry.datacron,
+      datacronScopeVerified: entry.review.flags.datacronScopeVerified,
+      versionValidityVerified: entry.review.flags.versionValidityVerified,
+      reviewStatus: entry.review.status,
       blockers: Object.freeze(entry.review.blockers.map(blockerLabel)),
       validationRefs: entry.research.validationRefs,
     });
@@ -153,9 +187,12 @@ function provenanceState({ productionGuidance = null, candidate = null } = {}) {
     status: 'none',
     label: 'NO EXACT TACTICAL SOURCE RECORD',
     detail: 'No approved or quarantined source record matches this exact attacker and defender composition.',
-    sourceName: '', sourceRef: '', sourceUpdatedAt: '', capturedAt: '', validityNotes: '',
+    sourceName: '', sourceRef: '', sourceType: '', sourceAuthor: '', sourceUpdatedAt: '', capturedAt: '', validityNotes: '',
+    validity: Object.freeze({ validFrom: '', validUntil: '', gameDataVersion: '', notes: '' }),
+    datacronScope: Object.freeze({ attacker: normalizeDatacronConstraint(), defender: normalizeDatacronConstraint() }),
+    datacronScopeVerified: false, versionValidityVerified: false, reviewStatus: '',
     blockers: Object.freeze([]), validationRefs: Object.freeze([]),
   });
 }
 
-export { blockerLabel, entryMatches, exactComposition, findExactProvenance, normalizeEntry, provenanceState };
+export { blockerLabel, entryMatches, exactComposition, findExactProvenance, normalizeDatacronConstraint, normalizeEntry, provenanceState };
