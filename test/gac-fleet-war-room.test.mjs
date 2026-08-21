@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import { mergeIds, storageKey } from '../public/gac-manual-board-context-bridge.js';
 import {
   allocateFleetCounters,
   compositionMatch,
@@ -11,6 +12,7 @@ import {
 
 const ui=fs.readFileSync(new URL('../public/gac-fleet-war-room.js',import.meta.url),'utf8');
 const v3=fs.readFileSync(new URL('../public/gac-war-room-v3.js',import.meta.url),'utf8');
+const bridge=fs.readFileSync(new URL('../public/gac-manual-board-context-bridge.js',import.meta.url),'utf8');
 const css=fs.readFileSync(new URL('../public/gac-fleet-war-room.css',import.meta.url),'utf8');
 
 function ship(baseId,name=baseId,power=100000){return {baseId,name,unitType:'Ship',power,stars:7,level:85,abilities:[]};}
@@ -109,6 +111,13 @@ test('fleet roster availability separates AVAILABLE, ALLOCATED, and DEFENSE RESE
   assert.equal(availability.rows.find((row)=>row.baseId==='CAPITALEXECUTOR').status,'allocated');
   assert.equal(availability.rows.find((row)=>row.baseId==='CAPITALPROFUNDITY').status,'reserved');
   assert.equal(availability.rows.find((row)=>row.baseId==='Y-WINGREBEL').status,'available');
+});
+
+test('fleet reserve context uses a dedicated scope and merges ship identities without losing earlier local choices',()=>{
+  assert.deepEqual(mergeIds(['CAPITALEXECUTOR','HOUNDSTOOTH'],['HOUNDSTOOTH','CAPITALPROFUNDITY']),['CAPITALEXECUTOR','HOUNDSTOOTH','CAPITALPROFUNDITY']);
+  assert.match(storageKey({owner:'732764286',opponent:'123456789',round:2,formatName:'5v5',scope:'fleet-reserve'}),/:2:5v5:fleet-reserve$/);
+  assert.match(bridge,/migrateIdScope/);
+  assert.match(bridge,/scope: 'fleet-reserve'/);
 });
 
 test('Fleet War Room is wired into GAC v3 with evidence endpoint, local reserves, source gate and no fleet heuristic fallback',()=>{
