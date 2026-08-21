@@ -1,4 +1,5 @@
 import './gac-canonical-faction-filter-ui.js';
+import './gac-league-board-ui.js';
 
 const REPLAY = Symbol('gac-manual-selection-replay');
 
