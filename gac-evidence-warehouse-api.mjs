@@ -6,6 +6,7 @@ const PUBLIC_LIMIT_MAX = 250;
 const FRESH_MS = 30_000;
 const STALE_MS = 180_000;
 const MAX_ENTRIES = 256;
+const MAX_CONCURRENT_LOADS = 24;
 
 function clean(value){return String(value??'').trim();}
 function positiveLimit(value,fallback=100,max=PUBLIC_LIMIT_MAX){const parsed=Math.floor(Number(value));return Number.isFinite(parsed)&&parsed>0?Math.min(max,parsed):fallback;}
@@ -32,11 +33,26 @@ export function createGacEvidenceWarehouseApi(options={}){
   const writeJson=options.writeJson;
   const warehouse=options.warehouse||gacEvidenceWarehouseService;
   const cache=options.cache||new LiveRosterCache({freshMs:FRESH_MS,staleMs:STALE_MS,maxEntries:MAX_ENTRIES,now:options.now});
+  const maxConcurrentLoads=Math.max(1,Math.min(128,Math.floor(Number(options.maxConcurrentLoads)||MAX_CONCURRENT_LOADS)));
+  let activeLoads=0;
   if(typeof writeJson!=='function')throw new TypeError('writeJson is required');
   if(typeof warehouse?.getEvidence!=='function')throw new TypeError('warehouse.getEvidence is required');
 
+  async function guardedLoad(input){
+    if(activeLoads>=maxConcurrentLoads){
+      const error=new Error('The GAC evidence warehouse is at its cache-miss concurrency limit. Retry shortly.');
+      error.status=429;
+      error.retryAfter=2;
+      throw error;
+    }
+    activeLoads+=1;
+    try{return await warehouse.getEvidence(input);}
+    finally{activeLoads-=1;}
+  }
+
   return Object.freeze({
     cache,
+    status:()=>Object.freeze({activeLoads,maxConcurrentLoads,cacheScope:'process-local-lru-coalesced'}),
     async handle(request,response,url){
       if(request.method!=='GET')return false;
       if(url.pathname==='/api/gac/release-status'){
@@ -50,17 +66,19 @@ export function createGacEvidenceWarehouseApi(options={}){
       const input=warehouseInput(url);
       const key=warehouseCacheKey(input);
       try{
-        const cached=await cache.getOrLoad(key,()=>warehouse.getEvidence(input),{staleWhileRevalidate:true});
+        const cached=await cache.getOrLoad(key,()=>guardedLoad(input),{staleWhileRevalidate:true});
         writeJson(response,200,cached.value,{
           'Cache-Control':'public, max-age=20, stale-while-revalidate=120',
           'X-GAC-Source':'normalized-gac-evidence-warehouse',
           'X-GAC-Cache':cached.cache,
+          'X-GAC-Read-Policy':`public-limit-${PUBLIC_LIMIT_MAX};miss-concurrency-${maxConcurrentLoads}`,
           Age:String(Math.max(0,Math.floor((cached.ageMs||0)/1000))),
         });
       }catch(error){
         writeJson(response,statusFor(error),{error:error?.message||'The normalized GAC evidence warehouse is unavailable.'},{
           'Cache-Control':'no-store',
           'X-GAC-Source':'normalized-gac-evidence-warehouse',
+          ...(Number(error?.status)===429?{'Retry-After':String(Math.max(1,Number(error?.retryAfter)||2))}:{}),
         });
       }
       return true;
@@ -70,6 +88,7 @@ export function createGacEvidenceWarehouseApi(options={}){
 
 export {
   FRESH_MS,
+  MAX_CONCURRENT_LOADS,
   MAX_ENTRIES,
   PUBLIC_LIMIT_MAX,
   STALE_MS,
