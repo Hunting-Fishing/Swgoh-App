@@ -1,6 +1,7 @@
 import { gacBracketIndexService } from "./gac-bracket-index-service.mjs";
 import { gacCounterEvidenceBatchService } from "./gac-counter-evidence-batch-service.mjs";
 import { createGacCurrentOpponentConfirmationApi } from "./gac-current-opponent-confirmation-api.mjs";
+import { gacFleetCounterEvidenceService } from "./gac-fleet-counter-evidence-service.mjs";
 import { gacHistoryImportService } from "./gac-history-import-service.mjs";
 import { gacHistoryService } from "./gac-history-service.mjs";
 import { createGacMatchupService } from "./gac-matchup-service.mjs";
@@ -60,6 +61,7 @@ export function createGacApi({
   historyImport = gacHistoryImportService,
   bracketIndex = gacBracketIndexService,
   counterBatch = gacCounterEvidenceBatchService,
+  fleetCounters = gacFleetCounterEvidenceService,
   scouting = gacScoutingService,
   now = Date.now,
   importCooldownMs = 30 * 60 * 1000,
@@ -318,6 +320,24 @@ export function createGacApi({
           writeJson(response, 200, body, { "X-GAC-Source": "persisted-counter-evidence-batch" });
         } catch (error) {
           writeError(writeJson, response, error, "Batched GAC counter evidence is unavailable.");
+        }
+        return true;
+      }
+
+      if (url.pathname === "/api/gac/fleet/counters/batch") {
+        try {
+          const capitals = [
+            ...url.searchParams.getAll("enemyCapital"),
+            ...String(url.searchParams.get("capitals") || "").split(","),
+          ].filter(Boolean);
+          const body = await fleetCounters.getFleetCounterEvidenceBatch({
+            format: url.searchParams.get("format"),
+            enemyCapitalShipBaseIds: capitals,
+            limit: positiveLimit(url.searchParams.get("limit"), 30, 100),
+          });
+          writeJson(response, 200, body, { "X-GAC-Source": "persisted-fleet-counter-evidence" });
+        } catch (error) {
+          writeError(writeJson, response, error, "GAC fleet counter evidence is unavailable.");
         }
         return true;
       }

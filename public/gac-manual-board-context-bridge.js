@@ -36,6 +36,9 @@ function mergeRows(left = [], right = []) {
   for (const row of [...left, ...right]) index.set(key(row), row);
   return [...index.values()];
 }
+function mergeIds(left = [], right = []) {
+  return [...new Set([...left, ...right].map((value) => clean(value).split(':')[0].toUpperCase()).filter(Boolean))];
+}
 function migrationCandidates({ owner, opponent, round, formatName, scope = '' }) {
   const targetKey = storageKey({ owner, opponent, round, formatName, scope });
   return [
@@ -52,6 +55,20 @@ function migrateRowScope({ owner, opponent, round, formatName, scope = '' }) {
     const source = parseRows(sourceKey);
     if (!source.length) continue;
     target = mergeRows(source, target).map((row) => ({ ...row, opponentAllyCode: opponent === 'manual' ? clean(row?.opponentAllyCode) : opponent }));
+    localStorage.removeItem(sourceKey);
+    changed = true;
+  }
+  if (changed) localStorage.setItem(targetKey, JSON.stringify(target));
+  return changed;
+}
+function migrateIdScope({ owner, opponent, round, formatName, scope }) {
+  const targetKey = storageKey({ owner, opponent, round, formatName, scope });
+  let target = parseRows(targetKey);
+  let changed = false;
+  for (const sourceKey of migrationCandidates({ owner, opponent, round, formatName, scope })) {
+    const source = parseRows(sourceKey);
+    if (!source.length) continue;
+    target = mergeIds(source, target);
     localStorage.removeItem(sourceKey);
     changed = true;
   }
@@ -81,8 +98,9 @@ function migrateDraftContext() {
   if (!round) return false;
   const squadChanged = migrateRowScope({ owner, opponent, round, formatName });
   const fleetChanged = migrateRowScope({ owner, opponent, round, formatName, scope: 'fleet' });
+  const reserveChanged = migrateIdScope({ owner, opponent, round, formatName, scope: 'fleet-reserve' });
   const revealChanged = migrateRevealScope({ owner, opponent, round, formatName });
-  return squadChanged || fleetChanged || revealChanged;
+  return squadChanged || fleetChanged || reserveChanged || revealChanged;
 }
 
 function dispatchMatchupRefresh() {
@@ -118,4 +136,4 @@ function bind() {
 
 if (typeof document !== 'undefined') bind();
 
-export { mergeRows, migrateDraftContext, migrationCandidates, storageKey };
+export { mergeIds, mergeRows, migrateDraftContext, migrationCandidates, storageKey };
