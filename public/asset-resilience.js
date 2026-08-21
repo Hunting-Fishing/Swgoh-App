@@ -8,6 +8,7 @@ import './gac-fleet-attempt-history.js';
 import './gac-fleet-cleanup-control.js';
 import './gac-fleet-cleanup-provenance.js';
 import './guild-command-professional.js';
+import './tb-rote-professional.js';
 
 const state = {
   loaded: false,
