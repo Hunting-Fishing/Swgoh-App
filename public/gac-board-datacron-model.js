@@ -1,7 +1,8 @@
 const clean = (value) => String(value ?? '').trim();
 
 function stableDatacronId(value) {
-  return clean(value?.id || value);
+  if (value && typeof value === 'object') return clean(value.id);
+  return clean(value);
 }
 
 function liveDatacronInventory(roster = {}) {
