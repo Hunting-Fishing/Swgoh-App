@@ -1,3 +1,4 @@
+import './gac-cleanup-intelligence-ui.js';
 import { latestPostAttempt, resultDraft, resultTruthLabel } from './gac-attempt-result-model.js';
 
 const state = {
