@@ -1,5 +1,6 @@
 import { supabaseAuthVerifier } from './supabase-auth.mjs';
 import { supabaseSocialAuth } from './supabase-social-auth.mjs';
+import { normalizePublicOrigin, resolvePublicOrigin } from './auth-public-origin.mjs';
 
 const ACCESS_COOKIE = 'swgoh_cc_access';
 const REFRESH_COOKIE = 'swgoh_cc_refresh';
@@ -22,10 +23,12 @@ function configFromEnv(env = process.env) {
   const url = trimUrl(env.SUPABASE_URL);
   const publishableKey = clean(env.SUPABASE_PUBLISHABLE_KEY || env.SUPABASE_ANON_KEY);
   const secureCookies = boolEnv(env.AUTH_COOKIE_SECURE, clean(env.NODE_ENV).toLowerCase() !== 'development');
+  const publicOrigin = normalizePublicOrigin(env.PUBLIC_APP_ORIGIN || env.APP_PUBLIC_ORIGIN);
   return Object.freeze({
     url,
     publishableKey,
     secureCookies,
+    publicOrigin,
     enabled: Boolean(url && publishableKey),
   });
 }
@@ -114,16 +117,10 @@ async function readJsonBody(request) {
   }
 }
 
-function expectedOrigin(request) {
-  const host = clean(request?.headers?.['x-forwarded-host'] || request?.headers?.host);
-  const proto = clean(clean(request?.headers?.['x-forwarded-proto']).split(',')[0]) || 'https';
-  return host ? `${proto}://${host}` : '';
-}
-
-function assertSameOrigin(request) {
+function assertSameOrigin(request, configuredOrigin = '') {
   const origin = clean(request?.headers?.origin);
   if (!origin) return;
-  const expected = expectedOrigin(request);
+  const expected = resolvePublicOrigin(request, configuredOrigin);
   if (!expected || origin !== expected) {
     const error = new Error('Cross-origin authentication request rejected.');
     error.status = 403;
@@ -207,6 +204,8 @@ export function createSupabaseAuthSession(env = process.env, options = {}) {
       enabled: config.enabled,
       secureCookies: config.secureCookies,
       mode: config.enabled ? 'supabase-auth-http-only-session' : 'disabled',
+      publicOriginConfigured: Boolean(config.publicOrigin),
+      publicOrigin: config.publicOrigin || null,
       social: socialAuth.status(),
     });
   }
@@ -294,7 +293,7 @@ export function createSupabaseAuthSession(env = process.env, options = {}) {
       }
 
       if (request.method === 'POST' && url.pathname === '/api/auth/signup') {
-        assertSameOrigin(request);
+        assertSameOrigin(request, config.publicOrigin);
         const body = await readJsonBody(request);
         const email = validEmail(body?.email);
         const password = String(body?.password || '');
@@ -318,7 +317,7 @@ export function createSupabaseAuthSession(env = process.env, options = {}) {
       }
 
       if (request.method === 'POST' && url.pathname === '/api/auth/signin') {
-        assertSameOrigin(request);
+        assertSameOrigin(request, config.publicOrigin);
         const body = await readJsonBody(request);
         const email = validEmail(body?.email);
         const password = String(body?.password || '');
@@ -332,7 +331,7 @@ export function createSupabaseAuthSession(env = process.env, options = {}) {
       }
 
       if (request.method === 'POST' && url.pathname === '/api/auth/refresh') {
-        assertSameOrigin(request);
+        assertSameOrigin(request, config.publicOrigin);
         const session = await refreshFromCookie(request);
         if (!session.user) {
           json(response, 401, { authenticated: false, error: 'No valid refresh session is available.' }, {
@@ -347,7 +346,7 @@ export function createSupabaseAuthSession(env = process.env, options = {}) {
       }
 
       if (request.method === 'POST' && url.pathname === '/api/auth/signout') {
-        assertSameOrigin(request);
+        assertSameOrigin(request, config.publicOrigin);
         const cookies = parseCookies(request);
         const accessToken = clean(cookies[ACCESS_COOKIE]);
         if (accessToken && config.enabled) {
