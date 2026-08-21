@@ -1,5 +1,4 @@
 import './gac-war-room-v2.js';
-import './asset-resilience.js';
 
 const PANEL_SELECTOR = '[data-workspace-panel="gac"]';
 const ROOT_SELECTOR = '[data-gacv2-root]';
