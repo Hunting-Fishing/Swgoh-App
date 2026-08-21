@@ -1,5 +1,6 @@
 import './gac-war-room-v3.js';
 import './gac-fleet-round-operations.js';
+import './gac-fleet-attempt-history.js';
 
 const state = {
   loaded: false,
