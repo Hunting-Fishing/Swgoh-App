@@ -30,6 +30,21 @@ function transitionAllowed(previousInput, nextInput) {
   if (previous === "attempted") return ["win", "loss"].includes(next);
   return false;
 }
+function sanitizeStoredBanners(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 && Number.isInteger(parsed) ? parsed : null;
+}
+function validatedResultBanners(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0 || !Number.isInteger(parsed)) {
+    const error = new Error("Banners must be a non-negative whole number or left blank when not confirmed.");
+    error.status = 400;
+    throw error;
+  }
+  return parsed;
+}
 function sanitizeDatacron(value) {
   if (!value || typeof value !== "object" || !clean(value.id)) return null;
   return Object.freeze({
@@ -102,7 +117,7 @@ function sanitizeAttempt(value = {}) {
     leaderBaseId: normalizeBaseId(value?.leaderBaseId),
     datacronId: clean(value?.datacronId),
     status,
-    banners: value?.banners == null ? null : Math.max(0, Math.floor(Number(value.banners) || 0)),
+    banners: sanitizeStoredBanners(value?.banners),
     at: clean(value?.at),
     postAttempt: sanitizePostAttempt(value?.postAttempt, status),
   });
@@ -255,7 +270,7 @@ export function createGacAttackPlanService(options = {}) {
       throw error;
     }
     const assignment = await selectOne("gac_attack_plan_assignments", {
-      select: "id,round_id,defense_squad_id,attacker_leader_base_id,attacker_members,datacron,status,attempt_count,attempt_log,banners,planned_at,completed_at",
+      select: "id,round_id,defense_squad_id,attacker_leader_base_id,attacker_members,datacron,status,attempt_count,attempt_log,banners,planned_at,completed_at,updated_at,source,source_ref,metadata",
       id: `eq.${assignmentId}`,
       round_id: `eq.${resolved.roundRow.id}`,
     });
@@ -272,13 +287,21 @@ export function createGacAttackPlanService(options = {}) {
     }
 
     const defense = await assertDefense(resolved, assignment.defense_squad_id);
+    if (completedStatus(previousStatus) && previousStatus === status) {
+      return Object.freeze({
+        source: "verified-owner-war-room",
+        updated: false,
+        eventInstanceId: resolved.eventInstanceId,
+        round: resolved.round,
+        assignment: normalizeAssignment(assignment, defense),
+      });
+    }
+
     const timestamp = now().toISOString();
     const startsAttempt = status === "attempted" && previousStatus === "planned";
     const directResult = ["win", "loss"].includes(status) && previousStatus === "planned";
     const nextAttempts = Number(assignment.attempt_count || 0) + (startsAttempt || directResult ? 1 : 0);
-    const banners = input.banners === null || input.banners === undefined || input.banners === ""
-      ? null
-      : Math.max(0, Math.floor(Number(input.banners) || 0));
+    const banners = validatedResultBanners(input.banners);
     const attemptLog = [...sanitizeAttemptLog(assignment.attempt_log)];
     const closesAttempt = ["win", "loss"].includes(status) && !["win", "loss"].includes(previousStatus);
     if (closesAttempt) {
@@ -364,7 +387,7 @@ export function createGacAttackPlanService(options = {}) {
       status: validStatus(row.status) || "planned",
       attemptCount: Number(row.attempt_count || 0),
       attemptLog: sanitizeAttemptLog(row.attempt_log),
-      banners: row.banners == null ? null : Number(row.banners),
+      banners: sanitizeStoredBanners(row.banners),
       plannedAt: clean(row.planned_at),
       updatedAt: clean(row.updated_at),
       completedAt: clean(row.completed_at),
@@ -392,6 +415,8 @@ export {
   sanitizeAttemptLog,
   sanitizeDatacron,
   sanitizePostAttempt,
+  sanitizeStoredBanners,
   transitionAllowed,
+  validatedResultBanners,
   validStatus,
 };
