@@ -33,7 +33,7 @@ Core visual principles:
 | GAC War Room | Professional battle-room pass implemented; reference preservation corrected | 85% |
 | Guild Command Center | Professional overview/member/capability styling implemented | 70% |
 | TB / ROTE | Professional phase/map/mission-board pass implemented | 65% |
-| Login / auth visual alignment | Pending; behavior remains outside styling scope | 10% |
+| Login / auth visual alignment | Next styling target; behavior must remain unchanged | 10% |
 | Cross-device/accessibility | Responsive rules expanded across major workspaces | 52% |
 
 Approximate overall visual modernization: **75%**.
