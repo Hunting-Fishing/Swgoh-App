@@ -1,5 +1,6 @@
 import './gac-war-room-v3.js';
 import './gac-board-editor-stability-fix.js';
+import './gac-manual-counter-planner.js';
 import './gac-cleanup-attack-brief.js';
 import './gac-datacron-counter-intelligence-ui.js';
 import './gac-fleet-round-operations.js';
