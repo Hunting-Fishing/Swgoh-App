@@ -4,6 +4,9 @@
   "main": "cloudflare/worker.mjs",
   "compatibility_date": "2026-08-21",
   "keep_vars": true,
+  "vars": {
+    "RAILWAY_APP_ORIGIN": "https://swgoh-app-production.up.railway.app"
+  },
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",
