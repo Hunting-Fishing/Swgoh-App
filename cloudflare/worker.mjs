@@ -96,10 +96,11 @@ async function proxyApi(request, env) {
   headers.set("x-swgoH-edge", "cloudflare");
   headers.delete("host");
 
+  const hasBody = !["GET", "HEAD"].includes(request.method);
   const upstreamRequest = new Request(upstream, {
     method: request.method,
     headers,
-    body: ["GET", "HEAD"].includes(request.method) ? undefined : request.body,
+    ...(hasBody ? { body: request.body, duplex: "half" } : {}),
     redirect: "manual",
   });
 
