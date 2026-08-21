@@ -153,7 +153,7 @@ function rulesMarkup(format, activeLeague) {
 }
 
 function selectedPlacement(map) {
-  if (!selectedKey) return null;
+  if (!selectedKey || !map) return null;
   const [zone, slotText] = selectedKey.split('|');
   const slot = Number(slotText);
   return map.querySelector(`.gac-league-placement.is-filled[data-zone="${zone}"][data-slot="${slot}"]`) || null;
@@ -180,7 +180,7 @@ function selectedPanelMarkup(map, format, league) {
   </section>${rulesMarkup(format, league)}`;
 }
 
-function syncSidePanel(host, map, format, league) {
+function syncSidePanel(map, format, league) {
   const section = map.closest('.gac-manual-enemy-board');
   if (!section) return;
   section.classList.add('gac-live-arena-layout');
@@ -220,7 +220,7 @@ function enhanceMap() {
   map.dataset.gacLeague = league || '';
   map.dataset.gacFormat = format;
   if (league) for (const zone of ZONES) enhanceZone(zone, league, format);
-  syncSidePanel(host, map, format, league);
+  syncSidePanel(map, format, league);
   map.dataset.gacLeagueEnhanced = signature;
 }
 
@@ -277,6 +277,9 @@ function bind() {
       return;
     }
 
+    const moving = document.querySelector('[data-gac-manual-counter-planner]')?.classList.contains('gac-ux-moving');
+    if (moving && event.target.closest?.('.gac-ux-move-target,.gac-ux-swap-target')) return;
+
     const empty = event.target.closest?.('[data-gac-league-slot-add]');
     if (empty) {
       event.preventDefault();
@@ -316,12 +319,20 @@ function scheduleEnhance() {
 }
 
 function injectStyle() {
-  if (document.querySelector('link[data-gac-league-board-style]')) return;
-  const link = document.createElement('link');
-  link.rel = 'stylesheet';
-  link.href = '/gac-league-board.css?v=20260822-livearena2';
-  link.dataset.gacLeagueBoardStyle = 'true';
-  document.head.appendChild(link);
+  if (!document.querySelector('link[data-gac-league-board-style]')) {
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = '/gac-league-board.css?v=20260822-livearena2';
+    link.dataset.gacLeagueBoardStyle = 'true';
+    document.head.appendChild(link);
+  }
+  if (!document.querySelector('link[data-gac-live-layout-style]')) {
+    const layout = document.createElement('link');
+    layout.rel = 'stylesheet';
+    layout.href = '/gac-live-arena-layout.css?v=20260822-livearena1';
+    layout.dataset.gacLiveLayoutStyle = 'true';
+    document.head.appendChild(layout);
+  }
 }
 
 if (typeof window !== 'undefined') {
