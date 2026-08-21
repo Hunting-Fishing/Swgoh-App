@@ -17,11 +17,14 @@ function latestLossAttempt(assignment = {}) {
 }
 
 function cleanupTruth(assignment = {}, defense = {}, opponentRoster = {}) {
-  if (clean(assignment?.status).toLowerCase() !== 'loss') {
-    return Object.freeze({ ready:false, code:'not-loss', detail:'Cleanup intelligence is only generated for a current failed assignment.', survivorBaseIds:Object.freeze([]), survivorUnits:Object.freeze([]), attemptIndex:null, telemetryKnown:false });
-  }
+  const status = clean(assignment?.status).toLowerCase();
   const latest = latestLossAttempt(assignment);
-  if (!latest) return Object.freeze({ ready:false, code:'loss-log-missing', detail:'The failed assignment has no completed loss attempt in its canonical attempt log.', survivorBaseIds:Object.freeze([]), survivorUnits:Object.freeze([]), attemptIndex:null, telemetryKnown:false });
+  if (!latest) {
+    return Object.freeze({ ready:false, code:status==='loss'?'loss-log-missing':'not-loss', detail:status==='loss'?'The failed assignment has no completed loss attempt in its canonical attempt log.':'Cleanup intelligence requires a recorded failed attempt.', survivorBaseIds:Object.freeze([]), survivorUnits:Object.freeze([]), attemptIndex:null, telemetryKnown:false });
+  }
+  if (!['loss','abandoned'].includes(status)) {
+    return Object.freeze({ ready:false, code:'not-cleanup-state', detail:'Cleanup intelligence is waiting for the active cleanup plan/attempt lifecycle to finish before replanning.', survivorBaseIds:Object.freeze([]), survivorUnits:Object.freeze([]), attemptIndex:latest.index, telemetryKnown:false });
+  }
   const post = latest.attempt?.postAttempt || {};
   if (clean(post?.defenseState).toLowerCase() !== 'survivors-confirmed') {
     return Object.freeze({ ready:false, code:'survivors-unknown', detail:'Survivor state was not confirmed after the loss. No survivor-specific cleanup counter can be generated.', survivorBaseIds:Object.freeze([]), survivorUnits:Object.freeze([]), attemptIndex:latest.index, telemetryKnown:false });
