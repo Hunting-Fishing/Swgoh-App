@@ -32,6 +32,7 @@ Core visual principles:
 7. Desktop layouts prioritize maximum density over scanability and game-like presentation.
 8. Mobile behavior exists, but several dense desktop patterns should be redesigned rather than merely stacked.
 9. Some V3 cleanup logic hid older GAC scaffolding. This has been corrected so reference information remains visible under the enhancement-only rule.
+10. TB/ROTE phase, readiness, mission and candidate labels frequently fall into the 0.5–0.66rem range; the professional layer enlarges those surfaces without changing the tactical model.
 
 ## Rollout status
 
@@ -39,16 +40,16 @@ Core visual principles:
 | --- | --- | ---: |
 | Onboarding visual redesign | Implemented on styling branch | 100% |
 | Action Center visual redesign | Implemented on styling branch | 100% |
-| Shared palette / visual language | Established across onboarding, Actions, Player, GAC and Guild | 95% |
+| Shared palette / visual language | Established across onboarding, Actions, Player, GAC, Guild and TB/ROTE | 95% |
 | Player Command Center shell + overview | First readability / color / density pass implemented | 65% |
 | Global navigation / workspace tabs | First shared visual pass implemented | 60% |
 | GAC War Room visual modernization | Professional battle-room pass implemented; reference information preservation corrected | 85% |
 | Guild Command Center pages | Professional overview/member/capability styling implemented; populated-state review pending | 70% |
-| TB / ROTE map and planning surfaces | Styling pass pending | 5% |
+| TB / ROTE map and planning surfaces | Professional phase/map/mission-board pass implemented; populated-state review pending | 65% |
 | Login / auth visual alignment | Pending after onboarding path stabilizes | 10% |
-| Cross-device polish + accessibility review | Responsive rules expanded; full review pending | 40% |
+| Cross-device polish + accessibility review | Responsive rules expanded; full review pending | 45% |
 
-Approximate overall visual modernization: **60%**.
+Approximate overall visual modernization: **68%**.
 
 ## Implemented in the Player overview pass
 
@@ -90,26 +91,38 @@ Approximate overall visual modernization: **60%**.
 - Added desktop/tablet/mobile responsive layouts.
 - Added regression tests that prohibit the new Guild professional layer from removing nodes, fetching alternate data, or hiding content.
 
+## Implemented in the TB / ROTE pass
+
+- Preserved the existing phase deck, galaxy map, planet nodes, mission board, gate/core units, candidate lists and legacy Geo/Hoth information layouts.
+- Enlarged phase tabs, phase labels and phase descriptions.
+- Enlarged territory cards, planet art, readiness indicators and mission icons.
+- Improved lane-specific readability for dark-side, mixed, light-side and bonus paths without altering their underlying status classes.
+- Enlarged ROTE planet nodes and selected-planet treatment while keeping map relationships and positions intact.
+- Enlarged mission-board summaries, readiness status, mission chips, gate units and candidate rows.
+- Restored descriptive text inside fan-map planet details and legacy Geo/Hoth territory cards where previous density styling hid those descriptions.
+- Preserved map/operations view state behavior; the professional loader does not fetch, mutate or replace tactical data.
+- Added desktop/tablet/mobile responsive layouts and reduced-motion handling.
+- Added regression tests protecting the additive TB/ROTE presentation layer.
+
 ## Next implementation order
 
-### 1. TB / ROTE professional pass
-
-- Preserve all tactical/map/planning information.
-- Improve phase/planet/mission hierarchy without reducing tactical detail.
-- Use planet/faction-specific accent colors and stronger mission state visuals.
-- Enlarge controls and mission labels that currently fall below the primary readability target.
-
-### 2. Player Command Center detail polish
+### 1. Player Command Center detail polish
 
 - Review real populated roster state for overflow and visual balance.
 - Improve feature-family accents for Journey, Farm, GAC, Guild and Resources.
 - Preserve explanatory information while reducing visual competition through hierarchy rather than deletion.
 - Continue removing sub-0.7rem text from primary interaction surfaces.
 
-### 3. Login / auth
+### 2. Login / auth
 
 - Align login/signup visual language with onboarding after the OAuth flow is stable.
 - Keep authentication messaging simple and avoid decorative changes that obscure errors.
+
+### 3. Populated-state visual QA
+
+- Validate Onboarding, Actions, Player, GAC, Guild and TB/ROTE with real populated data.
+- Check wide desktop, laptop, tablet and mobile breakpoints.
+- Correct overflow, clipping and interaction conflicts without removing information.
 
 ## Guardrails
 
