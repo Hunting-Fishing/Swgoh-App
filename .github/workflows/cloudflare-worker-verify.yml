@@ -1,22 +1,9 @@
 name: Cloudflare Worker Verify
 
+# Manual-only by design. Production delivery does not depend on GitHub-hosted
+# runners; this verification remains available on demand without auto-spending.
 on:
-  pull_request:
-    paths:
-      - "cloudflare/**"
-      - "public/**"
-      - "server.mjs"
-      - "wrangler.jsonc"
-      - ".github/workflows/cloudflare-worker-verify.yml"
-  push:
-    branches:
-      - main
-    paths:
-      - "cloudflare/**"
-      - "public/**"
-      - "server.mjs"
-      - "wrangler.jsonc"
-      - ".github/workflows/cloudflare-worker-verify.yml"
+  workflow_dispatch:
 
 permissions:
   contents: read
