@@ -1,0 +1,38 @@
+name: Cloudflare Worker Verify
+
+on:
+  pull_request:
+    paths:
+      - "cloudflare/**"
+      - "public/**"
+      - "server.mjs"
+      - "wrangler.jsonc"
+      - ".github/workflows/cloudflare-worker-verify.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "cloudflare/**"
+      - "public/**"
+      - "server.mjs"
+      - "wrangler.jsonc"
+      - ".github/workflows/cloudflare-worker-verify.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  dry-run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Bundle Worker without deploying
+        run: npx --yes wrangler@4.125.0 deploy --dry-run --outdir .wrangler-dry-run
