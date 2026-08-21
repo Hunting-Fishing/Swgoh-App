@@ -5,6 +5,19 @@ const PLANNER_SELECTOR = '[data-gac-manual-counter-planner]';
 
 const state = { scheduled: false };
 
+function installRecoveryStyle() {
+  if (document.querySelector('style[data-gac-recovery-style]')) return;
+  const style = document.createElement('style');
+  style.dataset.gacRecoveryStyle = 'true';
+  style.textContent = `
+    #gacCommandCenterPro{display:none!important}
+    [data-workspace-panel="gac"]{min-height:0!important}
+    [data-workspace-panel="gac"]>*{visibility:visible!important;pointer-events:auto!important}
+    [data-workspace-panel="gac"]::after{display:none!important;content:none!important}
+  `;
+  document.head.appendChild(style);
+}
+
 function ensureCompatibilityAnchor() {
   if (document.getElementById('gacCommandCenterPro')) return true;
   const panel = document.querySelector(PANEL_SELECTOR);
@@ -21,6 +34,7 @@ function ensureCompatibilityAnchor() {
 }
 
 function syncReadyState() {
+  installRecoveryStyle();
   const panel = document.querySelector(PANEL_SELECTOR);
   if (!panel) return false;
   ensureCompatibilityAnchor();
@@ -45,6 +59,7 @@ function scheduleSync() {
 }
 
 if (typeof document !== 'undefined') {
+  installRecoveryStyle();
   document.addEventListener('DOMContentLoaded', scheduleSync, { once: true });
   window.addEventListener('hashchange', scheduleSync);
   window.addEventListener('swgoh:workspace-activated', scheduleSync);
@@ -56,4 +71,4 @@ if (typeof document !== 'undefined') {
   scheduleSync();
 }
 
-export { ensureCompatibilityAnchor, syncReadyState };
+export { ensureCompatibilityAnchor, installRecoveryStyle, syncReadyState };
