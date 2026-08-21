@@ -111,11 +111,13 @@ function enhanceMap() {
   if (!host || !map) return;
   const format = formatValue();
   const league = leagueValue();
+  const signature = `${format}|${league || 'none'}`;
+  if (map.dataset.gacLeagueEnhanced === signature) return;
+  map.dataset.gacLeagueEnhanced = signature;
 
   let strip = host.querySelector('[data-gac-league-rank-strip]');
   if (!strip) {
     map.insertAdjacentHTML('beforebegin', rankStripMarkup(format, league));
-    strip = host.querySelector('[data-gac-league-rank-strip]');
   } else {
     strip.outerHTML = rankStripMarkup(format, league);
   }
@@ -146,6 +148,7 @@ function bind() {
   document.addEventListener('change', (event) => {
     if (event.target.matches?.('[data-gac-league-select]')) {
       setLeague(event.target.value);
+      document.querySelector('.gac-manual-gac-map')?.removeAttribute('data-gac-league-enhanced');
       enhanceMap();
       return;
     }
@@ -159,6 +162,7 @@ function bind() {
       setLeague(rank.dataset.gacLeagueRank);
       const select = document.querySelector('[data-gac-league-select]');
       if (select) select.value = rank.dataset.gacLeagueRank;
+      document.querySelector('.gac-manual-gac-map')?.removeAttribute('data-gac-league-enhanced');
       enhanceMap();
       return;
     }
