@@ -1,0 +1,5 @@
+.gac-manual-enemy-board.gac-live-arena-layout>header{grid-column:1/-1!important;grid-row:1!important;border-bottom-color:#173f54!important}
+.gac-manual-enemy-board.gac-live-arena-layout>[data-gac-league-rank-strip]{grid-column:1/-1!important;grid-row:2!important}
+.gac-manual-enemy-board.gac-live-arena-layout>.gac-manual-gac-map{grid-column:1!important;grid-row:3!important;margin:0!important;align-self:stretch}
+.gac-manual-enemy-board.gac-live-arena-layout>.gac-manual-editor,.gac-manual-enemy-board.gac-live-arena-layout>.gac-live-arena-side{grid-column:2!important;grid-row:3!important;align-self:start;min-width:0;max-height:610px;overflow:auto}
+@media(max-width:980px){.gac-manual-enemy-board.gac-live-arena-layout>.gac-manual-gac-map,.gac-manual-enemy-board.gac-live-arena-layout>.gac-manual-editor,.gac-manual-enemy-board.gac-live-arena-layout>.gac-live-arena-side{grid-column:1!important;grid-row:auto!important}}
