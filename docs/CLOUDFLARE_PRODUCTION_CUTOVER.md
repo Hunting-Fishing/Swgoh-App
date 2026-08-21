@@ -1,32 +1,35 @@
-# SWGOH Command Center — Cloudflare Production Cutover
+# SWGOH Command Center — Cloudflare Edge + Railway Runtime
 
-## Target production architecture
+## Production architecture
 
 ```text
 GitHub: Hunting-Fishing/Swgoh-App
         |
-        | push to main
+        | source of truth / deploys
         v
-Cloudflare Workers Builds
+Railway
         |
-        +--> Workers Static Assets -> public/
+        +--> Swgoh-App Node/Docker runtime
+        |       |
+        |       +--> Supabase: canonical data, auth, snapshots, history
+        |       +--> live SWGOH gateway
         |
-        +--> Worker API -> existing server.mjs API implementation
-                |
-                +--> Supabase: canonical data, auth, snapshots, history
-                |
-                +--> SWGOH Live Gateway: explicit live refresh/enrichment only
-                           |
-                           +--> Comlink
-                           +--> SWGOH Stats
-                           +--> AE2
+        +--> Comlink / Stats / AE2 / workers and other containerized services
+
+Cloudflare
+        |
+        +--> swgohcommandcenter.com / www.swgohcommandcenter.com
+        +--> static public/ assets at the edge
+        +--> /api/* reverse proxy to the Railway Swgoh-App origin
 ```
 
-GitHub is the source of truth for production code. Cloudflare is the public application runtime and edge. Supabase remains the persistent application data/auth authority. Railway is no longer the website origin and should be retained only for live SWGOH services that still require a traditional long-running process.
+GitHub is the source of truth for code. Railway remains the primary application compute/runtime platform and continues to host Docker/container services across the project. Supabase remains the persistent application data/auth authority. Cloudflare provides the public domain, edge delivery, static assets, and a lightweight reverse proxy for API traffic.
+
+Cloudflare does **not** execute `server.mjs` or replace Railway's Node filesystem/process runtime.
 
 ## Cloudflare project
 
-Create/import a Worker from the GitHub repository `Hunting-Fishing/Swgoh-App`.
+Import the GitHub repository `Hunting-Fishing/Swgoh-App`.
 
 Required settings:
 
@@ -42,67 +45,55 @@ The Wrangler configuration attaches both production hostnames:
 - `https://swgohcommandcenter.com`
 - `https://www.swgohcommandcenter.com`
 
-Static files are served directly from `public/`. Requests under `/api/*` run through the Cloudflare Worker.
+Static files are served directly from `public/`. Requests under `/api/*` run through the Cloudflare edge Worker and are proxied to Railway.
 
-## Required Cloudflare Worker secrets / variables
+## Required Cloudflare variable
 
-Do not commit these values to GitHub. Copy the current production values from the active environment into Cloudflare Worker Settings > Variables and Secrets.
+Cloudflare requires only one application-origin variable for the Railway bridge:
 
-Required for canonical application data/auth:
+- `RAILWAY_APP_ORIGIN=https://<current-swgoh-app-public-domain>.up.railway.app`
+
+This is the public Railway domain of the **Swgoh-App** service, not the separate SWGOH live-gateway domain.
+
+The Worker intentionally does not need Supabase service-role credentials, the live gateway API key, Discord tokens, or other application secrets. Those remain on Railway, where the application backend already runs.
+
+## Railway variables remain authoritative
+
+Keep the existing backend environment on Railway, including:
 
 - `SUPABASE_URL`
 - `SUPABASE_PUBLISHABLE_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY`
-
-Required while live SWGOH enrichment remains on the Railway live gateway:
-
+- `SWGOH_GATEWAY_URL`
 - `SWGOH_GATEWAY_API_KEY`
+- Discord credentials and integration variables
+- runtime/cache/storage variables used by the Node/Docker services
 
-Optional later integrations:
-
-- `DISCORD_APPLICATION_ID`
-- `DISCORD_PUBLIC_KEY`
-- `DISCORD_BOT_TOKEN`
-- `DISCORD_CLIENT_ID`
-- `DISCORD_CLIENT_SECRET`
-- `DISCORD_REDIRECT_URI`
-- `DISCORD_DEFAULT_GUILD_ID`
-- `DISCORD_DEFAULT_ALLY_CODE`
-- `DISCORD_TB_WEBHOOK_URL`
-
-Non-secret production defaults are committed in `wrangler.jsonc`.
+Do not copy server-only secrets into the Cloudflare edge unless a future architecture explicitly requires it.
 
 ## Supabase production URL configuration
 
-After the first Cloudflare deployment is healthy, update Supabase Auth URL Configuration so production authentication uses the new public origin:
+When the Cloudflare domain becomes the public user-facing origin, configure Supabase Auth for that public hostname:
 
 - Site URL: `https://www.swgohcommandcenter.com`
 - Production redirect allow-list: include `https://www.swgohcommandcenter.com/**`
-- Add the apex hostname as an allowed redirect only if it will be used directly instead of redirecting to `www`.
+- Include the apex hostname only if users will access it directly rather than redirecting to `www`.
 
-Do not rotate or delete the current Supabase project during this cutover. This migration changes the application runtime/origin, not the canonical database.
+This changes the public authentication origin only. It does not move Supabase or Railway.
 
-## Acceptance checks before disabling the Railway Swgoh-App web service
+## Acceptance checks
 
-1. `GET https://www.swgohcommandcenter.com/api/health` returns the expected production capability document.
-2. Canonical player baseline returns a complete roster from Supabase.
-3. Canonical Guild baseline returns the complete Guild membership from Supabase.
-4. Explicit live player refresh reaches the live gateway successfully.
-5. Explicit live Guild refresh reaches the live gateway successfully.
-6. Login/session/logout work with Secure HttpOnly cookies on the Cloudflare hostname.
-7. GAC War Room loads and saved-board/evidence routes work.
-8. Static assets and SPA navigation load without routing failures.
-9. Cloudflare Worker logs show no repeated runtime exceptions.
-10. Only after 1-9 pass: stop the Railway `Swgoh-App` website service.
+1. Cloudflare deployment completes successfully.
+2. `RAILWAY_APP_ORIGIN` points at the live Railway `Swgoh-App` public domain.
+3. `GET https://www.swgohcommandcenter.com/api/health` reaches Railway and returns the expected capability document.
+4. Canonical player baseline returns a complete roster from Supabase through Railway.
+5. Canonical Guild baseline returns complete Guild membership through Railway.
+6. Explicit live player/Guild refresh reaches the live gateway from Railway.
+7. Login/session/logout work with Secure HttpOnly cookies on the Cloudflare hostname.
+8. GAC War Room and other API-backed tools function through the proxy.
+9. Static assets and SPA navigation load from Cloudflare correctly.
+10. Railway services continue reporting healthy after the domain cutover.
 
-## Railway reduction target
+## Infrastructure policy
 
-Do not delete all Railway services at once. First remove the website service after Cloudflare acceptance passes. Then assess the remaining live-data services individually:
-
-- `SWGOH-Live-Gateway` — keep during initial cutover.
-- `my-swgoh-comlink` — keep while it is the authoritative live SWGOH transport.
-- `Swgoh-Stats` — keep only if live calculated-stat enrichment is still used.
-- `Swgoh-ae2` — keep only if runtime artwork extraction is still required.
-- `Guild-Sync-Worker` — migrate to a scheduled/serverless workflow after the web cutover, then remove from Railway.
-
-The long-term goal is for Railway spend to represent only unavoidable live game-data infrastructure, not the public website or canonical application data.
+Railway is retained as the shared Docker/container runtime for this and other repositories. Cost optimization should be done service-by-service through sizing, sleeping non-production workloads, caching, scheduled workers, or consolidating containers — not by removing Railway from the architecture.
