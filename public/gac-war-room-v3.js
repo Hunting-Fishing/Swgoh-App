@@ -225,6 +225,7 @@ function run() {
   state.scheduled = false;
   injectStylesheet('/command-center-layout-v3.css?v=20260821-layout3', 'cc-layout-v3');
   injectStylesheet('/gac-war-room-v3.css?v=20260821-gacv3', 'gac-war-room-v3');
+  injectStylesheet('/gac-war-room-professional.css?v=20260821-ui1', 'gac-war-room-professional');
   const root = document.querySelector('[data-gacv2-root]');
   if (root) enhance(root);
 }
