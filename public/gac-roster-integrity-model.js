@@ -69,6 +69,16 @@ function capability(body = {}, name) {
   return caps[name] === true ? true : caps[name] === false ? false : null;
 }
 
+function capabilityCoverage(value) {
+  return value === true ? 'known' : value === false ? 'unknown' : 'unverified';
+}
+
+function rosterArrayCoverage(available, declaredCapability, mismatch, expectedCount) {
+  if (!available || declaredCapability === false || mismatch) return 'partial';
+  if (expectedCount === null) return 'observed';
+  return 'known';
+}
+
 function rosterIntegrity(body = {}, headers = null, options = {}) {
   const expectedAllyCode = allyCode(options.expectedAllyCode);
   const actualAllyCode = allyCode(body?.player?.allyCode || body?.player?.ally_code);
@@ -107,29 +117,42 @@ function rosterIntegrity(body = {}, headers = null, options = {}) {
   const warnings = [];
   if (!sourceLive) blocking.push('Roster body is not marked as live.');
   if (!responseSourceLive) blocking.push(`Unexpected roster response source: ${responseSource}.`);
+  if (caps.liveRoster === false) blocking.push('Live roster capability is explicitly unavailable.');
   if (!identityKnown) blocking.push('Roster response does not expose a valid Ally Code identity.');
   else if (expectedAllyCode && !identityMatches) blocking.push(`Roster identity mismatch: expected ${expectedAllyCode}, received ${actualAllyCode}.`);
   if (!hasCharacters || caps.characterRoster === false) blocking.push('Character roster coverage is unavailable.');
   if (characterMismatch) blocking.push(`Character roster count mismatch: expected ${expected.characters}, received ${counts.characters}.`);
+
+  if (!responseSourceKnown) warnings.push('Roster response source header is not exposed; body source is the only provenance signal.');
+  if (!cacheState) warnings.push('Server roster cache state is not exposed.');
   if (stale) warnings.push('Server returned stale-while-revalidate roster data.');
   if (!freshnessKnown) warnings.push('Roster freshness age is not exposed.');
+  if (caps.liveRoster === null) warnings.push('Live roster capability is not explicitly declared.');
+  if (caps.characterRoster === null && hasCharacters) warnings.push('Character roster capability is not explicitly declared.');
   if (!hasShips || caps.shipRoster === false) warnings.push('Ship roster coverage is unavailable; fleet comparison is partial.');
+  else if (caps.shipRoster === null) warnings.push('Ship roster capability is not explicitly declared.');
   if (shipMismatch) warnings.push(`Ship roster count mismatch: expected ${expected.ships}, received ${counts.ships}.`);
   if (totalMismatch) warnings.push(`Total owned-unit count mismatch: expected ${expected.total}, received ${totalActual}.`);
+  if (expected.characters === null) warnings.push('Expected character count is not exposed; logical character completeness is not independently count-audited.');
+  if (hasShips && expected.ships === null) warnings.push('Expected ship count is not exposed; logical ship completeness is not independently count-audited.');
   if (caps.profileGp === false) warnings.push('Profile GP capability is unavailable.');
+  else if (caps.profileGp === null) warnings.push('Profile GP capability is not explicitly declared.');
   if (caps.unitGp === false) warnings.push('Unit GP capability is unavailable.');
+  else if (caps.unitGp === null) warnings.push('Unit GP capability is not explicitly declared.');
   if (caps.zetas === false) warnings.push('Zeta classification is unavailable.');
+  else if (caps.zetas === null) warnings.push('Zeta capability is not explicitly declared.');
   if (caps.omicrons === false) warnings.push('Omicron classification is unavailable.');
+  else if (caps.omicrons === null) warnings.push('Omicron capability is not explicitly declared.');
 
   const status = blocking.length ? 'blocked' : warnings.length ? 'warn' : 'good';
   const freshness = stale ? 'stale' : ['fresh', 'miss', 'refreshed'].includes(cacheState) ? 'fresh' : freshnessKnown ? 'observed' : 'unknown';
   const coverage = Object.freeze({
-    characters: hasCharacters && caps.characterRoster !== false && !characterMismatch ? 'known' : 'partial',
-    ships: hasShips && caps.shipRoster !== false && !shipMismatch ? 'known' : 'partial',
-    profileGp: caps.profileGp === false ? 'unknown' : 'known',
-    unitGp: caps.unitGp === false ? 'unknown' : 'known',
-    zetas: caps.zetas === false ? 'unknown' : caps.zetas === true ? 'known' : 'unverified',
-    omicrons: caps.omicrons === false ? 'unknown' : caps.omicrons === true ? 'known' : 'unverified',
+    characters: rosterArrayCoverage(hasCharacters, caps.characterRoster, characterMismatch, expected.characters),
+    ships: rosterArrayCoverage(hasShips, caps.shipRoster, shipMismatch, expected.ships),
+    profileGp: capabilityCoverage(caps.profileGp),
+    unitGp: capabilityCoverage(caps.unitGp),
+    zetas: capabilityCoverage(caps.zetas),
+    omicrons: capabilityCoverage(caps.omicrons),
   });
 
   return Object.freeze({
@@ -140,7 +163,7 @@ function rosterIntegrity(body = {}, headers = null, options = {}) {
     source: Object.freeze({
       body: bodySource || 'unknown',
       response: responseSource || 'not-exposed',
-      live: sourceLive && responseSourceLive,
+      live: sourceLive && responseSourceLive && caps.liveRoster !== false,
     }),
     freshness: Object.freeze({
       state: freshness,
@@ -166,11 +189,13 @@ function combinedRosterIntegrity(mine, opponent) {
 
 export {
   allyCode,
+  capabilityCoverage,
   combinedRosterIntegrity,
   expectedCounts,
   firstKnownCount,
   headerValue,
   responseAgeSeconds,
+  rosterArrayCoverage,
   rosterCounts,
   rosterIntegrity,
 };
