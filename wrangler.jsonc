@@ -3,6 +3,7 @@
   "name": "swgoh-command-center",
   "main": "cloudflare/worker.mjs",
   "compatibility_date": "2026-08-21",
+  "keep_vars": true,
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",
@@ -11,16 +12,6 @@
       "/api/*"
     ]
   },
-  "routes": [
-    {
-      "pattern": "swgohcommandcenter.com",
-      "custom_domain": true
-    },
-    {
-      "pattern": "www.swgohcommandcenter.com",
-      "custom_domain": true
-    }
-  ],
   "observability": {
     "enabled": true
   }
