@@ -1,17 +1,12 @@
 name: Node regression tests
 
+# Manual-only by design. Railway deploys main independently; automatic GitHub-hosted
+# runners are disabled so Actions billing/runner availability cannot block delivery.
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
-
-concurrency:
-  group: node-tests-${{ github.ref }}
-  cancel-in-progress: true
 
 jobs:
   test:
