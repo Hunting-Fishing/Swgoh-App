@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { Readable } from "node:stream";
-import { createGacAttackPlanApi } from "../gac-attack-plan-api.mjs";
+import { createGacAttackPlanApi, executionConfirmationSnapshot } from "../gac-attack-plan-api.mjs";
 
 function request(method, body = null, options = {}) {
   const stream = body == null ? Readable.from([]) : Readable.from([Buffer.from(JSON.stringify(body))]);
@@ -14,6 +14,25 @@ function request(method, body = null, options = {}) {
   };
   return stream;
 }
+
+const enemyDefense = Object.freeze({
+  id: 44,
+  leaderBaseId: "DEF_A",
+  members: ["DEF_A", "DEF_B", "DEF_C"],
+  zone: "FRONT-TOP",
+  slot: 0,
+  datacronState: "none",
+  datacron: null,
+});
+
+const lockedAssignment = Object.freeze({
+  id: 10,
+  defenseId: 44,
+  leaderBaseId: "ATK_A",
+  members: ["ATK_A", "ATK_B", "ATK_C"],
+  datacron: { id: "OWN-DC-9", setId: 19, level: 9, affixes: [] },
+  status: "planned",
+});
 
 function harness(options = {}) {
   const writes = [];
@@ -33,7 +52,7 @@ function harness(options = {}) {
     gatewayCalls.push({ pathname, includeKey });
     if (pathname === "/v1/gac/current-event") return { event: { eventInstanceId: "GAC:CURRENT" } };
     if (pathname === "/v1/gac/player/732764286") return { event: { eventInstanceId: "GAC:CURRENT" }, player: { allyCode: "732764286" } };
-    if (pathname === "/v1/player/732764286") return playerRoster;
+    if (pathname === "/v1/player/732764286") return options.playerRoster || playerRoster;
     throw new Error(`unexpected gateway call ${pathname}`);
   };
   const authSession = { async currentUser() { return options.anonymous ? null : { id: "USER-1" }; } };
@@ -52,11 +71,15 @@ function harness(options = {}) {
         defenses: options.ownDefenses || [{ id: 77, members: ["DEF_ME", "DEF_2", "DEF_3"] }],
       };
     },
+    async getDefenses(userId, input) {
+      planCalls.push({ type: "getDefenses", userId, input });
+      return { owner: "opponent", defenses: options.enemyDefenses || [enemyDefense] };
+    },
   };
   const plans = {
     async getAssignments(userId, input) {
       planCalls.push({ type: "getAssignments", userId, input });
-      return { source: "verified-owner-war-room", round: input.round, assignments: [] };
+      return { source: "verified-owner-war-room", round: input.round, assignments: options.assignments || [] };
     },
     async saveAssignment(userId, input) {
       planCalls.push({ type: "saveAssignment", userId, input });
@@ -128,12 +151,55 @@ test("cannot persist a datacron missing from current owned inventory", async () 
   assert.equal(planCalls.some((call) => call.type === "saveAssignment"), false);
 });
 
-test("status transitions are routed through authenticated PATCH without roster revalidation", async () => {
-  const { api, writes, gatewayCalls, planCalls } = harness();
-  await api.handle(request("PATCH", { round: 3, id: 10, status: "win", banners: 65 }), {}, new URL("https://app.test/api/gac/attack-plan/732764286"));
+test("planned attack begins only with exact B08 confirmation and live resource revalidation", async () => {
+  const executionConfirmation = executionConfirmationSnapshot(lockedAssignment, enemyDefense);
+  const { api, writes, gatewayCalls, planCalls } = harness({ assignments: [lockedAssignment], ownDefenses: [] });
+  await api.handle(request("PATCH", { round: 3, id: 10, status: "attempted", executionConfirmation }), {}, new URL("https://app.test/api/gac/attack-plan/732764286"));
   assert.equal(writes[0].status, 200);
   const update = planCalls.find((call) => call.type === "updateStatus");
   assert.equal(update.input.id, 10);
+  assert.equal(update.input.status, "attempted");
+  assert.equal(gatewayCalls.some((call) => call.pathname === "/v1/player/732764286"), true);
+  assert.equal(planCalls.some((call) => call.type === "getPlayerDefenses"), true);
+  assert.equal(planCalls.some((call) => call.type === "getDefenses"), true);
+});
+
+test("planned attack cannot begin with a stale or altered checklist fingerprint", async () => {
+  const executionConfirmation = { ...executionConfirmationSnapshot(lockedAssignment, enemyDefense), slot: 1 };
+  const { api, writes, planCalls } = harness({ assignments: [lockedAssignment], ownDefenses: [] });
+  await api.handle(request("PATCH", { round: 3, id: 10, status: "attempted", executionConfirmation }), {}, new URL("https://app.test/api/gac/attack-plan/732764286"));
+  assert.equal(writes[0].status, 409);
+  assert.match(writes[0].body.error, /no longer matches/i);
+  assert.equal(planCalls.some((call) => call.type === "updateStatus"), false);
+});
+
+test("planned attack cannot begin while enemy Datacron truth is unknown", async () => {
+  const unknownDefense = { ...enemyDefense, datacronState: "unknown" };
+  const executionConfirmation = executionConfirmationSnapshot(lockedAssignment, unknownDefense);
+  const { api, writes, planCalls } = harness({ assignments: [lockedAssignment], ownDefenses: [], enemyDefenses: [unknownDefense] });
+  await api.handle(request("PATCH", { round: 3, id: 10, status: "attempted", executionConfirmation }), {}, new URL("https://app.test/api/gac/attack-plan/732764286"));
+  assert.equal(writes[0].status, 409);
+  assert.match(writes[0].body.error, /enemy Datacron/i);
+  assert.equal(planCalls.some((call) => call.type === "updateStatus"), false);
+});
+
+test("direct planned to win/loss is rejected so the execution gate cannot be bypassed", async () => {
+  for (const status of ["win", "loss"]) {
+    const { api, writes, gatewayCalls, planCalls } = harness({ assignments: [lockedAssignment] });
+    await api.handle(request("PATCH", { round: 3, id: 10, status, banners: status === "win" ? 65 : null }), {}, new URL("https://app.test/api/gac/attack-plan/732764286"));
+    assert.equal(writes[0].status, 409);
+    assert.match(writes[0].body.error, /pre-battle checklist/i);
+    assert.equal(planCalls.some((call) => call.type === "updateStatus"), false);
+    assert.equal(gatewayCalls.some((call) => call.pathname === "/v1/player/732764286"), false);
+  }
+});
+
+test("win/loss after an attempted assignment remains a result-only transition", async () => {
+  const attempted = { ...lockedAssignment, status: "attempted" };
+  const { api, writes, gatewayCalls, planCalls } = harness({ assignments: [attempted] });
+  await api.handle(request("PATCH", { round: 3, id: 10, status: "win", banners: 65 }), {}, new URL("https://app.test/api/gac/attack-plan/732764286"));
+  assert.equal(writes[0].status, 200);
+  const update = planCalls.find((call) => call.type === "updateStatus");
   assert.equal(update.input.status, "win");
   assert.equal(update.input.banners, 65);
   assert.equal(gatewayCalls.some((call) => call.pathname === "/v1/player/732764286"), false);
