@@ -15,12 +15,15 @@ export function normalizePublicOrigin(value) {
   }
 }
 
-export function resolvePublicOrigin(request, configuredOrigin = '') {
-  const explicit = normalizePublicOrigin(configuredOrigin);
-  if (explicit) return explicit;
-
-  const host = clean(request?.headers?.['x-forwarded-host'] || request?.headers?.host);
+export function resolveRequestOrigin(request) {
+  const host = clean(request?.headers?.['x-forwarded-host'] || request?.headers?.host).split(',')[0].trim();
   const proto = clean(clean(request?.headers?.['x-forwarded-proto']).split(',')[0]) || 'https';
   if (!host) return '';
   return normalizePublicOrigin(`${proto}://${host}`);
+}
+
+export function resolvePublicOrigin(request, configuredOrigin = '') {
+  const explicit = normalizePublicOrigin(configuredOrigin);
+  if (explicit) return explicit;
+  return resolveRequestOrigin(request);
 }
