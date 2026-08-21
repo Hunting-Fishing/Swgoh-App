@@ -1,3 +1,4 @@
+import './gac-main-section.js';
 import './gac-war-room-v3.js';
 import './gac-manual-war-room-bridge.js';
 import './gac-manual-cleanup-parity.js';
