@@ -14,6 +14,10 @@
         "leaderBaseId": "GRANDMASTERLUKE",
         "members": ["GRANDMASTERLUKE", "JEDIKNIGHTLUKE", "HERMITYODA"]
       },
+      "datacron": {
+        "attacker": { "presence": "", "required": false, "setIds": [], "mechanicIds": [] },
+        "defender": { "presence": "", "required": false, "setIds": [], "mechanicIds": [] }
+      },
       "source": {
         "name": "SWGOH GA3 Counter Guide",
         "ref": "https://www.swgoh-ga3.online-server.info/index.php?id=baylan_skoll&mode=leaders",
@@ -75,6 +79,10 @@
         "leaderBaseId": "SUPREMELEADERKYLOREN",
         "members": ["SUPREMELEADERKYLOREN", "FIRSTORDERSPECIALFORCESPILOT", "GENERALHUX"]
       },
+      "datacron": {
+        "attacker": { "presence": "", "required": false, "setIds": [], "mechanicIds": [] },
+        "defender": { "presence": "", "required": false, "setIds": [], "mechanicIds": [] }
+      },
       "source": {
         "name": "SWGOH GA3 Counter Guide",
         "ref": "https://www.swgoh-ga3.online-server.info/index.php?id=pirate_king_hondo_ohnaka",
@@ -135,6 +143,10 @@
       "attacker": {
         "leaderBaseId": "DARTHTRAYA",
         "members": ["DARTHTRAYA", "DARTHNIHILUS", "SAVAGEOPRESS"]
+      },
+      "datacron": {
+        "attacker": { "presence": "", "required": false, "setIds": [], "mechanicIds": [] },
+        "defender": { "presence": "", "required": false, "setIds": [], "mechanicIds": [] }
       },
       "source": {
         "name": "SWGOH GA3 Counter Guide",
