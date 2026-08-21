@@ -1,0 +1,92 @@
+/* Full GAC battlefield: four territories per player, eight territory locations total. */
+.gac-manual-gac-map.gac-league-board-active.gac-full-battlefield{
+  position:relative;
+  display:grid!important;
+  grid-template-columns:minmax(160px,1fr) minmax(180px,1.08fr) 34px minmax(180px,1.08fr) minmax(160px,1fr)!important;
+  grid-template-rows:30px minmax(205px,1fr) minmax(205px,1fr)!important;
+  grid-template-areas:
+    'ownlabel ownlabel center enemylabel enemylabel'
+    'own-back-top own-front-top center enemy-front-top enemy-back-top'
+    'own-back-bottom own-front-bottom center enemy-front-bottom enemy-back-bottom'!important;
+  gap:6px!important;
+  min-height:500px!important;
+  padding:8px!important;
+  background:
+    radial-gradient(circle at 50% 50%,rgba(236,195,62,.10),transparent 8%),
+    linear-gradient(90deg,rgba(75,195,237,.025) 49.8%,rgba(236,195,62,.11) 50%,rgba(75,195,237,.025) 50.2%),
+    linear-gradient(180deg,#04101a,#071a28)!important;
+  overflow:hidden;
+}
+
+.gac-full-battlefield:before,.gac-full-battlefield:after{display:none!important}
+.gac-full-side-label{z-index:3;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:4px 8px;border:1px solid #214f67;border-radius:7px;background:#071925;color:#cfeaf6;min-width:0}
+.gac-full-side-label.is-own{grid-area:ownlabel;border-color:#325770;background:linear-gradient(90deg,#0b2130,#071824)}
+.gac-full-side-label.is-opponent{grid-area:enemylabel;border-color:#715d25;background:linear-gradient(90deg,#071824,#211d0d)}
+.gac-full-side-label span{font-size:7px;font-weight:950;letter-spacing:.13em;color:#6bd9f5}
+.gac-full-side-label.is-opponent span{color:#f0c94f}
+.gac-full-side-label strong{font-size:8px;color:#dceff7;white-space:nowrap}
+
+.gac-full-center-line{grid-area:center;position:relative;z-index:2;display:grid;place-items:center;min-width:24px;pointer-events:none}
+.gac-full-center-line:before{content:'';position:absolute;top:0;bottom:0;left:50%;border-left:1px solid rgba(238,197,65,.38);box-shadow:0 0 14px rgba(238,197,65,.12)}
+.gac-full-center-line span{position:relative;z-index:2;writing-mode:vertical-rl;transform:rotate(180deg);padding:7px 4px;border:1px solid #806922;border-radius:999px;background:#07131c;color:#e5bd41;font-size:6px;font-weight:950;letter-spacing:.15em}
+
+.gac-full-battlefield .gac-manual-map-zone.gac-full-enemy-territory{min-width:0!important;min-height:0!important;margin:0!important}
+.gac-full-battlefield .gac-manual-map-zone.is-front-top{grid-area:enemy-front-top!important}
+.gac-full-battlefield .gac-manual-map-zone.is-back-top{grid-area:enemy-back-top!important}
+.gac-full-battlefield .gac-manual-map-zone.is-front-bottom{grid-area:enemy-front-bottom!important}
+.gac-full-battlefield .gac-manual-map-zone.is-back-bottom{grid-area:enemy-back-bottom!important}
+
+.gac-full-own-territory{position:relative;z-index:1;min-width:0;display:grid;grid-template-rows:auto 1fr;gap:5px;padding:7px;border:1px solid #315c73;border-radius:8px;background:radial-gradient(circle at 50% 70%,rgba(46,139,179,.07),transparent 55%),linear-gradient(145deg,rgba(8,31,46,.97),rgba(4,16,25,.98));color:#d9eff8;overflow:hidden}
+.gac-full-own-territory.is-back-top{border-color:#6d622d;background:radial-gradient(circle at 50% 70%,rgba(209,174,65,.07),transparent 55%),linear-gradient(145deg,rgba(27,27,15,.96),rgba(5,17,24,.98))}
+.gac-full-own-territory>header{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;min-height:31px;padding-bottom:4px;border-bottom:1px solid rgba(103,201,235,.10)}
+.gac-full-own-territory>header div{display:grid;gap:1px}
+.gac-full-own-territory>header span{font-size:7px;font-weight:950;letter-spacing:.08em;color:#7fcce7;text-transform:uppercase}
+.gac-full-own-territory.is-back-top>header span{color:#e2bf4b}
+.gac-full-own-territory>header strong{font-size:10px;color:#f1f8fb}
+.gac-full-own-territory>header small{font-size:6px;color:#668c9e}
+.gac-full-own-territory>header>b{padding:3px 5px;border:1px solid #326078;border-radius:6px;background:#071c2a;color:#83d8ef;font-size:7px}
+.gac-full-own-territory.is-back-top>header>b{border-color:#796929;color:#e7c64e;background:#1d1a0b}
+
+.gac-full-own-focus{align-self:stretch;display:grid;place-items:center;align-content:center;gap:4px;border:0;background:transparent;color:#75d8f3;cursor:pointer;min-height:116px;padding:5px;transition:filter .14s ease,transform .14s ease}
+.gac-full-own-focus:hover{filter:brightness(1.16);transform:translateY(-2px)}
+.gac-full-own-territory.is-back-top .gac-full-own-focus{color:#e5c34d}
+.gac-full-own-orbit{width:62px;height:62px;display:grid;place-items:center;border:2px solid currentColor;border-radius:50%;background:radial-gradient(circle,#0d2b3d,#061522 65%,#031019);box-shadow:inset 0 0 0 5px rgba(255,255,255,.02),0 0 14px rgba(76,190,230,.10)}
+.gac-full-own-orbit b{font-size:18px;line-height:1}
+.gac-full-own-focus>strong{font-size:8px;letter-spacing:.08em;color:#dff6ff}
+.gac-full-own-focus>small{font-size:6px;color:#6d93a4}
+
+.gac-full-battlefield .gac-manual-map-emblem{position:absolute!important;left:50%!important;top:50%!important;transform:translate(-50%,-50%)!important;z-index:8!important;width:70px!important;height:70px!important;margin:0!important}
+
+/* The full 8-territory map needs the full content width. Put the selected/editor panel below at normal desktop widths. */
+@media (max-width:1499px){
+  .gac-manual-enemy-board.gac-live-arena-layout:has(.gac-full-battlefield){grid-template-columns:minmax(0,1fr)!important}
+  .gac-manual-enemy-board.gac-live-arena-layout:has(.gac-full-battlefield)>header,
+  .gac-manual-enemy-board.gac-live-arena-layout:has(.gac-full-battlefield)>[data-gac-league-rank-strip],
+  .gac-manual-enemy-board.gac-live-arena-layout:has(.gac-full-battlefield)>.gac-manual-gac-map,
+  .gac-manual-enemy-board.gac-live-arena-layout:has(.gac-full-battlefield)>.gac-manual-editor,
+  .gac-manual-enemy-board.gac-live-arena-layout:has(.gac-full-battlefield)>.gac-live-arena-side{grid-column:1!important}
+  .gac-manual-enemy-board.gac-live-arena-layout:has(.gac-full-battlefield)>.gac-manual-gac-map{grid-row:3!important}
+  .gac-manual-enemy-board.gac-live-arena-layout:has(.gac-full-battlefield)>.gac-manual-editor,
+  .gac-manual-enemy-board.gac-live-arena-layout:has(.gac-full-battlefield)>.gac-live-arena-side{grid-row:4!important;max-height:none!important}
+}
+
+@media (max-width:920px){
+  .gac-manual-gac-map.gac-league-board-active.gac-full-battlefield{
+    grid-template-columns:1fr 1fr!important;
+    grid-template-rows:auto minmax(180px,1fr) minmax(180px,1fr) auto auto minmax(180px,1fr) minmax(180px,1fr)!important;
+    grid-template-areas:
+      'ownlabel ownlabel'
+      'own-front-top own-back-top'
+      'own-front-bottom own-back-bottom'
+      'center center'
+      'enemylabel enemylabel'
+      'enemy-front-top enemy-back-top'
+      'enemy-front-bottom enemy-back-bottom'!important;
+  }
+  .gac-full-center-line{min-height:24px}
+  .gac-full-center-line:before{left:0;right:0;top:50%;bottom:auto;border-left:0;border-top:1px solid rgba(238,197,65,.38)}
+  .gac-full-center-line span{writing-mode:horizontal-tb;transform:none;padding:4px 8px}
+}
+
+.gac-manual-own-defense.gac-full-own-pulse{animation:gacFullOwnPulse .9s ease}
+@keyframes gacFullOwnPulse{0%,100%{box-shadow:inherit}40%{box-shadow:0 0 0 3px rgba(82,205,244,.22),0 0 24px rgba(82,205,244,.18)}}
