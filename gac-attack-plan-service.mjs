@@ -48,6 +48,52 @@ function sanitizeDatacron(value) {
     }))),
   });
 }
+function sanitizePostAttempt(value = {}, statusInput = "") {
+  const status = validStatus(statusInput);
+  const requested = clean(value?.defenseState).toLowerCase();
+  const defenseState = status === "win"
+    ? "cleared"
+    : requested === "survivors-confirmed"
+      ? "survivors-confirmed"
+      : "unknown";
+  const survivorBaseIds = defenseState === "survivors-confirmed"
+    ? [...new Set(asArray(value?.survivorBaseIds).map(normalizeBaseId).filter(Boolean))]
+    : [];
+  return Object.freeze({
+    defenseState,
+    survivorBaseIds: Object.freeze(survivorBaseIds),
+    source: "user-confirmed-result",
+    tmState: "unknown",
+    healthState: "unknown",
+    protectionState: "unknown",
+  });
+}
+function confirmedPostAttempt(value = {}, statusInput = "", defenseMembers = []) {
+  const status = validStatus(statusInput);
+  const defenseIds = [...new Set(asArray(defenseMembers).map(normalizeBaseId).filter(Boolean))];
+  if (status === "win") return sanitizePostAttempt({ defenseState: "cleared" }, status);
+  if (status !== "loss") return sanitizePostAttempt({}, status);
+  const requested = clean(value?.defenseState).toLowerCase();
+  if (!requested || requested === "unknown") return sanitizePostAttempt({ defenseState: "unknown" }, status);
+  if (requested !== "survivors-confirmed") {
+    const error = new Error("Post-attempt defense state must be unknown or survivors-confirmed for a loss.");
+    error.status = 400;
+    throw error;
+  }
+  const survivors = [...new Set(asArray(value?.survivorBaseIds).map(normalizeBaseId).filter(Boolean))];
+  if (!survivors.length) {
+    const error = new Error("Select at least one surviving defender when confirming loss survivors.");
+    error.status = 400;
+    throw error;
+  }
+  const invalid = survivors.filter((id) => !defenseIds.includes(id));
+  if (invalid.length) {
+    const error = new Error(`Confirmed survivors are not part of the saved defense: ${invalid.join(", ")}.`);
+    error.status = 409;
+    throw error;
+  }
+  return sanitizePostAttempt({ defenseState: "survivors-confirmed", survivorBaseIds: survivors }, status);
+}
 function sanitizeAttempt(value = {}) {
   const status = validStatus(value?.status);
   if (!["win", "loss"].includes(status)) return null;
@@ -58,6 +104,7 @@ function sanitizeAttempt(value = {}) {
     status,
     banners: value?.banners == null ? null : Math.max(0, Math.floor(Number(value.banners) || 0)),
     at: clean(value?.at),
+    postAttempt: sanitizePostAttempt(value?.postAttempt, status),
   });
 }
 function sanitizeAttemptLog(value) {
@@ -224,6 +271,7 @@ export function createGacAttackPlanService(options = {}) {
       throw error;
     }
 
+    const defense = await assertDefense(resolved, assignment.defense_squad_id);
     const timestamp = now().toISOString();
     const startsAttempt = status === "attempted" && previousStatus === "planned";
     const directResult = ["win", "loss"].includes(status) && previousStatus === "planned";
@@ -234,6 +282,7 @@ export function createGacAttackPlanService(options = {}) {
     const attemptLog = [...sanitizeAttemptLog(assignment.attempt_log)];
     const closesAttempt = ["win", "loss"].includes(status) && !["win", "loss"].includes(previousStatus);
     if (closesAttempt) {
+      const postAttempt = confirmedPostAttempt(input.postAttempt, status, defense.members);
       attemptLog.push(Object.freeze({
         members: Object.freeze(asArray(assignment.attacker_members).map(normalizeBaseId).filter(Boolean)),
         leaderBaseId: normalizeBaseId(assignment.attacker_leader_base_id),
@@ -241,6 +290,7 @@ export function createGacAttackPlanService(options = {}) {
         status,
         banners,
         at: timestamp,
+        postAttempt,
       }));
     }
     const completedAt = completedStatus(status)
@@ -257,7 +307,6 @@ export function createGacAttackPlanService(options = {}) {
       id: `eq.${assignmentId}`,
       round_id: `eq.${resolved.roundRow.id}`,
     }));
-    const defense = await assertDefense(resolved, assignment.defense_squad_id);
     return Object.freeze({
       source: "verified-owner-war-room",
       updated: true,
@@ -336,11 +385,13 @@ export const gacAttackPlanService = createGacAttackPlanService();
 
 export {
   completedStatus,
+  confirmedPostAttempt,
   normalizeBaseId,
   normalizedMembers,
   sanitizeAttempt,
   sanitizeAttemptLog,
   sanitizeDatacron,
+  sanitizePostAttempt,
   transitionAllowed,
   validStatus,
 };
