@@ -20,7 +20,7 @@ const GAC_ZONE_CAPACITY = Object.freeze({
     kyber: Object.freeze({ 'FRONT-TOP': 4, 'FRONT-BOTTOM': 4, 'BACK-BOTTOM': 3, 'BACK-TOP': 3 }),
   }),
   '3v3': Object.freeze({
-    carbonite: Object.freeze({ 'FRONT-TOP': 1, 'FRONT-BOTTOM': 1, 'BACK-BOTTOM': 1, 'BACK-TOP': 1 }),
+    carbonite: Object.freeze({ 'FRONT-TOP': 1, 'FRONT-BOTTOM': 1, 'BACK-BOTTOM': 2, 'BACK-TOP': 1 }),
     bronzium: Object.freeze({ 'FRONT-TOP': 2, 'FRONT-BOTTOM': 2, 'BACK-BOTTOM': 3, 'BACK-TOP': 1 }),
     chromium: Object.freeze({ 'FRONT-TOP': 3, 'FRONT-BOTTOM': 3, 'BACK-BOTTOM': 4, 'BACK-TOP': 2 }),
     aurodium: Object.freeze({ 'FRONT-TOP': 4, 'FRONT-BOTTOM': 4, 'BACK-BOTTOM': 5, 'BACK-TOP': 2 }),
