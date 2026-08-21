@@ -1,5 +1,8 @@
 import { buildExecutionChecklist, executionReady } from './gac-battle-execution-model.js';
 
+const BATTLE_CARD_SELECTOR = '#gacBoardPlannerGrid .gac-saved-board-card,[data-gac-board-workspace] .gac-visible-defense[data-defense-id]';
+const ATTEMPT_CONTROL_SELECTOR = '#gacBoardPlannerGrid [data-war-action="attempt"],[data-gac-board-workspace] [data-war-action="attempt"],[data-gac-board-workspace] [data-gac-manual-war-action="preflight"]';
+
 const state = {
   key: '',
   assignments: [],
@@ -23,7 +26,7 @@ function identity() {
   const mine = allyCode(document.getElementById('allyCode')?.value || window.__swgohAccountAllyCode);
   const opponent = allyCode(document.getElementById('gacOpponentCode')?.value || document.querySelector('[data-gacv2-opponent]')?.value);
   const round = Number(document.getElementById('gacBracketRound')?.value || document.querySelector('[data-gacv2-round]')?.value);
-  const size = Number(document.getElementById('gacMode')?.value || document.querySelector('[data-gacv2-mode]')?.value) === 3 ? 3 : 5;
+  const size = Number(document.getElementById('gacMode')?.value || document.querySelector('[data-gacv2-mode]')?.value || document.querySelector('[data-gac-board-format]')?.value) === 3 ? 3 : 5;
   if (!/^\d{9}$/.test(mine) || !/^\d{9}$/.test(opponent) || ![1,2,3].includes(round)) return null;
   return Object.freeze({ mine, opponent, round, size, key: `${mine}|${opponent}|${round}|${size}` });
 }
@@ -44,6 +47,9 @@ async function fetchJson(pathname, options = {}) {
   return body;
 }
 
+function battleCard(node) {
+  return node?.closest?.('.gac-saved-board-card,.gac-visible-defense[data-defense-id]') || null;
+}
 function assignmentByDefense(defenseId) {
   return state.assignments.find((row) => Number(row?.defenseId) === Number(defenseId)) || null;
 }
@@ -99,14 +105,14 @@ function renderCard(card) {
   card.querySelector('.gac-execution-lock')?.remove();
   const defenseId = Number(card?.dataset?.defenseId);
   const assignment = assignmentByDefense(defenseId);
-  const oldAttempt = card.querySelector('[data-war-action="attempt"]');
+  const oldAttempt = card.querySelector('[data-war-action="attempt"],[data-gac-manual-war-action="preflight"]');
   if (!assignment || clean(assignment.status).toLowerCase() !== 'planned') {
     if (oldAttempt) oldAttempt.textContent = 'Mark Attempt';
     return;
   }
   const defense = defenseById(defenseId);
   if (oldAttempt) {
-    oldAttempt.textContent = state.open.has(Number(assignment.id)) ? 'Close Pre-Battle Checklist' : 'Pre-Battle Checklist';
+    oldAttempt.textContent = state.open.has(Number(assignment.id)) ? 'CLOSE PRE-BATTLE CHECKLIST' : 'PRE-BATTLE CHECKLIST';
     oldAttempt.classList.add('is-preflight');
   }
   if (!state.open.has(Number(assignment.id))) return;
@@ -115,7 +121,7 @@ function renderCard(card) {
 }
 
 function renderAll() {
-  for (const card of document.querySelectorAll('#gacBoardPlannerGrid .gac-saved-board-card')) renderCard(card);
+  for (const card of document.querySelectorAll(BATTLE_CARD_SELECTOR)) renderCard(card);
 }
 
 async function load({ force = false } = {}) {
@@ -147,6 +153,22 @@ async function load({ force = false } = {}) {
   } finally {
     if (requestId === state.requestId) { state.loading = false; renderAll(); }
   }
+}
+
+async function togglePreflight(card) {
+  const defenseId = Number(card?.dataset?.defenseId);
+  if (!defenseId) return;
+  let assignment = assignmentByDefense(defenseId);
+  if (!assignment?.id) {
+    await load({ force:true });
+    assignment = assignmentByDefense(defenseId);
+  }
+  if (!assignment?.id || clean(assignment.status).toLowerCase() !== 'planned') return;
+  const id = Number(assignment.id);
+  if (state.open.has(id)) state.open.delete(id);
+  else { state.open.add(id); state.errors.delete(id); }
+  renderCard(card);
+  card.querySelector('[data-gac-execution-lock]')?.scrollIntoView?.({ behavior:'smooth', block:'center' });
 }
 
 async function beginAttempt(card) {
@@ -196,26 +218,22 @@ function schedule(delay = 80, force = false) {
 function injectStyle() {
   if (document.querySelector('link[data-gac-execution-lock-style]')) return;
   const link = document.createElement('link');
-  link.rel = 'stylesheet'; link.href = '/gac-battle-execution-ui.css?v=20260821-b08a'; link.dataset.gacExecutionLockStyle = 'true';
+  link.rel = 'stylesheet'; link.href = '/gac-battle-execution-ui.css?v=20260821-b08b'; link.dataset.gacExecutionLockStyle = 'true';
   document.head.appendChild(link);
 }
 
 function bind() {
   injectStyle();
   document.addEventListener('click', (event) => {
-    const attempt = event.target.closest?.('#gacBoardPlannerGrid [data-war-action="attempt"]');
+    const attempt = event.target.closest?.(ATTEMPT_CONTROL_SELECTOR);
     if (attempt) {
       event.preventDefault(); event.stopImmediatePropagation();
-      const card = attempt.closest('.gac-saved-board-card');
-      const assignment = assignmentByDefense(Number(card?.dataset?.defenseId));
-      if (!assignment?.id) { schedule(0,true); return; }
-      const id = Number(assignment.id);
-      if (state.open.has(id)) state.open.delete(id); else { state.open.add(id); state.errors.delete(id); }
-      renderCard(card);
+      const card = battleCard(attempt);
+      if (card) void togglePreflight(card);
       return;
     }
     const begin = event.target.closest?.('[data-gac-exec-begin]');
-    if (begin) { const card=begin.closest('.gac-saved-board-card'); if(card) void beginAttempt(card); return; }
+    if (begin) { const card=battleCard(begin); if(card) void beginAttempt(card); return; }
     const refresh = event.target.closest?.('[data-gac-exec-refresh]');
     if (refresh) { void load({ force:true }); }
   }, true);
@@ -227,13 +245,14 @@ function bind() {
       if (!id) return;
       const confirmations = confirmationFor(id);
       confirmations[input.dataset.gacExecConfirm] = input.checked === true;
-      const card = input.closest('.gac-saved-board-card');
+      const card = battleCard(input);
       if (card) renderCard(card);
       return;
     }
-    if (['allyCode','gacOpponentCode','gacBracketRound','gacMode'].includes(event.target?.id) || event.target?.matches?.('[data-gacv2-opponent],[data-gacv2-round],[data-gacv2-mode]')) schedule(120,true);
+    if (['allyCode','gacOpponentCode','gacBracketRound','gacMode'].includes(event.target?.id) || event.target?.matches?.('[data-gacv2-opponent],[data-gacv2-round],[data-gacv2-mode],[data-gac-board-format]')) schedule(120,true);
   }, true);
   window.addEventListener('gac-saved-board-rendered', () => schedule(60,true));
+  window.addEventListener('gac-visible-board-rendered', () => schedule(60,true));
   window.addEventListener('gac-war-room-updated', () => schedule(80,true));
   window.addEventListener('gac-board-evidence-updated', () => schedule(100,true));
   window.addEventListener('gac-roster-integrity-updated', () => renderAll());
@@ -243,4 +262,4 @@ function bind() {
 
 if (typeof document !== 'undefined') bind();
 
-export { beginAttempt, confirmationFor, identity, renderAll };
+export { BATTLE_CARD_SELECTOR, ATTEMPT_CONTROL_SELECTOR, battleCard, beginAttempt, confirmationFor, identity, renderAll, togglePreflight };
