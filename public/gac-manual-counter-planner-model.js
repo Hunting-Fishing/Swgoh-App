@@ -1,3 +1,4 @@
+import './gac-manual-selection-guard.js';
 import { hybridBoardPlan } from './gac-hybrid-board-plan.js';
 
 const SQUAD_ZONES = Object.freeze(['FRONT-TOP', 'FRONT-BOTTOM', 'BACK-BOTTOM']);
