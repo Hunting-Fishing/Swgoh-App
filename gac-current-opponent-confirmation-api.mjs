@@ -2,6 +2,7 @@ import { createGacAttackPlanApi } from "./gac-attack-plan-api.mjs";
 import { createGacBoardObservationApi } from "./gac-board-observation-api.mjs";
 import { gacBracketIndexService } from "./gac-bracket-index-service.mjs";
 import { gacCurrentOpponentConfirmationService } from "./gac-current-opponent-confirmation-service.mjs";
+import { createGacEvidenceWarehouseApi } from "./gac-evidence-warehouse-api.mjs";
 import { createGacFleetAttackPlanApi } from "./gac-fleet-attack-plan-api.mjs";
 import { createGacFleetBoardApi } from "./gac-fleet-board-api.mjs";
 import { createGacFleetCleanupObservationApi } from "./gac-fleet-cleanup-observation-api.mjs";
@@ -92,6 +93,11 @@ export function createGacCurrentOpponentConfirmationApi(options = {}) {
   if (typeof requestGateway !== "function") throw new TypeError("requestGateway is required");
   if (typeof writeJson !== "function") throw new TypeError("writeJson is required");
 
+  const evidenceWarehouseApi = createGacEvidenceWarehouseApi({
+    writeJson,
+    ...(options.evidenceWarehouse ? { warehouse: options.evidenceWarehouse } : {}),
+    ...(options.evidenceWarehouseCache ? { cache: options.evidenceWarehouseCache } : {}),
+  });
   const boardApi = createGacBoardObservationApi({
     requestGateway,
     writeJson,
@@ -171,6 +177,7 @@ export function createGacCurrentOpponentConfirmationApi(options = {}) {
 
   return Object.freeze({
     async handle(request, response, url) {
+      if (await evidenceWarehouseApi.handle(request, response, url)) return true;
       if (await boardApi.handle(request, response, url)) return true;
       if (await attackPlanApi.handle(request, response, url)) return true;
       if (await verifiedBattleApi.handle(request, response, url)) return true;
