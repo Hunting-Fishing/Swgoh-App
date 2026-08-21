@@ -13,6 +13,34 @@ function railwayOrigin(env) {
   }
 }
 
+function readSetCookies(headers) {
+  if (!headers) return [];
+  if (typeof headers.getSetCookie === "function") {
+    return headers.getSetCookie();
+  }
+  if (typeof headers.getAll === "function") {
+    try {
+      return headers.getAll("Set-Cookie");
+    } catch {
+      // Fall through to the single-value path below.
+    }
+  }
+  const single = headers.get?.("Set-Cookie");
+  return single ? [single] : [];
+}
+
+function copyResponseHeaders(headers) {
+  const output = new Headers();
+  for (const [name, value] of headers) {
+    if (name.toLowerCase() === "set-cookie") continue;
+    output.append(name, value);
+  }
+  for (const value of readSetCookies(headers)) {
+    output.append("Set-Cookie", value);
+  }
+  return output;
+}
+
 async function proxyApi(request, env) {
   const origin = railwayOrigin(env);
   if (!origin) {
@@ -29,8 +57,8 @@ async function proxyApi(request, env) {
   const upstream = new URL(`${incoming.pathname}${incoming.search}`, origin);
   const headers = new Headers(request.headers);
 
-  // Preserve the public Cloudflare host for the Railway app's same-origin auth
-  // checks while the actual fetch target remains the Railway service domain.
+  // Preserve the browser's Cookie header and the public Cloudflare host/protocol.
+  // Railway uses these forwarded values for same-origin auth and callback URLs.
   headers.set("x-forwarded-host", incoming.host);
   headers.set("x-forwarded-proto", incoming.protocol.replace(":", ""));
   headers.set("x-swgoH-edge", "cloudflare");
@@ -44,7 +72,10 @@ async function proxyApi(request, env) {
   });
 
   const response = await fetch(upstreamRequest);
-  const responseHeaders = new Headers(response.headers);
+
+  // Set-Cookie cannot be folded like ordinary response headers. Preserve every
+  // Railway cookie individually so OAuth state/session cookies survive the edge.
+  const responseHeaders = copyResponseHeaders(response.headers);
   responseHeaders.set("x-swgoH-runtime", "railway");
   responseHeaders.set("x-swgoH-edge", "cloudflare");
 
@@ -66,3 +97,5 @@ export default {
     return env.ASSETS.fetch(request);
   },
 };
+
+export { copyResponseHeaders, proxyApi, readSetCookies };
