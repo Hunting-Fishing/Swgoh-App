@@ -1,5 +1,13 @@
 const state={scheduled:false};
 
+function resultButton(source,status,label){
+  const button=source.cloneNode(false);
+  delete button.dataset.gacManualWarAction;
+  button.dataset.warAction=status;
+  button.textContent=label;
+  return button;
+}
+
 function adaptManualExecutionControls(root=document){
   let changed=0;
   for(const button of root.querySelectorAll?.('[data-gac-board-workspace] [data-gac-manual-war-action="preflight"]')||[]){
@@ -8,8 +16,9 @@ function adaptManualExecutionControls(root=document){
     changed+=1;
   }
   for(const button of root.querySelectorAll?.('[data-gac-board-workspace] [data-gac-manual-war-action="result"]')||[]){
-    button.dataset.gacDirectResult='true';
-    delete button.dataset.gacManualWarAction;
+    const win=resultButton(button,'win','✓ RECORD WIN');
+    const loss=resultButton(button,'loss','× RECORD LOSS');
+    button.replaceWith(win,loss);
     changed+=1;
   }
   return changed;
@@ -29,4 +38,4 @@ function bind(){
 
 if(typeof document!=='undefined')bind();
 
-export { adaptManualExecutionControls };
+export { adaptManualExecutionControls, resultButton };
