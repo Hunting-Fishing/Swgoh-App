@@ -35,9 +35,18 @@ function decorate(){
   }
 }
 
+function injectStyle(){
+  if(document.querySelector('link[data-gac-fleet-cleanup-provenance-style]'))return;
+  const link=document.createElement('link');
+  link.rel='stylesheet';
+  link.href='/gac-fleet-cleanup-provenance.css?v=20260821-cleanup1';
+  link.dataset.gacFleetCleanupProvenanceStyle='true';
+  document.head.appendChild(link);
+}
 function schedule(){requestAnimationFrame(decorate);}
 
 if(typeof document!=='undefined'){
+  injectStyle();
   window.addEventListener('gac-fleet-round-state-updated',schedule);
   window.addEventListener('gac-fleet-canonical-updated',schedule);
   window.addEventListener('gac-fleet-plan-updated',schedule);
