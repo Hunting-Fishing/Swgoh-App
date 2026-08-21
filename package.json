@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "start": "node scripts/start-production.mjs",
-    "build": "node --test test/discord-donation-preference.test.mjs test/discord-tb-preference-command.test.mjs test/discord-canonical-controls-contract.test.mjs test/cloudflare-oauth-cookie-proxy.test.mjs test/public-auth-origin-contract.test.mjs test/supabase-social-auth.test.mjs && node scripts/build-production-data.mjs",
+    "build": "node --test test/discord-donation-preference.test.mjs test/discord-tb-preference-command.test.mjs test/discord-canonical-controls-contract.test.mjs test/cloudflare-oauth-cookie-proxy.test.mjs test/cloudflare-worker-routing-config.test.mjs test/public-auth-origin-contract.test.mjs test/supabase-social-auth.test.mjs && node scripts/build-production-data.mjs",
     "test": "node --test",
     "verify": "node --test",
     "report:tb-coverage": "node scripts/report-tb-strategy-coverage.mjs",
