@@ -37,50 +37,58 @@ Core visual principles:
 | --- | --- | ---: |
 | Onboarding visual redesign | Implemented on styling branch | 100% |
 | Action Center visual redesign | Implemented on styling branch | 100% |
-| Shared palette / visual language | Established in first two surfaces | 70% |
-| Player Command Center shell + overview | Audited; implementation next | 20% |
-| Global navigation / workspace tabs | Audited; implementation next | 20% |
+| Shared palette / visual language | Established across onboarding, Actions and Player overview | 85% |
+| Player Command Center shell + overview | First readability / color / density pass implemented | 65% |
+| Global navigation / workspace tabs | First shared visual pass implemented | 55% |
 | GAC War Room visual modernization | Existing feature work retained; styling pass pending | 15% |
 | Guild Command Center pages | Styling pass pending | 10% |
 | TB / ROTE map and planning surfaces | Styling pass pending | 5% |
 | Login / auth visual alignment | Pending after onboarding path stabilizes | 10% |
-| Cross-device polish + accessibility review | Initial responsive rules included; full review pending | 20% |
+| Cross-device polish + accessibility review | Responsive rules expanded; full review pending | 30% |
 
-Approximate overall visual modernization: **30%**.
+Approximate overall visual modernization: **42%**.
+
+## Implemented in the Player overview pass
+
+- Reduced 10-column KPI rows to readable 5-column desktop clusters.
+- Reduced 10-column launch rails to readable 5-column desktop clusters.
+- Increased KPI, launch, player identity and module typography.
+- Increased touch targets and module spacing.
+- Added warm/cool color families to dashboard cards and workspace states.
+- Upgraded active workspace navigation to a strong gold command state.
+- Enlarged visual-library cards and their imagery/status treatments.
+- Added responsive 3-column, 2-column and 1-column fallbacks for smaller displays.
 
 ## Next implementation order
 
-### 1. Player Command Center overview
+### 1. Player Command Center detail polish
 
-- Replace the ultra-dense 10-column KPI and launch rails with readable responsive groups.
-- Increase base dashboard typography.
-- Add color-coded feature families.
-- Establish a consistent player identity/header card.
-- Make Journey/Farm/GAC/Guild entry points feel like game modes.
+- Review real populated roster state for overflow and visual balance.
+- Improve feature-family accents for Journey, Farm, GAC, Guild and Resources.
+- Consolidate redundant top-level explanation copy where the dashboard already communicates the same state.
+- Continue removing sub-0.7rem text from primary interaction surfaces.
 
-### 2. Shared navigation
-
-- Standardize Player / Roster / Farm / Mods / Squads / GAC / Datacrons / Events / Guild / Resources tabs.
-- Give active workspace a strong gold/cyan state.
-- Keep horizontal mobile navigation with larger touch targets.
-- Add consistent page-title and account/status treatment.
-
-### 3. GAC War Room
+### 2. GAC War Room
 
 - Treat opponent entry and counter selection as the main mission flow.
 - Separate defense setup, opponent scouting, counter recommendations and battle tracking visually.
 - Use territory/map-like cards rather than generic data panels.
 
-### 4. Guild Command Center
+### 3. Guild Command Center
 
 - Create officer-oriented command sections with strong readiness status.
 - Distinguish member views from officer controls.
 - Consolidate TB, TW, raid and roster intelligence entry points.
 
-### 5. TB / ROTE
+### 4. TB / ROTE
 
 - Preserve tactical density inside map/planning views while simplifying surrounding controls.
 - Use planet/faction-specific accent colors and stronger mission state visuals.
+
+### 5. Login / auth
+
+- Align login/signup visual language with onboarding after the OAuth flow is stable.
+- Keep authentication messaging simple and avoid decorative changes that obscure errors.
 
 ## Guardrails
 
