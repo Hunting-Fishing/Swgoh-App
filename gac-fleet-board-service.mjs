@@ -64,6 +64,25 @@ function mutationPolicy(plan = null) {
   if (status === "abandoned") return Object.freeze({ allowed: true, code: "released", status, attempts });
   return Object.freeze({ allowed: false, code: "unknown", status, attempts });
 }
+function attemptFleetIds(value = {}) {
+  const members = normalizeIds(value.members);
+  if (members.length) return members;
+  return normalizeIds([value.capitalShipBaseId, ...asArray(value.starters), ...asArray(value.reinforcements)]);
+}
+function assignmentConsumedOrActiveIds(row = {}) {
+  const ids = new Set();
+  for (const attempt of asArray(row.attempt_log)) {
+    for (const id of attemptFleetIds(attempt)) ids.add(id);
+  }
+  if (["planned", "attempted"].includes(validPlanStatus(row.status))) {
+    for (const id of normalizeIds(row.attacker_members)) ids.add(id);
+  }
+  return Object.freeze([...ids]);
+}
+function overlapIds(left = [], right = []) {
+  const rightSet = new Set(normalizeIds(right));
+  return Object.freeze(normalizeIds(left).filter((id) => rightSet.has(id)));
+}
 function normalizeRow(row = {}) {
   const fleet = normalizeFleet({
     capitalShipBaseId: row.capital_ship_base_id,
@@ -116,6 +135,47 @@ export function createGacFleetBoardService(options = {}) {
     throw error;
   }
 
+  async function assertDefenseFleetResourceSafe(resolved, ownerInput, fleet, slotInput) {
+    const owner = validOwner(ownerInput);
+    const slot = validSlot(slotInput);
+    if (!owner || slot === null) throw new TypeError("Validated owner and fleet slot are required for resource integrity checks.");
+    const siblingFleets = asArray(await store.select("gac_round_fleets", {
+      select: "id,fleet_slot,capital_ship_base_id,starters,reinforcements,members",
+      round_id: `eq.${resolved.roundRow.id}`,
+      owner: `eq.${owner}`,
+      side: "eq.defense",
+      source: "eq.user-confirmed-current-fleet-board",
+      limit: 10,
+    }));
+    for (const sibling of siblingFleets) {
+      if (Number(sibling.fleet_slot) === slot) continue;
+      const siblingMembers = normalizeIds(sibling.members?.length
+        ? sibling.members
+        : [sibling.capital_ship_base_id, ...asArray(sibling.starters), ...asArray(sibling.reinforcements)]);
+      const overlap = overlapIds(fleet.members, siblingMembers);
+      if (overlap.length) {
+        const error = new Error(`The same fleet unit cannot be saved in multiple ${owner === "player" ? "own-defense" : "enemy-defense"} slots this round: ${overlap.join(", ")}.`);
+        error.status = 409;
+        throw error;
+      }
+    }
+    if (owner !== "player") return Object.freeze({ allowed: true, overlap: Object.freeze([]) });
+
+    const assignments = asArray(await store.select("gac_fleet_attack_plan_assignments", {
+      select: "id,status,attacker_members,attempt_log",
+      round_id: `eq.${resolved.roundRow.id}`,
+      limit: 20,
+    }));
+    const offenseIds = new Set(assignments.flatMap(assignmentConsumedOrActiveIds));
+    const overlap = fleet.members.filter((id) => offenseIds.has(id));
+    if (overlap.length) {
+      const error = new Error(`Those ships cannot be saved on your defense because they are already allocated or consumed on offense this round: ${overlap.join(", ")}.`);
+      error.status = 409;
+      throw error;
+    }
+    return Object.freeze({ allowed: true, overlap: Object.freeze([]) });
+  }
+
   async function saveFleetDefense(userIdInput, input = {}, ownerInput = "opponent") {
     const owner = validOwner(ownerInput);
     if (!owner) throw new TypeError("Fleet board owner must be player or opponent.");
@@ -146,6 +206,7 @@ export function createGacFleetBoardService(options = {}) {
       const existing = asArray(await store.select("gac_round_fleets", { select: "id", ...identity, limit: 10 }));
       for (const row of existing) await assertFleetMutationSafe(row.id, owner, "replace");
     }
+    await assertDefenseFleetResourceSafe(resolved, owner, fleet, slot);
     await store.delete("gac_round_fleets", identity);
     const observedAt = now().toISOString();
     const inserted = asArray(await store.insert("gac_round_fleets", [{
@@ -177,6 +238,7 @@ export function createGacFleetBoardService(options = {}) {
         starterCount: 3,
         reinforcementCount: fleet.reinforcements.length,
         datacronApplicable: false,
+        roundResourceIntegrityChecked: true,
       },
     }]));
     return Object.freeze({
@@ -248,6 +310,7 @@ export function createGacFleetBoardService(options = {}) {
   }
 
   return Object.freeze({
+    assertDefenseFleetResourceSafe,
     assertFleetMutationSafe,
     deleteDefense: (userId, input) => deleteFleetDefense(userId, input, "opponent"),
     deleteFleetDefense,
@@ -265,11 +328,14 @@ export function createGacFleetBoardService(options = {}) {
 export const gacFleetBoardService = createGacFleetBoardService();
 
 export {
+  assignmentConsumedOrActiveIds,
+  attemptFleetIds,
   mutationPolicy,
   normalizeBaseId,
   normalizeFleet,
   normalizeIds,
   normalizeRow,
+  overlapIds,
   validOwner,
   validPlanStatus,
   validSlot,
