@@ -29,6 +29,7 @@ function assignmentFor(defenseId){return state.assignments.find((row)=>Number(ro
 function defenseFor(defenseId){return state.defenses.find((row)=>Number(row?.id)===Number(defenseId))||assignmentFor(defenseId)?.defense||null;}
 function hasRecordedLoss(assignment={}){return (Array.isArray(assignment?.attemptLog)?assignment.attemptLog:[]).some((attempt)=>clean(attempt?.status).toLowerCase()==='loss');}
 function needsCleanupReplan(assignment={}){const status=clean(assignment?.status).toLowerCase();return status==='loss'||(status==='abandoned'&&hasRecordedLoss(assignment));}
+function isActiveCleanup(assignment={}){return clean(assignment?.planKind).toLowerCase()==='cleanup'&&['planned','attempted'].includes(clean(assignment?.status).toLowerCase());}
 function unitIndex(roster){return new Map((Array.isArray(roster?.units)?roster.units:[]).map((unit)=>[normalizeId(unit),unit]).filter(([id])=>id));}
 function unitFor(roster,id){return unitIndex(roster).get(normalizeId(id))||{baseId:normalizeId(id),name:normalizeId(id)};}
 function imageUrl(unit={}){return clean(unit.image||unit.imageUrl||unit.portrait||unit.portraitUrl||unit.thumbnail||unit.icon);}
@@ -49,6 +50,11 @@ function disableLegacyLossRetry(card){
   if(lane)lane.innerHTML='<div class="gac-board-no-counter">Original-defense retry disabled. Cleanup uses only confirmed surviving defenders.</div>';
   const legacy=card.querySelector('[data-war-action="lock"]');
   if(legacy){legacy.disabled=true;legacy.textContent='Use Cleanup Intelligence Below';legacy.classList.add('is-muted');}
+}
+function lockedCleanupHtml(assignment){
+  const survivors=(Array.isArray(assignment?.cleanup?.survivorBaseIds)?assignment.cleanup.survivorBaseIds:[]).map(normalizeId).filter(Boolean);
+  const status=clean(assignment?.status).toUpperCase()||'PLANNED';
+  return `<section class="gac-b10-cleanup is-locked" data-gac-b10-cleanup><header><div><span>FAILURE & CLEANUP INTELLIGENCE · B10</span><strong>LOCKED CLEANUP TARGET · ${status}</strong><small>Residual defender identity comes from the confirmed prior-loss state, not the original saved squad.</small></div><b>RESIDUAL LOCK</b></header><div class="gac-b10-survivors"><span>DEFENDERS ALIVE AT CLEANUP START</span><div>${survivors.length?survivors.map((id)=>portrait(state.opponentRoster,id,'is-enemy')).join(''):'<small>Residual survivor set unavailable — execution should remain blocked.</small>'}</div></div><div class="gac-b10-telemetry"><strong>POST-BATTLE TELEMETRY</strong><span>TM UNKNOWN · HP UNKNOWN · PROTECTION UNKNOWN · cooldowns not inferred</span></div><div class="gac-b10-boundary"><strong>EXECUTION IDENTITY</strong><span>B08 pre-battle fingerprint uses these survivor IDs with the original verified zone, slot, and Datacron truth.</span></div></section>`;
 }
 function candidateHtml(current,assignment,candidate,index){
   const coverage=ownDatacron(candidate);const datacronId=clean(coverage?.datacron?.id);const members=(candidate?.squad||[]).map((unit)=>normalizeId(unit)).filter(Boolean);
@@ -81,10 +87,12 @@ function panelHtml(current,assignment,defense){
 function renderCard(card,current){
   card.querySelector('[data-gac-b10-cleanup]')?.remove();
   const defenseId=Number(card?.dataset?.defenseId);const assignment=assignmentFor(defenseId);
-  if(!assignment||!needsCleanupReplan(assignment))return;
+  if(!assignment)return;
+  const anchor=card.querySelector('[data-gac-result-history]')||card.querySelector('.gac-war-room')||card;
+  if(isActiveCleanup(assignment)){anchor.insertAdjacentHTML('afterend',lockedCleanupHtml(assignment));return;}
+  if(!needsCleanupReplan(assignment))return;
   disableLegacyLossRetry(card);
   const defense=defenseFor(defenseId)||{};
-  const anchor=card.querySelector('[data-gac-result-history]')||card.querySelector('.gac-war-room')||card;
   anchor.insertAdjacentHTML('afterend',panelHtml(current,assignment,defense));
 }
 function renderAll(){const current=identity();if(!current)return;for(const card of document.querySelectorAll('#gacBoardPlannerGrid .gac-saved-board-card'))renderCard(card,current);}
@@ -128,4 +136,4 @@ function bind(){
 }
 if(typeof document!=='undefined')bind();
 
-export { disableLegacyLossRetry, hasRecordedLoss, identity, lockCleanup, needsCleanupReplan, renderAll };
+export { disableLegacyLossRetry, hasRecordedLoss, identity, isActiveCleanup, lockCleanup, needsCleanupReplan, renderAll };
