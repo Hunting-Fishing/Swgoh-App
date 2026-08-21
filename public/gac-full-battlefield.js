@@ -6,6 +6,7 @@ const OWN_TERRITORIES = Object.freeze([
 ]);
 
 let scheduled = false;
+let readyDispatched = false;
 
 function clean(value) { return String(value ?? '').trim(); }
 
@@ -61,9 +62,9 @@ function markOpponentZones(map) {
   for (const [selector, area] of mapping) {
     const zone = map.querySelector(selector);
     if (!zone) continue;
-    zone.classList.add('gac-full-enemy-territory');
-    zone.style.gridArea = area;
-    zone.dataset.gacBattlefieldSide = 'opponent';
+    if (!zone.classList.contains('gac-full-enemy-territory')) zone.classList.add('gac-full-enemy-territory');
+    if (zone.style.gridArea !== area) zone.style.gridArea = area;
+    if (zone.dataset.gacBattlefieldSide !== 'opponent') zone.dataset.gacBattlefieldSide = 'opponent';
   }
 }
 
@@ -85,17 +86,20 @@ function reservedUnitCount() {
 
 function updateOwnSummary(map) {
   const label = map.querySelector(':scope > [data-gac-full-side-label="own"] strong');
-  if (!label) return;
+  if (!label) return false;
   const count = reservedUnitCount();
-  label.textContent = count ? `2 FRONT · 2 REAR · ${count} DEFENSE UNITS MARKED` : '2 FRONT · 2 REAR';
+  const next = count ? `2 FRONT · 2 REAR · ${count} DEFENSE UNITS MARKED` : '2 FRONT · 2 REAR';
+  if (label.textContent === next) return false;
+  label.textContent = next;
+  return true;
 }
 
 function enhanceBattlefield() {
   const map = document.querySelector('[data-gac-manual-counter-planner] .gac-manual-gac-map.gac-league-board-active');
-  if (!map) return;
+  if (!map) return false;
 
-  map.classList.add('gac-full-battlefield');
-  map.dataset.gacTerritoryLocations = '8';
+  if (!map.classList.contains('gac-full-battlefield')) map.classList.add('gac-full-battlefield');
+  if (map.dataset.gacTerritoryLocations !== '8') map.dataset.gacTerritoryLocations = '8';
   ensureSideLabel(map, 'own');
   ensureSideLabel(map, 'opponent');
   ensureCenterLine(map);
@@ -108,6 +112,15 @@ function enhanceBattlefield() {
     boardHeader.textContent = 'Full GAC battlefield: four territories on your side and four on the opponent side. Opponent defense circles remain the editable manual board.';
     boardHeader.dataset.gacFullMapCopy = 'true';
   }
+
+  if (map.dataset.gacFullBattlefieldReady !== 'true') {
+    map.dataset.gacFullBattlefieldReady = 'true';
+    if (!readyDispatched) {
+      readyDispatched = true;
+      window.dispatchEvent(new CustomEvent('swgoh:gac-battlefield-ready'));
+    }
+  }
+  return true;
 }
 
 function focusOwnDefense() {
@@ -144,7 +157,7 @@ function injectStyle() {
   if (document.querySelector('link[data-gac-full-battlefield-style]')) return;
   const link = document.createElement('link');
   link.rel = 'stylesheet';
-  link.href = '/gac-full-battlefield.css?v=20260822-eightmap1';
+  link.href = '/gac-full-battlefield.css?v=20260822-eightmap2';
   link.dataset.gacFullBattlefieldStyle = 'true';
   document.head.appendChild(link);
 }
@@ -155,7 +168,10 @@ if (typeof window !== 'undefined') {
   document.addEventListener('DOMContentLoaded', scheduleEnhance, { once: true });
   window.addEventListener('hashchange', scheduleEnhance);
   window.addEventListener('swgoh:workspace-activated', scheduleEnhance);
-  new MutationObserver(scheduleEnhance).observe(document.documentElement, { childList: true, subtree: true });
+  new MutationObserver((records) => {
+    if (!records.some((record) => record.addedNodes?.length || record.removedNodes?.length)) return;
+    scheduleEnhance();
+  }).observe(document.documentElement, { childList: true, subtree: true });
   scheduleEnhance();
 }
 
