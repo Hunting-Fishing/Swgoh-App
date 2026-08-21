@@ -190,13 +190,16 @@ function syncSidePanel(map, format, league) {
     panel?.remove();
     return;
   }
+  const signature = `${format}|${league || 'none'}|${selectedKey || 'none'}`;
   if (!panel) {
     panel = document.createElement('aside');
     panel.className = 'gac-live-arena-side';
     panel.dataset.gacLiveSide = 'true';
     map.insertAdjacentElement('afterend', panel);
   }
+  if (panel.dataset.signature === signature) return;
   panel.innerHTML = selectedPanelMarkup(map, format, league);
+  panel.dataset.signature = signature;
 }
 
 function enhanceMap() {
@@ -209,19 +212,22 @@ function enhanceMap() {
   const league = leagueValue();
   const signature = `${format}|${league || 'none'}`;
 
-  let strip = host.querySelector('[data-gac-league-rank-strip]');
-  const markup = rankStripMarkup(format, league);
-  if (!strip) map.insertAdjacentHTML('beforebegin', markup);
-  else if (strip.dataset.signature !== signature) strip.outerHTML = markup;
-  strip = host.querySelector('[data-gac-league-rank-strip]');
-  if (strip) strip.dataset.signature = signature;
+  if (map.dataset.gacLeagueEnhanced !== signature) {
+    let strip = host.querySelector('[data-gac-league-rank-strip]');
+    const markup = rankStripMarkup(format, league);
+    if (!strip) map.insertAdjacentHTML('beforebegin', markup);
+    else if (strip.dataset.signature !== signature) strip.outerHTML = markup;
+    strip = host.querySelector('[data-gac-league-rank-strip]');
+    if (strip) strip.dataset.signature = signature;
 
-  map.classList.toggle('gac-league-board-active', Boolean(league));
-  map.dataset.gacLeague = league || '';
-  map.dataset.gacFormat = format;
-  if (league) for (const zone of ZONES) enhanceZone(zone, league, format);
+    map.classList.toggle('gac-league-board-active', Boolean(league));
+    map.dataset.gacLeague = league || '';
+    map.dataset.gacFormat = format;
+    if (league) for (const zone of ZONES) enhanceZone(zone, league, format);
+    map.dataset.gacLeagueEnhanced = signature;
+  }
+
   syncSidePanel(map, format, league);
-  map.dataset.gacLeagueEnhanced = signature;
 }
 
 function replayZoneOpen(zone, slot) {
