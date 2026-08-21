@@ -2,6 +2,9 @@ import { createGacAttackPlanApi } from "./gac-attack-plan-api.mjs";
 import { createGacBoardObservationApi } from "./gac-board-observation-api.mjs";
 import { gacBracketIndexService } from "./gac-bracket-index-service.mjs";
 import { gacCurrentOpponentConfirmationService } from "./gac-current-opponent-confirmation-service.mjs";
+import { createGacFleetAttackPlanApi } from "./gac-fleet-attack-plan-api.mjs";
+import { createGacFleetBoardApi } from "./gac-fleet-board-api.mjs";
+import { createGacFleetVerifiedBattleApi } from "./gac-fleet-verified-battle-api.mjs";
 import { createGacVerifiedBattleApi } from "./gac-verified-battle-api.mjs";
 import { supabaseAuthSession } from "./supabase-auth-session.mjs";
 
@@ -87,6 +90,7 @@ export function createGacCurrentOpponentConfirmationApi(options = {}) {
   const confirmation = options.confirmation || gacCurrentOpponentConfirmationService;
   if (typeof requestGateway !== "function") throw new TypeError("requestGateway is required");
   if (typeof writeJson !== "function") throw new TypeError("writeJson is required");
+
   const boardApi = createGacBoardObservationApi({
     requestGateway,
     writeJson,
@@ -111,6 +115,30 @@ export function createGacCurrentOpponentConfirmationApi(options = {}) {
     bracketIndex,
     confirmation,
     ...(options.verifiedBattles ? { battles: options.verifiedBattles } : {}),
+  });
+  const fleetBoardApi = createGacFleetBoardApi({
+    requestGateway,
+    writeJson,
+    authSession,
+    bracketIndex,
+    confirmation,
+    ...(options.fleetBoards ? { fleets: options.fleetBoards } : {}),
+  });
+  const fleetAttackPlanApi = createGacFleetAttackPlanApi({
+    requestGateway,
+    writeJson,
+    authSession,
+    bracketIndex,
+    confirmation,
+    ...(options.fleetAttackPlans ? { plans: options.fleetAttackPlans } : {}),
+  });
+  const fleetVerifiedBattleApi = createGacFleetVerifiedBattleApi({
+    requestGateway,
+    writeJson,
+    authSession,
+    bracketIndex,
+    confirmation,
+    ...(options.fleetVerifiedBattles ? { battles: options.fleetVerifiedBattles } : {}),
   });
 
   async function indexedBracket(code, currentEvent, playerContext) {
@@ -137,6 +165,9 @@ export function createGacCurrentOpponentConfirmationApi(options = {}) {
       if (await boardApi.handle(request, response, url)) return true;
       if (await attackPlanApi.handle(request, response, url)) return true;
       if (await verifiedBattleApi.handle(request, response, url)) return true;
+      if (await fleetBoardApi.handle(request, response, url)) return true;
+      if (await fleetAttackPlanApi.handle(request, response, url)) return true;
+      if (await fleetVerifiedBattleApi.handle(request, response, url)) return true;
       const match = request.method === "POST" && url.pathname.match(/^\/api\/gac\/current-opponent\/(\d{9})\/confirm$/);
       if (!match) return false;
 
