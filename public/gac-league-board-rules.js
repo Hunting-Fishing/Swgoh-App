@@ -29,7 +29,7 @@ const RULES = Object.freeze({
   }),
   Carbonite: Object.freeze({
     '5v5': Object.freeze({ squadTeams: 3, fleetTeams: 1, territoryTeams: Object.freeze({ 'BACK-TOP': 1, 'FRONT-TOP': 1, 'BACK-BOTTOM': 1, 'FRONT-BOTTOM': 1 }) }),
-    '3v3': Object.freeze({ squadTeams: 3, fleetTeams: 1, territoryTeams: Object.freeze({ 'BACK-TOP': 1, 'FRONT-TOP': 1, 'BACK-BOTTOM': 1, 'FRONT-BOTTOM': 1 }) }),
+    '3v3': Object.freeze({ squadTeams: 4, fleetTeams: 1, territoryTeams: Object.freeze({ 'BACK-TOP': 1, 'FRONT-TOP': 1, 'BACK-BOTTOM': 2, 'FRONT-BOTTOM': 1 }) }),
   }),
 });
 
