@@ -6,6 +6,12 @@ function uniqueIds(values = []) {
   return [...new Set(asArray(values).map((value) => normalizeId(value?.baseId || value)).filter(Boolean))];
 }
 
+function exactSlot(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const slot = Number(value);
+  return Number.isInteger(slot) && slot >= 0 ? slot : null;
+}
+
 function defenseDatacronTruth(defense = {}) {
   const state = clean(defense?.datacronState).toLowerCase();
   const id = clean(defense?.datacron?.id);
@@ -45,7 +51,7 @@ function executionFingerprint(assignment = {}, defense = {}) {
     assignmentId: Number(assignment?.id) || null,
     defenseId: Number(assignment?.defenseId || defense?.id) || null,
     zone: clean(defense?.zone),
-    slot: Number.isInteger(Number(defense?.slot)) ? Number(defense.slot) : null,
+    slot: exactSlot(defense?.slot),
     attackerLeaderBaseId: normalizeId(assignment?.leaderBaseId),
     attackerMembers: Object.freeze(uniqueIds(assignment?.members)),
     attackerDatacronId: clean(assignment?.datacron?.id),
@@ -70,12 +76,13 @@ function buildExecutionChecklist({ assignment = {}, defense = {}, roster = {}, o
   const defenderDc = defenseDatacronTruth(defense);
   const attackerDc = attackerDatacronTruth(assignment, roster);
   const expectedSize = asArray(defense?.members).length === 3 ? 3 : asArray(defense?.members).length === 5 ? 5 : 0;
-  const exactDefense = Boolean(Number(assignment?.defenseId) > 0 && Number(defense?.id) === Number(assignment?.defenseId) && expectedSize > 0);
+  const slot = exactSlot(defense?.slot);
+  const exactDefense = Boolean(Number(assignment?.defenseId) > 0 && Number(defense?.id) === Number(assignment?.defenseId) && expectedSize > 0 && clean(defense?.zone) && slot !== null);
   const exactAttack = Boolean(expectedSize > 0 && members.length === expectedSize && members.includes(normalizeId(assignment?.leaderBaseId)));
   const rosterTruthStatus = clean(rosterIntegrity?.status).toLowerCase();
   const rows = [
     checklistRow('plan', 'Canonical attack lock', status === 'planned' ? 'pass' : 'block', status === 'planned' ? 'Assignment is locked in the verified current round.' : `Assignment status is ${status || 'unknown'}.`, status !== 'planned'),
-    checklistRow('defense', 'Exact saved defense', exactDefense ? 'pass' : 'block', exactDefense ? `${clean(defense?.zone) || 'zone ?'} · slot ${Number(defense?.slot) + 1}` : 'Saved defense identity is unavailable or changed.', !exactDefense),
+    checklistRow('defense', 'Exact saved defense', exactDefense ? 'pass' : 'block', exactDefense ? `${clean(defense?.zone)} · slot ${slot + 1}` : 'Saved defense identity, zone, or slot is unavailable or changed.', !exactDefense),
     checklistRow('defender-dc', 'Enemy Datacron truth', defenderDc.exact ? 'pass' : 'block', defenderDc.label, !defenderDc.exact),
     checklistRow('attack', 'Exact attacker squad + leader', exactAttack ? 'pass' : 'block', exactAttack ? `${members.length} locked attackers · leader ${normalizeId(assignment?.leaderBaseId)}` : 'Locked attacker composition is incomplete.', !exactAttack),
     checklistRow('roster', 'Attackers in current roster', missing.length ? 'block' : 'pass', missing.length ? `Missing: ${missing.join(', ')}` : 'Every locked attacker exists in the current roster.', missing.length > 0),
@@ -106,6 +113,7 @@ export {
   attackerDatacronTruth,
   buildExecutionChecklist,
   defenseDatacronTruth,
+  exactSlot,
   executionFingerprint,
   executionReady,
   normalizeId,
