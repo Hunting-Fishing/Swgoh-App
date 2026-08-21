@@ -35,6 +35,12 @@ function defenseDatacronState(defense = {}) {
   if (state === "none") return { state: "none", id: "" };
   return { state: "unknown", id: "" };
 }
+function executionDefenderMembers(assignment = {}, defense = {}) {
+  if (clean(assignment?.planKind).toLowerCase() === "cleanup") {
+    return normalizedIds(assignment?.cleanup?.survivorBaseIds);
+  }
+  return normalizedIds(defense?.members);
+}
 function executionConfirmationSnapshot(assignment = {}, defense = {}) {
   const defenderDc = defenseDatacronState(defense);
   return Object.freeze({
@@ -47,7 +53,7 @@ function executionConfirmationSnapshot(assignment = {}, defense = {}) {
     attackerMembers: Object.freeze(normalizedIds(assignment?.members)),
     attackerDatacronId: clean(assignment?.datacron?.id),
     defenderLeaderBaseId: normalizeBaseId(defense?.leaderBaseId),
-    defenderMembers: Object.freeze(normalizedIds(defense?.members)),
+    defenderMembers: Object.freeze(executionDefenderMembers(assignment, defense)),
     defenderDatacronState: defenderDc.state,
     defenderDatacronId: defenderDc.id,
   });
@@ -77,6 +83,15 @@ function assertExecutionConfirmation(submitted = {}, assignment = {}, defense = 
     const error = new Error("The locked enemy defense must have an exact saved board zone and slot before beginning the attempt.");
     error.status = 409;
     throw error;
+  }
+  if (clean(assignment?.planKind).toLowerCase() === "cleanup") {
+    const original = new Set(normalizedIds(defense?.members));
+    const invalid = expected.defenderMembers.filter((id) => !original.has(id));
+    if (!expected.defenderMembers.length || invalid.length) {
+      const error = new Error("The cleanup plan no longer has a valid confirmed survivor composition for the saved defense. Rebuild cleanup intelligence before battle.");
+      error.status = 409;
+      throw error;
+    }
   }
   if (expected.defenderDatacronState === "unknown") {
     const error = new Error("Confirm the enemy Datacron as exact assigned or confirmed none before beginning the attempt.");
@@ -295,6 +310,7 @@ export {
   defenseDatacronState,
   exactExecutionSlot,
   executionConfirmationSnapshot,
+  executionDefenderMembers,
   normalizedIds,
   statusFor,
 };
