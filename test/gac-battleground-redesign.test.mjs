@@ -2,10 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { boardRule } from '../public/gac-league-board-rules.js';
+import { leagueBoard } from '../public/gac-league-board-model.js';
 
 const source = async (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 
-test('all supplied 5v5 and 3v3 defense totals are encoded exactly', () => {
+test('all supplied 5v5 and 3v3 defense totals are encoded exactly in canonical rules', () => {
   const expected = {
     Kyber: { '5v5':[11,3,14], '3v3':[15,3,18] },
     Aurodium: { '5v5':[9,2,11], '3v3':[13,2,15] },
@@ -22,52 +23,44 @@ test('all supplied 5v5 and 3v3 defense totals are encoded exactly', () => {
   }
 });
 
-test('Carbonite 3v3 renders four squad circles plus one fleet circle', () => {
-  const rule = boardRule('Carbonite', '3v3');
-  assert.equal(rule.territoryTeams['FRONT-TOP'], 1);
-  assert.equal(rule.territoryTeams['FRONT-BOTTOM'], 1);
-  assert.equal(rule.territoryTeams['BACK-BOTTOM'], 2);
-  assert.equal(rule.territoryTeams['BACK-TOP'], 1);
+test('manual live board model agrees with canonical totals including Carbonite 3v3', () => {
+  for (const [league, key] of [['Carbonite','carbonite'],['Bronzium','bronzium'],['Chromium','chromium'],['Aurodium','aurodium'],['Kyber','kyber']]) {
+    for (const format of ['5v5','3v3']) {
+      const canonical = boardRule(league, format);
+      const live = leagueBoard(format, key);
+      assert.equal(live.squadCount, canonical.squadTeams, `${league} ${format} squad count`);
+      assert.equal(live.fleetCount, canonical.fleetTeams, `${league} ${format} fleet count`);
+      assert.equal(live.totalPlacements, canonical.totalDefenses, `${league} ${format} total count`);
+    }
+  }
 });
 
-test('battleground presentation reuses canonical manual board state and slot editor', async () => {
-  const js = await source('public/gac-battleground-redesign.js');
-  assert.match(js, /boardSnapshot/);
-  assert.match(js, /openSquadSlot/);
-  assert.match(js, /data-gac-redesign-slot/);
-  assert.match(js, /data-gac-board-add-unit/);
-  assert.match(js, /data-gac-board-edit/);
-  assert.match(js, /data-gac-board-delete/);
-  assert.doesNotMatch(js, /\/api\/gac\/current-board/);
+test('runtime boots the live manual planner but no longer boots the rejected duplicate battleground layer', async () => {
+  const bootstrap = await source('public/asset-resilience.js');
+  assert.match(bootstrap, /import '\.\/gac-manual-counter-planner\.js';/);
+  assert.doesNotMatch(bootstrap, /gac-battleground-redesign\.js/);
+  assert.doesNotMatch(bootstrap, /gac-battleground-redesign-guard\.js/);
 });
 
-test('placed board circles render leader portrait with member pips', async () => {
-  const js = await source('public/gac-battleground-redesign.js');
-  assert.match(js, /gac-arena-node-ring/);
-  assert.match(js, /leaderFor\(defense/);
-  assert.match(js, /memberPips\(defense/);
-  assert.match(js, /gac-arena-portrait is-leader|portrait\(leader, 'is-leader'\)/);
+test('live battlefield uses circle selection, leader-in-node, member pips and existing editor actions', async () => {
+  const ui = await source('public/gac-league-board-ui.js');
+  assert.match(ui, /gac-league-slot-node is-filled/);
+  assert.match(ui, /gac-league-node-orbit/);
+  assert.match(ui, /gac-league-node-pips/);
+  assert.match(ui, /portraitMarkup\(portraits\[0\], 'is-leader'\)/);
+  assert.match(ui, /data-gac-league-slot-add/);
+  assert.match(ui, /data-gac-league-slot-edit/);
+  assert.match(ui, /data-gac-manual-defense-edit/);
+  assert.match(ui, /data-gac-manual-defense-delete/);
+  assert.doesNotMatch(ui, /fetch\(/);
 });
 
-test('fleet circles hand off to canonical fleet planner', async () => {
-  const js = await source('public/gac-battleground-redesign.js');
-  assert.match(js, /__gacFleetCanonicalOperations/);
-  assert.match(js, /data-gac-manual-fleet-planner-focus/);
-  assert.match(js, /data-gac-redesign-fleet-slot/);
-});
-
-test('legacy planner is preserved as a collapsed fallback instead of deleted', async () => {
-  const js = await source('public/gac-battleground-redesign.js');
-  assert.match(js, /gac-redesign-legacy-tools/);
-  assert.match(js, /preserved fallback/);
-  assert.doesNotMatch(js, /\.remove\(\).*gac-manual-counter-planner/);
-});
-
-test('arena styling uses a four-territory board and circular interactive nodes', async () => {
-  const css = await source('public/gac-battleground-redesign.css');
-  assert.match(css, /grid-template-areas:"fleet fronttop" "backbottom frontbottom"/);
-  assert.match(css, /\.gac-arena-node-ring\{[^}]*border-radius:50%/);
-  assert.match(css, /\.gac-arena-node\.is-selected/);
-  assert.match(css, /\.gac-redesign-main\{display:grid/);
-  assert.match(css, /\.gac-redesign-counter/);
+test('live arena styling removes giant placement cards and renders circular interaction points', async () => {
+  const css = await source('public/gac-league-board.css');
+  assert.match(css, /\.gac-league-slot-node\{[^}]*width:104px/);
+  assert.match(css, /\.gac-league-node-orbit\{[^}]*border-radius:50%/);
+  assert.match(css, /\.gac-league-card-storage\{display:none!important/);
+  assert.match(css, /\.gac-league-slot-node\.is-selected/);
+  assert.match(css, /\.gac-live-arena-side/);
+  assert.match(css, /\.gac-live-rules/);
 });
