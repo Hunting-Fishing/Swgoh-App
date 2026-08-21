@@ -57,6 +57,60 @@ function sourceAnchor(name, ref) {
     : `<strong>${label}</strong>`;
 }
 
+function sourceMetaLine(provenance = {}) {
+  const parts = [`Source family ${clean(provenance.sourceType) || 'not declared'}`];
+  if (clean(provenance.sourceAuthor)) parts.push(`author ${clean(provenance.sourceAuthor)}`);
+  parts.push(`updated ${dateLabel(provenance.sourceUpdatedAt)}`);
+  parts.push(`captured ${dateLabel(provenance.capturedAt)}`);
+  return parts.join(' · ');
+}
+
+function scopePresenceLabel(value) {
+  const presence = clean(value).toLowerCase();
+  if (presence === 'any') return 'ANY';
+  if (presence === 'none') return 'CONFIRMED NONE';
+  if (presence === 'assigned') return 'ASSIGNED';
+  return 'NOT DECLARED';
+}
+
+function scopeConstraintSummary(constraint = {}) {
+  const parts = [scopePresenceLabel(constraint.presence)];
+  if (constraint.required === true) parts.push('required');
+  const setIds = Array.isArray(constraint.setIds) ? constraint.setIds.map(clean).filter(Boolean) : [];
+  const mechanicIds = Array.isArray(constraint.mechanicIds) ? constraint.mechanicIds.map(clean).filter(Boolean) : [];
+  if (setIds.length) parts.push(`sets ${setIds.join(', ')}`);
+  if (mechanicIds.length) parts.push(`mechanic IDs ${mechanicIds.join(', ')}`);
+  return parts.join(' · ');
+}
+
+function renderDatacronScope(provenance = {}) {
+  const scope = provenance.datacronScope || {};
+  const verified = provenance.datacronScopeVerified === true;
+  return `<section class="gac-prov-meta-card gac-prov-scope ${verified ? 'is-verified' : 'is-unverified'}">
+    <header><span>DATACRON SCOPE</span><b>${verified ? 'VERIFIED' : 'UNVERIFIED'}</b></header>
+    <div><strong>ATTACKER</strong><small>${escapeHtml(scopeConstraintSummary(scope.attacker || {}))}</small></div>
+    <div><strong>DEFENDER</strong><small>${escapeHtml(scopeConstraintSummary(scope.defender || {}))}</small></div>
+    ${verified ? '' : '<p>Blank or undeclared scope is not treated as “any” or “none.” Execution remains locked until the source scope is reviewed.</p>'}
+  </section>`;
+}
+
+function renderValidity(provenance = {}) {
+  const validity = provenance.validity || {};
+  const verified = provenance.versionValidityVerified === true;
+  const from = clean(validity.validFrom);
+  const until = clean(validity.validUntil);
+  const windowLabel = from || until
+    ? `${from ? dateLabel(from) : 'open'} → ${until ? dateLabel(until) : 'open'}`
+    : 'WINDOW NOT DECLARED';
+  const version = clean(validity.gameDataVersion) || 'NOT DECLARED';
+  return `<section class="gac-prov-meta-card gac-prov-validity ${verified ? 'is-verified' : 'is-unverified'}">
+    <header><span>VALIDITY</span><b>${verified ? 'VERIFIED' : 'UNVERIFIED'}</b></header>
+    <div><strong>WINDOW</strong><small>${escapeHtml(windowLabel)}</small></div>
+    <div><strong>GAME DATA</strong><small>${escapeHtml(version)}</small></div>
+    ${clean(validity.notes) ? `<p>${escapeHtml(validity.notes)}</p>` : ''}
+  </section>`;
+}
+
 function renderValidationRefs(rows = []) {
   if (!rows.length) return '';
   return `<div class="gac-prov-validations"><span>CURRENT RELEVANCE CHECKS</span>${rows.slice(0,4).map((row) => `<article><div>${sourceAnchor(row.sourceName, row.sourceRef)}<small>${escapeHtml(row.kind || 'validation')}</small></div><p>${escapeHtml(row.note || 'Supporting validation reference.')}</p></article>`).join('')}</div>`;
@@ -73,7 +127,8 @@ function renderPanel(provenance, executionUnlocked) {
   const blockers = Array.isArray(provenance?.blockers) ? provenance.blockers : [];
   return `<section class="gac-brief-provenance is-locked" data-gac-provenance-panel>
     <div class="gac-prov-head"><span>TACTIC PROVENANCE</span><strong>${escapeHtml(provenance.label || 'TACTIC FOUND · EXECUTION LOCKED')}</strong></div>
-    <div class="gac-prov-source"><div>${sourceAnchor(provenance.sourceName, provenance.sourceRef)}<small>Source updated ${dateLabel(provenance.sourceUpdatedAt)} · captured ${dateLabel(provenance.capturedAt)}</small></div><p>${escapeHtml(provenance.validityNotes || provenance.detail || '')}</p></div>
+    <div class="gac-prov-source"><div>${sourceAnchor(provenance.sourceName, provenance.sourceRef)}<small>${escapeHtml(sourceMetaLine(provenance))}</small></div><p>${escapeHtml(provenance.detail || 'Source metadata is available for audit.')}</p></div>
+    <div class="gac-prov-meta-grid">${renderDatacronScope(provenance)}${renderValidity(provenance)}</div>
     ${blockers.length ? `<div class="gac-prov-blockers"><span>WHY EXECUTION IS LOCKED</span>${blockers.map((label) => `<b>⚠ ${escapeHtml(label)}</b>`).join('')}</div>` : ''}
     ${renderValidationRefs(provenance.validationRefs)}
     <small class="gac-prov-boundary">Quarantined source metadata is visible for audit. Unapproved opening moves, target order, and tactical instructions are not loaded into runtime.</small>
@@ -95,7 +150,9 @@ function v2CounterContext(card) {
 function renderV2Chip(provenance) {
   if (!provenance || provenance.status === 'none') return `<div class="gacv2-prov-chip is-none"><strong>TACTIC SOURCE</strong><span>No exact sourced execution record</span></div>`;
   const blockers = Array.isArray(provenance.blockers) ? provenance.blockers : [];
-  return `<details class="gacv2-prov-chip is-${escapeHtml(provenance.status)}"><summary><strong>TACTIC SOURCE FOUND</strong><span>${provenance.status === 'locked' ? 'EXECUTION LOCKED' : escapeHtml(provenance.status.toUpperCase())}</span></summary><div>${sourceAnchor(provenance.sourceName, provenance.sourceRef)}<small>${blockers.length ? `${blockers.length} review gate${blockers.length === 1 ? '' : 's'} · ` : ''}updated ${dateLabel(provenance.sourceUpdatedAt)}</small><p>${escapeHtml(provenance.validityNotes || provenance.detail || '')}</p>${blockers.length ? `<ul>${blockers.slice(0,5).map((label) => `<li>${escapeHtml(label)}</li>`).join('')}</ul>` : ''}<em>Metadata only. Quarantined execution guidance is not loaded.</em></div></details>`;
+  const dcState = provenance.datacronScopeVerified === true ? 'Datacron verified' : 'Datacron unverified';
+  const validityState = provenance.versionValidityVerified === true ? 'Validity verified' : 'Validity unverified';
+  return `<details class="gacv2-prov-chip is-${escapeHtml(provenance.status)}"><summary><strong>TACTIC SOURCE FOUND</strong><span>${provenance.status === 'locked' ? 'EXECUTION LOCKED' : escapeHtml(provenance.status.toUpperCase())}</span></summary><div>${sourceAnchor(provenance.sourceName, provenance.sourceRef)}<small>${escapeHtml(sourceMetaLine(provenance))}</small><div class="gacv2-prov-meta"><span>${escapeHtml(dcState)}</span><span>${escapeHtml(validityState)}</span><span>Attacker DC: ${escapeHtml(scopeConstraintSummary(provenance.datacronScope?.attacker || {}))}</span><span>Defender DC: ${escapeHtml(scopeConstraintSummary(provenance.datacronScope?.defender || {}))}</span></div><p>${escapeHtml(provenance.validityNotes || provenance.detail || '')}</p>${blockers.length ? `<ul>${blockers.slice(0,5).map((label) => `<li>${escapeHtml(label)}</li>`).join('')}</ul>` : ''}<em>Metadata only. Quarantined execution guidance is not loaded.</em></div></details>`;
 }
 
 async function inspectV2Counter(card) {
@@ -156,7 +213,7 @@ function schedule(delay = 80) {
 function injectStyle() {
   if (document.querySelector('link[data-gac-provenance-inspector]')) return;
   const link = document.createElement('link');
-  link.rel = 'stylesheet'; link.href = '/gac-war-room-provenance-inspector.css?v=20260821-b05b'; link.dataset.gacProvenanceInspector = 'true';
+  link.rel = 'stylesheet'; link.href = '/gac-war-room-provenance-inspector.css?v=20260821-b05c'; link.dataset.gacProvenanceInspector = 'true';
   document.head.appendChild(link);
 }
 
@@ -175,4 +232,4 @@ if (typeof document !== 'undefined') {
   schedule(300);
 }
 
-export { identity, ids, renderPanel, renderV2Chip, v2CounterContext };
+export { dateLabel, identity, ids, renderDatacronScope, renderPanel, renderValidity, renderV2Chip, scopeConstraintSummary, scopePresenceLabel, sourceMetaLine, v2CounterContext };

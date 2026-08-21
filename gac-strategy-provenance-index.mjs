@@ -16,6 +16,14 @@ function side(value = {}) {
     members: Object.freeze([...new Set(asArray(value.members).map(normalizeId).filter(Boolean))]),
   });
 }
+function datacronConstraint(value = {}) {
+  return Object.freeze({
+    presence: clean(value.presence).toLowerCase(),
+    required: value.required === true,
+    setIds: Object.freeze([...new Set(asArray(value.setIds).map(clean).filter(Boolean))].sort()),
+    mechanicIds: Object.freeze([...new Set(asArray(value.mechanicIds).map(clean).filter(Boolean))].sort()),
+  });
+}
 function validationRef(value = {}) {
   return Object.freeze({
     kind: clean(value.kind), sourceName: clean(value.sourceName), sourceRef: clean(value.sourceRef), capturedAt: clean(value.capturedAt), note: clean(value.note),
@@ -34,6 +42,10 @@ function sanitizedEntry(candidateInput = {}) {
     format: clean(record.format).toLowerCase(),
     defender: side(record.defender),
     attacker: side(record.attacker),
+    datacron: Object.freeze({
+      attacker: datacronConstraint(record.attackerDatacron),
+      defender: datacronConstraint(record.defenderDatacron),
+    }),
     source: Object.freeze({
       name: clean(provenance.sourceName), ref: clean(provenance.sourceRef), type: clean(provenance.sourceType), author: clean(provenance.author), updatedAt: clean(provenance.sourceUpdatedAt || provenance.sourcePublishedAt), capturedAt: clean(provenance.capturedAt),
     }),
@@ -80,4 +92,4 @@ async function main(argv = process.argv.slice(2)) {
 const invokedDirectly = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 if (invokedDirectly) main().catch((error) => { console.error(error?.message || error); process.exitCode = 1; });
 
-export { buildProvenanceIndex, sanitizedEntry, main };
+export { buildProvenanceIndex, datacronConstraint, sanitizedEntry, main };
