@@ -5,6 +5,14 @@ const clean = (value) => String(value ?? '').trim();
 const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g,(char)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
 const escapeAttr = escapeHtml;
 
+function injectStyle() {
+  if(document.querySelector('link[data-gac-fleet-attempt-history-style]'))return;
+  const link=document.createElement('link');
+  link.rel='stylesheet';
+  link.href='/gac-fleet-attempt-history.css?v=20260821-fleetledger';
+  link.dataset.gacFleetAttemptHistoryStyle='true';
+  document.head.appendChild(link);
+}
 function unitIndex(snapshot = {}) {
   return new Map((Array.isArray(snapshot?.ownerRoster?.units) ? snapshot.ownerRoster.units : [])
     .map((unit)=>[normalizeId(unit),unit])
@@ -66,6 +74,7 @@ function render(detail = window.__gacFleetCanonicalOperations || {}) {
 function schedule(detail) { requestAnimationFrame(()=>render(detail)); }
 
 if(typeof document!=='undefined') {
+  injectStyle();
   window.addEventListener('gac-fleet-round-state-updated',(event)=>schedule(event.detail));
   window.addEventListener('gac-fleet-evidence-archived',()=>schedule(window.__gacFleetCanonicalOperations));
   document.addEventListener('DOMContentLoaded',()=>schedule(window.__gacFleetCanonicalOperations),{once:true});
