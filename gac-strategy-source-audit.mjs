@@ -11,6 +11,7 @@ import { catalogPayload } from "./public/gac-strategy-catalog.js";
 
 const ROOT = fileURLToPath(new URL("./", import.meta.url));
 const CANDIDATE_PATH = resolve(ROOT, "public/data/gac-strategy-source-candidates.json");
+const FIVE_V_FIVE_CANDIDATE_PATH = resolve(ROOT, "public/data/gac-strategy-source-candidates-5v5.json");
 const PRODUCTION_PATH = resolve(ROOT, "public/data/gac-strategy-records.json");
 const GAME_CATALOG_PATH = resolve(ROOT, "public/data/catalog.json");
 
@@ -25,6 +26,19 @@ function duplicateValues(values = []) {
     else seen.add(value);
   }
   return Object.freeze([...duplicates].sort());
+}
+function argumentValue(argv = [], name = "") {
+  const exact = clean(name);
+  const inline = asArray(argv).find((value) => clean(value).startsWith(`${exact}=`));
+  if (inline) return clean(inline).slice(exact.length + 1);
+  const index = asArray(argv).findIndex((value) => clean(value) === exact);
+  return index >= 0 ? clean(argv[index + 1]) : "";
+}
+function candidatePathFromArgv(argv = []) {
+  const explicit = argumentValue(argv, "--candidates");
+  if (explicit) return resolve(ROOT, explicit);
+  const format = argumentValue(argv, "--format").toLowerCase();
+  return format === "5v5" ? FIVE_V_FIVE_CANDIDATE_PATH : CANDIDATE_PATH;
 }
 function catalogBaseIdSet(gameCatalog = {}) {
   return new Set(asArray(gameCatalog?.units).map((unit) => normalizeBaseId(unit?.baseId)).filter(Boolean));
@@ -57,6 +71,10 @@ function auditSourceCandidates(candidateBody = {}, productionBody = {}, gameCata
   const duplicateCandidateIds = duplicateValues(candidates.map((candidate) => candidate?.candidateId));
   const duplicateProposedRecordIds = duplicateValues(candidates.map((candidate) => candidate?.proposedRecord?.id));
   const schemaVersion = Number(candidateBody?.schemaVersion || 0);
+  const declaredFormat = clean(candidateBody?.format).toLowerCase();
+  const formatMismatches = ["3v3", "5v5"].includes(declaredFormat)
+    ? candidates.filter((candidate) => clean(candidate?.proposedRecord?.format).toLowerCase() !== declaredFormat).map((candidate) => clean(candidate?.candidateId))
+    : [];
   const gameCatalogAuditEnabled = Boolean(gameCatalog && typeof gameCatalog === "object");
   const knownBaseIds = gameCatalogAuditEnabled ? catalogBaseIdSet(gameCatalog) : new Set();
   const baseIdAudit = candidates.map((candidate) => Object.freeze({
@@ -76,10 +94,13 @@ function auditSourceCandidates(candidateBody = {}, productionBody = {}, gameCata
     && duplicateProductionIds.length === 0
     && duplicateCandidateIds.length === 0
     && duplicateProposedRecordIds.length === 0
+    && formatMismatches.length === 0
     && production.rejected.length === 0
     && (!gameCatalogAuditEnabled || (knownBaseIds.size > 0 && approvedInvalidBaseIds.size === 0));
   return Object.freeze({
     schemaVersion,
+    declaredFormat: ["3v3", "5v5"].includes(declaredFormat) ? declaredFormat : null,
+    formatMismatches: Object.freeze(formatMismatches),
     candidateCount: candidates.length,
     pending: summaries.filter((row) => row.status === "pending").length,
     quarantined: summaries.filter((row) => row.status === "quarantined").length,
@@ -132,13 +153,14 @@ async function readJson(pathname) {
 
 async function main(argv = process.argv.slice(2)) {
   const write = argv.includes("--write");
+  const candidatePath = candidatePathFromArgv(argv);
   const [candidates, production, gameCatalog] = await Promise.all([
-    readJson(CANDIDATE_PATH),
+    readJson(candidatePath),
     readJson(PRODUCTION_PATH),
     readJson(GAME_CATALOG_PATH),
   ]);
   const audit = auditSourceCandidates(candidates, production, gameCatalog);
-  process.stdout.write(`${JSON.stringify(audit, null, 2)}\n`);
+  process.stdout.write(`${JSON.stringify({ candidatePath, ...audit }, null, 2)}\n`);
   if (!audit.safe) process.exitCode = 1;
   if (!write) return audit;
   if (!audit.safe) throw new Error("Refusing to write production strategy catalog because the source audit failed.");
@@ -163,8 +185,12 @@ if (invokedDirectly) {
 }
 
 export {
+  CANDIDATE_PATH,
+  FIVE_V_FIVE_CANDIDATE_PATH,
+  argumentValue,
   auditSourceCandidates,
   buildProductionCatalog,
+  candidatePathFromArgv,
   catalogBaseIdSet,
   duplicateValues,
   invalidCandidateBaseIds,

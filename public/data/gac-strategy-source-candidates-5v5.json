@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "format": "5v5",
+  "generatedAt": "2026-08-21T15:55:00+08:00",
+  "releaseState": "source-blocked-production-safe",
+  "policy": "Research candidates are quarantined from runtime. Promotion requires a reviewable current source proving exact composition, canonical Base IDs, explicit Datacron scope, current-version validity, provenance, copyright-safe paraphrase, and a source-supported execution sequence. Aggregate win statistics alone do not satisfy execution requirements.",
+  "reason": "No reviewed 5v5 candidate currently satisfies every promotion requirement. Runtime execution therefore remains source-gated rather than invented.",
+  "candidates": []
+}
