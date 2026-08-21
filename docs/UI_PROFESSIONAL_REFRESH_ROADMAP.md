@@ -21,128 +21,85 @@ Core visual principles:
 - Preserve existing live-data and authentication contracts while changing presentation.
 - **Enhancement-only rule:** existing information must remain accessible. Older/reference surfaces may be visually demoted, but not removed merely to make a screen cleaner.
 
-## Current audit findings
-
-1. The app currently has many feature-specific CSS layers loaded together on the main dashboard.
-2. Several late CSS layers deliberately compress controls, KPIs and labels into very small type.
-3. The visual palette is dominated by near-black, navy and low-saturation blue.
-4. Onboarding, Actions, Player Dashboard, Guild tools and GAC use different page shells and navigation patterns.
-5. Success states and major player accomplishments do not receive enough visual emphasis.
-6. Important actions often look similar to secondary utility controls.
-7. Desktop layouts prioritize maximum density over scanability and game-like presentation.
-8. Mobile behavior exists, but several dense desktop patterns should be redesigned rather than merely stacked.
-9. Some V3 cleanup logic hid older GAC scaffolding. This has been corrected so reference information remains visible.
-10. TB/ROTE phase, readiness, mission and candidate labels frequently fell into the 0.5–0.66rem range; the professional layer enlarges those surfaces without changing the tactical model.
-11. The Events/Resources visual library previously replaced whole workspace DOM trees with `innerHTML`; this has been corrected to prepend the visual navigation layer while retaining existing detailed DOM and handlers.
-12. Roster Commander and Farm Gallery had styling rules that hid the original roster controls/grid and Farm V3/Master Plan. The professional Player layer now restores those as retained detailed-reference surfaces.
-
 ## Rollout status
 
 | Workstream | Status | Completion |
 | --- | --- | ---: |
-| Onboarding visual redesign | Implemented on styling branch | 100% |
-| Action Center visual redesign | Implemented on styling branch | 100% |
-| Shared palette / visual language | Established across major Command Center workspaces | 97% |
-| Player Command Center + populated detail | Roster, Farm/Journey, Mods/Optimizer and retained reference pass implemented | 85% |
+| Onboarding | Implemented on styling branch | 100% |
+| Action Center | Implemented on styling branch | 100% |
+| Shared visual language | Established across major workspaces | 97% |
+| Player Command Center + populated detail | Roster, Farm/Journey, Mods/Optimizer and retained-reference pass implemented | 85% |
 | Global navigation / workspace tabs | Shared command-rail pass implemented | 65% |
-| GAC War Room visual modernization | Professional battle-room pass implemented; reference preservation corrected | 85% |
-| Guild Command Center pages | Professional overview/member/capability styling implemented | 70% |
-| TB / ROTE map and planning surfaces | Professional phase/map/mission-board pass implemented | 65% |
-| Login / auth visual alignment | Pending; auth behavior remains outside styling branch scope | 10% |
-| Cross-device polish + accessibility review | Responsive rules expanded across major workspaces | 52% |
+| GAC War Room | Professional battle-room pass implemented; reference preservation corrected | 85% |
+| Guild Command Center | Professional overview/member/capability styling implemented | 70% |
+| TB / ROTE | Professional phase/map/mission-board pass implemented | 65% |
+| Login / auth visual alignment | Pending; behavior remains outside styling scope | 10% |
+| Cross-device/accessibility | Responsive rules expanded across major workspaces | 52% |
 
 Approximate overall visual modernization: **75%**.
 
-## Implemented in the Player overview pass
+## Information-preservation corrections
 
-- Reduced 10-column KPI rows to readable 5-column desktop clusters.
-- Reduced 10-column launch rails to readable 5-column desktop clusters.
-- Increased KPI, launch, player identity and module typography.
-- Increased touch targets and module spacing.
-- Added warm/cool color families to dashboard cards and workspace states.
-- Upgraded active workspace navigation to a strong gold command state.
-- Enlarged visual-library cards and their imagery/status treatments.
-- Added responsive 3-column, 2-column and 1-column fallbacks for smaller displays.
+- GAC V3 no longer hides older/reference GAC scaffolding merely to remove duplication.
+- Events and Resources no longer replace their whole workspace DOM with `innerHTML`; visual libraries are prepended and existing detailed DOM/handlers remain mounted.
+- Original roster controls/grid are restored below Roster Commander as retained detailed reference.
+- Farm Gallery no longer suppresses Farm V3 command/surfaces or the Master Farm Plan.
+- TB/ROTE descriptive map/territory information previously hidden for density has been restored.
+- Regression checks now prohibit the new professional enhancer layers from deleting/replacing workspace content or fetching alternate data.
 
-## Implemented in the populated Player pass
+## Populated Player pass
 
-- Added a dedicated additive `player-command-professional` layer loaded through the existing asset chain.
-- Restored the original roster controls and original owned-roster grid as **DETAILED REFERENCE · RETAINED** below Roster Commander instead of hiding them.
-- Kept all Roster Commander filters, presets, saved views, summary metrics, ROTE demand, abilities, Mods, readiness and action columns intact.
-- Enlarged Roster Commander hero, filters, summary cards, table text and action controls.
-- Changed the Farm Gallery from highly compressed 5-column target / 7-column unit layouts to readable 4-column target / 5-column unit layouts on wide displays, with responsive reductions below that.
-- Restored Farm V3 command/surfaces and the Master Farm Plan alongside the Gallery; Gallery navigation no longer suppresses detailed planning information.
-- Enlarged Farm target imagery, state chips, stats, actions, requirement search and unit tiles.
-- Enlarged the Current Journey/Era Guide while retaining every description, evidence boundary, source link, tier detail and requirement chip.
-- Enlarged Mods Audit summary/pip/table presentation while retaining all existing mod metrics and tables.
+- Added additive `player-command-professional` styling through the existing asset chain.
+- Kept all Roster Commander filters, presets, saved views, summary metrics, ROTE demand, abilities, Mods, readiness and table actions.
+- Increased Roster Commander hierarchy, typography, controls, summary cards and table readability.
+- Reworked Farm Gallery density from 5 target columns / 7 unit columns toward 4 / 5 wide-screen groups with responsive fallbacks.
+- Enlarged Farm target imagery, states, stats, actions, requirement controls and unit tiles.
+- Enlarged Current Journey/Era Guide while retaining descriptions, evidence boundaries, source links, tiers and requirements.
+- Enlarged Mods Audit summaries, pips and tables while retaining metrics.
 - Improved Mod Optimizer controls, assignments, move chips and donor information without changing optimizer logic.
-- Corrected Events and Resources so their visual libraries are **prepended**, not destructive replacements; prior detailed DOM and handlers remain mounted.
-- Added regression checks prohibiting the Player professional enhancer from fetching alternate data, deleting nodes, replacing children, assigning workspace `innerHTML`, or hiding content.
+- Visual Resource/Event libraries now supplement the original detailed content instead of replacing it.
 
-## Implemented in the GAC War Room pass
+## GAC War Room pass
 
-- Replaced the white/gray tactical interior with the colorful command-deck language used across the new app shell.
-- Enlarged the War Room title, status state, setup controls and primary battle actions.
-- Made Enter Board the visually dominant quick action while keeping Scout and Truth Gate available.
-- Enlarged tactical HUD cards and made ready/warning/unknown states easier to scan.
-- Changed eight matchup metrics into four-column readable groups.
-- Preserved the territory-map board while enlarging territories, slots, unit art, labels and progress indicators.
-- Increased readability of enemy defense selection and counter-recommendation cards.
-- Added distinct visual treatment for evidence-backed counters, heuristic counters, missing counters and fleet territories.
-- Added responsive single-column territory ordering for narrower screens while retaining the desktop battlefield map.
-- Preserved live opponent lookup, manual board entry, counter logic, scouting/history, fleet handling, battle execution and Truth Gate behavior.
-- Corrected the V3 cleanup rule so older/reference GAC information remains visible instead of being hidden.
+- Colorful battle-command shell with larger setup, HUD, matchup, board and counter surfaces.
+- Enter Board is visually dominant while Scout and Truth Gate remain accessible.
+- Matchup metrics reduced from eight cramped columns to four readable groups without removing metrics.
+- Territory board, manual enemy entry, fleets, evidence counters, heuristic counters, history, execution and diagnostics retained.
 
-## Implemented in the Guild Command Center pass
+## Guild pass
 
-- Added a brighter guild identity/header treatment without changing live guild fetches or hydration state.
-- Enlarged source/freshness indicators and refresh controls.
-- Upgraded Guild navigation tabs with readable touch targets and non-destructive icons.
-- Restyled the full guild stat set rather than removing or consolidating metrics.
-- Added color families for Guild GP, Galactic Legends, relic depth, ships and membership metrics.
-- Converted TB, TW and Raid capability cards into clearly separated game-mode surfaces while preserving existing copy/actions.
-- Improved membership-change cards without reducing change history shown by the existing renderer.
-- Enlarged member search/filter/sort controls and maintained all current filtering options.
-- Retained all member-table columns: member, total GP, character GP, ship GP, GLs, R7+, R9 and roster state.
-- Improved selected-member detail, Galactic Legend chips and top-unit presentation without changing the roster model.
-- Added responsive layouts and non-destructive regression tests.
+- Brighter guild identity/freshness shell and larger tabs.
+- Full Guild stat set retained.
+- TB/TW/Raid capability areas visually separated.
+- Member search/filter/sort retained.
+- Member, GP, character GP, ship GP, GL, R7+, R9 and roster-state columns retained.
+- Member GL/top-unit detail retained.
 
-## Implemented in the TB / ROTE pass
+## TB / ROTE pass
 
-- Preserved the phase deck, galaxy map, planet nodes, mission board, gate/core units, candidate lists and legacy Geo/Hoth information layouts.
-- Enlarged phase tabs, labels and descriptions.
-- Enlarged territory cards, planet art, readiness indicators and mission icons.
-- Improved lane-specific readability for dark-side, mixed, light-side and bonus paths without altering underlying status classes.
-- Enlarged ROTE planet nodes and selected-planet treatment while keeping map relationships/positions intact.
-- Enlarged mission-board summaries, readiness status, mission chips, gate units and candidate rows.
-- Restored descriptive text inside fan-map planet details and legacy Geo/Hoth territory cards where previous density styling hid it.
-- Preserved map/operations view state behavior; the professional loader does not fetch, mutate or replace tactical data.
-- Added responsive layouts, reduced-motion handling and additive regression tests.
+- Phase deck, galaxy map, planet nodes, mission board, gate/core units, candidate lists and legacy Geo/Hoth layouts retained.
+- Larger phase/territory/readiness/mission/candidate presentation.
+- Lane identity improved for Dark, Mixed, Light and Bonus paths.
+- Map relationships/positions and map/operations state behavior unchanged.
 
 ## Next implementation order
 
 ### 1. Login / auth visual alignment
-
-- Align login/signup shell with onboarding without changing OAuth/session behavior.
+- Align login/signup with onboarding without changing OAuth/session behavior.
 - Preserve every auth error, provider button, redirect parameter and recovery path.
-- Do not modify OAuth logic while the production redirect/session issue remains under investigation.
 
 ### 2. Populated-state visual QA
-
-- Validate Onboarding, Actions, Player, GAC, Guild and TB/ROTE with real populated data.
-- Check wide desktop, laptop, tablet and mobile breakpoints.
-- Correct overflow, clipping and interaction conflicts without removing information.
+- Validate major workspaces with real populated data at desktop/laptop/tablet/mobile breakpoints.
+- Correct overflow, clipping and conflicts without removing information.
 
 ### 3. Shared-style consolidation
-
-- Once the refreshed workspaces are validated, reduce one-off override layers into shared visual tokens/components.
-- Keep the migration incremental so live workflow behavior is never rewritten solely for styling.
+- Gradually consolidate proven visual tokens/components after validation.
+- Do not rewrite live workflow logic solely for styling.
 
 ## Guardrails
 
-- No mock SWGOH player data should be introduced for production-facing states.
-- Styling changes must not alter authentication, Ally Code ownership verification, roster lookup or guild-binding contracts.
-- Existing information must remain accessible during UI modernization.
-- Visual enhancer layers should prefer classes/data attributes/prepending over replacing existing workspace DOM.
-- Decorative visuals should remain lightweight and CSS-driven unless a licensed/approved asset pipeline is established.
-- New shared styling should gradually reduce conflicting one-off CSS rules rather than adding permanent override layers indefinitely.
+- No production-facing mock SWGOH player data.
+- No styling change may alter auth, Ally Code ownership verification, roster lookup or guild-binding contracts.
+- Existing information must remain accessible.
+- Prefer additive classes/data attributes/prepending over replacing workspace DOM.
+- Decorative visuals stay lightweight/CSS-driven unless an approved asset pipeline exists.
