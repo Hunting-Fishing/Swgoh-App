@@ -1,7 +1,7 @@
 const GAC_V1_RELEASE_STATUS = Object.freeze({
   release: 'gac-v1',
-  state: 'production-hardening-complete',
-  generatedPolicyVersion: '2026-08-21-b18',
+  state: 'production',
+  generatedPolicyVersion: '2026-08-21-v1-release',
   packages: Object.freeze({
     console: 'production',
     rosterIntegrity: 'production',
@@ -12,14 +12,27 @@ const GAC_V1_RELEASE_STATUS = Object.freeze({
     cleanupAttackBrief: 'production',
     fleetWarRoom: 'production',
     fleetCleanup: 'production',
+    fleetAcceptance: 'production',
     datacronIntelligence: 'production',
     evidenceWarehouse: 'production',
     acceptanceSuite: 'production',
     publicScaleHardening: 'production',
+    tacticalSourceQuarantine: 'production',
   }),
   tacticalSources: Object.freeze({
-    threeVThree: Object.freeze({ state: 'quarantine-enforced', approvalRequired: true }),
-    fiveVFive: Object.freeze({ state: 'quarantine-enforced', approvalRequired: true }),
+    threeVThree: Object.freeze({
+      state: 'source-blocked-production-safe',
+      researchState: 'quarantine-enforced',
+      approvalRequired: true,
+      runtimeGuidance: 'approved-exact-records-only',
+    }),
+    fiveVFive: Object.freeze({
+      state: 'source-blocked-production-safe',
+      researchState: 'quarantine-enforced',
+      approvalRequired: true,
+      runtimeGuidance: 'approved-exact-records-only',
+    }),
+    approvedProductionRecordsAtRelease: 0,
     executionFallback: 'source-gated-no-invention',
   }),
   truthBoundaries: Object.freeze({
