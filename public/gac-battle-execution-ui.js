@@ -9,6 +9,7 @@ const state = {
   open: new Set(),
   confirmations: new Map(),
   errors: new Map(),
+  beginning: new Set(),
   requestId: 0,
   timer: null,
   loading: false,
@@ -66,8 +67,9 @@ function rowHtml(row) {
 function confirmationRows(assignment, checklist, confirmations) {
   const defenderDc = checklist.defenderDatacron;
   const attackerDc = checklist.attackerDatacron;
+  const slotLabel = checklist.fingerprint?.slot === null ? 'slot ?' : `slot ${Number(checklist.fingerprint.slot) + 1}`;
   const rows = [
-    ['defense', 'I compared the exact enemy squad and slot with the game.', `Defense #${Number(assignment?.defenseId) || '?'} · ${escapeHtml(clean(checklist.fingerprint?.zone) || 'zone ?')} slot ${Number(checklist.fingerprint?.slot) + 1}`],
+    ['defense', 'I compared the exact enemy squad and slot with the game.', `Defense #${Number(assignment?.defenseId) || '?'} · ${escapeHtml(clean(checklist.fingerprint?.zone) || 'zone ?')} ${slotLabel}`],
     ['defenderDatacron', defenderDc.state === 'none' ? 'I confirm the enemy has NO Datacron.' : 'I confirm this exact enemy Datacron is assigned.', escapeHtml(defenderDc.label)],
     ['attack', 'I selected this exact attacker squad and leader in-game.', `${checklist.fingerprint.attackerMembers.length} attackers · leader ${escapeHtml(checklist.fingerprint.attackerLeaderBaseId)}`],
     ['attackerDatacron', attackerDc.state === 'none' ? 'I will attack with NO Datacron.' : 'I selected this exact attacker Datacron in-game.', escapeHtml(attackerDc.label)],
@@ -81,6 +83,7 @@ function checklistHtml(assignment, defense) {
   const checklist = buildExecutionChecklist({ assignment, defense, roster:state.roster, ownDefenses:state.ownDefenses, rosterIntegrity:rosterIntegrity() });
   const ready = executionReady(checklist, confirmations);
   const error = clean(state.errors.get(id));
+  const busy = state.loading || state.beginning.has(id);
   return `<section class="gac-execution-lock ${ready ? 'is-ready' : checklist.readyForConfirmation ? 'is-confirm' : 'is-blocked'}" data-gac-execution-lock="${id}">
     <header><div><span>PRE-BATTLE LOCK · B08</span><strong>${ready ? 'READY TO BEGIN ATTEMPT' : checklist.readyForConfirmation ? 'USER CONFIRMATION REQUIRED' : 'EXECUTION BLOCKED'}</strong><small>Server revalidates the exact lock again when BEGIN ATTEMPT is pressed.</small></div><b>${checklist.blockers.length ? `${checklist.blockers.length} BLOCKER${checklist.blockers.length===1?'':'S'}` : ready ? 'LOCK VERIFIED' : '4 CONFIRMATIONS'}</b></header>
     <div class="gac-exec-auto"><span>AUTOMATED TRUTH CHECKS</span>${checklist.rows.map(rowHtml).join('')}</div>
@@ -88,7 +91,7 @@ function checklistHtml(assignment, defense) {
     <div class="gac-exec-boundary"><strong>RESOURCE LOCK</strong><span>These attackers remain reserved to this defense. Once the attempt begins, result handling must preserve their consumption boundary.</span></div>
     <div class="gac-exec-boundary is-source"><strong>TACTICAL SOURCE</strong><span>This lock confirms battle identity and resources only. It does not unlock opener, target order, or other execution guidance that remains source-gated in Attack Brief.</span></div>
     ${error ? `<div class="gac-exec-error"><strong>SERVER BLOCKED ATTEMPT</strong><span>${escapeHtml(error)}</span></div>` : ''}
-    <footer><button type="button" data-gac-exec-refresh>RECHECK LIVE STATE</button><button type="button" class="is-begin" data-gac-exec-begin ${ready && !state.loading ? '' : 'disabled'}>${state.loading ? 'VERIFYING…' : 'BEGIN ATTEMPT'}</button></footer>
+    <footer><button type="button" data-gac-exec-refresh ${busy ? 'disabled' : ''}>RECHECK LIVE STATE</button><button type="button" class="is-begin" data-gac-exec-begin ${ready && !busy ? '' : 'disabled'}>${busy ? 'VERIFYING…' : 'BEGIN ATTEMPT'}</button></footer>
   </section>`;
 }
 
@@ -131,7 +134,7 @@ async function load({ force = false } = {}) {
     if (requestId !== state.requestId) return;
     if (allyCode(opponentBoard?.opponent?.allyCode) !== current.opponent) throw new Error('Verified board opponent does not match the selected opponent.');
     if (state.key !== current.key) {
-      state.open.clear(); state.confirmations.clear(); state.errors.clear();
+      state.open.clear(); state.confirmations.clear(); state.errors.clear(); state.beginning.clear();
     }
     state.key = current.key;
     state.assignments = Array.isArray(warRoom?.assignments) ? warRoom.assignments : [];
@@ -149,8 +152,10 @@ async function load({ force = false } = {}) {
 async function beginAttempt(card) {
   const current = identity();
   const defenseId = Number(card?.dataset?.defenseId);
-  if (!current || !defenseId) return;
-  state.loading = true;
+  const initial = assignmentByDefense(defenseId);
+  const busyKey = Number(initial?.id) || defenseId;
+  if (!current || !defenseId || !busyKey || state.beginning.has(busyKey)) return;
+  state.beginning.add(busyKey);
   renderAll();
   try {
     await load({ force:true });
@@ -160,6 +165,8 @@ async function beginAttempt(card) {
     const confirmations = confirmationFor(Number(assignment.id));
     const checklist = buildExecutionChecklist({ assignment, defense, roster:state.roster, ownDefenses:state.ownDefenses, rosterIntegrity:rosterIntegrity() });
     if (!executionReady(checklist, confirmations)) throw new Error('The pre-battle checklist is not complete after refreshing live state.');
+    state.beginning.add(Number(assignment.id));
+    renderAll();
     await fetchJson(`/api/gac/attack-plan/${current.mine}`, {
       method:'PATCH',
       body:JSON.stringify({ id:Number(assignment.id), status:'attempted', banners:null, round:current.round, executionConfirmation:checklist.fingerprint }),
@@ -170,10 +177,13 @@ async function beginAttempt(card) {
     window.dispatchEvent(new CustomEvent('gac-war-room-updated',{detail:{action:'attempt-begun',assignmentId:Number(assignment.id),defenseId}}));
     await load({ force:true });
   } catch (error) {
-    const assignment = assignmentByDefense(defenseId);
+    const assignment = assignmentByDefense(defenseId) || initial;
     if (assignment?.id) state.errors.set(Number(assignment.id), clean(error?.message || error));
   } finally {
-    state.loading = false;
+    state.beginning.delete(busyKey);
+    if (initial?.id) state.beginning.delete(Number(initial.id));
+    const currentAssignment = assignmentByDefense(defenseId);
+    if (currentAssignment?.id) state.beginning.delete(Number(currentAssignment.id));
     renderAll();
   }
 }
