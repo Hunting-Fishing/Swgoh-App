@@ -37,16 +37,16 @@ Core visual principles:
 | --- | --- | ---: |
 | Onboarding visual redesign | Implemented on styling branch | 100% |
 | Action Center visual redesign | Implemented on styling branch | 100% |
-| Shared palette / visual language | Established across onboarding, Actions and Player overview | 85% |
+| Shared palette / visual language | Established across onboarding, Actions, Player and GAC | 90% |
 | Player Command Center shell + overview | First readability / color / density pass implemented | 65% |
 | Global navigation / workspace tabs | First shared visual pass implemented | 55% |
-| GAC War Room visual modernization | Existing feature work retained; styling pass pending | 15% |
+| GAC War Room visual modernization | Professional battle-room pass implemented; populated-state review pending | 80% |
 | Guild Command Center pages | Styling pass pending | 10% |
 | TB / ROTE map and planning surfaces | Styling pass pending | 5% |
 | Login / auth visual alignment | Pending after onboarding path stabilizes | 10% |
-| Cross-device polish + accessibility review | Responsive rules expanded; full review pending | 30% |
+| Cross-device polish + accessibility review | Responsive rules expanded; full review pending | 35% |
 
-Approximate overall visual modernization: **42%**.
+Approximate overall visual modernization: **52%**.
 
 ## Implemented in the Player overview pass
 
@@ -59,6 +59,19 @@ Approximate overall visual modernization: **42%**.
 - Enlarged visual-library cards and their imagery/status treatments.
 - Added responsive 3-column, 2-column and 1-column fallbacks for smaller displays.
 
+## Implemented in the GAC War Room pass
+
+- Replaced the white/gray tactical interior with the same colorful command-deck language used across the new app shell.
+- Enlarged the War Room title, status state, setup controls and primary battle actions.
+- Made Enter Board the visually dominant quick action while keeping Scout and Truth Gate available.
+- Enlarged tactical HUD cards and made ready/warning/unknown states easier to scan.
+- Changed eight matchup metrics into four-column readable groups.
+- Preserved the territory-map board while enlarging territories, slots, unit art, labels and progress indicators.
+- Increased readability of enemy defense selection and counter-recommendation cards.
+- Added distinct visual treatment for evidence-backed counters, heuristic counters, missing counters and fleet territories.
+- Added responsive single-column territory ordering for narrower screens while retaining the desktop battlefield map.
+- Preserved existing live opponent lookup, manual board entry, counter logic, scouting/history, fleet handling, battle execution and Truth Gate behavior.
+
 ## Next implementation order
 
 ### 1. Player Command Center detail polish
@@ -68,24 +81,18 @@ Approximate overall visual modernization: **42%**.
 - Consolidate redundant top-level explanation copy where the dashboard already communicates the same state.
 - Continue removing sub-0.7rem text from primary interaction surfaces.
 
-### 2. GAC War Room
-
-- Treat opponent entry and counter selection as the main mission flow.
-- Separate defense setup, opponent scouting, counter recommendations and battle tracking visually.
-- Use territory/map-like cards rather than generic data panels.
-
-### 3. Guild Command Center
+### 2. Guild Command Center
 
 - Create officer-oriented command sections with strong readiness status.
 - Distinguish member views from officer controls.
 - Consolidate TB, TW, raid and roster intelligence entry points.
 
-### 4. TB / ROTE
+### 3. TB / ROTE
 
 - Preserve tactical density inside map/planning views while simplifying surrounding controls.
 - Use planet/faction-specific accent colors and stronger mission state visuals.
 
-### 5. Login / auth
+### 4. Login / auth
 
 - Align login/signup visual language with onboarding after the OAuth flow is stable.
 - Keep authentication messaging simple and avoid decorative changes that obscure errors.
