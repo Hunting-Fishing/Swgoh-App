@@ -13,6 +13,7 @@ const ROUTES = Object.freeze([
   ["raids", "/guild/raids", "Raids"],
 ]);
 const ALLY_STORAGE_KEY = "swgoh:guild-route-ally-code";
+const GUILD_REQUEST_TIMEOUT_MS = 25000;
 
 const state = {
   route: "overview",
@@ -49,6 +50,10 @@ function routeFromPath(pathname = location.pathname) {
   const normalized = pathname.replace(/\/+$/, "") || "/";
   const match = ROUTES.find(([, path]) => path === normalized);
   return match?.[0] || "overview";
+}
+
+function routePath(route = state.route) {
+  return ROUTES.find(([id]) => id === route)?.[1] || "/guild";
 }
 
 function currentAllyCode() {
@@ -103,16 +108,25 @@ function formatTime(value) {
   return Number.isNaN(date.getTime()) ? "Unknown" : date.toLocaleString();
 }
 
-async function fetchJson(url) {
-  const response = await fetch(url, { cache: "no-store" });
-  const body = await response.json();
-  if (!response.ok) throw new Error(body?.error || `${url} returned HTTP ${response.status}`);
-  return { body, response };
+async function fetchJson(url, timeoutMs = GUILD_REQUEST_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, { cache: "no-store", signal: controller.signal });
+    const body = await response.json();
+    if (!response.ok) throw new Error(body?.error || `${url} returned HTTP ${response.status}`);
+    return { body, response };
+  } catch (error) {
+    if (error?.name === "AbortError") throw new Error(`Guild data request timed out after ${Math.round(timeoutMs / 1000)} seconds.`);
+    throw error;
+  } finally {
+    window.clearTimeout(timeout);
+  }
 }
 
 async function loadCatalog() {
   if (state.catalog) return state.catalog;
-  const { body } = await fetchJson("/data/catalog.json?guild-routes=1");
+  const { body } = await fetchJson("/data/catalog.json?guild-routes=2");
   state.catalog = Array.isArray(body?.units) ? body.units : [];
   return state.catalog;
 }
@@ -190,7 +204,8 @@ function renderNeedsAllyCode() {
 
 function renderRouteError(message) {
   const target = $("guildRouteHeader");
-  if (target) target.innerHTML = `<div class="workspace-error">${escapeHtml(message)}</div>`;
+  if (target) target.innerHTML = `<div class="workspace-error">${escapeHtml(message)} <button id="guildRouteRetry" type="button">Retry Guild</button></div>`;
+  $("guildRouteRetry")?.addEventListener("click", () => loadGuild(false));
 }
 
 function membershipDeltaHtml() {
@@ -317,9 +332,45 @@ function renderActivePage() {
 function updateRouteLinks(allyCode = currentAllyCode()) {
   for (const link of document.querySelectorAll("[data-guild-route-nav]")) {
     link.href = routeUrl(link.dataset.guildRoutePath, allyCode);
+    link.classList.toggle("active", routeFromPath(link.dataset.guildRoutePath) === state.route);
   }
   const home = $("guildRouteBackHome");
   if (home) home.href = allyCode ? `/?allyCode=${encodeURIComponent(allyCode)}#overview` : "/#overview";
+}
+
+function navigateGuildRoute(pathname, { replace = false } = {}) {
+  const nextRoute = routeFromPath(pathname);
+  if (!state.snapshot && nextRoute !== "tb") return false;
+  state.route = nextRoute;
+  const url = routeUrl(routePath(nextRoute), currentAllyCode());
+  if (replace) history.replaceState({ guildRoute: nextRoute }, "", url);
+  else history.pushState({ guildRoute: nextRoute }, "", url);
+  updateRouteLinks();
+  renderActivePage();
+  window.scrollTo({ top: 0, behavior: "auto" });
+  window.dispatchEvent(new CustomEvent("swgoh:guild-route-changed", { detail: { route: nextRoute, clientSide: true } }));
+  return true;
+}
+
+function installGuildClientRouting() {
+  const root = $("guildRouteRoot");
+  if (!root || root.dataset.clientRouting === "ready") return;
+  root.dataset.clientRouting = "ready";
+  root.addEventListener("click", (event) => {
+    const link = event.target.closest?.("a[data-guild-route-nav], a.guild-route-card-link");
+    if (!link) return;
+    const url = new URL(link.href, location.href);
+    if (url.origin !== location.origin || !url.pathname.startsWith("/guild")) return;
+    if (!state.snapshot && routeFromPath(url.pathname) !== "tb") return;
+    event.preventDefault();
+    navigateGuildRoute(url.pathname);
+  });
+  window.addEventListener("popstate", () => {
+    if (!isGuildRoute()) return;
+    state.route = routeFromPath();
+    updateRouteLinks();
+    renderActivePage();
+  });
 }
 
 function guildNavHtml() {
@@ -353,6 +404,7 @@ function prepareRouteShell() {
     <section id="guildRouteContent" class="guild-route-content"></section>`;
 
   main.replaceChildren(root);
+  installGuildClientRouting();
   if (allyForm) {
     $("guildRouteAllyFormHost")?.appendChild(allyForm);
     const label = allyForm.querySelector('label[for="allyCode"]');
@@ -419,6 +471,14 @@ function install() {
   const code = currentAllyCode();
   if (code.length === 9) loadGuild(false);
 }
+
+window.__swgohGuildRouteHealth = () => ({
+  route: state.route,
+  loading: state.loading,
+  snapshotReady: Boolean(state.snapshot),
+  memberCount: state.snapshot?.members?.length || 0,
+  clientRouting: $("guildRouteRoot")?.dataset.clientRouting || "",
+});
 
 if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => setTimeout(install, 0), { once: true });
 else setTimeout(install, 0);
