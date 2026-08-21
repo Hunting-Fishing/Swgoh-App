@@ -10,6 +10,18 @@ function unwrapBattlegroundShell() {
   return true;
 }
 
+function collapseLegacyPlanner() {
+  const legacy = document.querySelector('[data-gac-manual-counter-planner]');
+  if (!legacy || legacy.closest('[data-gac-redesign-legacy-tools]')) return false;
+  const details = document.createElement('details');
+  details.className = 'gac-redesign-legacy-tools';
+  details.dataset.gacRedesignLegacyTools = 'true';
+  details.innerHTML = '<summary>Advanced legacy roster tools <span>preserved fallback</span></summary>';
+  legacy.insertAdjacentElement('beforebegin', details);
+  details.appendChild(legacy);
+  return true;
+}
+
 function bindGuard() {
   const unwrap = () => unwrapBattlegroundShell();
   window.addEventListener('gac-war-room-updated', unwrap);
@@ -18,8 +30,10 @@ function bindGuard() {
   document.addEventListener('click', (event) => {
     if (event.target.closest?.('[data-gac-redesign-fleet-slot]')) unwrap();
   }, true);
+  new MutationObserver(() => collapseLegacyPlanner()).observe(document.documentElement, { childList:true, subtree:true });
+  collapseLegacyPlanner();
 }
 
 if (typeof document !== 'undefined') bindGuard();
 
-export { unwrapBattlegroundShell };
+export { collapseLegacyPlanner, unwrapBattlegroundShell };
