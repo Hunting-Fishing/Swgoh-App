@@ -85,12 +85,12 @@
     const style = document.createElement("style");
     style.id = "commandUnifiedShellStyles";
     style.textContent = `
-      .command-global-topbar{position:sticky;top:0;z-index:1000;display:flex;align-items:center;justify-content:space-between;gap:18px;padding:12px 22px;background:rgba(5,9,20,.97);border-bottom:1px solid rgba(122,240,236,.16);backdrop-filter:blur(16px);font-family:inherit}
+      .command-global-topbar{position:sticky;top:0;z-index:10000;display:flex;align-items:center;justify-content:space-between;gap:18px;padding:12px 22px;background:rgba(5,9,20,.97);border-bottom:1px solid rgba(122,240,236,.16);backdrop-filter:blur(16px);font-family:inherit}
       .command-global-brand{display:inline-flex;align-items:center;gap:7px;color:#edf4ff;text-decoration:none;font-weight:900;letter-spacing:.04em;white-space:nowrap}.command-global-brand span{color:#72efe5}
       .command-global-nav{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}.command-global-nav a,.command-global-nav button{appearance:none;border:1px solid rgba(126,164,211,.28);background:#0d1729;color:#c9d7eb;border-radius:999px;padding:8px 13px;font:700 12px/1 inherit;text-decoration:none;cursor:pointer}.command-global-nav a:hover,.command-global-nav button:hover,.command-global-nav a.active{border-color:#72efe5;color:#72efe5;background:#102337}
       .command-global-identity{max-width:270px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#8399b7;font-size:11px;margin-left:4px}
       .command-guild-boot{position:fixed;inset:0;z-index:9999;display:grid;place-items:center;background:#050914;color:#eef5ff;font-family:inherit}.command-guild-boot-card{width:min(560px,calc(100vw - 36px));padding:38px;border:1px solid rgba(114,239,229,.28);border-radius:22px;background:linear-gradient(145deg,#091323,#0b1729);box-shadow:0 30px 100px rgba(0,0,0,.45);text-align:center}.command-guild-boot-kicker{color:#72efe5;font-size:11px;font-weight:900;letter-spacing:.19em}.command-guild-boot h1{margin:12px 0 8px;font-size:32px}.command-guild-boot p{margin:0;color:#93a8c4;line-height:1.6}.command-guild-boot-signal{width:52px;height:52px;margin:24px auto;border:2px solid rgba(114,239,229,.2);border-top-color:#72efe5;border-radius:50%;animation:commandSpin 1s linear infinite}@keyframes commandSpin{to{transform:rotate(360deg)}}
-      .command-guild-boot.is-error .command-guild-boot-signal{animation:none;border-color:#ff7f8d}.command-guild-boot-actions{display:flex;gap:10px;justify-content:center;margin-top:20px}.command-guild-boot-actions a{color:#72efe5;text-decoration:none;border:1px solid rgba(114,239,229,.3);border-radius:999px;padding:9px 14px}
+      .command-guild-boot.is-error .command-guild-boot-signal{animation:none;border-color:#ff7f8d}.command-guild-boot-actions{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:20px}.command-guild-boot-actions a{color:#72efe5;text-decoration:none;border:1px solid rgba(114,239,229,.3);border-radius:999px;padding:9px 14px}.command-guild-boot-actions a:hover{background:#102337;border-color:#72efe5}
       body.command-unified-player .topbar .kicker{color:#72efe5}
       @media(max-width:760px){.command-global-topbar{align-items:flex-start;flex-direction:column}.command-global-nav{justify-content:flex-start}.command-global-identity{display:none}}
     `;
@@ -155,6 +155,25 @@
     if (button && !isGuildPath()) button.textContent = "Refresh My Roster";
   }
 
+  function guildBootActions() {
+    return '<div class="command-guild-boot-actions"><a href="/">Player Center</a><a href="/actions">Action Center</a><a href="/onboarding">Account</a></div>';
+  }
+
+  function renderGuildBootError(message = "") {
+    const veil = $("commandGuildBoot");
+    if (!veil || $("guildRouteRoot")) return;
+    veil.classList.add("is-error");
+    const card = veil.querySelector(".command-guild-boot-card");
+    if (!card) return;
+    const detail = String(message || "").trim();
+    card.innerHTML = `
+      <div class="command-guild-boot-kicker">GUILD ROUTE DID NOT INITIALIZE</div>
+      <h1>Guild workspace stopped safely</h1>
+      <div class="command-guild-boot-signal" aria-hidden="true"></div>
+      <p>The legacy Player/Roster interface remains blocked so the wrong workspace cannot masquerade as Guild Command.${detail ? ` ${detail}` : ""}</p>
+      <div class="command-guild-boot-actions"><a href="${location.href}">Reload Guild</a><a href="/">Player Center</a><a href="/actions">Action Center</a><a href="/onboarding">Account</a></div>`;
+  }
+
   function installGuildBootVeil() {
     if (!isGuildPath() || $("commandGuildBoot")) return;
     installShellStyles();
@@ -167,6 +186,7 @@
         <h1>Opening Guild Command Center</h1>
         <div class="command-guild-boot-signal" aria-hidden="true"></div>
         <p>Loading your verified Guild identity, current roster authority, and officer workspace.</p>
+        ${guildBootActions()}
       </div>`;
     document.body.appendChild(veil);
 
@@ -183,24 +203,25 @@
 
     window.setTimeout(() => {
       if (!document.body.contains(veil) || $("guildRouteRoot")) return;
-      veil.classList.add("is-error");
-      const card = veil.querySelector(".command-guild-boot-card");
-      if (!card) return;
-      card.innerHTML = `
-        <div class="command-guild-boot-kicker">GUILD ROUTE DID NOT INITIALIZE</div>
-        <h1>Guild workspace stopped safely</h1>
-        <div class="command-guild-boot-signal" aria-hidden="true"></div>
-        <p>The legacy Player/Roster interface has been blocked instead of showing the wrong workspace. Reload once; if the route still fails, use Action Center while Command Center records the route defect.</p>
-        <div class="command-guild-boot-actions"><a href="${location.href}">Reload Guild</a><a href="/actions">Action Center</a></div>`;
-    }, 8000);
+      renderGuildBootError("The route did not mount within the startup window.");
+    }, 4000);
   }
 
   function startGuildRouteEarly() {
     if (!isGuildPath()) return;
+    installUnifiedTopbar();
     installGuildBootVeil();
-    import(GUILD_ROUTE_MODULE).catch((error) => {
-      console.error("Guild route bootstrap failed:", error?.message || error);
-    });
+    import(GUILD_ROUTE_MODULE)
+      .then(() => {
+        window.setTimeout(() => {
+          if (!$("guildRouteRoot")) renderGuildBootError("The Guild module loaded but did not mount its route shell.");
+        }, 750);
+      })
+      .catch((error) => {
+        const message = String(error?.message || error || "Guild route module failed to load.").slice(0, 180);
+        console.error("Guild route bootstrap failed:", message);
+        renderGuildBootError(`Bootstrap error: ${message}`);
+      });
   }
 
   async function bootstrapAccountContext() {
