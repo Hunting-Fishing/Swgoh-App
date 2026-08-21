@@ -48,8 +48,9 @@ function countLabel(actual, expected) {
 }
 
 function coverageBadge(label, value) {
-  const stateClass = value === 'known' ? 'is-known' : value === 'partial' ? 'is-partial' : 'is-unknown';
-  return `<span class="gac-roster-cap ${stateClass}"><b>${escapeHtml(label)}</b><small>${escapeHtml(String(value || 'unknown').toUpperCase())}</small></span>`;
+  const normalized = clean(value).toLowerCase() || 'unknown';
+  const stateClass = ['known', 'partial', 'observed', 'unverified', 'unknown'].includes(normalized) ? normalized : 'unknown';
+  return `<span class="gac-roster-cap is-${stateClass}"><b>${escapeHtml(label)}</b><small>${escapeHtml(normalized.toUpperCase())}</small></span>`;
 }
 
 function cardHtml(label, integrity, body = null) {
@@ -58,6 +59,8 @@ function cardHtml(label, integrity, body = null) {
   }
   const name = clean(body?.player?.name) || formatAllyCode(integrity.actualAllyCode || integrity.expectedAllyCode);
   const issues = [...integrity.blocking, ...integrity.warnings];
+  const visibleIssues = issues.slice(0, 5);
+  const hiddenIssueCount = Math.max(0, issues.length - visibleIssues.length);
   const statusLabel = integrity.status === 'good' ? 'LIVE · VERIFIED' : integrity.status === 'warn' ? 'LIVE · WARNING' : 'TRUTH BLOCKED';
   return `<article class="gac-roster-truth-card is-${escapeHtml(integrity.status)}">
     <header><span>${escapeHtml(label)}</span><b>${escapeHtml(statusLabel)}</b></header>
@@ -65,7 +68,7 @@ function cardHtml(label, integrity, body = null) {
     <div class="gac-roster-truth-source"><span>${escapeHtml(integrity.source.response)} · ${escapeHtml(integrity.freshness.cacheState)}</span><b>${escapeHtml(ageLabel(integrity.freshness.ageSeconds))}</b></div>
     <div class="gac-roster-truth-counts"><span><small>CHARACTERS</small><b>${escapeHtml(countLabel(integrity.counts.characters, integrity.expectedCounts.characters))}</b></span><span><small>SHIPS</small><b>${escapeHtml(countLabel(integrity.counts.ships, integrity.expectedCounts.ships))}</b></span></div>
     <div class="gac-roster-truth-caps">${coverageBadge('Characters', integrity.coverage.characters)}${coverageBadge('Ships', integrity.coverage.ships)}${coverageBadge('Profile GP', integrity.coverage.profileGp)}${coverageBadge('Unit GP', integrity.coverage.unitGp)}${coverageBadge('Zetas', integrity.coverage.zetas)}${coverageBadge('Omicrons', integrity.coverage.omicrons)}</div>
-    ${issues.length ? `<div class="gac-roster-truth-issues">${issues.slice(0,5).map((issue) => `<small>⚠ ${escapeHtml(issue)}</small>`).join('')}</div>` : '<div class="gac-roster-truth-clean">✓ Live source, identity, freshness and roster coverage passed the current checks.</div>'}
+    ${issues.length ? `<div class="gac-roster-truth-issues">${visibleIssues.map((issue) => `<small>⚠ ${escapeHtml(issue)}</small>`).join('')}${hiddenIssueCount ? `<small>+ ${hiddenIssueCount} additional integrity warning${hiddenIssueCount === 1 ? '' : 's'}</small>` : ''}</div>` : '<div class="gac-roster-truth-clean">✓ Live source, identity, freshness and roster coverage passed the current checks.</div>'}
   </article>`;
 }
 
@@ -110,7 +113,7 @@ function render() {
   host.className = `gac-roster-integrity is-${combined}`;
   host.innerHTML = `<header class="gac-roster-truth-head"><div><span>ROSTER TRUTH GATE</span><strong>${escapeHtml(combinedLabel(combined))}</strong><small>Live Comlink provenance · exact player identity · server-cache age · logical roster coverage</small></div><button type="button" data-gac-roster-truth-refresh ${state.loading ? 'disabled' : ''}>${state.loading ? 'CHECKING…' : 'REFRESH TRUTH'}</button></header>
     <div class="gac-roster-truth-grid">${cardHtml('YOUR ROSTER', state.mine?.integrity, state.mine?.body)}${cardHtml('OPPONENT', state.opponent?.integrity, state.opponent?.body)}</div>
-    <footer>${combined === 'blocked' ? 'Do not treat roster deltas or counter-fit calculations as authoritative until the blocking roster truth issue is resolved.' : combined === 'warn' ? 'Character matchup work may continue where coverage is known; warnings identify stale or partial fields that must not be treated as current truth.' : combined === 'good' ? 'Both roster responses passed the current live-source, identity, freshness, and coverage checks.' : 'Load or detect the current opponent to verify both live roster snapshots.'}</footer>`;
+    <footer>${combined === 'blocked' ? 'Do not treat roster deltas or counter-fit calculations as authoritative until the blocking roster truth issue is resolved.' : combined === 'warn' ? 'Character matchup work may continue where coverage is known; warnings identify stale, observed, unverified, or partial fields that must not be treated as current truth.' : combined === 'good' ? 'Both roster responses passed the current live-source, identity, freshness, capability, and count-coverage checks.' : 'Load or detect the current opponent to verify both live roster snapshots.'}</footer>`;
   host.querySelector('[data-gac-roster-truth-refresh]')?.addEventListener('click', () => void refresh({ force: true }));
 }
 
@@ -200,7 +203,7 @@ function injectStyle() {
   if (document.querySelector('link[data-gac-roster-integrity-style]')) return;
   const link = document.createElement('link');
   link.rel = 'stylesheet';
-  link.href = '/gac-roster-integrity.css?v=20260821-b06a';
+  link.href = '/gac-roster-integrity.css?v=20260821-b06b';
   link.dataset.gacRosterIntegrityStyle = 'true';
   document.head.appendChild(link);
 }
@@ -227,4 +230,4 @@ function bind() {
 
 if (typeof window !== 'undefined' && typeof document !== 'undefined') bind();
 
-export { ageLabel, cardHtml, combinedLabel, countLabel, fetchRosterTruth, formatAllyCode };
+export { ageLabel, cardHtml, combinedLabel, countLabel, coverageBadge, fetchRosterTruth, formatAllyCode };
