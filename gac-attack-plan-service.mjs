@@ -404,7 +404,7 @@ export function createGacAttackPlanService(options = {}) {
     if (!row) return null;
     const metadata = row.metadata && typeof row.metadata === "object" ? row.metadata : {};
     const planKind = clean(metadata.planKind).toLowerCase() === "cleanup" ? "cleanup" : "standard";
-    const cleanupAttemptIndex = Number.isInteger(Number(metadata.cleanupAttemptIndex)) ? Number(metadata.cleanupAttemptIndex) : null;
+    const cleanupAttemptIndex = planKind === "cleanup" && Number.isInteger(Number(metadata.cleanupAttemptIndex)) ? Number(metadata.cleanupAttemptIndex) : null;
     const cleanupSurvivorBaseIds = planKind === "cleanup"
       ? Object.freeze([...new Set(asArray(metadata.cleanupSurvivorBaseIds).map(normalizeBaseId).filter(Boolean))])
       : Object.freeze([]);
