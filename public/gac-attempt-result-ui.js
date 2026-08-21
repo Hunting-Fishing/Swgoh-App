@@ -35,6 +35,10 @@ async function fetchJson(pathname,options={}) {
 
 function assignmentForDefense(defenseId){return state.assignments.find((row)=>Number(row?.defenseId)===Number(defenseId))||null;}
 function defenseForId(defenseId){return state.defenses.find((row)=>Number(row?.id)===Number(defenseId))||null;}
+function resultDefenseMembers(assignment={},defense={}){
+  if(clean(assignment?.planKind).toLowerCase()==='cleanup')return (Array.isArray(assignment?.cleanup?.survivorBaseIds)?assignment.cleanup.survivorBaseIds:[]).map(normalizeId).filter(Boolean);
+  return (Array.isArray(defense?.members)?defense.members:[]).map(normalizeId).filter(Boolean);
+}
 function unitIndex(){return new Map((Array.isArray(state.opponentRoster?.units)?state.opponentRoster.units:[]).map((unit)=>[normalizeId(unit?.baseId),unit]).filter(([id])=>id));}
 function unitLabel(id){const unit=unitIndex().get(normalizeId(id));return clean(unit?.name)||normalizeId(id)||'Unknown defender';}
 function unitImage(id){const unit=unitIndex().get(normalizeId(id));return clean(unit?.image||unit?.imageUrl||unit?.portrait||unit?.portraitUrl);}
@@ -60,16 +64,17 @@ function historyHtml(assignment){
 }
 
 function resultEditorHtml(assignment,defense,draft){
-  const id=Number(assignment?.id);const error=clean(state.errors.get(id));const busy=state.busy.has(id);
-  const model=resultDraft(draft.status,{banners:draft.banners,lossState:draft.lossState,survivorBaseIds:[...draft.survivors],defenseMembers:defense?.members});
+  const id=Number(assignment?.id);const error=clean(state.errors.get(id));const busy=state.busy.has(id);const availableDefenders=resultDefenseMembers(assignment,defense);
+  const model=resultDraft(draft.status,{banners:draft.banners,lossState:draft.lossState,survivorBaseIds:[...draft.survivors],defenseMembers:availableDefenders});
   const isLoss=draft.status==='loss';
   const survivorMode=isLoss&&draft.lossState==='survivors-confirmed';
+  const cleanup=clean(assignment?.planKind).toLowerCase()==='cleanup';
   return `<section class="gac-result-capture is-${escapeHtml(draft.status)}" data-gac-result-capture="${id}">
-    <header><div><span>ATTEMPT RESULT · B09</span><strong>${draft.status==='win'?'CAPTURE WIN RESULT':'CAPTURE LOSS RESULT'}</strong><small>Record only what you confirmed from the game.</small></div><button type="button" data-gac-result-close>Close</button></header>
+    <header><div><span>ATTEMPT RESULT · B09${cleanup?' · CLEANUP':''}</span><strong>${draft.status==='win'?'CAPTURE WIN RESULT':'CAPTURE LOSS RESULT'}</strong><small>Record only what you confirmed from the game.</small></div><button type="button" data-gac-result-close>Close</button></header>
     <div class="gac-result-outcome"><strong>${draft.status.toUpperCase()}</strong><span>${draft.status==='win'?'Defense will be recorded as cleared.':'Choose whether you inspected the surviving defense.'}</span></div>
     <label class="gac-result-banners"><span>BANNERS</span><input type="number" min="0" step="1" inputmode="numeric" data-gac-result-banners value="${escapeHtml(draft.banners)}" placeholder="Leave blank if not checked"><small>Blank stays unknown; it is never converted to 0.</small></label>
-    ${isLoss?`<div class="gac-result-loss-state"><span>POST-ATTEMPT DEFENSE STATE</span><label><input type="radio" name="gac-result-loss-${id}" value="unknown" data-gac-result-loss-state ${draft.lossState!=='survivors-confirmed'?'checked':''}><b>Survivor state not checked</b><small>Store the loss only. Defender state remains unknown.</small></label><label><input type="radio" name="gac-result-loss-${id}" value="survivors-confirmed" data-gac-result-loss-state ${survivorMode?'checked':''}><b>Confirm survivors from game</b><small>Select only defenders you can still see after the failed attempt.</small></label></div>`:''}
-    ${survivorMode?`<div class="gac-result-survivors"><span>CONFIRMED SURVIVING DEFENDERS</span><div>${(Array.isArray(defense?.members)?defense.members:[]).map((id)=>portraitChoice(id,draft.survivors.has(normalizeId(id)))).join('')}</div></div>`:''}
+    ${isLoss?`<div class="gac-result-loss-state"><span>POST-ATTEMPT DEFENSE STATE</span><label><input type="radio" name="gac-result-loss-${id}" value="unknown" data-gac-result-loss-state ${draft.lossState!=='survivors-confirmed'?'checked':''}><b>Survivor state not checked</b><small>Store the loss only. Defender state remains unknown.</small></label><label><input type="radio" name="gac-result-loss-${id}" value="survivors-confirmed" data-gac-result-loss-state ${survivorMode?'checked':''}><b>Confirm survivors from game</b><small>${cleanup?'Select only defenders that were alive at the start of this cleanup and are still visible now.':'Select only defenders you can still see after the failed attempt.'}</small></label></div>`:''}
+    ${survivorMode?`<div class="gac-result-survivors"><span>CONFIRMED SURVIVING DEFENDERS</span><div>${availableDefenders.map((id)=>portraitChoice(id,draft.survivors.has(normalizeId(id)))).join('')}</div></div>`:''}
     <div class="gac-result-unknown-boundary"><strong>NOT CAPTURED</strong><span>Turn Meter, Health, Protection, cooldowns, and other hidden/post-battle percentages remain UNKNOWN. B09 does not estimate them.</span></div>
     ${error||!model.valid?`<div class="gac-result-error"><strong>RESULT NOT READY</strong><span>${escapeHtml(error||model.error)}</span></div>`:''}
     <footer><button type="button" data-gac-result-submit ${model.valid&&!busy?'':'disabled'}>${busy?'SAVING…':draft.status==='win'?'SAVE CONFIRMED WIN':'SAVE CONFIRMED LOSS'}</button></footer>
@@ -109,8 +114,8 @@ async function load(force=false){
 async function submitResult(card){
   const current=identity();const defenseId=Number(card?.dataset?.defenseId);const assignment=assignmentForDefense(defenseId);if(!current||!assignment?.id||clean(assignment.status).toLowerCase()!=='attempted')return;
   const id=Number(assignment.id);if(state.busy.has(id))return;
-  const defense=defenseForId(defenseId)||assignment?.defense||{};const draft=state.drafts.get(id);if(!draft)return;
-  const model=resultDraft(draft.status,{banners:draft.banners,lossState:draft.lossState,survivorBaseIds:[...draft.survivors],defenseMembers:defense?.members});
+  const defense=defenseForId(defenseId)||assignment?.defense||{};const draft=state.drafts.get(id);if(!draft)return;const availableDefenders=resultDefenseMembers(assignment,defense);
+  const model=resultDraft(draft.status,{banners:draft.banners,lossState:draft.lossState,survivorBaseIds:[...draft.survivors],defenseMembers:availableDefenders});
   if(!model.valid){state.errors.set(id,model.error);renderCard(card);return;}
   state.busy.add(id);state.errors.delete(id);renderCard(card);
   try{
@@ -151,4 +156,4 @@ function bind(){
 }
 if(typeof document!=='undefined')bind();
 
-export { identity, openResult, renderAll, submitResult };
+export { identity, openResult, renderAll, resultDefenseMembers, submitResult };
