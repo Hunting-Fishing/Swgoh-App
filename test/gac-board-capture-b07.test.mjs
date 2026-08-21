@@ -118,7 +118,7 @@ test('initial capture queue includes only visible front territories and prioriti
   assert.equal(queue.next.zone, 'FRONT-TOP');
   assert.equal(queue.next.slot, 0);
   assert.equal(queue.hiddenCapacity, 3);
-  assert.deepEqual(queue.hiddenTerritories.sort(), ['BACK-BOTTOM', 'BACK-TOP']);
+  assert.deepEqual([...queue.hiddenTerritories].sort(), ['BACK-BOTTOM', 'BACK-TOP']);
 });
 
 test('occupied visible slots are skipped and hidden rear defenses never become next targets', () => {
