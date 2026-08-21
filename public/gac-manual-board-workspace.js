@@ -1,6 +1,14 @@
 import { hybridBoardPlan } from './gac-hybrid-board-plan.js';
 import { boardRule, divisionFromRoster, LEAGUES, leagueFromRoster } from './gac-league-board-rules.js';
 import { ZONES, zoneLabel } from './gac-board-position.js';
+import {
+  canSaveDatacronSelection,
+  datacronLabel,
+  liveDatacronInventory,
+  localDatacronSnapshot,
+  restoredDatacronSelection,
+  selectionFromControl,
+} from './gac-board-datacron-model.js';
 
 const state = {
   ownerRoster: null,
@@ -56,7 +64,7 @@ async function fetchJson(pathname, options = {}) {
   });
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const error = new Error(body?.error || `HTTP ${response.status}`);
+    const error = new Error(body?.error || `HTTP ${response.status}.`);
     error.status = response.status;
     throw error;
   }
@@ -217,16 +225,58 @@ function selectedSlot(unit,index){
   const id=normalizeId(unit.baseId);const leader=id===normalizeId(state.editor.leaderBaseId);
   return `<div class="gac-board-picked-slot ${leader?'is-leader':''}"><span>${leader?'LEADER':'UNIT '+(index+1)}</span>${portrait(unit,true)}<div><button type="button" data-gac-board-make-leader="${escapeAttr(id)}" ${leader?'disabled':''}>Leader</button><button type="button" data-gac-board-remove-unit="${escapeAttr(id)}">×</button></div></div>`;
 }
+function editorDatacronValue(){
+  if(!state.editor)return 'unknown';
+  if(state.editor.datacronUnresolved)return 'unresolved';
+  if(state.editor.datacronState==='assigned'&&state.editor.datacronId)return `assigned:${state.editor.datacronId}`;
+  return state.editor.datacronState==='none'?'none':'unknown';
+}
+function editorDatacronOptions(){
+  const current=editorDatacronValue();
+  const inventory=liveDatacronInventory(state.opponentRoster);
+  const base=`<option value="unknown" ${current==='unknown'?'selected':''}>Not confirmed</option><option value="none" ${current==='none'?'selected':''}>Confirmed none</option>`;
+  const unresolved=state.editor?.datacronUnresolved
+    ? `<option value="unresolved" selected disabled>Assigned snapshot unavailable · ${escapeHtml(clean(state.editor.datacronId).slice(-8)||'ID missing')}</option>`
+    : '';
+  const rows=Array.isArray(inventory)?inventory.map((datacron,index)=>{
+    const id=clean(datacron?.id);const value=`assigned:${id}`;
+    return `<option value="${escapeAttr(value)}" ${current===value?'selected':''}>Assigned · ${escapeHtml(datacronLabel(datacron,index))}</option>`;
+  }).join(''):'';
+  return `${base}${unresolved}${rows}`;
+}
+function editorDatacronStatus(){
+  if(!state.editor)return '';
+  if(state.editor.datacronUnresolved)return 'ASSIGNED SNAPSHOT UNRESOLVED · the previously saved exact instance is not in the current live inventory. Reconfirm not confirmed, confirmed none, or a current exact instance before saving.';
+  if(state.editor.datacronState==='assigned')return `EXACT ASSIGNED INSTANCE · ${clean(state.editor.datacronId).slice(-8)} · verified against the current live opponent Datacron inventory.`;
+  if(state.editor.datacronState==='none')return 'CONFIRMED NONE · save this only when the in-game defense visibly has no assigned Datacron.';
+  const inventory=liveDatacronInventory(state.opponentRoster);
+  return inventory===null
+    ? 'DATACRON NOT CONFIRMED · individual opponent Datacron inventory is unavailable; no assignment or absence is inferred.'
+    : 'DATACRON NOT CONFIRMED · inventory availability alone does not prove assignment or absence.';
+}
+function editorReady(){
+  return Boolean(state.editor
+    && state.editor.members.length===squadSize()
+    && state.editor.members.includes(state.editor.leaderBaseId)
+    && canSaveDatacronSelection({state:state.editor.datacronState,id:state.editor.datacronId,unresolved:state.editor.datacronUnresolved}));
+}
 function editorHtml(){
   if(!state.editor)return `<div class="gac-board-editor-placeholder"><strong>Choose a territory slot</strong><span>Click an empty squad slot where the defense appears in your game.</span></div>`;
   const size=squadSize();const selected=state.editor.members.map(editorUnit);const query=clean(state.editor.query).toLowerCase();
   const results=editorUnits().filter((unit)=>!state.editor.members.includes(normalizeId(unit.baseId))&&(!query||clean(unit.name).toLowerCase().includes(query)||normalizeId(unit.baseId).toLowerCase().includes(query))).slice(0,64);
-  return `<section class="gac-board-editor"><header><div><span>VISIBLE ENEMY LINEUP</span><strong>${escapeHtml(zoneLabel(state.editor.zone))} · Slot ${Number(state.editor.slot)+1}</strong><small>Select ${size} characters exactly as they appear in-game.</small></div><button type="button" data-gac-board-close>Close</button></header><div class="gac-board-picked">${Array.from({length:size},(_,index)=>selectedSlot(selected[index],index)).join('')}</div><div class="gac-board-search"><input data-gac-board-search placeholder="Search ${state.opponentRoster?'opponent roster':'all characters'}…" value="${escapeAttr(state.editor.query||'')}"><b>${state.editor.members.length}/${size}</b></div><div class="gac-board-unit-results">${results.map((unit)=>`<button type="button" data-gac-board-add-unit="${escapeAttr(unit.baseId)}">${portrait(unit,true)}<span><strong>${escapeHtml(unit.name)}</strong><small>${state.opponentRoster?`R${n(unit.relic)} · ${number.format(n(unit.power))} GP · ${number.format(n(unit.speed))} spd`:'Static game catalog fallback'}</small></span></button>`).join('')||'<div class="gac-board-no-results">No matching characters.</div>'}</div><footer><label>Datacron<select data-gac-board-dc><option value="unknown" ${state.editor.datacronState==='unknown'?'selected':''}>Not confirmed</option><option value="none" ${state.editor.datacronState==='none'?'selected':''}>Confirmed none</option></select></label><button type="button" data-gac-board-save ${state.editor.members.length===size&&state.editor.members.includes(state.editor.leaderBaseId)?'':'disabled'}>${state.busy?'Saving…':'Save Defense'}</button></footer><p>Verified opponent + round → canonical current-board save. Otherwise this remains a local manual observation and still feeds the smart planner.</p></section>`;
+  return `<section class="gac-board-editor"><header><div><span>VISIBLE ENEMY LINEUP</span><strong>${escapeHtml(zoneLabel(state.editor.zone))} · Slot ${Number(state.editor.slot)+1}</strong><small>Select ${size} characters exactly as they appear in-game.</small></div><button type="button" data-gac-board-close>Close</button></header><div class="gac-board-picked">${Array.from({length:size},(_,index)=>selectedSlot(selected[index],index)).join('')}</div><div class="gac-board-search"><input data-gac-board-search placeholder="Search ${state.opponentRoster?'opponent roster':'all characters'}…" value="${escapeAttr(state.editor.query||'')}"><b>${state.editor.members.length}/${size}</b></div><div class="gac-board-unit-results">${results.map((unit)=>`<button type="button" data-gac-board-add-unit="${escapeAttr(unit.baseId)}">${portrait(unit,true)}<span><strong>${escapeHtml(unit.name)}</strong><small>${state.opponentRoster?`R${n(unit.relic)} · ${number.format(n(unit.power))} GP · ${number.format(n(unit.speed))} spd`:'Static game catalog fallback'}</small></span></button>`).join('')||'<div class="gac-board-no-results">No matching characters.</div>'}</div><footer><label>Datacron<select data-gac-board-dc>${editorDatacronOptions()}</select></label><button type="button" data-gac-board-save ${editorReady()?'':'disabled'}>${state.busy?'Saving…':'Save Defense'}</button></footer><p class="${state.editor.datacronUnresolved?'is-warning':''}">${escapeHtml(editorDatacronStatus())}</p><p>Verified opponent + round → canonical current-board save. Otherwise this remains a local manual observation and still feeds the smart planner.</p></section>`;
 }
 
+function defenseDatacronLabel(defense={}){
+  const stateName=clean(defense?.datacronState).toLowerCase();
+  const id=clean(defense?.datacron?.id||defense?.datacronId);
+  if(stateName==='assigned')return id?`DC ASSIGNED · ${id.slice(-8)}`:'DC ASSIGNED · ID UNRESOLVED';
+  if(stateName==='none')return 'DC CONFIRMED NONE';
+  return 'DC NOT CONFIRMED';
+}
 function defenseCard(defense){
   const units=resolveUnits(defense);const verified=defense.storage==='server';
-  return `<article class="gac-visible-defense" data-gac-board-key="${escapeAttr(boardKey(defense))}"><header><div><span>SLOT ${Number(defense.slot)+1}</span><strong>${escapeHtml(units[0]?.name||defense.leaderBaseId||'Defense')}</strong></div><b class="${verified?'is-verified':''}">${verified?'VERIFIED SAVED':'LOCAL DRAFT'}</b></header><div class="gac-visible-defense-units">${units.map((unit)=>portrait(unit,true)).join('')}</div>${counterHtml(defense)}<footer><button type="button" data-gac-board-edit="${escapeAttr(boardKey(defense))}">Edit</button><button type="button" data-gac-board-delete="${escapeAttr(boardKey(defense))}">Delete</button></footer></article>`;
+  return `<article class="gac-visible-defense" data-gac-board-key="${escapeAttr(boardKey(defense))}"><header><div><span>SLOT ${Number(defense.slot)+1}</span><strong>${escapeHtml(units[0]?.name||defense.leaderBaseId||'Defense')}</strong><small>${escapeHtml(defenseDatacronLabel(defense))}</small></div><b class="${verified?'is-verified':''}">${verified?'VERIFIED SAVED':'LOCAL DRAFT'}</b></header><div class="gac-visible-defense-units">${units.map((unit)=>portrait(unit,true)).join('')}</div>${counterHtml(defense)}<footer><button type="button" data-gac-board-edit="${escapeAttr(boardKey(defense))}">Edit</button><button type="button" data-gac-board-delete="${escapeAttr(boardKey(defense))}">Delete</button></footer></article>`;
 }
 function zoneCard(zone){
   const defenses=zoneDefenses(zone.value);
@@ -283,7 +333,18 @@ function mount(){
 
 function startEditor(zone,defense=null,forcedSlot=null){
   const slot=defense?.slot==null?(Number.isInteger(Number(forcedSlot))?Number(forcedSlot):nextSlot(zone)):Number(defense.slot);
-  state.editor={zone,slot,members:Array.isArray(defense?.members)?defense.members.map(normalizeId).filter(Boolean):[],leaderBaseId:normalizeId(defense?.leaderBaseId),datacronState:clean(defense?.datacronState).toLowerCase()==='none'?'none':'unknown',query:''};
+  const dc=restoredDatacronSelection(defense||{},state.opponentRoster||{});
+  state.editor={
+    zone,
+    slot,
+    members:Array.isArray(defense?.members)?defense.members.map(normalizeId).filter(Boolean):[],
+    leaderBaseId:normalizeId(defense?.leaderBaseId),
+    datacronState:dc.state,
+    datacronId:dc.id,
+    datacron:dc.datacron,
+    datacronUnresolved:dc.unresolved,
+    query:'',
+  };
   if(!state.editor.leaderBaseId&&state.editor.members.length)state.editor.leaderBaseId=state.editor.members[0];render();document.querySelector('[data-gac-board-editor-host]')?.scrollIntoView?.({behavior:'smooth',block:'center'});
 }
 function openSquadSlot(zone,slot){
@@ -296,14 +357,30 @@ function openSquadSlot(zone,slot){
 function addUnit(id){if(!state.editor||state.editor.members.length>=squadSize())return;id=normalizeId(id);if(!id||state.editor.members.includes(id))return;state.editor.members.push(id);if(!state.editor.leaderBaseId)state.editor.leaderBaseId=id;state.editor.query='';render();}
 function removeUnit(id){if(!state.editor)return;id=normalizeId(id);state.editor.members=state.editor.members.filter((value)=>value!==id);if(state.editor.leaderBaseId===id)state.editor.leaderBaseId=state.editor.members[0]||'';render();}
 function makeLeader(id){if(!state.editor)return;id=normalizeId(id);if(state.editor.members.includes(id))state.editor.leaderBaseId=id;render();}
-function editorDefense(){return state.editor?{id:`local:${state.editor.zone}:${state.editor.slot}`,leaderBaseId:state.editor.leaderBaseId,members:[...state.editor.members],zone:state.editor.zone,slot:Number(state.editor.slot),datacron:null,datacronState:state.editor.datacronState||'unknown',source:'user-entered-manual-board',observedAt:new Date().toISOString(),opponentAllyCode:opponentCode()}:null;}
+function editorDefense(){
+  if(!state.editor)return null;
+  const selection={state:state.editor.datacronState,id:state.editor.datacronId,datacron:state.editor.datacron,unresolved:state.editor.datacronUnresolved};
+  return {
+    id:`local:${state.editor.zone}:${state.editor.slot}`,
+    leaderBaseId:state.editor.leaderBaseId,
+    members:[...state.editor.members],
+    zone:state.editor.zone,
+    slot:Number(state.editor.slot),
+    datacron:localDatacronSnapshot(selection),
+    datacronId:selection.state==='assigned'?clean(selection.id):'',
+    datacronState:selection.state||'unknown',
+    source:'user-entered-manual-board',
+    observedAt:new Date().toISOString(),
+    opponentAllyCode:opponentCode(),
+  };
+}
 function saveDraft(defense){const key=boardKey(defense);state.drafts=state.drafts.filter((row)=>boardKey(row)!==key);state.drafts.push(defense);writeDrafts();}
 async function persistDefense(defense){
   const owner=ownerCode(),opponent=opponentCode(),round=currentRound();if(!/^\d{9}$/.test(owner)||!/^\d{9}$/.test(opponent)||!round)return null;
-  return fetchJson(`/api/gac/current-board/${owner}/defense`,{method:'POST',body:JSON.stringify({opponentAllyCode:opponent,round,size:squadSize(),leaderBaseId:defense.leaderBaseId,members:defense.members,datacronId:'',datacronState:defense.datacronState||'unknown',zone:defense.zone,slot:defense.slot,sourceRef:'gac-visible-board-workspace'})});
+  return fetchJson(`/api/gac/current-board/${owner}/defense`,{method:'POST',body:JSON.stringify({opponentAllyCode:opponent,round,size:squadSize(),leaderBaseId:defense.leaderBaseId,members:defense.members,datacronId:defense.datacronState==='assigned'?clean(defense.datacronId||defense.datacron?.id):'',datacronState:defense.datacronState||'unknown',zone:defense.zone,slot:defense.slot,sourceRef:'gac-visible-board-workspace'})});
 }
 async function saveEditor(){
-  if(!state.editor||state.editor.members.length!==squadSize()||!state.editor.members.includes(state.editor.leaderBaseId))return;
+  if(!editorReady())return;
   const defense=editorDefense();state.busy=true;render();let persisted=false;
   try{const result=await persistDefense(defense);if(result?.saved){persisted=true;state.drafts=state.drafts.filter((row)=>boardKey(row)!==boardKey(defense));writeDrafts();await loadServerDefenses();window.dispatchEvent(new CustomEvent('gac-board-evidence-updated',{detail:{owner:'opponent',action:'saved',round:currentRound()}}));}}
   catch(error){if(![401,409].includes(Number(error?.status)))console.warn('Manual GAC board save failed',error);}
@@ -353,17 +430,24 @@ function bind(){
   document.addEventListener('change',(event)=>{
     if(event.target?.matches?.('[data-gac-board-league]')){state.leagueOverride=clean(event.target.value);if(state.leagueOverride)localStorage.setItem('swgoh:gac-board:league-override',state.leagueOverride);else localStorage.removeItem('swgoh:gac-board:league-override');render();return;}
     if(event.target?.matches?.('[data-gac-board-format]')){const mode=document.querySelector('[data-gacv2-mode]');if(mode){mode.value=Number(event.target.value)===3?'3':'5';mode.dispatchEvent(new Event('change',{bubbles:true}));}state.editor=null;schedule(60,false);return;}
-    if(event.target?.matches?.('[data-gac-board-dc]')&&state.editor){state.editor.datacronState=event.target.value==='none'?'none':'unknown';return;}
+    if(event.target?.matches?.('[data-gac-board-dc]')&&state.editor){
+      const selection=selectionFromControl(event.target.value,state.opponentRoster||{});
+      state.editor.datacronState=selection.state;
+      state.editor.datacronId=selection.id;
+      state.editor.datacron=selection.datacron;
+      state.editor.datacronUnresolved=selection.unresolved;
+      render();return;
+    }
     if(event.target?.matches?.('[data-gacv2-opponent],[data-gacv2-round],[data-gacv2-mode]')||event.target?.id==='allyCode')schedule(160,true);
   },true);
   window.addEventListener('gac-v2-matchup-loaded',()=>schedule(80,true));
   window.addEventListener('gac-current-opponent-manually-confirmed',()=>schedule(100,true));
   window.addEventListener('gac-board-evidence-updated',()=>schedule(110,true));
 }
-function injectStyle(){if(document.querySelector('link[data-gac-visible-board-style]'))return;const link=document.createElement('link');link.rel='stylesheet';link.href='/gac-manual-board-workspace.css?v=20260821-b07';link.dataset.gacVisibleBoardStyle='true';document.head.appendChild(link);}
+function injectStyle(){if(document.querySelector('link[data-gac-visible-board-style]'))return;const link=document.createElement('link');link.rel='stylesheet';link.href='/gac-manual-board-workspace.css?v=20260821-b07dc';link.dataset.gacVisibleBoardStyle='true';document.head.appendChild(link);}
 
 if(typeof document!=='undefined'){
   injectStyle();bind();schedule(220,true);document.addEventListener('DOMContentLoaded',()=>schedule(100,true),{once:true});window.addEventListener('hashchange',()=>schedule(140,true));new MutationObserver(()=>{if(!document.querySelector('[data-gac-board-workspace]'))schedule(60,false);}).observe(document.documentElement,{childList:true,subtree:true});
 }
 
-export { activeSquadDefenses, boardKey, boardSnapshot, currentRule, mergedDefenses, nextSlot, openSquadSlot, requestBoardRefresh, selectedLeague };
+export { activeSquadDefenses, boardKey, boardSnapshot, currentRule, editorDefense, editorReady, mergedDefenses, nextSlot, openSquadSlot, persistDefense, requestBoardRefresh, selectedLeague };
