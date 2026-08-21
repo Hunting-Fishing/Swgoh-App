@@ -4,6 +4,7 @@ import { gacBracketIndexService } from "./gac-bracket-index-service.mjs";
 import { gacCurrentOpponentConfirmationService } from "./gac-current-opponent-confirmation-service.mjs";
 import { createGacFleetAttackPlanApi } from "./gac-fleet-attack-plan-api.mjs";
 import { createGacFleetBoardApi } from "./gac-fleet-board-api.mjs";
+import { createGacFleetCleanupObservationApi } from "./gac-fleet-cleanup-observation-api.mjs";
 import { createGacFleetVerifiedBattleApi } from "./gac-fleet-verified-battle-api.mjs";
 import { createGacVerifiedBattleApi } from "./gac-verified-battle-api.mjs";
 import { supabaseAuthSession } from "./supabase-auth-session.mjs";
@@ -140,6 +141,14 @@ export function createGacCurrentOpponentConfirmationApi(options = {}) {
     confirmation,
     ...(options.fleetVerifiedBattles ? { battles: options.fleetVerifiedBattles } : {}),
   });
+  const fleetCleanupObservationApi = createGacFleetCleanupObservationApi({
+    requestGateway,
+    writeJson,
+    authSession,
+    bracketIndex,
+    confirmation,
+    ...(options.fleetCleanupObservations ? { cleanup: options.fleetCleanupObservations } : {}),
+  });
 
   async function indexedBracket(code, currentEvent, playerContext) {
     const id = eventInstanceId(currentEvent, playerContext);
@@ -168,6 +177,7 @@ export function createGacCurrentOpponentConfirmationApi(options = {}) {
       if (await fleetBoardApi.handle(request, response, url)) return true;
       if (await fleetAttackPlanApi.handle(request, response, url)) return true;
       if (await fleetVerifiedBattleApi.handle(request, response, url)) return true;
+      if (await fleetCleanupObservationApi.handle(request, response, url)) return true;
       const match = request.method === "POST" && url.pathname.match(/^\/api\/gac\/current-opponent\/(\d{9})\/confirm$/);
       if (!match) return false;
 
