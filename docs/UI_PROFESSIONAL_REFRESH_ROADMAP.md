@@ -17,7 +17,7 @@ Core visual principles:
 - Fewer items packed into one row; favor readable cards and responsive clusters.
 - Strong visual hierarchy: page mission -> player context -> primary action -> supporting data -> retained detailed reference.
 - Game-like progress, mission, readiness and status presentation.
-- Shared navigation and card language across Player, Guild, GAC, TB and Actions.
+- Shared navigation and card language across Player, Guild, GAC, TB, Actions and Auth.
 - Preserve existing live-data and authentication contracts while changing presentation.
 - **Enhancement-only rule:** existing information must remain accessible. Older/reference surfaces may be visually demoted, but not removed merely to make a screen cleaner.
 
@@ -27,16 +27,16 @@ Core visual principles:
 | --- | --- | ---: |
 | Onboarding | Implemented on styling branch | 100% |
 | Action Center | Implemented on styling branch | 100% |
-| Shared visual language | Established across major workspaces | 97% |
+| Shared visual language | Established across major workspaces and Auth | 98% |
 | Player Command Center + populated detail | Roster, Farm/Journey, Mods/Optimizer and retained-reference pass implemented | 85% |
 | Global navigation / workspace tabs | Shared command-rail pass implemented | 65% |
 | GAC War Room | Professional battle-room pass implemented; reference preservation corrected | 85% |
 | Guild Command Center | Professional overview/member/capability styling implemented | 70% |
 | TB / ROTE | Professional phase/map/mission-board pass implemented | 65% |
-| Login / auth visual alignment | Next styling target; behavior must remain unchanged | 10% |
-| Cross-device/accessibility | Responsive rules expanded across major workspaces | 52% |
+| Login / auth visual alignment | Login/Signup styling implemented; OAuth/session logic deliberately unchanged | 90% |
+| Cross-device/accessibility | Responsive rules expanded across major workspaces and Auth | 58% |
 
-Approximate overall visual modernization: **75%**.
+Approximate overall visual modernization: **82%**.
 
 ## Information-preservation corrections
 
@@ -58,6 +58,18 @@ Approximate overall visual modernization: **75%**.
 - Enlarged Mods Audit summaries, pips and tables while retaining metrics.
 - Improved Mod Optimizer controls, assignments, move chips and donor information without changing optimizer logic.
 - Visual Resource/Event libraries now supplement the original detailed content instead of replacing it.
+
+## Auth pass
+
+- Added an additive `auth-professional.css` layer to Login and Signup; `auth-page.js` was not modified.
+- Preserved Discord and Google provider URLs including `next=/onboarding`.
+- Preserved active-session card, status/error live region, sign-out control, email/password fields and password reveal controls.
+- Preserved Signup display name, password confirmation and ownership-verification/security explanations.
+- Upgraded the visual language to bright gold/cyan/purple command styling consistent with Onboarding.
+- Increased provider buttons, input fields and primary actions for readability/touch use.
+- Added visible keyboard focus states and mobile layouts.
+- Added regression checks protecting provider links, onboarding redirects, forms, status messaging and the existing Auth script contract.
+- OAuth/session redirect behavior remains intentionally untouched by this styling branch.
 
 ## GAC War Room pass
 
@@ -84,17 +96,17 @@ Approximate overall visual modernization: **75%**.
 
 ## Next implementation order
 
-### 1. Login / auth visual alignment
-- Align login/signup with onboarding without changing OAuth/session behavior.
-- Preserve every auth error, provider button, redirect parameter and recovery path.
-
-### 2. Populated-state visual QA
+### 1. Populated-state visual QA
 - Validate major workspaces with real populated data at desktop/laptop/tablet/mobile breakpoints.
 - Correct overflow, clipping and conflicts without removing information.
 
-### 3. Shared-style consolidation
+### 2. Shared-style consolidation
 - Gradually consolidate proven visual tokens/components after validation.
 - Do not rewrite live workflow logic solely for styling.
+
+### 3. Auth behavior — separate functional workstream
+- Diagnose the OAuth/session redirect loop independently from presentation.
+- Keep the visual branch free of speculative session/auth logic changes.
 
 ## Guardrails
 
