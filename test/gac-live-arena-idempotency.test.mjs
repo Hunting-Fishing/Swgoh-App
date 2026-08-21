@@ -31,3 +31,17 @@ test('live arena displays the saved leaderBaseId instead of assuming member zero
   assert.match(fix, /gacActualLeader/);
   assert.match(guard, /gac-live-arena-leader-fix\.js/);
 });
+
+test('selected circle workflow becomes editor left, arena center and selected summary right', async () => {
+  const companion = await source('public/gac-live-arena-editor-side.js');
+  const layout = await source('public/gac-live-arena-layout.css');
+  const guard = await source('public/gac-manual-selection-guard.js');
+  assert.match(companion, /has-live-editor/);
+  assert.match(companion, /gac-live-editor-side/);
+  assert.match(companion, /own-defense-collapsed/);
+  assert.match(companion, /localStorage\.getItem\(COLLAPSE_KEY\) === null/);
+  assert.match(layout, /has-live-editor>\.gac-manual-editor\{grid-column:1/);
+  assert.match(layout, /has-live-editor>\.gac-manual-gac-map\{grid-column:2/);
+  assert.match(layout, /has-live-editor>\.gac-live-editor-side\{grid-column:3/);
+  assert.match(guard, /gac-live-arena-editor-side\.js/);
+});
