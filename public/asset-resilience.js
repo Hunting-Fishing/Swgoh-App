@@ -12,6 +12,7 @@ import './gac-fleet-round-operations.js';
 import './gac-fleet-attempt-history.js';
 import './gac-fleet-cleanup-control.js';
 import './gac-fleet-cleanup-provenance.js';
+import './gac-fleet-manual-parity.js';
 
 const state = {
   loaded: false,
