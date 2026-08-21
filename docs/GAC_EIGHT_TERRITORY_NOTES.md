@@ -1,0 +1,1 @@
+The full Grand Arena map is modeled as four territories per player: two front and two rear. The opponent-side team counts remain league/format driven and are not used to determine the number of physical territory locations.
