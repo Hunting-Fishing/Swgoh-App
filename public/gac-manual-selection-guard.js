@@ -1,5 +1,6 @@
 import './gac-canonical-faction-filter-ui.js';
 import './gac-league-board-ui.js';
+import './gac-live-arena-leader-fix.js';
 import './gac-ux-polish.js';
 
 const REPLAY = Symbol('gac-manual-selection-replay');
