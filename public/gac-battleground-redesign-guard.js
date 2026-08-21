@@ -27,6 +27,7 @@ function bindGuard() {
   window.addEventListener('gac-war-room-updated', unwrap);
   window.addEventListener('gac-fleet-round-state-updated', unwrap);
   window.addEventListener('gac-board-evidence-updated', unwrap);
+  window.addEventListener('hashchange', unwrap);
   document.addEventListener('click', (event) => {
     if (event.target.closest?.('[data-gac-redesign-fleet-slot]')) unwrap();
   }, true);
