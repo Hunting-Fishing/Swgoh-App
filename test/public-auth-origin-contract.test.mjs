@@ -15,7 +15,7 @@ function fakeResponse() {
   };
 }
 
-test('configured PUBLIC_APP_ORIGIN overrides Railway forwarded host for OAuth callback', async () => {
+test('configured PUBLIC_APP_ORIGIN produces the exact production OAuth callback', async () => {
   const env = {
     SUPABASE_URL: 'https://project.supabase.co',
     SUPABASE_PUBLISHABLE_KEY: 'publishable-test',
@@ -48,8 +48,8 @@ test('configured PUBLIC_APP_ORIGIN overrides Railway forwarded host for OAuth ca
   assert.equal(response.status, 303);
   const authorize = new URL(response.headers.Location);
   const redirectTo = new URL(authorize.searchParams.get('redirect_to'));
-  assert.equal(redirectTo.origin, 'https://swgohcommandcenter.app');
-  assert.equal(redirectTo.pathname, '/api/auth/oauth/callback');
+  assert.equal(redirectTo.href, 'https://swgohcommandcenter.app/api/auth/oauth/callback');
+  assert.equal(redirectTo.search, '');
   assert.notEqual(redirectTo.hostname, 'swgoh-app-production.up.railway.app');
 });
 
