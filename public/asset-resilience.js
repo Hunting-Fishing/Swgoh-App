@@ -1,5 +1,6 @@
 import './gac-war-room-v3.js';
 import './gac-manual-war-room-bridge.js';
+import './gac-manual-datacron-lock.js';
 import './gac-manual-execution-contract.js';
 import './gac-board-editor-stability-fix.js';
 import './gac-manual-counter-planner.js';
