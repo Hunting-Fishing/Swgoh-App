@@ -115,15 +115,15 @@ function lockedMembers(assignment = {}) {
 function recommendationHtml(openAssignment, units) {
   const recommendation = openAssignment?.recommendation;
   if (!recommendation?.squad?.length) {
-    return `<div class="gac-manual-war-counter is-empty"><div><strong>WAR ROOM · AUTHORITATIVE</strong><span>No non-overlapping legal counter remains for this defense.</span></div></div>`;
+    return `<div class="gac-board-smart-counter gac-manual-war-counter is-empty"><div><strong>WAR ROOM · AUTHORITATIVE</strong><span>No non-overlapping legal counter remains for this defense.</span></div></div>`;
   }
   const evidence = openAssignment?.source === 'historical-counter-evidence';
-  return `<div class="gac-manual-war-counter ${evidence ? 'is-evidence' : ''}"><div><strong>${evidence ? 'WAR ROOM · HISTORICAL EVIDENCE' : 'WAR ROOM · BOARD-WIDE PLAN'}</strong><span>${escapeHtml(openAssignment?.allocationReason || recommendation?.confidence || 'Remaining-roster allocation')}</span></div><div>${recommendation.squad.map((unit) => portrait(units.get(normalizeId(unit?.baseId)) || unit, unit?.baseId)).join('')}</div></div>`;
+  return `<div class="gac-board-smart-counter gac-manual-war-counter ${evidence ? 'is-evidence' : ''}"><div><strong>${evidence ? 'WAR ROOM · HISTORICAL EVIDENCE' : 'WAR ROOM · BOARD-WIDE PLAN'}</strong><span>${escapeHtml(openAssignment?.allocationReason || recommendation?.confidence || 'Remaining-roster allocation')}</span></div><div>${recommendation.squad.map((unit) => portrait(units.get(normalizeId(unit?.baseId)) || unit, unit?.baseId)).join('')}</div></div>`;
 }
 
 function lockedHtml(assignment, units) {
   const members = lockedMembers(assignment);
-  return `<div class="gac-manual-war-counter is-locked"><div><strong>LOCKED ATTACK SQUAD</strong><span>Reserved to this exact defense until result or release.</span></div><div>${members.map((id) => portrait(units.get(id) || {}, id)).join('')}</div></div>`;
+  return `<div class="gac-board-smart-counter gac-manual-war-counter is-locked"><div><strong>LOCKED ATTACK SQUAD</strong><span>Reserved to this exact defense until result or release.</span></div><div>${members.map((id) => portrait(units.get(id) || {}, id)).join('')}</div></div>`;
 }
 
 function controlsHtml(defense, assignment, openAssignment) {
@@ -179,7 +179,7 @@ function renderCards(ctx) {
     if (counter) {
       counter.classList.add('gac-manual-war-authoritative');
       if (assignment && ['planned', 'attempted'].includes(status)) counter.outerHTML = lockedHtml(assignment, units);
-      else if (assignment && status === 'win') counter.outerHTML = `<div class="gac-manual-war-counter is-cleared"><strong>✓ DEFENSE CLEARED</strong><span>The War Room will not spend another squad here.</span></div>`;
+      else if (assignment && status === 'win') counter.outerHTML = `<div class="gac-board-smart-counter gac-manual-war-counter is-cleared"><strong>✓ DEFENSE CLEARED</strong><span>The War Room will not spend another squad here.</span></div>`;
       else counter.outerHTML = recommendationHtml(openAssignment, units);
     }
     const panel = document.createElement('section');
