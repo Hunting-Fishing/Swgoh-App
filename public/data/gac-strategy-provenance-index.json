@@ -1,26 +1,65 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-21T01:30:00+08:00",
+  "generatedAt": "2026-08-21T12:20:00+08:00",
   "entries": [
     {
       "candidateId": "research:baylan-shin-marrok:jml-jkl-hyoda:3v3:2026-01",
       "recordId": "strategy:baylan-shin-marrok:jml-jkl-hyoda:3v3",
       "format": "3v3",
-      "defender": { "leaderBaseId": "BAYLANSKOLL", "members": ["BAYLANSKOLL", "SHINHATI", "MARROK"] },
-      "attacker": { "leaderBaseId": "GRANDMASTERLUKE", "members": ["GRANDMASTERLUKE", "JEDIKNIGHTLUKE", "HERMITYODA"] },
-      "source": { "name": "SWGOH GA3 Counter Guide", "ref": "https://www.swgoh-ga3.online-server.info/index.php?id=baylan_skoll&mode=leaders", "type": "tool", "author": "", "updatedAt": "2026-01-16T00:00:00Z", "capturedAt": "2026-08-21T01:30:00+08:00" },
-      "review": {
-        "status": "quarantined", "promotionReady": false,
-        "blockers": ["datacron-scope-unverified", "current-version-validity-unverified"],
-        "flags": { "sourceVerified": true, "exactCompositionVerified": true, "baseIdsVerified": true, "guidanceParaphraseVerified": true, "datacronScopeVerified": false, "versionValidityVerified": false, "copyrightParaphraseReviewed": true }
+      "defender": {
+        "leaderBaseId": "BAYLANSKOLL",
+        "members": ["BAYLANSKOLL", "SHINHATI", "MARROK"]
       },
-      "validity": { "validFrom": "", "validUntil": "", "gameDataVersion": "", "notes": "Season 81 confirms current matchup relevance, but exact current Datacron scope for the January execution sequence remains unverified." },
+      "attacker": {
+        "leaderBaseId": "GRANDMASTERLUKE",
+        "members": ["GRANDMASTERLUKE", "JEDIKNIGHTLUKE", "HERMITYODA"]
+      },
+      "source": {
+        "name": "SWGOH GA3 Counter Guide",
+        "ref": "https://www.swgoh-ga3.online-server.info/index.php?id=baylan_skoll&mode=leaders",
+        "type": "tool",
+        "author": "",
+        "updatedAt": "2026-01-16T00:00:00Z",
+        "capturedAt": "2026-08-21T01:30:00+08:00"
+      },
+      "review": {
+        "status": "quarantined",
+        "promotionReady": false,
+        "blockers": ["datacron-scope-unverified", "current-version-validity-unverified"],
+        "flags": {
+          "sourceVerified": true,
+          "exactCompositionVerified": true,
+          "baseIdsVerified": true,
+          "guidanceParaphraseVerified": true,
+          "datacronScopeVerified": false,
+          "versionValidityVerified": false,
+          "copyrightParaphraseReviewed": true
+        }
+      },
+      "validity": {
+        "validFrom": "",
+        "validUntil": "",
+        "gameDataVersion": "",
+        "notes": "Season 81 confirms Baylan remains a major 3v3 matchup and JML/JKL/HYoda remains a current 3v3 attack squad, but the January execution source does not prove current exact-match Datacron scope."
+      },
       "research": {
         "snapshotDate": "2026-01-16",
-        "notes": "Exact historical execution source plus current-season relevance evidence. Execution guidance is intentionally omitted from this runtime-safe index.",
+        "notes": "Exact execution source plus current Season 81 relevance evidence. Current evidence is validation only and is not treated as proof that the January sequence survives every active Datacron.",
         "validationRefs": [
-          { "kind": "current-statistics", "sourceName": "SWGOH.GG", "sourceRef": "https://swgoh.gg/gac/counters/BAYLANSKOLL/", "capturedAt": "2026-08-21T01:30:00+08:00", "note": "Season 81 3v3 Baylan page reports 53K+ analyzed battles." },
-          { "kind": "current-squad-meta", "sourceName": "SWGOH.GG", "sourceRef": "https://swgoh.gg/tier-list/3v3/", "capturedAt": "2026-08-21T01:30:00+08:00", "note": "Season 81 includes JML / JKL / Hermit Yoda with current Datacron build samples." }
+          {
+            "kind": "current-statistics",
+            "sourceName": "SWGOH.GG",
+            "sourceRef": "https://swgoh.gg/gac/counters/BAYLANSKOLL/",
+            "capturedAt": "2026-08-21T01:30:00+08:00",
+            "note": "Season 81 3v3 Baylan counter page reports 53K+ analyzed battles."
+          },
+          {
+            "kind": "current-squad-meta",
+            "sourceName": "SWGOH.GG",
+            "sourceRef": "https://swgoh.gg/tier-list/3v3/",
+            "capturedAt": "2026-08-21T01:30:00+08:00",
+            "note": "Season 81 tier data includes the JML / JKL / Hermit Yoda 3v3 squad with current Datacron build samples."
+          }
         ]
       }
     },
@@ -28,20 +67,60 @@
       "candidateId": "research:pkh-hondo-vane:slkr-fosftp-hux:3v3:2026-01",
       "recordId": "strategy:pkh-hondo-vane:slkr-fosftp-hux:3v3",
       "format": "3v3",
-      "defender": { "leaderBaseId": "GLHONDO", "members": ["GLHONDO", "HONDO", "VANE"] },
-      "attacker": { "leaderBaseId": "SUPREMELEADERKYLOREN", "members": ["SUPREMELEADERKYLOREN", "FIRSTORDERSPECIALFORCESPILOT", "GENERALHUX"] },
-      "source": { "name": "SWGOH GA3 Counter Guide", "ref": "https://www.swgoh-ga3.online-server.info/index.php?id=pirate_king_hondo_ohnaka", "type": "tool", "author": "", "updatedAt": "2026-01-16T00:00:00Z", "capturedAt": "2026-08-21T01:30:00+08:00" },
-      "review": {
-        "status": "quarantined", "promotionReady": false,
-        "blockers": ["guidance-sequence-missing", "datacron-scope-unverified", "current-version-validity-unverified"],
-        "flags": { "sourceVerified": true, "exactCompositionVerified": true, "baseIdsVerified": true, "guidanceParaphraseVerified": false, "datacronScopeVerified": false, "versionValidityVerified": false, "copyrightParaphraseReviewed": true }
+      "defender": {
+        "leaderBaseId": "GLHONDO",
+        "members": ["GLHONDO", "HONDO", "VANE"]
       },
-      "validity": { "validFrom": "", "validUntil": "", "gameDataVersion": "", "notes": "Exact historical pairing is recorded, but reviewed execution guidance and current Hux/FOSFTP Datacron compatibility are not established." },
+      "attacker": {
+        "leaderBaseId": "SUPREMELEADERKYLOREN",
+        "members": ["SUPREMELEADERKYLOREN", "FIRSTORDERSPECIALFORCESPILOT", "GENERALHUX"]
+      },
+      "source": {
+        "name": "SWGOH GA3 Counter Guide",
+        "ref": "https://www.swgoh-ga3.online-server.info/index.php?id=pirate_king_hondo_ohnaka",
+        "type": "tool",
+        "author": "",
+        "updatedAt": "2026-01-16T00:00:00Z",
+        "capturedAt": "2026-08-21T01:30:00+08:00"
+      },
+      "review": {
+        "status": "quarantined",
+        "promotionReady": false,
+        "blockers": ["guidance-sequence-missing", "datacron-scope-unverified", "current-version-validity-unverified"],
+        "flags": {
+          "sourceVerified": true,
+          "exactCompositionVerified": true,
+          "baseIdsVerified": true,
+          "guidanceParaphraseVerified": false,
+          "datacronScopeVerified": false,
+          "versionValidityVerified": false,
+          "copyrightParaphraseReviewed": true
+        }
+      },
+      "validity": {
+        "validFrom": "",
+        "validUntil": "",
+        "gameDataVersion": "",
+        "notes": "Exact historical pairing captured; reviewed current execution sequence and active Datacron scope are still missing."
+      },
       "research": {
-        "snapshotDate": "2026-01-16", "notes": "Current Hondo prevalence and current First Order Datacron mechanics are relevance evidence only.",
+        "snapshotDate": "2026-01-16",
+        "notes": "Exact historical SLKR / FO SF TIE Pilot / Hux versus Pirate King Hondo / Hondo / Vane pairing. Current-season Hondo prevalence and active First Order Datacron mechanics are tracked separately.",
         "validationRefs": [
-          { "kind": "current-statistics", "sourceName": "SWGOH.GG", "sourceRef": "https://swgoh.gg/gac/counters/GLHONDO/", "capturedAt": "2026-08-21T01:30:00+08:00", "note": "Pirate King Hondo remains a high-volume Season 81 3v3 defense." },
-          { "kind": "current-datacron", "sourceName": "SWGOH.GG", "sourceRef": "https://swgoh.gg/datacrons/24/", "capturedAt": "2026-08-21T01:30:00+08:00", "note": "Current set includes Hux and First Order SF TIE Pilot mechanics; exact tactic compatibility remains unverified." }
+          {
+            "kind": "current-statistics",
+            "sourceName": "SWGOH.GG",
+            "sourceRef": "https://swgoh.gg/gac/counters/GLHONDO/",
+            "capturedAt": "2026-08-21T01:30:00+08:00",
+            "note": "Season 81 3v3 Pirate King Hondo is among the most analyzed defenses."
+          },
+          {
+            "kind": "current-datacron",
+            "sourceName": "SWGOH.GG",
+            "sourceRef": "https://swgoh.gg/datacrons/24/",
+            "capturedAt": "2026-08-21T01:30:00+08:00",
+            "note": "Current Whispers of Wealth set includes General Hux and First Order SF TIE Pilot character mechanics; exact tactic compatibility remains unverified."
+          }
         ]
       }
     },
@@ -49,20 +128,109 @@
       "candidateId": "research:jmmw-aayla-depa:traya-nihilus-savage:3v3:2026-01",
       "recordId": "strategy:jmmw-aayla-depa:traya-nihilus-savage:3v3",
       "format": "3v3",
-      "defender": { "leaderBaseId": "JEDIMASTERMACEWINDU", "members": ["JEDIMASTERMACEWINDU", "AAYLASECURA", "DEPABILLABA"] },
-      "attacker": { "leaderBaseId": "DARTHTRAYA", "members": ["DARTHTRAYA", "DARTHNIHILUS", "SAVAGEOPRESS"] },
-      "source": { "name": "SWGOH GA3 Counter Guide", "ref": "https://www.swgoh-ga3.online-server.info/index.php?id=jedi_master_mace_windu", "type": "tool", "author": "", "updatedAt": "2026-01-16T00:00:00Z", "capturedAt": "2026-08-21T01:30:00+08:00" },
-      "review": {
-        "status": "quarantined", "promotionReady": false,
-        "blockers": ["base-ids-unverified", "guidance-sequence-missing", "datacron-scope-unverified", "current-version-validity-unverified"],
-        "flags": { "sourceVerified": true, "exactCompositionVerified": true, "baseIdsVerified": false, "guidanceParaphraseVerified": false, "datacronScopeVerified": false, "versionValidityVerified": false, "copyrightParaphraseReviewed": true }
+      "defender": {
+        "leaderBaseId": "JEDIMASTERMACEWINDU",
+        "members": ["JEDIMASTERMACEWINDU", "AAYLASECURA", "DEPABILLABA"]
       },
-      "validity": { "validFrom": "", "validUntil": "", "gameDataVersion": "", "notes": "Current relevance is established at leader/squad level only; canonical-ID completion, exact current matchup execution and Datacron scope remain locked." },
+      "attacker": {
+        "leaderBaseId": "DARTHTRAYA",
+        "members": ["DARTHTRAYA", "DARTHNIHILUS", "SAVAGEOPRESS"]
+      },
+      "source": {
+        "name": "SWGOH GA3 Counter Guide",
+        "ref": "https://www.swgoh-ga3.online-server.info/index.php?id=jedi_master_mace_windu",
+        "type": "tool",
+        "author": "",
+        "updatedAt": "2026-01-16T00:00:00Z",
+        "capturedAt": "2026-08-21T01:30:00+08:00"
+      },
+      "review": {
+        "status": "quarantined",
+        "promotionReady": false,
+        "blockers": ["guidance-sequence-missing", "datacron-scope-unverified", "current-version-validity-unverified"],
+        "flags": {
+          "sourceVerified": true,
+          "exactCompositionVerified": true,
+          "baseIdsVerified": true,
+          "guidanceParaphraseVerified": false,
+          "datacronScopeVerified": false,
+          "versionValidityVerified": false,
+          "copyrightParaphraseReviewed": true
+        }
+      },
+      "validity": {
+        "validFrom": "",
+        "validUntil": "",
+        "gameDataVersion": "",
+        "notes": "Historical exact-composition pairing plus current-era tactical-context evidence are captured. Canonical Base IDs are verified; exact current execution sequence, exact active Datacron mechanic scope and current exact-composition validity remain gated."
+      },
       "research": {
-        "snapshotDate": "2026-01-16", "notes": "Historical exact pairing plus current Season 81 relevance evidence.",
+        "snapshotDate": "2026-01-16",
+        "notes": "The January source identifies the exact JMMW/Aayla/Depa and Traya/Nihilus/Savage pairing. A May 21, 2026 Xaereth source independently confirms current-era Nihilus/Traya/Savage vs Mace usage with a Depa Datacron context under Sets 28/29/30. That recent timestamp is treated only as tactical-context evidence: it does not prove the exact defender teammate composition, a move sequence, or the exact Datacron mechanic required for this proposed record.",
         "validationRefs": [
-          { "kind": "current-statistics", "sourceName": "SWGOH.GG", "sourceRef": "https://swgoh.gg/gac/counters/JEDIMASTERMACEWINDU/", "capturedAt": "2026-08-21T01:30:00+08:00", "note": "Jedi Master Mace Windu remains a high-volume Season 81 3v3 defense." },
-          { "kind": "current-squad-meta", "sourceName": "SWGOH.GG", "sourceRef": "https://swgoh.gg/tier-list/3v3/", "capturedAt": "2026-08-21T01:30:00+08:00", "note": "Current 3v3 data includes Traya / Nihilus / Savage with active Datacron build samples." }
+          {
+            "kind": "current-statistics",
+            "sourceName": "SWGOH.GG",
+            "sourceRef": "https://swgoh.gg/gac/counters/JEDIMASTERMACEWINDU/",
+            "capturedAt": "2026-08-21T01:30:00+08:00",
+            "note": "Season 81 3v3 Jedi Master Mace Windu counter page has a large current sample."
+          },
+          {
+            "kind": "current-squad-meta",
+            "sourceName": "SWGOH.GG",
+            "sourceRef": "https://swgoh.gg/tier-list/3v3/",
+            "capturedAt": "2026-08-21T01:30:00+08:00",
+            "note": "Current 3v3 tier data includes Traya / Nihilus / Savage with active Datacron build samples."
+          },
+          {
+            "kind": "recent-tactical-context",
+            "sourceName": "Xaereth Prevails via SWGOH.TV",
+            "sourceRef": "https://swgoh.tv/video/48466-counters-you-need-may-3v3-w-timestamps-swgoh-gac-galaxyofheroes-starwars",
+            "capturedAt": "2026-08-21T12:20:00+08:00",
+            "note": "Published 2026-05-21. The source index states Datacron Sets 28/29/30 and labels timestamp 30:25 as Nihilus/Traya/Savage vs. Mace (Depa cron). Used for current-era matchup/DC context only, not execution guidance."
+          },
+          {
+            "kind": "canonical-unit-id",
+            "sourceName": "SWGOH.GG",
+            "sourceRef": "https://swgoh.gg/units/jedi-master-mace-windu/",
+            "capturedAt": "2026-08-21T12:20:00+08:00",
+            "note": "Current unit record exposes Base ID JEDIMASTERMACEWINDU."
+          },
+          {
+            "kind": "canonical-unit-id",
+            "sourceName": "SWGOH.GG",
+            "sourceRef": "https://swgoh.gg/units/aayla-secura/",
+            "capturedAt": "2026-08-21T12:20:00+08:00",
+            "note": "Current unit record exposes Base ID AAYLASECURA."
+          },
+          {
+            "kind": "canonical-unit-id",
+            "sourceName": "SWGOH.GG",
+            "sourceRef": "https://swgoh.gg/units/depa-billaba/",
+            "capturedAt": "2026-08-21T12:20:00+08:00",
+            "note": "Current unit record exposes Base ID DEPABILLABA."
+          },
+          {
+            "kind": "canonical-unit-id",
+            "sourceName": "SWGOH.GG",
+            "sourceRef": "https://swgoh.gg/units/darth-traya/",
+            "capturedAt": "2026-08-21T12:20:00+08:00",
+            "note": "Current unit record exposes Base ID DARTHTRAYA."
+          },
+          {
+            "kind": "canonical-unit-id",
+            "sourceName": "SWGOH.GG",
+            "sourceRef": "https://swgoh.gg/units/darth-nihilus/",
+            "capturedAt": "2026-08-21T12:20:00+08:00",
+            "note": "Current unit record exposes Base ID DARTHNIHILUS."
+          },
+          {
+            "kind": "canonical-unit-id",
+            "sourceName": "SWGOH.GG",
+            "sourceRef": "https://swgoh.gg/units/savage-opress/",
+            "capturedAt": "2026-08-21T12:20:00+08:00",
+            "note": "Current unit record exposes Base ID SAVAGEOPRESS."
+          }
         ]
       }
     }
