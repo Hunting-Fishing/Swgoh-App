@@ -1,3 +1,4 @@
+import './gac-ui-ready-guard.js';
 import './gac-canonical-faction-filter-ui.js';
 import './gac-league-board-ui.js';
 import './gac-full-battlefield.js';
