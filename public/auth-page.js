@@ -1,3 +1,10 @@
+const CANONICAL_BROWSER_ORIGIN = 'https://swgohcommandcenter.app';
+
+if (window.location.hostname.endsWith('.up.railway.app')) {
+  const canonicalUrl = new URL(`${window.location.pathname}${window.location.search}${window.location.hash}`, CANONICAL_BROWSER_ORIGIN);
+  window.location.replace(canonicalUrl.href);
+}
+
 const mode = document.body.dataset.authMode === 'signup' ? 'signup' : 'login';
 const form = document.querySelector('[data-auth-form]');
 const message = document.querySelector('[data-auth-message]');
