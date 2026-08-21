@@ -23,6 +23,11 @@ function statusFor(error) {
 function normalizedIds(values = []) {
   return [...new Set(asArray(values).map((value) => normalizeBaseId(value?.baseId || value)).filter(Boolean))];
 }
+function exactExecutionSlot(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const slot = Number(value);
+  return Number.isInteger(slot) && slot >= 0 ? slot : null;
+}
 function defenseDatacronState(defense = {}) {
   const state = clean(defense?.datacronState).toLowerCase();
   const id = clean(defense?.datacron?.id);
@@ -37,7 +42,7 @@ function executionConfirmationSnapshot(assignment = {}, defense = {}) {
     assignmentId: Number(assignment?.id) || null,
     defenseId: Number(assignment?.defenseId || defense?.id) || null,
     zone: clean(defense?.zone),
-    slot: Number.isInteger(Number(defense?.slot)) ? Number(defense.slot) : null,
+    slot: exactExecutionSlot(defense?.slot),
     attackerLeaderBaseId: normalizeBaseId(assignment?.leaderBaseId),
     attackerMembers: Object.freeze(normalizedIds(assignment?.members)),
     attackerDatacronId: clean(assignment?.datacron?.id),
@@ -54,7 +59,7 @@ function assertExecutionConfirmation(submitted = {}, assignment = {}, defense = 
     assignmentId: Number(submitted?.assignmentId) || null,
     defenseId: Number(submitted?.defenseId) || null,
     zone: clean(submitted?.zone),
-    slot: Number.isInteger(Number(submitted?.slot)) ? Number(submitted.slot) : null,
+    slot: exactExecutionSlot(submitted?.slot),
     attackerLeaderBaseId: normalizeBaseId(submitted?.attackerLeaderBaseId),
     attackerMembers: normalizedIds(submitted?.attackerMembers),
     attackerDatacronId: clean(submitted?.attackerDatacronId),
@@ -65,6 +70,11 @@ function assertExecutionConfirmation(submitted = {}, assignment = {}, defense = 
   };
   if (JSON.stringify(normalized) !== JSON.stringify(expected)) {
     const error = new Error("The pre-battle confirmation no longer matches the locked attack and current saved defense. Re-open the checklist and verify the battle again.");
+    error.status = 409;
+    throw error;
+  }
+  if (!expected.zone || expected.slot === null) {
+    const error = new Error("The locked enemy defense must have an exact saved board zone and slot before beginning the attempt.");
     error.status = 409;
     throw error;
   }
@@ -282,6 +292,7 @@ export {
   assertExecutionConfirmation,
   assertExecutionLiveState,
   defenseDatacronState,
+  exactExecutionSlot,
   executionConfirmationSnapshot,
   normalizedIds,
   statusFor,
