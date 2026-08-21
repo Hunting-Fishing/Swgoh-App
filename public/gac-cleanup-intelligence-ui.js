@@ -27,6 +27,8 @@ async function fetchJson(pathname,options={}){
 }
 function assignmentFor(defenseId){return state.assignments.find((row)=>Number(row?.defenseId)===Number(defenseId))||null;}
 function defenseFor(defenseId){return state.defenses.find((row)=>Number(row?.id)===Number(defenseId))||assignmentFor(defenseId)?.defense||null;}
+function hasRecordedLoss(assignment={}){return (Array.isArray(assignment?.attemptLog)?assignment.attemptLog:[]).some((attempt)=>clean(attempt?.status).toLowerCase()==='loss');}
+function needsCleanupReplan(assignment={}){const status=clean(assignment?.status).toLowerCase();return status==='loss'||(status==='abandoned'&&hasRecordedLoss(assignment));}
 function unitIndex(roster){return new Map((Array.isArray(roster?.units)?roster.units:[]).map((unit)=>[normalizeId(unit),unit]).filter(([id])=>id));}
 function unitFor(roster,id){return unitIndex(roster).get(normalizeId(id))||{baseId:normalizeId(id),name:normalizeId(id)};}
 function imageUrl(unit={}){return clean(unit.image||unit.imageUrl||unit.portrait||unit.portraitUrl||unit.thumbnail||unit.icon);}
@@ -40,7 +42,8 @@ function ownDatacron(candidate){
 }
 function disableLegacyLossRetry(card){
   const assignment=assignmentFor(Number(card?.dataset?.defenseId));
-  if(clean(assignment?.status).toLowerCase()!=='loss'&&!card?.classList?.contains('gac-war-is-loss'))return;
+  const visibleLoss=clean(card?.querySelector('.gac-war-attempt-log')?.textContent).toUpperCase().includes('LOSS');
+  if(!needsCleanupReplan(assignment)&&!card?.classList?.contains('gac-war-is-loss')&&!visibleLoss)return;
   card.dataset.recommendedAttackerMembers='';card.dataset.recommendedAttackerLeader='';card.dataset.recommendedDatacronId='';
   const lane=card.querySelector('.gac-war-room-counter-lane .gac-board-units');
   if(lane)lane.innerHTML='<div class="gac-board-no-counter">Original-defense retry disabled. Cleanup uses only confirmed surviving defenders.</div>';
@@ -78,7 +81,7 @@ function panelHtml(current,assignment,defense){
 function renderCard(card,current){
   card.querySelector('[data-gac-b10-cleanup]')?.remove();
   const defenseId=Number(card?.dataset?.defenseId);const assignment=assignmentFor(defenseId);
-  if(!assignment||clean(assignment.status).toLowerCase()!=='loss')return;
+  if(!assignment||!needsCleanupReplan(assignment))return;
   disableLegacyLossRetry(card);
   const defense=defenseFor(defenseId)||{};
   const anchor=card.querySelector('[data-gac-result-history]')||card.querySelector('.gac-war-room')||card;
@@ -102,7 +105,7 @@ async function load(force=false){
 }
 async function lockCleanup(button){
   const current=identity();if(!current)return;
-  const defenseId=Number(button?.dataset?.defenseId);const assignment=assignmentFor(defenseId);if(!assignment?.id||clean(assignment.status).toLowerCase()!=='loss')return;
+  const defenseId=Number(button?.dataset?.defenseId);const assignment=assignmentFor(defenseId);if(!assignment?.id||!needsCleanupReplan(assignment))return;
   const members=clean(button.dataset.members).split(',').map(normalizeId).filter(Boolean);const leaderBaseId=normalizeId(button.dataset.leader);const datacronId=clean(button.dataset.datacronId);const id=Number(assignment.id);
   if(state.busy.has(id))return;state.busy.add(id);state.errors.delete(id);renderAll();
   try{
@@ -117,7 +120,7 @@ function bind(){
   injectStyle();
   document.addEventListener('click',(event)=>{
     const legacy=event.target.closest?.('#gacBoardPlannerGrid [data-war-action="lock"]');
-    if(legacy){const card=legacy.closest('.gac-saved-board-card');const assignment=assignmentFor(Number(card?.dataset?.defenseId));if(card?.classList?.contains('gac-war-is-loss')||clean(assignment?.status).toLowerCase()==='loss'){event.preventDefault();event.stopImmediatePropagation();disableLegacyLossRetry(card);if(assignment)renderCard(card,identity());card.querySelector('[data-gac-b10-cleanup]')?.scrollIntoView?.({behavior:'smooth',block:'center'});return;}}
+    if(legacy){const card=legacy.closest('.gac-saved-board-card');const assignment=assignmentFor(Number(card?.dataset?.defenseId));const visibleLoss=clean(card?.querySelector('.gac-war-attempt-log')?.textContent).toUpperCase().includes('LOSS');if(card?.classList?.contains('gac-war-is-loss')||visibleLoss||needsCleanupReplan(assignment)){event.preventDefault();event.stopImmediatePropagation();disableLegacyLossRetry(card);if(assignment)renderCard(card,identity());card.querySelector('[data-gac-b10-cleanup]')?.scrollIntoView?.({behavior:'smooth',block:'center'});return;}}
     const lock=event.target.closest?.('[data-gac-b10-lock]');if(lock){event.preventDefault();const card=lock.closest('.gac-saved-board-card');if(card)void lockCleanup(lock);}
   },true);
   document.addEventListener('change',(event)=>{if(['allyCode','gacOpponentCode','gacBracketRound','gacMode'].includes(event.target?.id)||event.target?.matches?.('[data-gacv2-opponent],[data-gacv2-round],[data-gacv2-mode]'))schedule(120,true);},true);
@@ -125,4 +128,4 @@ function bind(){
 }
 if(typeof document!=='undefined')bind();
 
-export { disableLegacyLossRetry, identity, lockCleanup, renderAll };
+export { disableLegacyLossRetry, hasRecordedLoss, identity, lockCleanup, needsCleanupReplan, renderAll };
