@@ -1,4 +1,5 @@
 import './gac-war-room-provenance-inspector.js';
+import './gac-roster-integrity.js';
 import './gac-manual-board-context-bridge.js';
 import './gac-manual-board-workspace.js';
 import './gac-board-v2-slot-command.js';
