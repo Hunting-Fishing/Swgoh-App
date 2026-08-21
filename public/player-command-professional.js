@@ -1,10 +1,19 @@
 function ensureStyle() {
-  if (document.querySelector('link[data-player-command-professional="true"]')) return;
-  const link = document.createElement('link');
-  link.rel = 'stylesheet';
-  link.href = '/player-command-professional.css?v=20260821-playerpro1';
-  link.dataset.playerCommandProfessional = 'true';
-  document.head.appendChild(link);
+  if (!document.querySelector('link[data-player-command-professional="true"]')) {
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = '/player-command-professional.css?v=20260821-playerpro1';
+    link.dataset.playerCommandProfessional = 'true';
+    document.head.appendChild(link);
+  }
+
+  if (!document.querySelector('link[data-non-gac-responsive-polish="true"]')) {
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = '/non-gac-responsive-polish.css?v=20260821-qa1';
+    link.dataset.nonGacResponsivePolish = 'true';
+    document.head.appendChild(link);
+  }
 }
 
 function markReference(node) {
