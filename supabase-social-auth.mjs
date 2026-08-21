@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { supabaseCoreStore } from './supabase-core-store.mjs';
-import { normalizePublicOrigin, resolvePublicOrigin } from './auth-public-origin.mjs';
+import { normalizePublicOrigin, resolvePublicOrigin, resolveRequestOrigin } from './auth-public-origin.mjs';
 
 const ACCESS_COOKIE = 'swgoh_cc_access';
 const REFRESH_COOKIE = 'swgoh_cc_refresh';
@@ -184,6 +184,19 @@ export function createSupabaseSocialAuth(env = process.env, options = {}) {
       writeJson(response, 404, { error: 'Social login provider is not supported.' });
       return;
     }
+
+    // Social OAuth must begin and end on the same browser origin because the
+    // PKCE verifier is stored in a host-scoped HttpOnly cookie. Railway remains
+    // the backend origin, but direct Railway browser OAuth starts are moved to
+    // the canonical public app before any verifier/state cookie is created.
+    const requestOrigin = resolveRequestOrigin(request);
+    if (config.publicOrigin && requestOrigin && requestOrigin !== config.publicOrigin) {
+      const canonicalStart = new URL(`/api/auth/oauth/${provider}`, `${config.publicOrigin}/`);
+      canonicalStart.searchParams.set('next', safeNext(next));
+      redirect(response, canonicalStart.href);
+      return;
+    }
+
     const enabled = await providers();
     if (!enabled[provider]) {
       redirect(response, `/login?oauth_error=${encodeURIComponent(`${provider}_not_enabled`)}`);
