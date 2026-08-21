@@ -9,6 +9,7 @@ import './gac-fleet-cleanup-control.js';
 import './gac-fleet-cleanup-provenance.js';
 import './guild-command-professional.js';
 import './tb-rote-professional.js';
+import './player-command-professional.js';
 
 const state = {
   loaded: false,
