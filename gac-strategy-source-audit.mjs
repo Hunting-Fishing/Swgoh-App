@@ -12,9 +12,11 @@ import { catalogPayload } from "./public/gac-strategy-catalog.js";
 const ROOT = fileURLToPath(new URL("./", import.meta.url));
 const CANDIDATE_PATH = resolve(ROOT, "public/data/gac-strategy-source-candidates.json");
 const PRODUCTION_PATH = resolve(ROOT, "public/data/gac-strategy-records.json");
+const GAME_CATALOG_PATH = resolve(ROOT, "public/data/catalog.json");
 
 function clean(value) { return String(value ?? "").trim(); }
 function asArray(value) { return Array.isArray(value) ? value : []; }
+function normalizeBaseId(value) { return clean(value).split(":")[0].toUpperCase(); }
 function duplicateValues(values = []) {
   const seen = new Set();
   const duplicates = new Set();
@@ -24,7 +26,24 @@ function duplicateValues(values = []) {
   }
   return Object.freeze([...duplicates].sort());
 }
-function auditSourceCandidates(candidateBody = {}, productionBody = {}) {
+function catalogBaseIdSet(gameCatalog = {}) {
+  return new Set(asArray(gameCatalog?.units).map((unit) => normalizeBaseId(unit?.baseId)).filter(Boolean));
+}
+function strategyBaseIds(candidate = {}) {
+  const record = candidate?.proposedRecord || {};
+  return Object.freeze([...new Set([
+    ...asArray(record?.defender?.members),
+    ...asArray(record?.attacker?.members),
+    record?.defender?.leaderBaseId,
+    record?.attacker?.leaderBaseId,
+  ].map(normalizeBaseId).filter(Boolean))].sort());
+}
+function invalidCandidateBaseIds(candidate = {}, gameCatalog = {}) {
+  const known = catalogBaseIdSet(gameCatalog);
+  if (!known.size) return Object.freeze(strategyBaseIds(candidate));
+  return Object.freeze(strategyBaseIds(candidate).filter((id) => !known.has(id)));
+}
+function auditSourceCandidates(candidateBody = {}, productionBody = {}, gameCatalog = null) {
   const candidates = asArray(candidateBody?.candidates);
   const production = catalogPayload(productionBody);
   const summaries = candidates.map(candidateSummary);
@@ -38,12 +57,27 @@ function auditSourceCandidates(candidateBody = {}, productionBody = {}) {
   const duplicateCandidateIds = duplicateValues(candidates.map((candidate) => candidate?.candidateId));
   const duplicateProposedRecordIds = duplicateValues(candidates.map((candidate) => candidate?.proposedRecord?.id));
   const schemaVersion = Number(candidateBody?.schemaVersion || 0);
+  const gameCatalogAuditEnabled = Boolean(gameCatalog && typeof gameCatalog === "object");
+  const knownBaseIds = gameCatalogAuditEnabled ? catalogBaseIdSet(gameCatalog) : new Set();
+  const baseIdAudit = candidates.map((candidate) => Object.freeze({
+    candidateId: clean(candidate?.candidateId),
+    invalidBaseIds: gameCatalogAuditEnabled ? invalidCandidateBaseIds(candidate, gameCatalog) : Object.freeze([]),
+  }));
+  const approvedInvalidBaseIds = new Set();
+  if (gameCatalogAuditEnabled) {
+    const approvedIds = new Set(approved.map((candidate) => clean(candidate?.candidateId)));
+    for (const row of baseIdAudit) {
+      if (!approvedIds.has(row.candidateId)) continue;
+      for (const id of row.invalidBaseIds) approvedInvalidBaseIds.add(id);
+    }
+  }
   const safe = schemaVersion === 1
     && invalidApproved.length === 0
     && duplicateProductionIds.length === 0
     && duplicateCandidateIds.length === 0
     && duplicateProposedRecordIds.length === 0
-    && production.rejected.length === 0;
+    && production.rejected.length === 0
+    && (!gameCatalogAuditEnabled || (knownBaseIds.size > 0 && approvedInvalidBaseIds.size === 0));
   return Object.freeze({
     schemaVersion,
     candidateCount: candidates.length,
@@ -56,6 +90,12 @@ function auditSourceCandidates(candidateBody = {}, productionBody = {}) {
     duplicateProductionIds: Object.freeze([...new Set(duplicateProductionIds)].sort()),
     duplicateCandidateIds,
     duplicateProposedRecordIds,
+    gameCatalog: Object.freeze({
+      audited: gameCatalogAuditEnabled,
+      unitCount: knownBaseIds.size,
+      approvedInvalidBaseIds: Object.freeze([...approvedInvalidBaseIds].sort()),
+    }),
+    baseIdAudit: Object.freeze(baseIdAudit),
     production: Object.freeze({
       accepted: production.records.length,
       rejected: production.rejected.length,
@@ -66,8 +106,8 @@ function auditSourceCandidates(candidateBody = {}, productionBody = {}) {
   });
 }
 
-function buildProductionCatalog(candidateBody = {}, productionBody = {}, generatedAt = new Date().toISOString()) {
-  const audit = auditSourceCandidates(candidateBody, productionBody);
+function buildProductionCatalog(candidateBody = {}, productionBody = {}, generatedAt = new Date().toISOString(), gameCatalog = null) {
+  const audit = auditSourceCandidates(candidateBody, productionBody, gameCatalog);
   if (!audit.safe) {
     const error = new Error("GAC strategy source audit is not safe for promotion.");
     error.code = "GAC_STRATEGY_AUDIT_FAILED";
@@ -92,13 +132,17 @@ async function readJson(pathname) {
 
 async function main(argv = process.argv.slice(2)) {
   const write = argv.includes("--write");
-  const [candidates, production] = await Promise.all([readJson(CANDIDATE_PATH), readJson(PRODUCTION_PATH)]);
-  const audit = auditSourceCandidates(candidates, production);
+  const [candidates, production, gameCatalog] = await Promise.all([
+    readJson(CANDIDATE_PATH),
+    readJson(PRODUCTION_PATH),
+    readJson(GAME_CATALOG_PATH),
+  ]);
+  const audit = auditSourceCandidates(candidates, production, gameCatalog);
   process.stdout.write(`${JSON.stringify(audit, null, 2)}\n`);
   if (!audit.safe) process.exitCode = 1;
   if (!write) return audit;
   if (!audit.safe) throw new Error("Refusing to write production strategy catalog because the source audit failed.");
-  const next = buildProductionCatalog(candidates, production);
+  const next = buildProductionCatalog(candidates, production, new Date().toISOString(), gameCatalog);
   const productionCount = asArray(production?.records).length;
   if (next.records.length === productionCount) {
     process.stdout.write("No approved strategy candidates are ready for promotion; production catalog unchanged.\n");
@@ -118,4 +162,12 @@ if (invokedDirectly) {
   });
 }
 
-export { auditSourceCandidates, buildProductionCatalog, duplicateValues, main };
+export {
+  auditSourceCandidates,
+  buildProductionCatalog,
+  catalogBaseIdSet,
+  duplicateValues,
+  invalidCandidateBaseIds,
+  main,
+  strategyBaseIds,
+};
