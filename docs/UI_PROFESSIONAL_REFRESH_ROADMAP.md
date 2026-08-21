@@ -25,6 +25,8 @@ Core visual principles:
 
 **GAC is frozen on this styling branch until further notice.** A separate branch is actively working on GAC, so ongoing work here must not modify GAC CSS, JavaScript, tests, selectors or behavior. Existing GAC changes already present in this branch are left as-is; new work proceeds around them to reduce merge conflicts.
 
+The first post-freeze verification compared the branch against commit `c2bdf28b97f9356a35169bc5aa2634f4ccc7fe42`: all new work was limited to the roadmap, `non-gac-responsive-polish.css`, its non-GAC loader hook, and its regression test. No GAC file changed after the freeze instruction.
+
 ## Rollout status
 
 | Workstream | Status | Completion |
