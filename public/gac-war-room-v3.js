@@ -7,6 +7,7 @@ import './gac-board-capture-accelerator.js';
 import './gac-fleet-canonical-sync.js';
 import './gac-fleet-war-room.js';
 import './gac-battle-execution-ui.js';
+import './gac-attempt-result-ui.js';
 
 const TAB_ORDER = ['matchup', 'board', 'delta', 'history', 'diagnostics'];
 
