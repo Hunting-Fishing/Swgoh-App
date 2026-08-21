@@ -18,7 +18,7 @@ Railway
 
 Cloudflare
         |
-        +--> swgohcommandcenter.com / www.swgohcommandcenter.com
+        +--> swgohcommandcenter.app / www.swgohcommandcenter.app
         +--> static public/ assets at the edge
         +--> /api/* reverse proxy to the Railway Swgoh-App origin
 ```
@@ -40,10 +40,11 @@ Required settings:
 - Root directory: repository root
 - Runtime configuration source of truth: `wrangler.jsonc`
 
-The Wrangler configuration attaches both production hostnames:
+Attach the production hostname from Cloudflare Workers & Pages > `swgoh-command-center` > Settings > Domains & Routes:
 
-- `https://swgohcommandcenter.com`
-- `https://www.swgohcommandcenter.com`
+- `swgohcommandcenter.app`
+
+After the apex hostname is validated, optionally add `www.swgohcommandcenter.app` and redirect it to the apex hostname so the application has one canonical public origin.
 
 Static files are served directly from `public/`. Requests under `/api/*` run through the Cloudflare edge Worker and are proxied to Railway.
 
@@ -51,7 +52,7 @@ Static files are served directly from `public/`. Requests under `/api/*` run thr
 
 Cloudflare requires only one application-origin variable for the Railway bridge:
 
-- `RAILWAY_APP_ORIGIN=https://<current-swgoh-app-public-domain>.up.railway.app`
+- `RAILWAY_APP_ORIGIN=https://swgoh-app-production.up.railway.app`
 
 This is the public Railway domain of the **Swgoh-App** service, not the separate SWGOH live-gateway domain.
 
@@ -75,9 +76,9 @@ Do not copy server-only secrets into the Cloudflare edge unless a future archite
 
 When the Cloudflare domain becomes the public user-facing origin, configure Supabase Auth for that public hostname:
 
-- Site URL: `https://www.swgohcommandcenter.com`
-- Production redirect allow-list: include `https://www.swgohcommandcenter.com/**`
-- Include the apex hostname only if users will access it directly rather than redirecting to `www`.
+- Site URL: `https://swgohcommandcenter.app`
+- Production redirect allow-list: include `https://swgohcommandcenter.app/**`
+- Include `https://www.swgohcommandcenter.app/**` only if the `www` hostname is used directly instead of redirecting to the apex hostname.
 
 This changes the public authentication origin only. It does not move Supabase or Railway.
 
@@ -85,7 +86,7 @@ This changes the public authentication origin only. It does not move Supabase or
 
 1. Cloudflare deployment completes successfully.
 2. `RAILWAY_APP_ORIGIN` points at the live Railway `Swgoh-App` public domain.
-3. `GET https://www.swgohcommandcenter.com/api/health` reaches Railway and returns the expected capability document.
+3. `GET https://swgohcommandcenter.app/api/health` reaches Railway and returns the expected capability document.
 4. Canonical player baseline returns a complete roster from Supabase through Railway.
 5. Canonical Guild baseline returns complete Guild membership through Railway.
 6. Explicit live player/Guild refresh reaches the live gateway from Railway.
