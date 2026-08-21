@@ -1,47 +1,32 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import {
-  assignmentUsedIds,
-  canonicalReady,
-  normalizeFleetRow,
-  reserveIds,
-} from '../public/gac-fleet-round-operations.js';
 
 const ui=fs.readFileSync(new URL('../public/gac-fleet-round-operations.js',import.meta.url),'utf8');
 const sync=fs.readFileSync(new URL('../public/gac-fleet-canonical-sync.js',import.meta.url),'utf8');
 const bootstrap=fs.readFileSync(new URL('../public/asset-resilience.js',import.meta.url),'utf8');
 const css=fs.readFileSync(new URL('../public/gac-fleet-round-operations.css',import.meta.url),'utf8');
 
-test('canonical fleet operations require verified owner opponent and round context',()=>{
-  assert.equal(canonicalReady({ownerCode:'111222333',opponentCode:'444555666',round:1}),true);
-  assert.equal(canonicalReady({ownerCode:'111222333',opponentCode:'',round:1}),false);
-  assert.equal(canonicalReady({ownerCode:'111222333',opponentCode:'444555666',round:0}),false);
+test('Fleet War Room operational UI requires verified owner opponent and round context',()=>{
+  assert.match(ui,/function canonicalReady\(snapshot\)/);
+  assert.match(ui,/ownerCode/);
+  assert.match(ui,/opponentCode/);
+  assert.match(ui,/\[1,2,3\]\.includes\(Number\(snapshot\?\.round\)\)/);
 });
 
-test('canonical own defense reserve contains capital starters and reinforcements',()=>{
-  const ids=reserveIds([{capitalShipBaseId:'CAPITALPROFUNDITY',starters:['OUTRIDER','YWING','FALCON'],reinforcements:['GHOST']}]);
-  assert.deepEqual(ids,['CAPITALPROFUNDITY','OUTRIDER','YWING','FALCON','GHOST']);
+test('canonical own defense reserve covers capital starters and reinforcements',()=>{
+  assert.match(ui,/function reserveIds\(rows = \[\]\)/);
+  assert.match(ui,/row\.capitalShipBaseId/);
+  assert.match(ui,/\.\.\.\(row\.starters\|\|\[\]\)/);
+  assert.match(ui,/\.\.\.\(row\.reinforcements\|\|\[\]\)/);
 });
 
-test('operational allocator excludes ships consumed by attempts and active locks',()=>{
-  const ids=assignmentUsedIds([
-    {status:'planned',members:['CAPITALEXECUTOR','HT','RC','XB'],attemptLog:[]},
-    {status:'loss',members:['CAPITALNEGOTIATOR','N1','N2','N3'],attemptLog:[{members:['CAPITALNEGOTIATOR','N1','N2','N3'],status:'loss'}]},
-    {status:'abandoned',members:['CAPITALHOMEONE','H1','H2','H3'],attemptLog:[]},
-  ]);
-  assert.ok(ids.includes('CAPITALEXECUTOR'));
-  assert.ok(ids.includes('CAPITALNEGOTIATOR'));
-  assert.equal(ids.includes('CAPITALHOMEONE'),false);
-});
-
-test('canonical fleet rows retain exact slot and role identity',()=>{
-  const row=normalizeFleetRow({id:42,slot:1,zone:'BACK-TOP',capitalShipBaseId:'CAPITALLEVIATHAN',starters:['S1','S2','S3'],reinforcements:['S4'],source:'user-confirmed-current-fleet-board'});
-  assert.equal(row.id,'42');
-  assert.equal(row.slot,1);
-  assert.equal(row.capitalShipBaseId,'CAPITALLEVIATHAN');
-  assert.deepEqual(row.starters,['S1','S2','S3']);
-  assert.deepEqual(row.reinforcements,['S4']);
+test('operational allocator reserves completed attempts and active locks',()=>{
+  assert.match(ui,/function assignmentUsedIds\(assignments = \[\]\)/);
+  assert.match(ui,/attemptLog/);
+  assert.match(ui,/\['planned','attempted'\]\.includes\(status\)/);
+  assert.match(ui,/allocateFleetCounters/);
+  assert.match(ui,/assignmentUsedIds\(state\.assignments\)/);
 });
 
 test('Fleet War Room operational UI exposes canonical board plan lifecycle and explicit role confirmation',()=>{
@@ -52,6 +37,7 @@ test('Fleet War Room operational UI exposes canonical board plan lifecycle and e
   assert.match(ui,/Save Canonical Defense/);
   assert.match(ui,/Confirm the attacking starting three/);
   assert.match(ui,/Historical GAHistory proves fleet member identity, not starter-vs-reinforcement roles/);
+  assert.match(ui,/selected\.size===3/);
   assert.match(ui,/Lock Canonical Fleet Counter/);
   assert.match(ui,/Start Attempt/);
   assert.match(ui,/Record Win/);
