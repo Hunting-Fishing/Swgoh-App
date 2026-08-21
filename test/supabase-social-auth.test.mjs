@@ -100,7 +100,7 @@ test('Discord identity mapping stores stable provider id without provider tokens
   assert.equal(Object.hasOwn(row, 'provider_refresh_token'), false);
 });
 
-test('social auth start uses Supabase authorize + PKCE and an HttpOnly state cookie', async () => {
+test('social auth start uses Supabase authorize + PKCE, exact callback URL, and an HttpOnly OAuth cookie', async () => {
   const calls = [];
   const social = createSupabaseSocialAuth(ENV, {
     fetch: async (url) => {
@@ -125,9 +125,8 @@ test('social auth start uses Supabase authorize + PKCE and an HttpOnly state coo
   assert.equal(location.searchParams.get('code_challenge_method'), 's256');
   assert.ok(location.searchParams.get('code_challenge'));
   const redirectTo = new URL(location.searchParams.get('redirect_to'));
-  assert.equal(redirectTo.origin, 'https://command.example');
-  assert.equal(redirectTo.pathname, '/api/auth/oauth/callback');
-  assert.ok(redirectTo.searchParams.get('state'));
+  assert.equal(redirectTo.href, 'https://command.example/api/auth/oauth/callback');
+  assert.equal(redirectTo.search, '');
   const oauthCookie = String(res.headers['Set-Cookie'][0]);
   assert.match(oauthCookie, /^swgoh_cc_oauth=/);
   assert.match(oauthCookie, /HttpOnly/);
@@ -136,7 +135,7 @@ test('social auth start uses Supabase authorize + PKCE and an HttpOnly state coo
   assert.equal(calls.length, 1);
 });
 
-test('callback rejects state mismatch without token exchange', async () => {
+test('callback rejects a missing OAuth cookie without token exchange', async () => {
   let tokenCalls = 0;
   const social = createSupabaseSocialAuth(ENV, {
     fetch: async (url) => {
@@ -148,26 +147,10 @@ test('callback rejects state mismatch without token exchange', async () => {
     store: { status: () => ({ configured: false }) },
   });
 
-  const startRes = fakeResponse();
-  social.providers = social.providers;
-  // Prime provider state through the settings endpoint.
-  const enabledSocial = createSupabaseSocialAuth(ENV, {
-    fetch: async (url) => {
-      if (url.endsWith('/auth/v1/settings')) return new Response(JSON.stringify({ external: { discord: true } }), { status: 200 });
-      if (url.includes('/auth/v1/token')) { tokenCalls += 1; return new Response('{}', { status: 500 }); }
-      return new Response('{}', { status: 500 });
-    },
-    randomBytes: (size) => Buffer.alloc(size, 3),
-    now: () => 1_000_000,
-    store: { status: () => ({ configured: false }) },
-  });
-  await enabledSocial.start(request(), startRes, 'discord', '/onboarding');
-  const oauthCookie = cookieValue(startRes.headers['Set-Cookie'], 'swgoh_cc_oauth');
-  const callbackReq = request('/api/auth/oauth/callback', `swgoh_cc_oauth=${encodeURIComponent(oauthCookie)}`);
   const callbackRes = fakeResponse();
-  await enabledSocial.callback(callbackReq, callbackRes, new URL('https://command.example/api/auth/oauth/callback?state=wrong&code=abc'));
+  await social.callback(request('/api/auth/oauth/callback'), callbackRes, new URL('https://command.example/api/auth/oauth/callback?code=abc'));
   assert.equal(callbackRes.status, 303);
-  assert.match(callbackRes.headers.Location, /oauth_state_mismatch/);
+  assert.match(callbackRes.headers.Location, /missing_oauth_state/);
   assert.equal(tokenCalls, 0);
 });
 
@@ -216,12 +199,12 @@ test('successful callback exchanges PKCE code server-side, writes social identit
   await social.start(request(), startRes, 'discord', '/onboarding');
   const authorize = new URL(startRes.headers.Location);
   const redirectTo = new URL(authorize.searchParams.get('redirect_to'));
-  const expectedState = redirectTo.searchParams.get('state');
+  assert.equal(redirectTo.search, '');
   const oauthCookie = cookieValue(startRes.headers['Set-Cookie'], 'swgoh_cc_oauth');
 
   const callbackRes = fakeResponse();
   const callbackReq = request('/api/auth/oauth/callback', `swgoh_cc_oauth=${encodeURIComponent(oauthCookie)}`);
-  await social.callback(callbackReq, callbackRes, new URL(`https://command.example/api/auth/oauth/callback?state=${encodeURIComponent(expectedState)}&code=auth-code`));
+  await social.callback(callbackReq, callbackRes, new URL('https://command.example/api/auth/oauth/callback?code=auth-code'));
 
   assert.equal(callbackRes.status, 303);
   assert.equal(callbackRes.headers.Location, '/onboarding');
