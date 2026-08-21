@@ -10,7 +10,7 @@ import {
   transitionAllowed,
 } from '../gac-fleet-attack-plan-service.mjs';
 
-const migration=fs.readFileSync(new URL('../supabase/migrations/20260821121500_gac_fleet_round_state.sql',import.meta.url),'utf8');
+const migration=fs.readFileSync(new URL('../supabase/migrations/20260821033548_gac_fleet_round_state.sql',import.meta.url),'utf8');
 const boardApi=fs.readFileSync(new URL('../gac-fleet-board-api.mjs',import.meta.url),'utf8');
 const planApi=fs.readFileSync(new URL('../gac-fleet-attack-plan-api.mjs',import.meta.url),'utf8');
 const battleApi=fs.readFileSync(new URL('../gac-fleet-verified-battle-api.mjs',import.meta.url),'utf8');
