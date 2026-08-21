@@ -115,7 +115,7 @@ test('latest observation selection preserves historical revisions while returnin
   assert.equal(latestObservations(rows)[0].revision,3);
 });
 
-const migration=fs.readFileSync(new URL('../supabase/migrations/20260821130000_gac_fleet_cleanup_observations.sql',import.meta.url),'utf8');
+const migration=fs.readFileSync(new URL('../supabase/migrations/20260821035813_gac_fleet_cleanup_observations.sql',import.meta.url),'utf8');
 const api=fs.readFileSync(new URL('../gac-fleet-cleanup-observation-api.mjs',import.meta.url),'utf8');
 const router=fs.readFileSync(new URL('../gac-current-opponent-confirmation-api.mjs',import.meta.url),'utf8');
 const ui=fs.readFileSync(new URL('../public/gac-fleet-cleanup-control.js',import.meta.url),'utf8');
