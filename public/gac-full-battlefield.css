@@ -60,20 +60,20 @@
 /* The full 8-territory map needs the full content width. Put the selected/editor panel below at normal desktop widths. */
 @media (max-width:1499px){
   .gac-manual-enemy-board.gac-live-arena-layout:has(.gac-full-battlefield){grid-template-columns:minmax(0,1fr)!important}
-  .gac-manual-enemy-board.gac-live-arena-layout:has(.gac-full-battlefield)>:scope>header,
-  .gac-manual-enemy-board.gac-live-arena-layout:has(.gac-full-battlefield)>:scope>[data-gac-league-rank-strip],
-  .gac-manual-enemy-board.gac-live-arena-layout:has(.gac-full-battlefield)>:scope>.gac-manual-gac-map,
-  .gac-manual-enemy-board.gac-live-arena-layout:has(.gac-full-battlefield)>:scope>.gac-manual-editor,
-  .gac-manual-enemy-board.gac-live-arena-layout:has(.gac-full-battlefield)>:scope>.gac-live-arena-side{grid-column:1!important}
-  .gac-manual-enemy-board.gac-live-arena-layout:has(.gac-full-battlefield)>:scope>.gac-manual-gac-map{grid-row:3!important}
-  .gac-manual-enemy-board.gac-live-arena-layout:has(.gac-full-battlefield)>:scope>.gac-manual-editor,
-  .gac-manual-enemy-board.gac-live-arena-layout:has(.gac-full-battlefield)>:scope>.gac-live-arena-side{grid-row:4!important;max-height:none!important}
+  .gac-manual-enemy-board.gac-live-arena-layout:has(.gac-full-battlefield)>header,
+  .gac-manual-enemy-board.gac-live-arena-layout:has(.gac-full-battlefield)>[data-gac-league-rank-strip],
+  .gac-manual-enemy-board.gac-live-arena-layout:has(.gac-full-battlefield)>.gac-manual-gac-map,
+  .gac-manual-enemy-board.gac-live-arena-layout:has(.gac-full-battlefield)>.gac-manual-editor,
+  .gac-manual-enemy-board.gac-live-arena-layout:has(.gac-full-battlefield)>.gac-live-arena-side{grid-column:1!important}
+  .gac-manual-enemy-board.gac-live-arena-layout:has(.gac-full-battlefield)>.gac-manual-gac-map{grid-row:3!important}
+  .gac-manual-enemy-board.gac-live-arena-layout:has(.gac-full-battlefield)>.gac-manual-editor,
+  .gac-manual-enemy-board.gac-live-arena-layout:has(.gac-full-battlefield)>.gac-live-arena-side{grid-row:4!important;max-height:none!important}
 }
 
 @media (max-width:920px){
   .gac-manual-gac-map.gac-league-board-active.gac-full-battlefield{
     grid-template-columns:1fr 1fr!important;
-    grid-template-rows:auto auto minmax(180px,1fr) minmax(180px,1fr) auto minmax(180px,1fr) minmax(180px,1fr)!important;
+    grid-template-rows:auto minmax(180px,1fr) minmax(180px,1fr) auto auto minmax(180px,1fr) minmax(180px,1fr)!important;
     grid-template-areas:
       'ownlabel ownlabel'
       'own-front-top own-back-top'
