@@ -231,6 +231,7 @@ export function createGacAttackPlanApi(options = {}) {
             id: body?.id,
             status: body?.status,
             banners: body?.banners,
+            postAttempt: body?.postAttempt,
           });
           writeJson(response, 200, result, {
             "X-GAC-Source": result.source,
