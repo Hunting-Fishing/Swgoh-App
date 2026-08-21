@@ -1,4 +1,4 @@
-import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { supabaseCoreStore } from './supabase-core-store.mjs';
 import { normalizePublicOrigin, resolvePublicOrigin } from './auth-public-origin.mjs';
 
@@ -78,12 +78,6 @@ function parseBase64urlJson(value) {
   } catch {
     return null;
   }
-}
-
-function secureEqual(left, right) {
-  const a = Buffer.from(clean(left));
-  const b = Buffer.from(clean(right));
-  return a.length > 0 && a.length === b.length && timingSafeEqual(a, b);
 }
 
 function pkcePair(random = randomBytes) {
@@ -198,14 +192,11 @@ export function createSupabaseSocialAuth(env = process.env, options = {}) {
     const origin = resolvePublicOrigin(request, config.publicOrigin);
     if (!origin) throw Object.assign(new Error('Could not determine the public Command Center origin.'), { status: 500 });
 
-    const state = random(24).toString('base64url');
     const { verifier, challenge } = pkcePair(random);
     const callback = new URL('/api/auth/oauth/callback', origin);
-    callback.searchParams.set('state', state);
     const oauthState = base64urlJson({
       provider,
       verifier,
-      state,
       next: safeNext(next),
       createdAt: now(),
     });
@@ -232,10 +223,6 @@ export function createSupabaseSocialAuth(env = process.env, options = {}) {
     const age = now() - Number(oauth.createdAt || 0);
     if (!Number.isFinite(age) || age < 0 || age > OAUTH_MAX_AGE_SECONDS * 1000) {
       redirect(response, '/login?oauth_error=expired_oauth_state', [clearOauth]);
-      return;
-    }
-    if (!secureEqual(url.searchParams.get('state'), oauth.state)) {
-      redirect(response, '/login?oauth_error=oauth_state_mismatch', [clearOauth]);
       return;
     }
     if (url.searchParams.get('error')) {
