@@ -9,12 +9,17 @@ function uniqueIds(values = []) {
 function normalizedBanners(value) {
   if (value === null || value === undefined || value === '') return null;
   const parsed = Number(value);
-  return Number.isFinite(parsed) && parsed >= 0 ? Math.floor(parsed) : null;
+  return Number.isFinite(parsed) && parsed >= 0 && Number.isInteger(parsed) ? parsed : null;
+}
+
+function bannerInputValid(value) {
+  return value === null || value === undefined || value === '' || normalizedBanners(value) !== null;
 }
 
 function resultDraft(statusInput, options = {}) {
   const status = clean(statusInput).toLowerCase();
   if (!['win','loss'].includes(status)) return Object.freeze({ valid:false, status:'', banners:null, postAttempt:null, error:'Result must be win or loss.' });
+  if (!bannerInputValid(options?.banners)) return Object.freeze({ valid:false, status, banners:null, postAttempt:null, error:'Banners must be a non-negative whole number or left blank if not confirmed.' });
   const banners = normalizedBanners(options?.banners);
   if (status === 'win') {
     return Object.freeze({
@@ -77,6 +82,7 @@ function resultTruthLabel(post = {}) {
 }
 
 export {
+  bannerInputValid,
   latestPostAttempt,
   normalizeId,
   normalizedBanners,
