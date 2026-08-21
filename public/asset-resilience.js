@@ -1,4 +1,5 @@
 import './gac-war-room-v3.js';
+import './gac-cleanup-attack-brief.js';
 import './gac-fleet-round-operations.js';
 import './gac-fleet-attempt-history.js';
 import './gac-fleet-cleanup-control.js';
