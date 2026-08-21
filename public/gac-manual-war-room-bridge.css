@@ -1,0 +1,37 @@
+.gac-manual-war-summary{display:grid;grid-template-columns:minmax(0,1fr) minmax(180px,.45fr);gap:14px;align-items:center;margin:12px 0 18px;padding:14px 16px;border:1px solid rgba(90,211,255,.28);border-radius:12px;background:linear-gradient(135deg,rgba(5,26,43,.94),rgba(10,14,26,.96));box-shadow:0 10px 26px rgba(0,0,0,.2)}
+.gac-manual-war-summary span,.gac-manual-war-panel header span{display:block;font-size:10px;font-weight:900;letter-spacing:.13em;color:#79dfff}
+.gac-manual-war-summary strong{display:block;margin-top:2px;font-size:20px;letter-spacing:.04em;color:#fff}
+.gac-manual-war-summary small{display:block;margin-top:3px;color:#9fb2c5}
+.gac-manual-war-progress{height:9px;border-radius:999px;overflow:hidden;background:rgba(255,255,255,.08)}
+.gac-manual-war-progress i{display:block;width:var(--gac-manual-war-progress,0%);height:100%;border-radius:inherit;background:linear-gradient(90deg,#2fa8ff,#72f5d0);transition:width .25s ease}
+.gac-manual-war-counter{display:grid;grid-template-columns:minmax(150px,.75fr) minmax(0,1.25fr);gap:10px;align-items:center;margin-top:10px;padding:10px;border:1px solid rgba(104,213,255,.24);border-radius:10px;background:rgba(4,18,31,.82)}
+.gac-manual-war-counter>div:first-child strong{display:block;font-size:11px;letter-spacing:.08em;color:#73dcff}
+.gac-manual-war-counter>div:first-child span{display:block;margin-top:3px;font-size:11px;color:#9eb5c7}
+.gac-manual-war-counter>div:last-child{display:flex;gap:7px;justify-content:flex-end;overflow-x:auto}
+.gac-manual-war-counter.is-locked{border-color:rgba(255,195,83,.4);background:rgba(38,27,7,.45)}
+.gac-manual-war-counter.is-locked>div:first-child strong{color:#ffc96c}
+.gac-manual-war-counter.is-cleared{display:block;border-color:rgba(80,228,154,.38);background:rgba(10,47,34,.45)}
+.gac-manual-war-counter.is-cleared strong{display:block;color:#69e6a4}
+.gac-manual-war-counter.is-cleared span{display:block;margin-top:3px;color:#a6c8b5}
+.gac-manual-war-counter.is-empty{display:block}
+.gac-manual-war-unit{display:grid;grid-template-rows:44px auto;width:48px;flex:0 0 48px;text-align:center;color:#dcecff}
+.gac-manual-war-unit img,.gac-manual-war-unit>b{width:44px;height:44px;border-radius:50%;object-fit:cover;border:1px solid rgba(126,222,255,.38);background:#0a1d2b}
+.gac-manual-war-unit>b{display:grid;place-items:center;font-size:12px}
+.gac-manual-war-unit small{margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:8px;color:#95a9bb}
+.gac-manual-war-panel{margin:10px 0;padding:11px 12px;border:1px solid rgba(104,213,255,.26);border-radius:10px;background:linear-gradient(135deg,rgba(7,24,39,.95),rgba(12,17,31,.96))}
+.gac-manual-war-panel.is-planned{border-color:rgba(255,196,85,.38)}
+.gac-manual-war-panel.is-attempted{border-color:rgba(174,120,255,.45)}
+.gac-manual-war-panel.is-win{border-color:rgba(78,224,151,.4)}
+.gac-manual-war-panel.is-loss{border-color:rgba(255,104,104,.4)}
+.gac-manual-war-panel header{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.gac-manual-war-panel header strong{display:block;margin-top:2px;font-size:13px;color:#fff}
+.gac-manual-war-panel header>b{font-size:10px;color:#a8bbca;white-space:nowrap}
+.gac-manual-war-panel>small{display:block;margin-top:5px;color:#8197aa}
+.gac-manual-war-panel>footer{display:flex;gap:8px;flex-wrap:wrap;margin-top:9px}
+.gac-manual-war-panel button{border:1px solid rgba(91,211,255,.44);border-radius:8px;padding:8px 10px;background:rgba(21,82,115,.46);color:#e9f8ff;font-size:10px;font-weight:900;letter-spacing:.05em;cursor:pointer}
+.gac-manual-war-panel button.is-muted{border-color:rgba(255,255,255,.16);background:rgba(255,255,255,.06);color:#aebbc7}
+.gac-manual-war-panel button:disabled{opacity:.48;cursor:wait}
+.gac-manual-war-note{font-size:10px;font-weight:900;letter-spacing:.06em;color:#9eb1c0}
+.gac-manual-war-cleared{font-size:11px;font-weight:900;color:#68e7a4}
+.gac-manual-war-error{margin-top:8px;padding:8px 9px;border:1px solid rgba(255,101,101,.35);border-radius:7px;background:rgba(84,18,18,.32);color:#ffb2b2;font-size:11px}
+@media(max-width:760px){.gac-manual-war-summary,.gac-manual-war-counter{grid-template-columns:1fr}.gac-manual-war-counter>div:last-child{justify-content:flex-start}}
