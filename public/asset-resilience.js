@@ -8,6 +8,7 @@ import './gac-manual-execution-contract.js';
 import './gac-board-editor-stability-fix.js';
 import './gac-manual-counter-planner.js';
 import './gac-battleground-redesign.js';
+import './gac-battleground-redesign-guard.js';
 import './gac-cleanup-attack-brief.js';
 import './gac-datacron-counter-intelligence-ui.js';
 import './gac-fleet-round-operations.js';
