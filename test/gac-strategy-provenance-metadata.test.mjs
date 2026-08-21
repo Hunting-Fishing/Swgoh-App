@@ -78,7 +78,7 @@ test('provenance rendering says NOT DECLARED and UNVERIFIED instead of coercing 
   assert.match(panel, /WHY EXECUTION IS LOCKED/);
   assert.match(chip, /Datacron unverified/);
   assert.match(chip, /Validity unverified/);
-  assert.doesNotMatch(panel, /Open with|target order|kill order/i);
+  assert.doesNotMatch(panel, /Reviewed fixture opener|Prioritize Baylan|Finish Shin|Eliminate [A-Z]/i);
 });
 
 test('source metadata line carries family author and capture dates without execution content', () => {
