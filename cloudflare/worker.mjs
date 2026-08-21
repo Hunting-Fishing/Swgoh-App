@@ -41,6 +41,13 @@ function copyResponseHeaders(headers) {
   return output;
 }
 
+function clearBrowserSessionCookies(headers) {
+  for (const name of ["swgoh_cc_access", "swgoh_cc_refresh", "swgoh_cc_oauth"]) {
+    headers.append("Set-Cookie", `${name}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`);
+  }
+  return headers;
+}
+
 function hasOauthCookie(headers) {
   const cookieHeader = clean(headers?.get?.("cookie"));
   return /(?:^|;\s*)swgoh_cc_oauth=/.test(cookieHeader);
@@ -58,6 +65,12 @@ function rootOauthCallbackRequest(request, url) {
     headers: request.headers,
     redirect: "manual",
   });
+}
+
+function isSameOriginSignout(request, url) {
+  if (request.method !== "POST" || url.pathname !== "/api/auth/signout") return false;
+  const origin = clean(request.headers.get("origin"));
+  return !origin || origin === url.origin;
 }
 
 async function proxyApi(request, env) {
@@ -83,10 +96,11 @@ async function proxyApi(request, env) {
   headers.set("x-swgoH-edge", "cloudflare");
   headers.delete("host");
 
+  const hasBody = !["GET", "HEAD"].includes(request.method);
   const upstreamRequest = new Request(upstream, {
     method: request.method,
     headers,
-    body: ["GET", "HEAD"].includes(request.method) ? undefined : request.body,
+    ...(hasBody ? { body: request.body, duplex: "half" } : {}),
     redirect: "manual",
   });
 
@@ -105,6 +119,30 @@ async function proxyApi(request, env) {
   });
 }
 
+async function signoutAtEdge(request, env) {
+  try {
+    const upstream = await proxyApi(request, env);
+    const headers = clearBrowserSessionCookies(copyResponseHeaders(upstream.headers));
+    headers.set("Cache-Control", "private, no-store");
+    headers.set("x-swgoH-edge-signout", "cleared");
+    return new Response(upstream.body, {
+      status: upstream.status,
+      statusText: upstream.statusText,
+      headers,
+    });
+  } catch {
+    const headers = clearBrowserSessionCookies(new Headers({
+      "Content-Type": "application/json; charset=utf-8",
+      "Cache-Control": "private, no-store",
+      "x-swgoH-edge-signout": "cleared-upstream-unavailable",
+    }));
+    return new Response(JSON.stringify({ authenticated: false, upstreamRevocation: "unavailable" }), {
+      status: 200,
+      headers,
+    });
+  }
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -117,6 +155,13 @@ export default {
       return proxyApi(oauthCallbackRequest, env);
     }
 
+    // Browser logout must be locally authoritative. Railway/Supabase revocation
+    // is still attempted, but the edge always expires every Command Center auth
+    // cookie so a surviving refresh token cannot silently recreate the session.
+    if (isSameOriginSignout(request, url)) {
+      return signoutAtEdge(request, env);
+    }
+
     if (url.pathname.startsWith("/api/")) {
       return proxyApi(request, env);
     }
@@ -125,4 +170,13 @@ export default {
   },
 };
 
-export { copyResponseHeaders, hasOauthCookie, proxyApi, readSetCookies, rootOauthCallbackRequest };
+export {
+  clearBrowserSessionCookies,
+  copyResponseHeaders,
+  hasOauthCookie,
+  isSameOriginSignout,
+  proxyApi,
+  readSetCookies,
+  rootOauthCallbackRequest,
+  signoutAtEdge,
+};
