@@ -1,5 +1,6 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { supabaseCoreStore } from './supabase-core-store.mjs';
+import { normalizePublicOrigin, resolvePublicOrigin } from './auth-public-origin.mjs';
 
 const ACCESS_COOKIE = 'swgoh_cc_access';
 const REFRESH_COOKIE = 'swgoh_cc_refresh';
@@ -24,7 +25,8 @@ function configFromEnv(env = process.env) {
   const url = trimUrl(env.SUPABASE_URL);
   const publishableKey = clean(env.SUPABASE_PUBLISHABLE_KEY || env.SUPABASE_ANON_KEY);
   const secureCookies = boolEnv(env.AUTH_COOKIE_SECURE, clean(env.NODE_ENV).toLowerCase() !== 'development');
-  return Object.freeze({ url, publishableKey, secureCookies, enabled: Boolean(url && publishableKey) });
+  const publicOrigin = normalizePublicOrigin(env.PUBLIC_APP_ORIGIN || env.APP_PUBLIC_ORIGIN);
+  return Object.freeze({ url, publishableKey, secureCookies, publicOrigin, enabled: Boolean(url && publishableKey) });
 }
 
 function parseCookies(request) {
@@ -58,12 +60,6 @@ function sessionCookies(session, secure) {
     cookie(ACCESS_COOKIE, clean(session?.access_token), { maxAge: accessMaxAge, secure }),
     cookie(REFRESH_COOKIE, clean(session?.refresh_token), { maxAge: 60 * 60 * 24 * 30, secure }),
   ];
-}
-
-function expectedOrigin(request) {
-  const host = clean(request?.headers?.['x-forwarded-host'] || request?.headers?.host);
-  const proto = clean(clean(request?.headers?.['x-forwarded-proto']).split(',')[0]) || 'https';
-  return host ? `${proto}://${host}` : '';
 }
 
 function safeNext(value) {
@@ -199,7 +195,7 @@ export function createSupabaseSocialAuth(env = process.env, options = {}) {
       redirect(response, `/login?oauth_error=${encodeURIComponent(`${provider}_not_enabled`)}`);
       return;
     }
-    const origin = expectedOrigin(request);
+    const origin = resolvePublicOrigin(request, config.publicOrigin);
     if (!origin) throw Object.assign(new Error('Could not determine the public Command Center origin.'), { status: 500 });
 
     const state = random(24).toString('base64url');
@@ -308,7 +304,18 @@ export function createSupabaseSocialAuth(env = process.env, options = {}) {
     return false;
   }
 
-  return Object.freeze({ handle, providers, start, callback, status: () => Object.freeze({ enabled: config.enabled, providers: [...PROVIDERS] }) });
+  return Object.freeze({
+    handle,
+    providers,
+    start,
+    callback,
+    status: () => Object.freeze({
+      enabled: config.enabled,
+      providers: [...PROVIDERS],
+      publicOriginConfigured: Boolean(config.publicOrigin),
+      publicOrigin: config.publicOrigin || null,
+    }),
+  });
 }
 
 export { identityRow, pkcePair, providerState, safeNext };
