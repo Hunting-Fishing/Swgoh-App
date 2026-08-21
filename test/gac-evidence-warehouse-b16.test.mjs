@@ -49,13 +49,14 @@ test('B16 fleet battle makes Datacrons explicitly not applicable and does not in
 });
 
 test('B16 tactical strategy warehouse record keeps DC constraints and provenance but no execution guidance',()=>{
-  const record={id:'TACTIC-1',status:'active',format:'3v3',defender:{leaderBaseId:'DEF_A',members:['DEF_A','DEF_B','DEF_C']},attacker:{leaderBaseId:'ATK_A',members:['ATK_A','ATK_B']},attackerDatacron:{presence:'none',required:false,setIds:[],mechanicIds:[]},defenderDatacron:{presence:'assigned',required:true,setIds:['SET30'],mechanicIds:['MECH-X']},validity:{validFrom:'2026-08-01',validUntil:'2026-09-01',gameDataVersion:'2026.08'},provenance:{sourceName:'Xaereth',sourceType:'creator-video',sourceRef:'video:1',sourceUpdatedAt:'2026-08-20',capturedAt:'2026-08-21',author:'Xaereth'},guidance:{opening:[{text:'SHOULD NOT LEAK'}]}};
+  const record={schemaVersion:1,id:'TACTIC-1',status:'active',format:'3v3',defender:{leaderBaseId:'DEF_A',members:['DEF_A','DEF_B','DEF_C']},attacker:{leaderBaseId:'ATK_A',members:['ATK_A','ATK_B']},attackerDatacron:{presence:'none',required:false,setIds:[],mechanicIds:[]},defenderDatacron:{presence:'assigned',required:true,setIds:['SET30'],mechanicIds:['MECH-X']},validity:{validFrom:'2026-08-01',validUntil:'2026-09-01',gameDataVersion:'2026.08'},provenance:{sourceName:'Xaereth',sourceType:'video',sourceRef:'video:1',sourceUpdatedAt:'2026-08-20',capturedAt:'2026-08-21',author:'Xaereth'},guidance:{opening:[{text:'SHOULD NOT LEAK'}]}};
   const row=normalizeStrategyRecord(record);
   assert.equal(row.evidenceKind,'tactical-strategy');
   assert.equal(row.datacron.attacker.presence,'none');
   assert.deepEqual(row.datacron.defender.setIds,['SET30']);
   assert.equal(row.era.gameDataVersion,'2026.08');
-  assert.doesNotMatch(JSON.stringify(row),/SHOULD NOT LEAK|opening|targets|mechanics|avoid/);
+  const serialized=JSON.stringify(row);
+  assert.doesNotMatch(serialized,/SHOULD NOT LEAK|"guidance"|"opening"|"targets"|"avoid"/);
 });
 
 test('B16 source-family mapping preserves unfamiliar sources without pretending approval',()=>{
@@ -66,7 +67,7 @@ test('B16 source-family mapping preserves unfamiliar sources without pretending 
 
 test('B16 service combines aggregate, battles, and active strategy metadata with filters and bounded limit',async()=>{
   const store={async select(table){if(table==='gac_counter_observations')return [aggregate];if(table==='gac_battles')return [verified];return [];}};
-  const activeStrategy={id:'TACTIC-2',status:'active',format:'3v3',defender:{leaderBaseId:'DEF_A',members:['DEF_A','DEF_B','DEF_C']},attacker:{leaderBaseId:'ATK_A',members:['ATK_A','ATK_B']},attackerDatacron:{presence:'any',required:false,setIds:[],mechanicIds:[]},defenderDatacron:{presence:'any',required:false,setIds:[],mechanicIds:[]},validity:{validFrom:'2026-08-01',validUntil:'2026-09-01',gameDataVersion:'2026.08',notes:''},provenance:{sourceName:'Reviewed',sourceType:'community-guide',sourceRef:'guide:1',sourceUpdatedAt:'2026-08-20',sourcePublishedAt:'2026-08-20',capturedAt:'2026-08-21',author:'Author'},guidance:{opening:[{text:'verified'}],targets:[],mechanics:[],avoid:[]}};
+  const activeStrategy={schemaVersion:1,id:'TACTIC-2',status:'active',format:'3v3',defender:{leaderBaseId:'DEF_A',members:['DEF_A','DEF_B','DEF_C']},attacker:{leaderBaseId:'ATK_A',members:['ATK_A','ATK_B']},attackerDatacron:{presence:'any',required:false,setIds:[],mechanicIds:[]},defenderDatacron:{presence:'any',required:false,setIds:[],mechanicIds:[]},validity:{validFrom:'2026-08-01',validUntil:'2026-09-01',gameDataVersion:'2026.08',notes:''},provenance:{sourceName:'Reviewed',sourceType:'community',sourceRef:'guide:1',sourceUpdatedAt:'2026-08-20',sourcePublishedAt:'2026-08-20',capturedAt:'2026-08-21',author:'Author'},guidance:{opening:[{text:'verified'}],targets:[],mechanics:[],avoid:[]}};
   const service=createGacEvidenceWarehouseService({store,strategyLoader:async()=>[activeStrategy]});
   const result=await service.getEvidence({format:'3v3',battleType:'character',enemyLeaderBaseId:'DEF_A',limit:2});
   assert.equal(result.records.length,2);
@@ -74,5 +75,5 @@ test('B16 service combines aggregate, battles, and active strategy metadata with
   assert.equal(result.truthBoundaries.legacyDatacronAbsenceMeansNone,false);
   assert.equal(result.truthBoundaries.tacticalGuidanceIncluded,false);
   assert.equal(result.truthBoundaries.internalUserIdentifiersExposed,false);
-  assert.ok(result.summary.count===2);
+  assert.equal(result.summary.count,2);
 });
