@@ -144,6 +144,13 @@ function cleanupContextFromAttemptLog(value, defenseMembers = []) {
   }
   return Object.freeze({ ready: false, attemptIndex: null, survivorBaseIds: Object.freeze([]), code: "loss-log-missing" });
 }
+function resultDefenseMembersForAssignment(assignment = {}, defenseMembers = []) {
+  const metadata = assignment?.metadata && typeof assignment.metadata === "object" ? assignment.metadata : {};
+  if (clean(metadata.planKind).toLowerCase() !== "cleanup") {
+    return Object.freeze([...new Set(asArray(defenseMembers).map(normalizeBaseId).filter(Boolean))]);
+  }
+  return Object.freeze([...new Set(asArray(metadata.cleanupSurvivorBaseIds).map(normalizeBaseId).filter(Boolean))]);
+}
 
 export function createGacAttackPlanService(options = {}) {
   const store = options.store || supabaseCoreStore;
@@ -336,7 +343,13 @@ export function createGacAttackPlanService(options = {}) {
     const attemptLog = [...sanitizeAttemptLog(assignment.attempt_log)];
     const closesAttempt = ["win", "loss"].includes(status) && !["win", "loss"].includes(previousStatus);
     if (closesAttempt) {
-      const postAttempt = confirmedPostAttempt(input.postAttempt, status, defense.members);
+      const resultDefenseMembers = resultDefenseMembersForAssignment(assignment, defense.members);
+      if (clean(assignment?.metadata?.planKind).toLowerCase() === "cleanup" && !resultDefenseMembers.length) {
+        const error = new Error("The cleanup attempt no longer has a valid pre-attempt survivor set. Rebuild cleanup intelligence before recording a residual result.");
+        error.status = 409;
+        throw error;
+      }
+      const postAttempt = confirmedPostAttempt(input.postAttempt, status, resultDefenseMembers);
       attemptLog.push(Object.freeze({
         members: Object.freeze(asArray(assignment.attacker_members).map(normalizeBaseId).filter(Boolean)),
         leaderBaseId: normalizeBaseId(assignment.attacker_leader_base_id),
@@ -456,6 +469,7 @@ export {
   confirmedPostAttempt,
   normalizeBaseId,
   normalizedMembers,
+  resultDefenseMembersForAssignment,
   sanitizeAttempt,
   sanitizeAttemptLog,
   sanitizeDatacron,
