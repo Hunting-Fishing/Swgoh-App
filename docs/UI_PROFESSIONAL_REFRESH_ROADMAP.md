@@ -19,6 +19,7 @@ Core visual principles:
 - Game-like progress, mission, readiness and status presentation.
 - Shared navigation and card language across Player, Guild, GAC, TB and Actions.
 - Preserve existing live-data and authentication contracts while changing presentation.
+- Enhancement-only rule: existing information must remain accessible. Older/reference surfaces may be visually demoted, but not removed merely to make a screen cleaner.
 
 ## Current audit findings
 
@@ -30,6 +31,7 @@ Core visual principles:
 6. Important actions often look similar to secondary utility controls.
 7. Desktop layouts prioritize maximum density over scanability and game-like presentation.
 8. Mobile behavior exists, but several dense desktop patterns should be redesigned rather than merely stacked.
+9. Some V3 cleanup logic hid older GAC scaffolding. This has been corrected so reference information remains visible under the enhancement-only rule.
 
 ## Rollout status
 
@@ -37,16 +39,16 @@ Core visual principles:
 | --- | --- | ---: |
 | Onboarding visual redesign | Implemented on styling branch | 100% |
 | Action Center visual redesign | Implemented on styling branch | 100% |
-| Shared palette / visual language | Established across onboarding, Actions, Player and GAC | 90% |
+| Shared palette / visual language | Established across onboarding, Actions, Player, GAC and Guild | 95% |
 | Player Command Center shell + overview | First readability / color / density pass implemented | 65% |
-| Global navigation / workspace tabs | First shared visual pass implemented | 55% |
-| GAC War Room visual modernization | Professional battle-room pass implemented; populated-state review pending | 80% |
-| Guild Command Center pages | Styling pass pending | 10% |
+| Global navigation / workspace tabs | First shared visual pass implemented | 60% |
+| GAC War Room visual modernization | Professional battle-room pass implemented; reference information preservation corrected | 85% |
+| Guild Command Center pages | Professional overview/member/capability styling implemented; populated-state review pending | 70% |
 | TB / ROTE map and planning surfaces | Styling pass pending | 5% |
 | Login / auth visual alignment | Pending after onboarding path stabilizes | 10% |
-| Cross-device polish + accessibility review | Responsive rules expanded; full review pending | 35% |
+| Cross-device polish + accessibility review | Responsive rules expanded; full review pending | 40% |
 
-Approximate overall visual modernization: **52%**.
+Approximate overall visual modernization: **60%**.
 
 ## Implemented in the Player overview pass
 
@@ -71,28 +73,40 @@ Approximate overall visual modernization: **52%**.
 - Added distinct visual treatment for evidence-backed counters, heuristic counters, missing counters and fleet territories.
 - Added responsive single-column territory ordering for narrower screens while retaining the desktop battlefield map.
 - Preserved existing live opponent lookup, manual board entry, counter logic, scouting/history, fleet handling, battle execution and Truth Gate behavior.
+- Corrected the V3 cleanup rule so older/reference GAC information remains visible instead of being hidden.
+
+## Implemented in the Guild Command Center pass
+
+- Added a brighter guild identity/header treatment without changing live guild fetches or hydration state.
+- Enlarged source/freshness indicators and refresh controls.
+- Upgraded Guild navigation tabs with readable touch targets and non-destructive icons.
+- Restyled the full guild stat set rather than removing or consolidating metrics.
+- Added color families for Guild GP, Galactic Legends, relic depth, ships and membership metrics.
+- Converted TB, TW and Raid capability cards into clearly separated game-mode surfaces while preserving their existing copy and actions.
+- Improved membership-change cards without reducing change history shown by the existing renderer.
+- Enlarged member search/filter/sort controls and maintained all current filtering options.
+- Increased guild member table readability while retaining all columns: member, total GP, character GP, ship GP, GLs, R7+, R9 and roster state.
+- Improved selected-member detail, Galactic Legend chips and top-unit presentation without changing the underlying roster model.
+- Added desktop/tablet/mobile responsive layouts.
+- Added regression tests that prohibit the new Guild professional layer from removing nodes, fetching alternate data, or hiding content.
 
 ## Next implementation order
 
-### 1. Player Command Center detail polish
+### 1. TB / ROTE professional pass
+
+- Preserve all tactical/map/planning information.
+- Improve phase/planet/mission hierarchy without reducing tactical detail.
+- Use planet/faction-specific accent colors and stronger mission state visuals.
+- Enlarge controls and mission labels that currently fall below the primary readability target.
+
+### 2. Player Command Center detail polish
 
 - Review real populated roster state for overflow and visual balance.
 - Improve feature-family accents for Journey, Farm, GAC, Guild and Resources.
-- Consolidate redundant top-level explanation copy where the dashboard already communicates the same state.
+- Preserve explanatory information while reducing visual competition through hierarchy rather than deletion.
 - Continue removing sub-0.7rem text from primary interaction surfaces.
 
-### 2. Guild Command Center
-
-- Create officer-oriented command sections with strong readiness status.
-- Distinguish member views from officer controls.
-- Consolidate TB, TW, raid and roster intelligence entry points.
-
-### 3. TB / ROTE
-
-- Preserve tactical density inside map/planning views while simplifying surrounding controls.
-- Use planet/faction-specific accent colors and stronger mission state visuals.
-
-### 4. Login / auth
+### 3. Login / auth
 
 - Align login/signup visual language with onboarding after the OAuth flow is stable.
 - Keep authentication messaging simple and avoid decorative changes that obscure errors.
@@ -101,5 +115,6 @@ Approximate overall visual modernization: **52%**.
 
 - No mock SWGOH player data should be introduced for production-facing states.
 - Styling changes should not alter authentication, Ally Code ownership verification, roster lookup or guild-binding contracts.
+- Existing information must remain accessible during UI modernization.
 - Decorative visuals should remain lightweight and CSS-driven unless a licensed/approved asset pipeline is established.
 - New shared styling should gradually reduce the number of conflicting one-off CSS rules rather than adding permanent override layers indefinitely.
