@@ -264,7 +264,8 @@ function editorHtml(){
   if(!state.editor)return `<div class="gac-board-editor-placeholder"><strong>Choose a territory slot</strong><span>Click an empty squad slot where the defense appears in your game.</span></div>`;
   const size=squadSize();const selected=state.editor.members.map(editorUnit);const query=clean(state.editor.query).toLowerCase();
   const results=editorUnits().filter((unit)=>!state.editor.members.includes(normalizeId(unit.baseId))&&(!query||clean(unit.name).toLowerCase().includes(query)||normalizeId(unit.baseId).toLowerCase().includes(query))).slice(0,64);
-  return `<section class="gac-board-editor"><header><div><span>VISIBLE ENEMY LINEUP</span><strong>${escapeHtml(zoneLabel(state.editor.zone))} · Slot ${Number(state.editor.slot)+1}</strong><small>Select ${size} characters exactly as they appear in-game.</small></div><button type="button" data-gac-board-close>Close</button></header><div class="gac-board-picked">${Array.from({length:size},(_,index)=>selectedSlot(selected[index],index)).join('')}</div><div class="gac-board-search"><input data-gac-board-search placeholder="Search ${state.opponentRoster?'opponent roster':'all characters'}…" value="${escapeAttr(state.editor.query||'')}"><b>${state.editor.members.length}/${size}</b></div><div class="gac-board-unit-results">${results.map((unit)=>`<button type="button" data-gac-board-add-unit="${escapeAttr(unit.baseId)}">${portrait(unit,true)}<span><strong>${escapeHtml(unit.name)}</strong><small>${state.opponentRoster?`R${n(unit.relic)} · ${number.format(n(unit.power))} GP · ${number.format(n(unit.speed))} spd`:'Static game catalog fallback'}</small></span></button>`).join('')||'<div class="gac-board-no-results">No matching characters.</div>'}</div><footer><label>Datacron<select data-gac-board-dc>${editorDatacronOptions()}</select></label><button type="button" data-gac-board-save ${editorReady()?'':'disabled'}>${state.busy?'Saving…':'Save Defense'}</button></footer><p class="${state.editor.datacronUnresolved?'is-warning':''}">${escapeHtml(editorDatacronStatus())}</p><p>Verified opponent + round → canonical current-board save. Otherwise this remains a local manual observation and still feeds the smart planner.</p></section>`;
+  const serverNote=state.editor.storage==='server'?'SERVER-BACKED · War Room plan/attempt mutation gate applies.':'LOCAL / NEW OBSERVATION';
+  return `<section class="gac-board-editor"><header><div><span>VISIBLE ENEMY LINEUP</span><strong>${escapeHtml(zoneLabel(state.editor.zone))} · Slot ${Number(state.editor.slot)+1}</strong><small>${escapeHtml(serverNote)} · select ${size} characters exactly as they appear in-game.</small></div><button type="button" data-gac-board-close>Close</button></header><div class="gac-board-picked">${Array.from({length:size},(_,index)=>selectedSlot(selected[index],index)).join('')}</div><div class="gac-board-search"><input data-gac-board-search placeholder="Search ${state.opponentRoster?'opponent roster':'all characters'}…" value="${escapeAttr(state.editor.query||'')}"><b>${state.editor.members.length}/${size}</b></div><div class="gac-board-unit-results">${results.map((unit)=>`<button type="button" data-gac-board-add-unit="${escapeAttr(unit.baseId)}">${portrait(unit,true)}<span><strong>${escapeHtml(unit.name)}</strong><small>${state.opponentRoster?`R${n(unit.relic)} · ${number.format(n(unit.power))} GP · ${number.format(n(unit.speed))} spd`:'Static game catalog fallback'}</small></span></button>`).join('')||'<div class="gac-board-no-results">No matching characters.</div>'}</div><footer><label>Datacron<select data-gac-board-dc>${editorDatacronOptions()}</select></label><button type="button" data-gac-board-save ${editorReady()?'':'disabled'}>${state.busy?'Saving…':'Save Defense'}</button></footer>${state.editor.error?`<p class="is-warning">${escapeHtml(state.editor.error)}</p>`:''}<p class="${state.editor.datacronUnresolved?'is-warning':''}">${escapeHtml(editorDatacronStatus())}</p><p>Verified opponent + round → canonical current-board save. Otherwise this remains a local manual observation and still feeds the smart planner.</p></section>`;
 }
 
 function defenseDatacronLabel(defense={}){
@@ -343,6 +344,9 @@ function startEditor(zone,defense=null,forcedSlot=null){
     datacronId:dc.id,
     datacron:dc.datacron,
     datacronUnresolved:dc.unresolved,
+    storage:clean(defense?.storage).toLowerCase()==='server'?'server':'draft',
+    serverId:defense?.id??null,
+    error:'',
     query:'',
   };
   if(!state.editor.leaderBaseId&&state.editor.members.length)state.editor.leaderBaseId=state.editor.members[0];render();document.querySelector('[data-gac-board-editor-host]')?.scrollIntoView?.({behavior:'smooth',block:'center'});
@@ -354,9 +358,10 @@ function openSquadSlot(zone,slot){
   const defense=activeSquadDefenses().find((row)=>clean(row.zone).toUpperCase()===normalizedZone&&Number(row.slot)===numericSlot)||null;
   startEditor(normalizedZone,defense,numericSlot);return true;
 }
-function addUnit(id){if(!state.editor||state.editor.members.length>=squadSize())return;id=normalizeId(id);if(!id||state.editor.members.includes(id))return;state.editor.members.push(id);if(!state.editor.leaderBaseId)state.editor.leaderBaseId=id;state.editor.query='';render();}
-function removeUnit(id){if(!state.editor)return;id=normalizeId(id);state.editor.members=state.editor.members.filter((value)=>value!==id);if(state.editor.leaderBaseId===id)state.editor.leaderBaseId=state.editor.members[0]||'';render();}
-function makeLeader(id){if(!state.editor)return;id=normalizeId(id);if(state.editor.members.includes(id))state.editor.leaderBaseId=id;render();}
+function clearEditorError(){if(state.editor)state.editor.error='';}
+function addUnit(id){if(!state.editor||state.editor.members.length>=squadSize())return;id=normalizeId(id);if(!id||state.editor.members.includes(id))return;clearEditorError();state.editor.members.push(id);if(!state.editor.leaderBaseId)state.editor.leaderBaseId=id;state.editor.query='';render();}
+function removeUnit(id){if(!state.editor)return;clearEditorError();id=normalizeId(id);state.editor.members=state.editor.members.filter((value)=>value!==id);if(state.editor.leaderBaseId===id)state.editor.leaderBaseId=state.editor.members[0]||'';render();}
+function makeLeader(id){if(!state.editor)return;clearEditorError();id=normalizeId(id);if(state.editor.members.includes(id))state.editor.leaderBaseId=id;render();}
 function editorDefense(){
   if(!state.editor)return null;
   const selection={state:state.editor.datacronState,id:state.editor.datacronId,datacron:state.editor.datacron,unresolved:state.editor.datacronUnresolved};
@@ -381,9 +386,15 @@ async function persistDefense(defense){
 }
 async function saveEditor(){
   if(!editorReady())return;
-  const defense=editorDefense();state.busy=true;render();let persisted=false;
+  const serverBacked=state.editor.storage==='server';
+  const defense=editorDefense();state.busy=true;state.editor.error='';render();let persisted=false;let persistError=null;
   try{const result=await persistDefense(defense);if(result?.saved){persisted=true;state.drafts=state.drafts.filter((row)=>boardKey(row)!==boardKey(defense));writeDrafts();await loadServerDefenses();window.dispatchEvent(new CustomEvent('gac-board-evidence-updated',{detail:{owner:'opponent',action:'saved',round:currentRound()}}));}}
-  catch(error){if(![401,409].includes(Number(error?.status)))console.warn('Manual GAC board save failed',error);}
+  catch(error){persistError=error;if(![401,409].includes(Number(error?.status)))console.warn('Manual GAC board save failed',error);}
+  if(serverBacked&&!persisted){
+    state.busy=false;
+    state.editor.error=clean(persistError?.message||'Server-backed defense was not changed. Resolve or release the War Room plan/attempt state before editing this slot.');
+    render();return;
+  }
   if(!persisted)saveDraft(defense);state.editor=null;state.busy=false;await buildPlan();render();
 }
 async function deleteDefense(key){
@@ -432,6 +443,7 @@ function bind(){
     if(event.target?.matches?.('[data-gac-board-format]')){const mode=document.querySelector('[data-gacv2-mode]');if(mode){mode.value=Number(event.target.value)===3?'3':'5';mode.dispatchEvent(new Event('change',{bubbles:true}));}state.editor=null;schedule(60,false);return;}
     if(event.target?.matches?.('[data-gac-board-dc]')&&state.editor){
       const selection=selectionFromControl(event.target.value,state.opponentRoster||{});
+      state.editor.error='';
       state.editor.datacronState=selection.state;
       state.editor.datacronId=selection.id;
       state.editor.datacron=selection.datacron;
@@ -444,7 +456,7 @@ function bind(){
   window.addEventListener('gac-current-opponent-manually-confirmed',()=>schedule(100,true));
   window.addEventListener('gac-board-evidence-updated',()=>schedule(110,true));
 }
-function injectStyle(){if(document.querySelector('link[data-gac-visible-board-style]'))return;const link=document.createElement('link');link.rel='stylesheet';link.href='/gac-manual-board-workspace.css?v=20260821-b07dc';link.dataset.gacVisibleBoardStyle='true';document.head.appendChild(link);}
+function injectStyle(){if(document.querySelector('link[data-gac-visible-board-style]'))return;const link=document.createElement('link');link.rel='stylesheet';link.href='/gac-manual-board-workspace.css?v=20260821-b07dc2';link.dataset.gacVisibleBoardStyle='true';document.head.appendChild(link);}
 
 if(typeof document!=='undefined'){
   injectStyle();bind();schedule(220,true);document.addEventListener('DOMContentLoaded',()=>schedule(100,true),{once:true});window.addEventListener('hashchange',()=>schedule(140,true));new MutationObserver(()=>{if(!document.querySelector('[data-gac-board-workspace]'))schedule(60,false);}).observe(document.documentElement,{childList:true,subtree:true});
