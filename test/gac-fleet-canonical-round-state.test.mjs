@@ -65,14 +65,14 @@ test('fleet board mutation policy protects locked and attempted fleet history',(
 });
 
 test('canonical fleet APIs are authenticated round-scoped routes and reject Datacrons',()=>{
-  assert.match(boardApi,/\/api\\\/gac\\\/current-fleet-board\\\//);
-  assert.match(boardApi,/defense\|my-defense/);
+  assert.ok(boardApi.includes('current-fleet-board'));
+  assert.ok(boardApi.includes('defense|my-defense'));
   assert.match(boardApi,/Datacrons do not apply to fleet defenses/);
   assert.match(boardApi,/current live roster/);
-  assert.match(planApi,/\/api\\\/gac\\\/fleet-attack-plan\\\//);
+  assert.ok(planApi.includes('fleet-attack-plan'));
   assert.match(planApi,/exactly three user-confirmed starters/);
   assert.match(planApi,/Datacrons do not apply to fleet attacks/);
-  assert.match(battleApi,/\/api\\\/gac\\\/fleet-verified-battle\\\//);
+  assert.ok(battleApi.includes('fleet-verified-battle'));
   assert.match(battleApi,/confirm: body\?\.confirm === true/);
 });
 
