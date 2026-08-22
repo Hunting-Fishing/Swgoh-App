@@ -68,6 +68,18 @@ function upgradeText(cere, jkck, babyCal, status) {
   return needs.join(" + ") || "Ready";
 }
 
+function profileTitle(member = {}) {
+  return text(member.playerTitle || member.title || member.namePlate || member.nameplate || member.profileTitle);
+}
+
+function memberRole(member = {}) {
+  return text(member.role || member.memberRole || member.guildRole || member.guildMemberLevel);
+}
+
+function portraitKey(member = {}) {
+  return text(member.portraitId || member.portrait || member.avatarId || member.avatar || member.profileIconId);
+}
+
 export function buildZeffoMemberReadiness(member = {}, index = 0) {
   const units = unitMap(member);
   const cere = normalizeZeffoUnitState(units.get(ZEFFO_UNITS.cere));
@@ -84,6 +96,9 @@ export function buildZeffoMemberReadiness(member = {}, index = 0) {
     name: text(member.name || member.playerName || memberId(member, index)),
     galacticPower: finite(member.galacticPower, 0),
     rosterAvailable: member.rosterAvailable === true || asArray(member.units).length > 0,
+    profileTitle: profileTitle(member),
+    memberRole: memberRole(member),
+    portraitKey: portraitKey(member),
     cere,
     jkck,
     babyCal,
@@ -141,7 +156,7 @@ export function filterGuildZeffoRows(rows = [], options = {}) {
   return Object.freeze(asArray(rows).filter((row) => {
     if (status !== "ALL" && row.status !== status) return false;
     if (!query) return true;
-    return [row.name, row.allyCode, row.status, row.preferredPath, row.upgradeText]
+    return [row.name, row.allyCode, row.status, row.preferredPath, row.upgradeText, row.profileTitle, row.memberRole]
       .join(" ").toLowerCase().replace(/-/g, "").includes(query);
   }));
 }
