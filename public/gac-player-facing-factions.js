@@ -1,5 +1,6 @@
 const PLAYER_FACTIONS = Object.freeze([
   '501st',
+  'Attacker',
   'Bad Batch',
   'Bounty Hunter',
   'Clone Trooper',
@@ -13,18 +14,22 @@ const PLAYER_FACTIONS = Object.freeze([
   'Galactic Republic',
   'Geonosian',
   'Gungan',
+  'Healer',
   'Hutt Cartel',
+  'ISB',
   'Imperial Remnant',
   'Imperial Trooper',
   'Inquisitorius',
   'Jawa',
   'Jedi',
   'Jedi Vanguard',
+  'Leader',
   'Mandalorian',
   'Mercenary',
   'New Republic',
   'Nightsister',
   'Old Republic',
+  'Order 66 Raid',
   'Phoenix',
   'Pirate',
   'Rebel',
@@ -37,6 +42,8 @@ const PLAYER_FACTIONS = Object.freeze([
   'Sith Empire',
   'Smuggler',
   'Spectre',
+  'Support',
+  'Tank',
   'Tusken',
   'Unaligned Force User',
   'Wookiee',
@@ -70,6 +77,8 @@ const ALIASES = new Map([
   ['imperialtroopers', 'Imperial Trooper'],
   ['rebelfighters', 'Rebel Fighter'],
   ['unalignedforceusers', 'Unaligned Force User'],
+  ['order66', 'Order 66 Raid'],
+  ['order66raid', 'Order 66 Raid'],
 ]);
 
 function clean(value) {
@@ -89,7 +98,7 @@ function normalizeTag(value) {
 
 function stripKnownPrefix(key) {
   let value = key;
-  for (const prefix of ['species', 'affiliation', 'profession', 'faction', 'category', 'tag']) {
+  for (const prefix of ['species', 'affiliation', 'profession', 'role', 'faction', 'category', 'tag']) {
     if (value.startsWith(prefix)) {
       value = value.slice(prefix.length);
       break;
@@ -103,7 +112,7 @@ function canonicalFaction(value) {
   const key = normalizeTag(value);
   if (!key) return '';
   if (INTERNAL_PREFIXES.some((prefix) => key.startsWith(prefix))) return '';
-  if (['lightside', 'darkside', 'neutral', 'human', 'leader', 'attacker', 'support', 'tank', 'healer'].includes(key)) return '';
+  if (['lightside', 'darkside', 'neutral', 'human'].includes(key)) return '';
 
   if (NORMALIZED_FACTIONS.has(key)) return NORMALIZED_FACTIONS.get(key);
   if (ALIASES.has(key)) return ALIASES.get(key);
