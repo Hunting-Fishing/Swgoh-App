@@ -11,6 +11,7 @@ import { aggregateRoteOperations } from './rote-operations.mjs';
 import { supabaseAuthSession } from './supabase-auth-session.mjs';
 import { tbAssignmentVersionService } from './tb-assignment-version-service.mjs';
 import { tbStage9PlanPreviewService } from './tb-stage9-plan-preview-service.mjs';
+import { tbStage10WebDeliveryService } from './tb-stage10-web-delivery-service.mjs';
 import { buildGuildRoteOperationSafety } from './public/guild-rote-operation-safety.js';
 import { planGuildTbOperationsParity } from './public/guild-operations-parity-planner.js';
 import { planGuildTwDefenseAssignments } from './public/guild-tw-defense-assigner.js';
@@ -276,6 +277,7 @@ export function createGuildOperationsApi(options = {}) {
   const delivery = options.delivery || guildOperationsDiscordDelivery;
   const immutablePreview = options.immutablePreview || tbStage9PlanPreviewService;
   const assignmentVersions = options.assignmentVersions || tbAssignmentVersionService;
+  const immutableDelivery = options.immutableDelivery || tbStage10WebDeliveryService;
   const fetchImpl = options.fetch || fetch;
 
   async function requireUser(request) {
@@ -328,12 +330,7 @@ export function createGuildOperationsApi(options = {}) {
         'TB_IMMUTABLE_VERIFIED_BINDING_REQUIRED',
       );
     }
-    return Object.freeze({
-      guild: officer.guild,
-      userId,
-      discordGuildId,
-      seedAllyCode,
-    });
+    return Object.freeze({ guild: officer.guild, userId, discordGuildId, seedAllyCode });
   }
 
   async function listImmutableVersions(userId, code, planId, phase) {
@@ -343,6 +340,16 @@ export function createGuildOperationsApi(options = {}) {
       phase: text(phase),
       limit: 100,
     });
+  }
+
+  async function immutableVersionAndContext(userId, code, runId) {
+    const context = await immutableOfficerContext(userId, code);
+    const selected = await assignmentVersions.getVersion({ guild: context.guild, userId }, { runId });
+    const version = selected?.version;
+    if (!version?.id || !Number(version?.versionNumber) || !/^P[1-6]$/.test(text(version?.rotePhase))) {
+      throw httpError('Immutable assignment version is missing phase/version metadata required for Stage 10.', 409, 'STAGE10_VERSION_REQUIRED');
+    }
+    return Object.freeze({ context, selected, version });
   }
 
   async function handle(request, response, url) {
@@ -440,6 +447,41 @@ export function createGuildOperationsApi(options = {}) {
           { guild: officer.guild, userId: user.id },
           { runId: tbCancelVersion[1], reason: body?.reason },
         ));
+        return true;
+      }
+      const tbStage10Preview = suffix.match(/^\/tb\/assignment-versions\/([0-9a-f-]{36})\/stage10-preview$/i);
+      if (tbStage10Preview) {
+        const resolved = await immutableVersionAndContext(user.id, code, tbStage10Preview[1]);
+        writeJson(response, 200, await immutableDelivery.preview(resolved.context, {
+          phase: resolved.version.rotePhase,
+          versionNumber: resolved.version.versionNumber,
+          includeMentions: body?.includeMentions !== false,
+          channelId: body?.channelId,
+        }));
+        return true;
+      }
+      const tbStage10Status = suffix.match(/^\/tb\/assignment-versions\/([0-9a-f-]{36})\/stage10-status$/i);
+      if (tbStage10Status) {
+        const resolved = await immutableVersionAndContext(user.id, code, tbStage10Status[1]);
+        writeJson(response, 200, await immutableDelivery.status(resolved.context, {
+          phase: resolved.version.rotePhase,
+          versionNumber: resolved.version.versionNumber,
+          includeMentions: body?.includeMentions !== false,
+          channelId: body?.channelId,
+        }));
+        return true;
+      }
+      const tbStage10Publish = suffix.match(/^\/tb\/assignment-versions\/([0-9a-f-]{36})\/publish-immutable$/i);
+      if (tbStage10Publish) {
+        const resolved = await immutableVersionAndContext(user.id, code, tbStage10Publish[1]);
+        writeJson(response, 200, await immutableDelivery.publish(resolved.context, {
+          phase: resolved.version.rotePhase,
+          versionNumber: resolved.version.versionNumber,
+          includeMentions: body?.includeMentions !== false,
+          channelId: body?.channelId,
+          confirm: body?.confirm,
+          planHash: body?.planHash || body?.hash,
+        }));
         return true;
       }
       const tbPublish = suffix.match(/^\/tb\/runs\/([0-9a-f-]{36})\/publish$/i);
