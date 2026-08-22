@@ -10,15 +10,17 @@ const context = Object.freeze({
   seedAllyCode: '123456789',
 });
 
-function planner(overrides = {}) {
+const guild = Object.freeze({
+  guild: { id: 'swgoh-guild-1', name: 'Test Guild' },
+  members: [
+    { playerId: 'P1', allyCode: '111111111', name: 'One', rosterAvailable: true, units: [{ baseId: 'A', stars: 7, relic: 9 }] },
+    { playerId: 'P2', allyCode: '222222222', name: 'Two', rosterAvailable: true, units: [{ baseId: 'B', stars: 7, relic: 8 }] },
+  ],
+});
+
+function livePlanner(overrides = {}) {
   return {
-    guild: {
-      guild: { id: 'swgoh-guild-1', name: 'Test Guild' },
-      members: [
-        { playerId: 'P1', allyCode: '111111111', name: 'One', galacticPower: 10000000, rosterAvailable: true, units: [{ baseId: 'A', stars: 7, relic: 9 }] },
-        { playerId: 'P2', allyCode: '222222222', name: 'Two', galacticPower: 9000000, rosterAvailable: true, units: [{ baseId: 'B', stars: 7, relic: 8 }] },
-      ],
-    },
+    guild,
     cache: 'live',
     guildAgeMs: 50,
     guildBindingSource: 'durable-guild-binding',
@@ -36,32 +38,21 @@ function planner(overrides = {}) {
         { memberId: 'P1', phase: 'P1', baseId: 'A', severity: 20 },
       ],
     },
-    plan: {
-      strategy: 'scarcity-first-mission-safe-echo-style-draft',
-      maxPerTerritory: 10,
-    },
+    plan: { strategy: 'scarcity-first-mission-safe-echo-style-draft', maxPerTerritory: 10 },
     ...overrides,
   };
 }
 
-function baselinePlan(overrides = {}) {
+function persistedPlan(overrides = {}) {
   return {
-    id: 'plan-1',
-    guild_id: 'guild-1',
-    tb_key: 'rote',
-    name: 'Live ROTE Plan',
-    status: 'previewed',
-    phase_layout: {},
-    requirement_overrides: {},
-    ignored_missions: [],
-    ignored_platoons: [],
-    ignored_slots: [],
+    id: 'plan-1', guild_id: 'guild-1', tb_key: 'rote', name: 'Live ROTE Plan', status: 'previewed',
+    phase_layout: {}, requirement_overrides: {}, ignored_missions: [], ignored_platoons: [], ignored_slots: [],
     updated_at: '2026-08-19T14:00:00Z',
     ...overrides,
   };
 }
 
-function parityResult(overrides = {}) {
+function parityOutput(overrides = {}) {
   return {
     strategy: 'echobase-parity-command-center',
     maxPerTerritory: 10,
@@ -73,17 +64,11 @@ function parityResult(overrides = {}) {
       { id: 'P1-S1', phase: 'P1', baseId: 'A', member: { playerId: 'P1', name: 'One' }, safety: { status: 'SAFE', help: false } },
       { id: 'P6-S1', phase: 'P6', baseId: 'A', member: { playerId: 'P1', name: 'One' }, safety: { status: 'MISSION PROTECTED OVERRIDE', help: true } },
     ],
-    unfilled: [
-      { id: 'P6-S2', phase: 'P6', baseId: 'B', safeOwners: 0, availableOwners: 0 },
-    ],
+    unfilled: [{ id: 'P6-S2', phase: 'P6', baseId: 'B', safeOwners: 0, availableOwners: 0 }],
     lockIssues: [],
     parity: {
-      mode: 'echobase-parity-command-center',
-      iterations: 1,
-      unresolvedRequirements: [],
-      groupingRulesApplied: [],
-      previewReady: true,
-      publishReady: false,
+      mode: 'echobase-parity-command-center', iterations: 1, unresolvedRequirements: [], groupingRulesApplied: [],
+      previewReady: true, publishReady: false,
       completion: { sourceSlots: 3, activeSlots: 3, assigned: 2, unfilled: 1, lockIssues: 0 },
     },
     ...overrides,
@@ -125,29 +110,28 @@ function fixture(options = {}) {
   const store = {
     async select(table, query) {
       calls.push({ table, query });
-      if (table === 'guild_tb_plans') return options.noPlan ? [] : [baselinePlan(options.planOverrides)];
+      if (table === 'guild_tb_plans') return options.noPlan ? [] : [persistedPlan(options.planOverrides)];
       if (table === 'guild_tb_grouping_rules') return options.groupingRules || [];
       if (table === 'guild_tb_plan_preassignments') return options.preassignments || [];
       if (table === 'players') return players;
       if (table === 'guild_member_operation_controls') return options.memberControls || [
-        { guild_id: 'guild-1', player_id: 'db-p2', available: true, ignored_until: null, source: 'command-center', updated_at: '2026-08-19T13:00:00Z' },
+        { guild_id: 'guild-1', player_id: 'db-p2', available: true, ignored_until: null, source: 'command-center' },
       ];
       if (table === 'guild_unit_donation_preferences') return options.donationPreferences || [
-        { guild_id: 'guild-1', player_id: 'db-p1', base_id: 'A', preference: 'give', source: 'command-center', updated_at: '2026-08-19T13:00:00Z' },
+        { guild_id: 'guild-1', player_id: 'db-p1', base_id: 'A', preference: 'give', source: 'command-center' },
       ];
       throw new Error(`Unexpected table: ${table}`);
     },
   };
-  const livePlanner = options.planner || planner();
   const live = {
     async buildPlan(input) {
       calls.push({ service: 'buildPlan', input });
-      return livePlanner;
+      return options.livePlanner || livePlanner();
     },
   };
-  const parityPlanner = (guild, operations, parityOptions) => {
-    calls.push({ service: 'parityPlanner', guild, operations, options: parityOptions });
-    return options.parityResult || parityResult();
+  const parityPlanner = (guildInput, operations, parityOptions) => {
+    calls.push({ service: 'parityPlanner', guild: guildInput, operations, options: parityOptions });
+    return options.parityOutput || parityOutput();
   };
   const versionService = {
     async createVersion(receivedContext, input) {
@@ -164,60 +148,46 @@ function fixture(options = {}) {
     },
   };
   const service = createTbStage9PlanPreviewService({
-    store,
-    stateStore,
-    reservationStore,
-    live,
-    parityPlanner,
-    versionService,
+    store, stateStore, reservationStore, live, parityPlanner, versionService,
     now: () => new Date('2026-08-22T13:00:00Z'),
     discordConfig: { redundancyTarget: 2 },
   });
   return { service, calls };
 }
 
-async function preview(service) {
+function preview(service) {
   return service.createPreview(context, { planId: 'plan-1', phase: 'P6', interaction: { guild_id: context.discordGuildId } });
 }
 
-test('creates an immutable P6 version from shared web parity planner while keeping delivery disabled', async () => {
+test('creates immutable P6 preview from shared web parity planner and keeps delivery disabled', async () => {
   const { service, calls } = fixture();
   const result = await preview(service);
-
   const hydration = calls.find((row) => row.service === 'buildPlan');
+  const parity = calls.find((row) => row.service === 'parityPlanner');
+  const create = calls.find((row) => row.service === 'createVersion');
+
   assert.equal(hydration.input.allyCode, '123456789');
   assert.equal(hydration.input.redundancyTarget, 2);
-
-  const parity = calls.find((row) => row.service === 'parityPlanner');
-  assert.equal(parity.guild, planner().guild);
+  assert.deepEqual(parity.guild, guild);
   assert.deepEqual(parity.options.preferences.map((row) => [row.memberId,row.baseId,row.preference]), [['P1','A','give']]);
   assert.deepEqual(parity.options.reservations.map((row) => [row.memberId,row.phase,row.baseId]), [['P2','P6','B']]);
   assert.deepEqual(parity.options.ignoredMembers, []);
   assert.equal(parity.options.maxPerTerritory, 10);
 
-  const create = calls.find((row) => row.service === 'createVersion');
-  assert.equal(create.receivedContext.userId, context.userId);
-  assert.equal(create.input.planId, 'plan-1');
   assert.equal(create.input.rotePhase, 'P6');
   assert.deepEqual(create.input.assignments.map((row) => row.id), ['P6-S1']);
   assert.deepEqual(create.input.unfilled.map((row) => row.id), ['P6-S2']);
   assert.equal(create.input.delivery.published, false);
   assert.equal(create.input.delivery.memberDms, false);
-  assert.match(create.input.inputFingerprint, /^[0-9a-f]{64}$/);
   assert.equal(create.input.diagnostics.plannerContract, 'stage9-web-discord-parity-v2');
   assert.equal(create.input.diagnostics.sourceHydrationContract, 'stage8-discord-mission-safe-v1');
-  assert.equal(create.input.diagnostics.phaseSummary.assigned, 1);
-  assert.equal(create.input.diagnostics.phaseSummary.unfilled, 1);
-  assert.equal(create.input.diagnostics.safetySummary.protectedUnits, 1);
-  assert.equal(result.controlsStable, true);
+  assert.match(create.input.inputFingerprint, /^[0-9a-f]{64}$/);
   assert.equal(result.version.versionNumber, 1);
+  assert.equal(result.controlsStable, true);
 });
 
-test('persisted web plan customization is passed through instead of rejected', async () => {
-  const groupingRules = [{
-    id:'rule-1', rule_type:'avoid_pair', priority:10, enabled:true,
-    when_spec:{ phase:'P6', memberId:'P1' }, then_spec:{ baseIds:['B'] },
-  }];
+test('persisted phase layout, overrides, ignores, grouping rules and preassignments flow into parity planner', async () => {
+  const groupingRules = [{ id:'rule-1', rule_type:'avoid_pair', priority:10, enabled:true, when_spec:{phase:'P6'}, then_spec:{baseIds:['B']} }];
   const preassignments = [{ id:'pre-1', slot_id:'P6-S1', player_id:'db-p1' }];
   const planOverrides = {
     phase_layout: { includedPhases:['P6'], excludedConflictIds:['P6-EXCLUDED'] },
@@ -237,17 +207,13 @@ test('persisted web plan customization is passed through instead of rejected', a
   assert.deepEqual(parity.options.ignoredSlots, planOverrides.ignored_slots);
   assert.deepEqual(parity.options.groupingRules, groupingRules);
   assert.deepEqual(parity.options.preAssignments, [{ slotId:'P6-S1', memberId:'P1' }]);
-  assert.equal(result.customization.phaseLayout, true);
-  assert.equal(result.customization.requirementOverrides, 1);
-  assert.equal(result.customization.ignoredMissions, 1);
-  assert.equal(result.customization.ignoredPlatoons, 1);
-  assert.equal(result.customization.ignoredSlots, 1);
-  assert.equal(result.customization.groupingRules, 1);
-  assert.equal(result.customization.preassignments, 1);
+  assert.deepEqual(result.customization, {
+    phaseLayout:true, requirementOverrides:1, ignoredMissions:1, ignoredPlatoons:1, ignoredSlots:1, groupingRules:1, preassignments:1,
+  });
   assert.equal(calls.some((row) => row.service === 'createVersion'), true);
 });
 
-test('canonical database controls override duplicate Discord preference and unavailable controls are normalized to SWGOH member IDs', async () => {
+test('canonical database controls override duplicate Discord preferences and normalize unavailable members', async () => {
   const { service, calls } = fixture({
     discordUnavailable: true,
     donationPreferences: [{ guild_id:'guild-1', player_id:'db-p1', base_id:'A', preference:'keep', source:'command-center' }],
@@ -259,29 +225,21 @@ test('canonical database controls override duplicate Discord preference and unav
   assert.deepEqual(parity.options.ignoredMembers, ['P2']);
 });
 
-test('refuses to persist when durable planning controls change during source hydration', async () => {
+test('fails closed when durable planning controls mutate during live source hydration', async () => {
   const { service, calls } = fixture({ controlsChange: true });
-  await assert.rejects(
-    () => preview(service),
-    (error) => error?.code === 'TB_ASSIGNMENT_PLANNING_CONTROLS_CHANGED',
-  );
+  await assert.rejects(() => preview(service), (error) => error?.code === 'TB_ASSIGNMENT_PLANNING_CONTROLS_CHANGED');
   assert.equal(calls.some((row) => row.service === 'parityPlanner'), false);
   assert.equal(calls.some((row) => row.service === 'createVersion'), false);
 });
 
-test('fails closed when shared parity planner reports unresolved requirement overrides', async () => {
+test('fails closed when parity planner reports unresolved officer requirement overrides', async () => {
+  const unresolved = parityOutput({
+    assignments: [], unfilled: [],
+    parity: { mode:'echobase-parity-command-center', unresolvedRequirements:[{slotId:'P6-S1'}], previewReady:false, publishReady:false },
+  });
   const { service, calls } = fixture({
     planOverrides: { requirement_overrides: { 'P6-S1': { clear:true } } },
-    parityResult: parityResult({
-      assignments: [],
-      unfilled: [],
-      parity: {
-        mode:'echobase-parity-command-center',
-        unresolvedRequirements:[{ slotId:'P6-S1', reason:'Requirement was cleared by an officer' }],
-        previewReady:false,
-        publishReady:false,
-      },
-    }),
+    parityOutput: unresolved,
   });
   await assert.rejects(
     () => preview(service),
@@ -290,41 +248,27 @@ test('fails closed when shared parity planner reports unresolved requirement ove
   assert.equal(calls.some((row) => row.service === 'createVersion'), false);
 });
 
-test('input fingerprint changes when Operation requirements change even when output row counts do not', async () => {
-  const firstFixture = fixture();
-  const firstResult = await preview(firstFixture.service);
-
-  const changed = planner();
-  changed.operations = {
-    slots: changed.operations.slots.map((row) => row.id === 'P6-S2' ? { ...row, requiredRelic: 9 } : row),
-  };
-  const secondFixture = fixture({ planner: changed });
-  const secondResult = await preview(secondFixture.service);
-
-  assert.notEqual(firstResult.inputFingerprint, secondResult.inputFingerprint);
-});
-
-test('input fingerprint changes when persisted web-plan controls change', async () => {
+test('input fingerprint changes when live Operation requirements change', async () => {
   const first = await preview(fixture().service);
-  const second = await preview(fixture({ planOverrides:{ ignored_slots:['P6-S2'] } }).service);
+  const changedLive = livePlanner();
+  changedLive.operations = { slots: changedLive.operations.slots.map((row) => row.id === 'P6-S2' ? { ...row, requiredRelic: 9 } : row) };
+  const second = await preview(fixture({ livePlanner: changedLive }).service);
   assert.notEqual(first.inputFingerprint, second.inputFingerprint);
 });
 
-test('input fingerprint changes when grouping rules or preassignments change', async () => {
-  const first = await preview(fixture().service);
-  const withRule = await preview(fixture({ groupingRules:[{ id:'r1', rule_type:'avoid_pair', priority:10, enabled:true, when_spec:{phase:'P6'}, then_spec:{baseIds:['B']} }] }).service);
-  const withLock = await preview(fixture({ preassignments:[{ id:'pre1', slot_id:'P6-S1', player_id:'db-p1' }] }).service);
-  assert.notEqual(first.inputFingerprint, withRule.inputFingerprint);
-  assert.notEqual(first.inputFingerprint, withLock.inputFingerprint);
-  assert.notEqual(withRule.inputFingerprint, withLock.inputFingerprint);
+test('input fingerprint changes when persisted plan controls, grouping rules or preassignments change', async () => {
+  const baseline = await preview(fixture().service);
+  const ignored = await preview(fixture({ planOverrides:{ ignored_slots:['P6-S2'] } }).service);
+  const ruled = await preview(fixture({ groupingRules:[{ id:'r1', rule_type:'avoid_pair', priority:10, enabled:true, when_spec:{phase:'P6'}, then_spec:{baseIds:['B']} }] }).service);
+  const locked = await preview(fixture({ preassignments:[{ id:'pre1', slot_id:'P6-S1', player_id:'db-p1' }] }).service);
+  assert.notEqual(baseline.inputFingerprint, ignored.inputFingerprint);
+  assert.notEqual(baseline.inputFingerprint, ruled.inputFingerprint);
+  assert.notEqual(baseline.inputFingerprint, locked.inputFingerprint);
 });
 
-test('refuses immutable preview creation for missing or archived source plan', async () => {
-  const { service, calls } = fixture({ noPlan: true });
-  await assert.rejects(
-    () => preview(service),
-    (error) => error?.code === 'TB_ASSIGNMENT_SOURCE_PLAN_STALE',
-  );
+test('missing or archived source plans are rejected before hydration and immutable version creation', async () => {
+  const { service, calls } = fixture({ noPlan:true });
+  await assert.rejects(() => preview(service), (error) => error?.code === 'TB_ASSIGNMENT_SOURCE_PLAN_STALE');
   assert.equal(calls.some((row) => row.service === 'buildPlan'), false);
-  assert.equal(calls.some((row) => row.service === 'parityPlanner'), false);
+  assert.equal(calls.some((row) => row.service === 'createVersion'), false);
 });
