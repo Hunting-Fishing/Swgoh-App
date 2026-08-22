@@ -58,6 +58,14 @@ export function createGacVerifiedBattleApi(options = {}) {
     return { eventInstanceId: id, round, confirmed };
   }
 
+  async function softRosterSnapshots(ownerCode, opponentCode) {
+    const [ownerRosterSnapshot, opponentRosterSnapshot] = await Promise.all([
+      requestGateway(`/v1/player/${ownerCode}`, true).catch(() => null),
+      opponentCode ? requestGateway(`/v1/player/${opponentCode}`, true).catch(() => null) : Promise.resolve(null),
+    ]);
+    return { ownerRosterSnapshot, opponentRosterSnapshot };
+  }
+
   return Object.freeze({
     async handle(request, response, url) {
       const match = request.method === "POST" && url.pathname.match(/^\/api\/gac\/verified-battle\/(\d{9})$/);
@@ -73,14 +81,18 @@ export function createGacVerifiedBattleApi(options = {}) {
         const code = normalizeAllyCode(match[1]);
         const body = await readJsonBody(request);
         const context = await currentContext(code, body?.round);
+        const opponentAllyCode = normalizeAllyCode(context.confirmed.opponent.allyCode);
+        const snapshots = await softRosterSnapshots(code, opponentAllyCode);
         const result = await battles.verifyAttempt(user.id, {
           allyCode: code,
-          opponentAllyCode: normalizeAllyCode(context.confirmed.opponent.allyCode),
+          opponentAllyCode,
           eventInstanceId: context.eventInstanceId,
           round: context.round,
           assignmentId: body?.assignmentId,
           attemptIndex: body?.attemptIndex,
           confirm: body?.confirm === true,
+          ownerRosterSnapshot: snapshots.ownerRosterSnapshot,
+          opponentRosterSnapshot: snapshots.opponentRosterSnapshot,
         });
         writeJson(response, 200, result, {
           "X-GAC-Source": result.source,
