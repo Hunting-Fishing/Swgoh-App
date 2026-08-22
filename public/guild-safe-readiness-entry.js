@@ -1,5 +1,6 @@
 const READINESS_PATH = "/guild/zeffo";
 const ALLY_STORAGE_KEY = "swgoh:guild-route-ally-code";
+const BASELINE_CONCURRENCY = 6;
 const digits = (value) => String(value || "").replace(/\D/g, "").slice(0, 9);
 const escapeHtml = (value) => String(value ?? "")
   .replaceAll("&", "&amp;")
@@ -10,6 +11,7 @@ const escapeHtml = (value) => String(value ?? "")
 
 let rendering = false;
 let renderedKey = "";
+const playerBaselineCache = new Map();
 
 function currentAllyCode() {
   const query = digits(new URLSearchParams(location.search).get("allyCode"));
@@ -44,6 +46,87 @@ function ensureNav() {
   return true;
 }
 
+async function fetchJson(url) {
+  const response = await fetch(url, { cache: "no-store", credentials: "same-origin" });
+  let body = {};
+  try { body = await response.json(); } catch {}
+  if (!response.ok) throw new Error(body?.error || `${url} returned HTTP ${response.status}`);
+  return body;
+}
+
+function playerBaseline(allyCode) {
+  const code = digits(allyCode);
+  if (code.length !== 9) return Promise.resolve(null);
+  if (!playerBaselineCache.has(code)) {
+    playerBaselineCache.set(code, fetchJson(`/api/player/${code}/baseline`).catch((error) => ({ __error: error?.message || "Player baseline unavailable" })));
+  }
+  return playerBaselineCache.get(code);
+}
+
+async function mapWithConcurrency(items, concurrency, worker) {
+  const results = new Array(items.length);
+  let cursor = 0;
+  async function run() {
+    while (cursor < items.length) {
+      const index = cursor++;
+      results[index] = await worker(items[index], index);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, Math.max(1, items.length)) }, run));
+  return results;
+}
+
+async function hydrateTbGuildRoster(guildBody, target) {
+  const members = Array.isArray(guildBody?.members) ? guildBody.members : [];
+  let completed = 0;
+  let hydrated = 0;
+
+  const detailedMembers = await mapWithConcurrency(members, BASELINE_CONCURRENCY, async (member) => {
+    if (Array.isArray(member?.units) && member.units.length) {
+      completed += 1;
+      hydrated += 1;
+      return member;
+    }
+
+    const code = digits(member?.allyCode);
+    const baseline = code.length === 9 ? await playerBaseline(code) : null;
+    completed += 1;
+    const units = Array.isArray(baseline?.units) ? baseline.units : [];
+    if (units.length) hydrated += 1;
+
+    if (target && completed % 4 === 0) {
+      const note = target.querySelector("[data-tb-hydration-progress]");
+      if (note) note.textContent = `Loading member progression… ${completed}/${members.length}`;
+    }
+
+    return {
+      ...member,
+      units,
+      rosterAvailable: units.length > 0,
+      tbRosterError: baseline?.__error || "",
+      lastSyncedAt: baseline?.player?.updatedAt || baseline?.fetchedAt || member?.lastSyncedAt || "",
+    };
+  });
+
+  return {
+    ...guildBody,
+    members: detailedMembers,
+    hydration: {
+      ...(guildBody?.hydration || {}),
+      requested: members.length,
+      hydrated,
+      failed: Math.max(0, members.length - hydrated),
+      complete: members.length > 0 && hydrated === members.length,
+    },
+    tbReadinessHydration: {
+      source: "persisted-player-baselines",
+      requested: members.length,
+      hydrated,
+      failed: Math.max(0, members.length - hydrated),
+    },
+  };
+}
+
 async function renderReadiness(force = false) {
   if (location.pathname.replace(/\/+$/, "") !== READINESS_PATH || rendering) return;
   const target = document.getElementById("guildRouteContent");
@@ -52,14 +135,13 @@ async function renderReadiness(force = false) {
   const key = `${allyCode}|${location.search}`;
   if (!force && renderedKey === key) return;
   rendering = true;
-  target.innerHTML = '<section class="guild-page-card"><div class="workspace-note">Loading live TB mission readiness…</div></section>';
+  target.innerHTML = '<section class="guild-page-card"><div class="workspace-note" data-tb-hydration-progress>Loading guild roster and member progression…</div></section>';
   try {
-    const [response, module] = await Promise.all([
-      fetch(`/api/guild/by-player/${allyCode}/roster`, { cache: "no-store" }),
+    const [summaryBody, module] = await Promise.all([
+      fetchJson(`/api/guild/by-player/${allyCode}/roster`),
       import("./guild-tb-readiness-page.js"),
     ]);
-    const guildBody = await response.json();
-    if (!response.ok) throw new Error(guildBody?.error || `Guild roster returned HTTP ${response.status}`);
+    const guildBody = await hydrateTbGuildRoster(summaryBody, target);
     await module.renderGuildTbReadinessPage({ target, guildBody, allyCode });
     renderedKey = key;
   } catch (error) {
