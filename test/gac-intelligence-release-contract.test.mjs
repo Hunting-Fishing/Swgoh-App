@@ -66,15 +66,18 @@ test('battle execution queue is wired to the authoritative server plan and respo
   assert.match(css, /@media\(max-width:420px\)/);
 });
 
-test('intelligence panels are on-demand rather than automatic recurring network analyzers', () => {
+test('intelligence panels are event-driven or user-triggered rather than recurring network analyzers', () => {
+  const matrix = source('public/gac-counter-matrix-ui.js');
   const optimizer = source('public/gac-board-optimization-ui.js');
   const relic = source('public/gac-relic-suitability-ui.js');
   const dcMatrix = source('public/gac-datacron-matrix-ui.js');
   const staging = source('public/gac-scouting-staging-ui.js');
+  assert.match(matrix, /data-gac-matrix-refresh/);
   assert.match(optimizer, /data-gac-opt-analyze/);
   assert.match(relic, /data-gac-relic-analyze/);
   assert.match(dcMatrix, /data-gac-dcm-load/);
   assert.match(staging, /data-gac-stage-build/);
+  assert.doesNotMatch(matrix, /setInterval\s*\(/);
   assert.doesNotMatch(optimizer, /setInterval\s*\(/);
   assert.doesNotMatch(relic, /setInterval\s*\(/);
   assert.doesNotMatch(dcMatrix, /setInterval\s*\(/);
