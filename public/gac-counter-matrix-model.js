@@ -29,6 +29,7 @@ function evidenceVariant(row = {}) {
   const battles = Math.max(0, n(row?.battles));
   const wins = Math.max(0, Math.min(battles, n(row?.wins)));
   const rate = battles ? wins / battles : 0;
+  const averageRelicDelta = row?.averageRelicDelta === null || row?.averageRelicDelta === undefined || row?.averageRelicDelta === '' ? null : Number(row.averageRelicDelta);
   return Object.freeze({
     enemyLeaderBaseId: normalizeId(row?.enemyLeaderBaseId),
     enemyMembers: Object.freeze(normalizeMembers(row?.enemyMembers)),
@@ -38,6 +39,8 @@ function evidenceVariant(row = {}) {
     wins,
     winRate: Number.isFinite(Number(row?.winRate)) ? Math.max(0, Math.min(1, Number(row.winRate))) : rate,
     averageBanners: row?.averageBanners === null || row?.averageBanners === undefined || row?.averageBanners === '' ? null : Number(row.averageBanners),
+    averageRelicDelta: Number.isFinite(averageRelicDelta) ? averageRelicDelta : null,
+    relicDeltaSamples: Math.max(0, Math.floor(n(row?.relicDeltaSamples))),
     confidence: Math.max(0, Math.min(1, Number.isFinite(Number(row?.confidence)) ? Number(row.confidence) : 1)),
     league: clean(row?.league),
     seasonId: clean(row?.seasonId),
@@ -83,6 +86,11 @@ function aggregateVariants(variants = []) {
   const averageBanners = bannerWeight
     ? bannerRows.reduce((sum, row) => sum + Number(row.averageBanners) * n(row.battles), 0) / bannerWeight
     : null;
+  const relicRows = rows.filter((row) => Number.isFinite(Number(row.averageRelicDelta)) && n(row.relicDeltaSamples) > 0);
+  const relicDeltaSamples = relicRows.reduce((sum, row) => sum + n(row.relicDeltaSamples), 0);
+  const averageRelicDelta = relicDeltaSamples
+    ? relicRows.reduce((sum, row) => sum + Number(row.averageRelicDelta) * n(row.relicDeltaSamples), 0) / relicDeltaSamples
+    : null;
   const confidenceWeight = rows.reduce((sum, row) => sum + Math.max(1, n(row.battles)), 0);
   const confidence = confidenceWeight
     ? rows.reduce((sum, row) => sum + n(row.confidence) * Math.max(1, n(row.battles)), 0) / confidenceWeight
@@ -92,6 +100,8 @@ function aggregateVariants(variants = []) {
     wins,
     winRate: battles ? wins / battles : 0,
     averageBanners,
+    averageRelicDelta,
+    relicDeltaSamples,
     confidence,
   });
 }
@@ -140,6 +150,8 @@ function allocateNonOverlapping(rows = [], minimumBattles = 5) {
       wins: variant.wins,
       winRate: variant.winRate,
       averageBanners: variant.averageBanners,
+      averageRelicDelta: variant.averageRelicDelta,
+      relicDeltaSamples: variant.relicDeltaSamples,
       confidence: variant.confidence,
     }));
   }
