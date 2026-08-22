@@ -1,10 +1,13 @@
 import { guildMemberRole, playerPortraitId, playerPortraitUrl, playerProfileTitle } from './guild-member-identity.js';
+import { potentialMissionReward, tbSpecialMissionFact } from './tb-special-mission-facts.js';
 
 const asArray = (value) => Array.isArray(value) ? value : [];
 const finite = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
 const text = (value) => String(value ?? "").trim();
 
-export const ZEFFO_UNLOCK_TARGET = 30;
+const ZEFFO_FACT = tbSpecialMissionFact('zeffo');
+export const ZEFFO_UNLOCK_TARGET = ZEFFO_FACT.unlockTarget;
+export const ZEFFO_GET3_PER_CLEAR = ZEFFO_FACT.reward.perSuccessfulClear;
 export const ZEFFO_UNITS = Object.freeze({
   cere: "CEREJUNDA",
   jkck: "JEDIKNIGHTCAL",
@@ -112,11 +115,14 @@ export function buildGuildZeffoReadiness(guildBody = {}) {
   const babyFallback = ready.filter((row) => row.cere.relic >= 7 && row.jkck.relic < 7 && row.babyCal.relic >= 7).length;
   const rosterUnavailable = sorted.filter((row) => !row.rosterAvailable).length;
   const potentialSuccessfulClears = ready.length;
+  const rewardOpportunity = potentialMissionReward('zeffo', potentialSuccessfulClears);
   return Object.freeze({
     missionId: 'zeffo',
     missionName: 'Bracca / Zeffo Unlock',
     rewardMode: 'unlock-with-mission-reward',
-    rewardCurrency: 'GET2',
+    rewardCurrency: ZEFFO_FACT.reward.currency,
+    rewardPerSuccessfulClear: ZEFFO_FACT.reward,
+    source: ZEFFO_FACT.source,
     guild: Object.freeze({
       id: text(guildBody?.guild?.id),
       name: text(guildBody?.guild?.name || "Guild"),
@@ -136,6 +142,8 @@ export function buildGuildZeffoReadiness(guildBody = {}) {
       babyFallback,
       rosterUnavailable,
       potentialSuccessfulClears,
+      potentialGet3: rewardOpportunity?.amount || 0,
+      theoreticalGet3Maximum: rewardOpportunity?.theoreticalGuildMaximum || 0,
       unlockShortfall: Math.max(0, ZEFFO_UNLOCK_TARGET - potentialSuccessfulClears),
       buffer: ready.length - ZEFFO_UNLOCK_TARGET,
       canFieldUnlockCount: ready.length >= ZEFFO_UNLOCK_TARGET,
