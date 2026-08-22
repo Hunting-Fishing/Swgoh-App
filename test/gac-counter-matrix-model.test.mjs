@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   aggregateVariants,
+  allocateNonOverlapping,
   buildCounterMatrix,
   counterAvailability,
   evidenceClass,
@@ -101,6 +102,32 @@ test('weighted aggregation uses battle counts for banner and confidence summarie
   assert.equal(aggregate.winRate, 33 / 40);
   assert.equal(aggregate.averageBanners, 53);
   assert.equal(Math.round(aggregate.confidence * 1000) / 1000, 0.95);
+});
+
+test('board summary allocation never reuses attackers across different defenses', () => {
+  const available = { available: true };
+  const rows = [
+    {
+      key: 'FRONT-TOP|0', defenseId: 1, leaderBaseId: 'D1',
+      variants: [
+        { counterLeaderBaseId: 'A_LEAD', counterMembers: ['A_LEAD', 'A_2', 'A_3'], battles: 100, wins: 95, winRate: 0.95, averageBanners: 55, confidence: 1, availability: available },
+        { counterLeaderBaseId: 'B_LEAD', counterMembers: ['B_LEAD', 'B_2', 'B_3'], battles: 30, wins: 24, winRate: 0.8, averageBanners: 52, confidence: 0.8, availability: available },
+      ],
+    },
+    {
+      key: 'FRONT-TOP|1', defenseId: 2, leaderBaseId: 'D2',
+      variants: [
+        { counterLeaderBaseId: 'A_LEAD', counterMembers: ['A_LEAD', 'A_2', 'A_3'], battles: 60, wins: 58, winRate: 58 / 60, averageBanners: 54, confidence: 1, availability: available },
+      ],
+    },
+  ];
+  const allocation = allocateNonOverlapping(rows, 5);
+  assert.equal(allocation.complete, true);
+  assert.equal(allocation.assignments.length, 2);
+  const memberSets = allocation.assignments.map((row) => new Set(row.counterMembers));
+  for (const id of memberSets[0]) assert.equal(memberSets[1].has(id), false);
+  assert.equal(allocation.usedBaseIds.length, 6);
+  assert.equal(allocation.projectedBanners, 106);
 });
 
 test('evidence classes are sample-gated before win rate coloring', () => {
