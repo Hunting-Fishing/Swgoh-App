@@ -27,6 +27,7 @@ function ensureIntelligenceStyles() {
     ['gac-datacron-readiness-css', '/gac-datacron-readiness.css?v=20260822-intel1'],
     ['gac-datacron-matrix-css', '/gac-datacron-matrix.css?v=20260822-intel1'],
     ['gac-intelligence-export-css', '/gac-intelligence-export.css?v=20260822-intel1'],
+    ['gac-intelligence-professional-css', '/gac-intelligence-professional.css?v=20260823-release1'],
   ];
   for (const [key, href] of styles) {
     if (document.querySelector(`link[data-${key}]`)) continue;
