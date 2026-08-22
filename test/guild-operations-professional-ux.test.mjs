@@ -21,6 +21,45 @@ test('officer requirement editor exposes override, canonical reset, ignore and r
   assert.match(enhancer, /ignoredSlots/);
 });
 
+test('website exposes immutable ROTE version generation, history, exact hash approval and cancellation', () => {
+  assert.match(enhancer, /IMMUTABLE OFFICER ASSIGNMENT REVIEW/);
+  assert.match(enhancer, /Generate Immutable Version/);
+  assert.match(enhancer, /Refresh Version History/);
+  assert.match(enhancer, /IMMUTABLE PLAN HASH · FULL 64 CHARACTERS/);
+  assert.match(enhancer, /I reviewed this exact/);
+  assert.match(enhancer, /Approve Exact Artifact/);
+  assert.match(enhancer, /Cancel Version/);
+  assert.match(enhancer, /\/immutable-preview/);
+  assert.match(enhancer, /\/assignment-versions\?phase=/);
+  assert.match(enhancer, /\/approve/);
+  assert.match(enhancer, /\/cancel/);
+});
+
+test('website Stage 10 requires preview before explicit PUBLISH delivery', () => {
+  assert.match(enhancer, /Preview Stage 10 Delivery/);
+  assert.match(enhancer, /EXACT DELIVERY PREVIEW/);
+  assert.match(enhancer, /Discord message/);
+  assert.match(enhancer, /Type PUBLISH/);
+  assert.match(enhancer, /Publish Approved Artifact to Discord/);
+  assert.match(enhancer, /stage10-preview/);
+  assert.match(enhancer, /stage10-status/);
+  assert.match(enhancer, /publish-immutable/);
+  assert.match(enhancer, /confirm:'PUBLISH'/);
+  assert.match(enhancer, /window\.confirm\(/);
+});
+
+test('changing mention policy invalidates a previously rendered delivery preview', () => {
+  assert.match(enhancer, /data-immutable-mentions/);
+  assert.match(enhancer, /state\.immutable\.delivery\[runId\] = \{ includeMentions:mentions\.checked \}/);
+  assert.match(enhancer, /!delivery\?\.preview/);
+});
+
+test('immutable enhancer avoids mutation-observer self-render loop after installation', () => {
+  assert.match(enhancer, /let created = false/);
+  assert.match(enhancer, /if \(created\) renderImmutablePanel\(\)/);
+  assert.match(enhancer, /if \(!state\.immutable\.loading && \(!state\.immutable\.loaded/);
+});
+
 test('TW team editing no longer requires officers to memorize raw base IDs', () => {
   assert.match(enhancer, /Find unit/);
   assert.match(enhancer, /Minimum relic/);
@@ -35,8 +74,11 @@ test('operations UX supports fast keyboard workflow and human-readable preassign
   assert.match(enhancer, /humanizePreassignments/);
 });
 
-test('professional layer includes responsive focus-visible styling', () => {
+test('professional layer includes responsive immutable and focus-visible styling', () => {
   assert.match(css, /focus-visible/);
   assert.match(css, /@media\(max-width:560px\)/);
   assert.match(css, /guild-ops-professional-bar/);
+  assert.match(css, /guild-ops-immutable-review-card/);
+  assert.match(css, /guild-ops-stage10-preview/);
+  assert.match(css, /guild-ops-immutable-publish-confirm/);
 });
