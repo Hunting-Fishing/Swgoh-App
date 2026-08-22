@@ -43,9 +43,20 @@ async function requestJson(url) {
   }
 }
 
-async function fileExists(filePath) {
-  try { await readFile(filePath); return true; }
-  catch { return false; }
+function usablePortraitRegistry(body = {}) {
+  const portraits = asArray(body?.portraits).map(normalizePortrait).filter(Boolean);
+  const declaredCount = Number(body?.count);
+  const countMatches = !Number.isFinite(declaredCount) || declaredCount === portraits.length;
+  return portraits.length > 0 && countMatches;
+}
+
+async function stalePortraitRegistryUsable(filePath = OUTPUT_PATH) {
+  try {
+    const body = JSON.parse(await readFile(filePath, 'utf8'));
+    return usablePortraitRegistry(body);
+  } catch {
+    return false;
+  }
 }
 
 async function syncPlayerPortraits() {
@@ -74,8 +85,8 @@ async function syncPlayerPortraits() {
 const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 if (isMain) {
   syncPlayerPortraits().catch(async (error) => {
-    if (ALLOW_STALE && await fileExists(OUTPUT_PATH)) {
-      console.warn(`[player-portraits] refresh failed; serving existing registry: ${error?.message || error}`);
+    if (ALLOW_STALE && await stalePortraitRegistryUsable(OUTPUT_PATH)) {
+      console.warn(`[player-portraits] refresh failed; serving validated non-empty existing registry: ${error?.message || error}`);
       return;
     }
     console.error(`[player-portraits] ${error?.stack || error}`);
@@ -83,4 +94,12 @@ if (isMain) {
   });
 }
 
-export { ASSET_BASE, OUTPUT_PATH, SCHEMA_VERSION, normalizePortrait, syncPlayerPortraits };
+export {
+  ASSET_BASE,
+  OUTPUT_PATH,
+  SCHEMA_VERSION,
+  normalizePortrait,
+  stalePortraitRegistryUsable,
+  syncPlayerPortraits,
+  usablePortraitRegistry,
+};
