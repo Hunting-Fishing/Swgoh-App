@@ -6,9 +6,10 @@ Draft PR: `#319`
 
 ## Current completion
 
-- Feature implementation: **97%**
-- Release / production readiness: **72%**
-- Branch position: **26 commits ahead / 0 behind `main`** at the latest comparison
+- Feature implementation: **98%**
+- Release / production readiness: **75%**
+- Branch position: **33 commits ahead / 0 behind `main`** at the latest comparison
+- Changed files: **18**
 - Active-branch overlap: **0 files with ROTE #316; 0 files with GAC #318**
 - Production deployment: **none**
 
@@ -30,6 +31,7 @@ Authenticated website officer
 
 Optional verified Discord binding
   -> durable Discord preferences / availability / hard reserves join planning
+  -> generate a fresh Discord-aware immutable version
   -> verified Discord destination
   -> Stage 10 exact-message preview
   -> explicit PUBLISH + hash confirmation
@@ -38,7 +40,7 @@ Optional verified Discord binding
 
 A Guild **does not need Discord** to generate, inspect, approve, cancel, or list immutable assignment versions.
 
-A Guild **does need a verified Discord binding** for Stage 10 Discord preview/status/publication.
+A Guild **does need a verified Discord binding and a Discord-aware immutable snapshot** for Stage 10 Discord preview/publication.
 
 If a Discord binding exists, its durable planning controls remain fail-closed rather than being silently ignored.
 
@@ -64,7 +66,7 @@ Stage 9 now reruns the shared `planGuildTbOperationsParity()` engine using the e
 
 ## Website-first immutable context
 
-`tb-immutable-web-context.mjs` now owns the server-side split between planning and Discord delivery.
+`tb-immutable-web-context.mjs` owns the server-side split between planning and Discord delivery.
 
 ### Planning context
 
@@ -86,7 +88,7 @@ Without verified Discord it rejects with `TB_STAGE10_VERIFIED_BINDING_REQUIRED`,
 
 ## Stage 9 planning modes
 
-The immutable fingerprint/diagnostics now record one of two explicit planning modes:
+The immutable fingerprint/diagnostics record one of two explicit planning modes:
 
 - `website-only`
 - `website-plus-discord-controls`
@@ -131,9 +133,9 @@ Database player UUIDs are normalized to canonical SWGOH player/Ally Code identit
 
 ## Website officer workflow
 
-`/guild/operations` now exposes an **IMMUTABLE OFFICER ASSIGNMENT REVIEW** panel.
+`/guild/operations` exposes an **IMMUTABLE OFFICER ASSIGNMENT REVIEW** panel.
 
-The intended website path is:
+The website path is:
 
 ```text
 Select saved ROTE plan
@@ -150,9 +152,38 @@ Without Discord, the UI reports:
 - `WEB PLAN READY · DISCORD OFF`
 - `Website planning + approval ready`
 
-An approved web-only artifact remains visible and valid. The UI explains that Discord may be connected later for publication; it does not pretend planning itself failed.
+An approved web-only artifact remains visible and valid for website review. It is **not** immediately Discord-publishable if Discord is connected later.
 
-When a verified Discord destination exists, the approved artifact additionally exposes:
+### Re-plan after connecting Discord
+
+A critical transition guard now prevents this unsafe sequence:
+
+```text
+website-only artifact
+ -> approve
+ -> connect Discord later
+ -> publish old artifact without newly available Discord controls
+```
+
+`tb-stage10-discord-delivery-service.mjs` now rejects a newly fingerprinted `website-only` artifact with:
+
+`STAGE10_REPLAN_AFTER_DISCORD_BINDING_REQUIRED`
+
+The officer must generate and approve a fresh immutable version after Discord is connected so the current Discord preferences, availability and hard reservations are fingerprinted into the artifact.
+
+This guard lives in the shared Stage 10 service, so it protects both website publication and Discord-command publication.
+
+Legacy immutable artifacts without the new planning-mode metadata remain backward-compatible instead of being rejected solely because they predate this branch.
+
+The website proactively reflects the same rule:
+
+- `DISCORD RE-PLAN REQUIRED` appears for an approved website-only artifact after Discord is connected;
+- Stage 10 preview/status controls are withheld for that artifact;
+- a fresh immutable version must be generated and approved.
+
+## Stage 10 exact delivery UX
+
+For a Discord-aware approved artifact:
 
 ```text
 Preview Stage 10 Delivery
@@ -165,6 +196,8 @@ Preview Stage 10 Delivery
 ```
 
 Changing the mention policy invalidates the previously rendered delivery preview so an officer cannot review one audience and publish another without re-previewing.
+
+Stage 10 preview also reports whether network delivery is enabled by server configuration. When `deliveryEnabled` is false, the website remains **preview-only** and exposes no PUBLISH control.
 
 ## Immutable fingerprint
 
@@ -195,6 +228,17 @@ Immutable preview creation rejects:
 - planning controls that mutate while live source hydration is running;
 - unresolved requirement overrides reported by the shared parity planner.
 
+Stage 10 rejects:
+
+- no verified Discord binding / destination;
+- a new website-only artifact created before Discord controls were bound;
+- unapproved / cancelled / superseded / stale / tampered artifacts;
+- mismatched explicit hash confirmation;
+- changed mention audiences during delivery;
+- changed verified destinations during delivery;
+- disabled server-side network delivery;
+- ambiguous failed delivery receipts without manual review.
+
 Immutable preview never publishes or sends member DMs.
 
 ## Downstream approval / delivery safety
@@ -219,6 +263,7 @@ Website approval still requires the **full exact 64-character plan hash**.
 Stage 10 still requires:
 
 - a verified Discord Guild / destination;
+- a Discord-aware immutable snapshot for newly fingerprinted artifacts;
 - a publishability-approved immutable artifact;
 - stored artifact phase/version resolved server-side rather than trusted from browser input;
 - explicit `PUBLISH` confirmation;
@@ -241,14 +286,20 @@ Contracts now cover:
 - configured Discord planning remains fail-closed if durable state is unavailable;
 - server-side planning context ignores client-supplied Discord/Ally identity substitutions;
 - immutable approval / cancellation do not require Discord;
-- Stage 10 preview/status/publish do require verified Discord;
+- Stage 10 preview/status/publish require verified Discord;
+- Stage 10 web adapter rejects website-only context before constructing delivery;
 - Stage 10 derives phase/version from the stored immutable artifact rather than browser body;
+- Stage 10 rejects website-only fingerprints after Discord is connected;
+- Stage 10 accepts explicit Discord-aware fingerprints;
+- legacy artifacts without planning-mode metadata remain compatible;
+- website suppresses Stage 10 controls until both current Discord destination and artifact snapshot are eligible;
+- website suppresses PUBLISH when Stage 10 network delivery is disabled;
 - control-mutation rejection;
 - unresolved requirement rejection;
 - fingerprint changes for live requirements, saved plan controls, grouping rules and preassignments;
 - source guard preventing return of `TB_ASSIGNMENT_PLAN_CUSTOMIZATION_UNSUPPORTED`;
 - website UX guard preventing return of the old `BINDING REQUIRED` planning message;
-- cross-layer parity -> immutable hash -> approval/publishability -> Stage 10 delivery ownership.
+- cross-layer website context -> Stage 9 -> immutable hash -> approval/publishability -> Stage 10 ownership.
 
 The shared parity-planner tests on `main` already cover phase/ignore scoping, requirement overrides, unresolved clears, preassignment locks and grouping-rule constraint passes.
 
@@ -257,25 +308,30 @@ The shared parity-planner tests on `main` already cover phase/ignore scoping, re
 Latest source audit:
 
 - PR #319 is open, draft and mergeable;
-- branch is 26 commits ahead / 0 behind `main`;
-- 15 files changed at the latest checkpoint;
+- branch is **33 commits ahead / 0 behind `main`**;
+- **18 files changed**;
 - zero changed-file overlap with active ROTE #316;
 - zero changed-file overlap with active GAC #318;
-- GitHub reports no pull-request workflow run for the current head;
+- GitHub combined status for the latest checked head contains no statuses;
+- GitHub reports no pull-request workflow run for that head;
+- repository contains a manual-only `.github/workflows/node-test.yml` using `workflow_dispatch` -> `npm ci` -> `npm test`;
+- the connected GitHub controls in this session can read/re-run existing workflow runs but cannot start a new manual dispatch;
 - no production deployment occurred.
 
-Executable `npm test` has **not** been claimed. The available local execution environment could not resolve `github.com` for a repository clone, so executable testing remains a release gate.
+Executable `npm test` has **not** been claimed. The available local execution environment could not resolve `github.com` for a repository clone, and no branch workflow run exists to rerun, so executable testing remains a release gate.
 
 ## Production gate
 
 Do not merge/deploy until:
 
-1. complete `npm test` passes against the branch in an environment with repository access;
+1. complete `npm test` passes against the branch in an environment with repository access or through the manual Node regression workflow;
 2. an authenticated website-only officer creates and approves an immutable test artifact with no Discord binding;
 3. a persisted plan containing every supported customization produces expected website vs Stage 9 parity;
 4. exact-hash officer approval succeeds and tampered/stale/superseded/unapproved artifacts still fail closed;
-5. a verified test Discord binding is added and the same class of approved artifact reaches Stage 10 preview;
-6. Stage 10 exact rendered chunks / mention coverage are officer-reviewed;
-7. controlled test publication confirms idempotent receipts / replay behavior;
-8. active branch ownership is rechecked immediately before merge;
-9. merge/deploy occurs only with explicit production approval.
+5. connect a verified test Discord binding and confirm the old website-only artifact is rejected for Stage 10 with re-plan required;
+6. generate and approve a fresh Discord-aware immutable version;
+7. Stage 10 exact rendered chunks / mention coverage are officer-reviewed;
+8. verify delivery-disabled mode remains preview-only;
+9. controlled test publication confirms idempotent receipts / replay behavior;
+10. active branch ownership is rechecked immediately before merge;
+11. merge/deploy occurs only with explicit production approval.
