@@ -9,6 +9,8 @@ import { guildOperationsService } from './guild-operations-service.mjs';
 import { resolveGuildPlanningOverlay } from './guild-planning-overlay.mjs';
 import { aggregateRoteOperations } from './rote-operations.mjs';
 import { supabaseAuthSession } from './supabase-auth-session.mjs';
+import { tbAssignmentVersionService } from './tb-assignment-version-service.mjs';
+import { tbStage9PlanPreviewService } from './tb-stage9-plan-preview-service.mjs';
 import { buildGuildRoteOperationSafety } from './public/guild-rote-operation-safety.js';
 import { planGuildTbOperationsParity } from './public/guild-operations-parity-planner.js';
 import { planGuildTwDefenseAssignments } from './public/guild-tw-defense-assigner.js';
@@ -272,6 +274,8 @@ export function createGuildOperationsApi(options = {}) {
   const service = options.service || guildOperationsService;
   const canonical = options.canonical || canonicalRosterService;
   const delivery = options.delivery || guildOperationsDiscordDelivery;
+  const immutablePreview = options.immutablePreview || tbStage9PlanPreviewService;
+  const assignmentVersions = options.assignmentVersions || tbAssignmentVersionService;
   const fetchImpl = options.fetch || fetch;
 
   async function requireUser(request) {
@@ -312,6 +316,35 @@ export function createGuildOperationsApi(options = {}) {
     });
   }
 
+  async function immutableOfficerContext(userId, code) {
+    const officer = await service.requireOfficer(userId, code);
+    const binding = await delivery.resolveBinding(officer.guild.id);
+    const discordGuildId = text(binding?.discordGuildId);
+    const seedAllyCode = text(binding?.guildState?.swgohAllyCode).replace(/\D/g, '');
+    if (!/^\d{16,22}$/.test(discordGuildId) || !/^\d{9}$/.test(seedAllyCode)) {
+      throw httpError(
+        'Immutable TB preview currently requires the Guild verified Discord/SWGOH binding so durable reservations and member controls can be materialized safely.',
+        409,
+        'TB_IMMUTABLE_VERIFIED_BINDING_REQUIRED',
+      );
+    }
+    return Object.freeze({
+      guild: officer.guild,
+      userId,
+      discordGuildId,
+      seedAllyCode,
+    });
+  }
+
+  async function listImmutableVersions(userId, code, planId, phase) {
+    const officer = await service.requireOfficer(userId, code);
+    return assignmentVersions.listVersions({ guild: officer.guild, userId }, {
+      planId,
+      phase: text(phase),
+      limit: 100,
+    });
+  }
+
   async function handle(request, response, url) {
     if (!url.pathname.startsWith('/api/account/guild-operations/')) return false;
     try {
@@ -329,6 +362,19 @@ export function createGuildOperationsApi(options = {}) {
       const tbDetail = suffix.match(/^\/tb\/plans\/([0-9a-f-]{36})$/i);
       if (request.method === 'GET' && tbDetail) {
         writeJson(response, 200, await service.getTbPlanDetail(user.id, code, tbDetail[1]));
+        return true;
+      }
+
+      const tbVersions = suffix.match(/^\/tb\/plans\/([0-9a-f-]{36})\/assignment-versions$/i);
+      if (request.method === 'GET' && tbVersions) {
+        writeJson(response, 200, await listImmutableVersions(user.id, code, tbVersions[1], url.searchParams.get('phase')));
+        return true;
+      }
+
+      const tbVersionDetail = suffix.match(/^\/tb\/assignment-versions\/([0-9a-f-]{36})$/i);
+      if (request.method === 'GET' && tbVersionDetail) {
+        const officer = await service.requireOfficer(user.id, code);
+        writeJson(response, 200, await assignmentVersions.getVersion({ guild: officer.guild, userId: user.id }, { runId: tbVersionDetail[1] }));
         return true;
       }
 
@@ -365,6 +411,35 @@ export function createGuildOperationsApi(options = {}) {
       const tbPreview = suffix.match(/^\/tb\/plans\/([0-9a-f-]{36})\/preview$/i);
       if (tbPreview) {
         writeJson(response, 201, await buildTbPreview(user.id, code, tbPreview[1], service, canonical, fetchImpl, delivery));
+        return true;
+      }
+      const tbImmutablePreview = suffix.match(/^\/tb\/plans\/([0-9a-f-]{36})\/immutable-preview$/i);
+      if (tbImmutablePreview) {
+        const immutableContext = await immutableOfficerContext(user.id, code);
+        const result = await immutablePreview.createPreview(immutableContext, {
+          planId: tbImmutablePreview[1],
+          phase: body?.phase,
+          interaction: { guild_id: immutableContext.discordGuildId },
+        });
+        writeJson(response, 201, result);
+        return true;
+      }
+      const tbApproveVersion = suffix.match(/^\/tb\/assignment-versions\/([0-9a-f-]{36})\/approve$/i);
+      if (tbApproveVersion) {
+        const officer = await service.requireOfficer(user.id, code);
+        writeJson(response, 200, await assignmentVersions.approveVersion(
+          { guild: officer.guild, userId: user.id },
+          { runId: tbApproveVersion[1], planHash: body?.planHash || body?.hash },
+        ));
+        return true;
+      }
+      const tbCancelVersion = suffix.match(/^\/tb\/assignment-versions\/([0-9a-f-]{36})\/cancel$/i);
+      if (tbCancelVersion) {
+        const officer = await service.requireOfficer(user.id, code);
+        writeJson(response, 200, await assignmentVersions.cancelVersion(
+          { guild: officer.guild, userId: user.id },
+          { runId: tbCancelVersion[1], reason: body?.reason },
+        ));
         return true;
       }
       const tbPublish = suffix.match(/^\/tb\/runs\/([0-9a-f-]{36})\/publish$/i);
