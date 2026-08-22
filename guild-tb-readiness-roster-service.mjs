@@ -51,6 +51,15 @@ function relevantCatalogRows(catalog = []) {
   });
 }
 
+function relevantBaseIds(catalog = []) {
+  const ids = new Set(TB_READINESS_EXPLICIT_BASE_IDS);
+  for (const unit of relevantCatalogRows(catalog)) {
+    const baseId = clean(unit?.baseId).toUpperCase();
+    if (/^[A-Z0-9_]{2,80}$/.test(baseId)) ids.add(baseId);
+  }
+  return [...ids];
+}
+
 function safeInValues(values = [], pattern) {
   return [...new Set(values.map(clean).filter((value) => value && pattern.test(value)))];
 }
@@ -60,13 +69,13 @@ function inFilter(values = []) {
 }
 
 function compactUnit(row = {}) {
-  const gear = Math.max(0, Math.floor(finite(row.gear_level)));
-  const relic = Math.max(0, Math.floor(finite(row.relic_tier)));
-  const stars = Math.max(0, Math.floor(finite(row.rarity)));
-  const power = Math.max(0, Math.floor(finite(row.galactic_power)));
+  const gear = Math.max(0, Math.floor(finite(row.gear_level ?? row.gear ?? row.gearLevel)));
+  const relic = Math.max(0, Math.floor(finite(row.relic_tier ?? row.relic ?? row.relicTier)));
+  const stars = Math.max(0, Math.floor(finite(row.rarity ?? row.stars)));
+  const power = Math.max(0, Math.floor(finite(row.galactic_power ?? row.power ?? row.gp)));
   return Object.freeze({
-    baseId: clean(row.base_id).toUpperCase(),
-    name: clean(row.unit_name || row.base_id),
+    baseId: clean(row.base_id ?? row.baseId).toUpperCase(),
+    name: clean(row.unit_name ?? row.name ?? row.base_id ?? row.baseId),
     stars,
     rarity: stars,
     level: Math.max(0, Math.floor(finite(row.level))),
@@ -76,7 +85,35 @@ function compactUnit(row = {}) {
     relicTier: relic,
     power,
     galacticPower: power,
-    lastSyncedAt: clean(row.last_synced_at),
+    lastSyncedAt: clean(row.last_synced_at ?? row.lastSyncedAt),
+  });
+}
+
+export function compactGuildTbReadinessRoster(guildBody = {}, catalog = []) {
+  const relevantCatalog = relevantCatalogRows(catalog);
+  const ids = new Set(relevantBaseIds(catalog));
+  let returnedUnitRows = 0;
+  const members = asArray(guildBody?.members).map((member) => {
+    const units = asArray(member?.units)
+      .filter((unit) => ids.has(clean(unit?.baseId ?? unit?.base_id).toUpperCase()))
+      .map(compactUnit);
+    returnedUnitRows += units.length;
+    return Object.freeze({ ...member, units: Object.freeze(units), tbReadinessRoster: true });
+  });
+
+  return Object.freeze({
+    ...guildBody,
+    sourceDetail: "supabase-persisted-guild-tb-readiness-compact",
+    members: Object.freeze(members),
+    tbReadiness: Object.freeze({
+      source: "supabase-canonical-compact-progression",
+      memberCount: members.length,
+      relevantUnitDefinitions: ids.size,
+      returnedUnitRows,
+      categories: TB_READINESS_CATEGORY_NAMES,
+      explicitBaseIds: TB_READINESS_EXPLICIT_BASE_IDS,
+    }),
+    tbReadinessCatalog: Object.freeze(relevantCatalog),
   });
 }
 
@@ -116,21 +153,13 @@ export function createGuildTbReadinessRosterService(options = {}) {
       canonical.getGameUnitCatalog(),
     ]);
 
-    const relevantCatalog = relevantCatalogRows(catalog);
-    const relevantBaseIds = safeInValues(
-      relevantCatalog.map((unit) => clean(unit?.baseId).toUpperCase()),
-      /^[A-Z0-9_]{2,80}$/,
-    );
-    for (const baseId of TB_READINESS_EXPLICIT_BASE_IDS) {
-      if (!relevantBaseIds.includes(baseId)) relevantBaseIds.push(baseId);
-    }
-
+    const ids = relevantBaseIds(catalog);
     const members = asArray(guildBody?.members);
     const memberIds = safeInValues(
       members.map((member) => member?.persistentId),
       /^[0-9a-fA-F-]{16,64}$/,
     );
-    const rows = await selectRelevantUnits(memberIds, relevantBaseIds);
+    const rows = await selectRelevantUnits(memberIds, ids);
     const unitsByPlayer = new Map();
     for (const row of rows) {
       const playerId = clean(row?.player_id);
@@ -138,26 +167,14 @@ export function createGuildTbReadinessRosterService(options = {}) {
       unitsByPlayer.get(playerId).push(compactUnit(row));
     }
 
-    const detailedMembers = members.map((member) => Object.freeze({
-      ...member,
-      units: Object.freeze(unitsByPlayer.get(clean(member?.persistentId)) || []),
-      tbReadinessRoster: true,
-    }));
-
-    return Object.freeze({
+    const hydrated = {
       ...guildBody,
-      sourceDetail: "supabase-persisted-guild-tb-readiness-compact",
-      members: Object.freeze(detailedMembers),
-      tbReadiness: Object.freeze({
-        source: "supabase-canonical-compact-progression",
-        memberCount: detailedMembers.length,
-        relevantUnitDefinitions: relevantBaseIds.length,
-        returnedUnitRows: rows.length,
-        categories: TB_READINESS_CATEGORY_NAMES,
-        explicitBaseIds: TB_READINESS_EXPLICIT_BASE_IDS,
-      }),
-      tbReadinessCatalog: Object.freeze(relevantCatalog),
-    });
+      members: members.map((member) => Object.freeze({
+        ...member,
+        units: Object.freeze(unitsByPlayer.get(clean(member?.persistentId)) || []),
+      })),
+    };
+    return compactGuildTbReadinessRoster(hydrated, catalog);
   }
 
   return Object.freeze({ getGuildTbReadinessRosterByPlayer });
