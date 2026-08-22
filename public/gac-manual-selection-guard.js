@@ -8,6 +8,7 @@ import './gac-live-arena-editor-side.js';
 import './gac-ux-polish.js';
 import './gac-counter-matrix-ui.js';
 import './gac-board-optimization-ui.js';
+import './gac-relic-suitability-ui.js';
 import './gac-scouting-history-ui.js';
 import './gac-scouting-staging-ui.js';
 import './gac-datacron-readiness-ui.js';
@@ -19,6 +20,7 @@ function ensureIntelligenceStyles() {
   const styles = [
     ['gac-counter-matrix-css', '/gac-counter-matrix.css?v=20260822-intel1'],
     ['gac-board-optimization-css', '/gac-board-optimization.css?v=20260822-intel1'],
+    ['gac-relic-suitability-css', '/gac-relic-suitability.css?v=20260822-intel1'],
     ['gac-scout-history-css', '/gac-scouting-history.css?v=20260822-intel1'],
     ['gac-scout-staging-css', '/gac-scouting-staging.css?v=20260822-intel1'],
     ['gac-datacron-readiness-css', '/gac-datacron-readiness.css?v=20260822-intel1'],
