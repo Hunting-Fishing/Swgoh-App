@@ -66,6 +66,31 @@ function helpCount(artifact = {}) {
   return array(artifact.assignments).filter((row) => row?.safety?.help === true).length;
 }
 
+export function assertStage10PlanningSnapshot(artifact = {}) {
+  const diagnostics = object(artifact?.diagnostics);
+  const source = object(diagnostics?.source);
+  const plannerInputs = object(source?.plannerInputs);
+  const planningMode = text(diagnostics?.planningMode || plannerInputs?.planningMode).toLowerCase();
+  const explicitDiscordBound = diagnostics?.discordBound === false || plannerInputs?.discordBound === false
+    ? false
+    : diagnostics?.discordBound === true || plannerInputs?.discordBound === true
+      ? true
+      : null;
+
+  if (planningMode === 'website-only' || explicitDiscordBound === false) {
+    throw serviceError(
+      'This immutable assignment version was created before Discord planning controls were bound. Generate and approve a fresh immutable version after connecting Discord before Stage 10 delivery.',
+      409,
+      'STAGE10_REPLAN_AFTER_DISCORD_BINDING_REQUIRED',
+    );
+  }
+
+  return Object.freeze({
+    planningMode: planningMode || 'legacy',
+    discordBound: explicitDiscordBound,
+  });
+}
+
 function memberKey(row = {}) {
   const playerId = text(row?.member?.playerId);
   const code = allyCode(row?.member?.allyCode);
@@ -460,6 +485,7 @@ export function createTbStage10DiscordDeliveryService(options = {}) {
     const selected = await resolveVersion(context, plan.id, phase, versionNumber);
     const runId = selected.version.id;
     const approved = await publishability.assertPublishable(context, { runId, planId: plan.id, rotePhase: phase });
+    assertStage10PlanningSnapshot(approved.artifact);
     const includeMentions = mentionPolicy(interaction);
     const selectedChannelId = requestedChannel(interaction);
     const verified = await verifiedChannel(context, selectedChannelId);
