@@ -35,6 +35,13 @@ function ensureCss() {
   document.head.appendChild(link);
 }
 
+function setStableMarkup(node, signature, html) {
+  if (!node || node.dataset.tbxSignature === signature) return false;
+  node.dataset.tbxSignature = signature;
+  node.innerHTML = html;
+  return true;
+}
+
 async function loadCatalog() {
   const shared = window.__swgohCatalogSnapshot?.body?.units;
   if (Array.isArray(shared) && shared.length) return shared;
@@ -69,8 +76,8 @@ function statusTone(status) {
 }
 
 function stateChip(requirement = {}) {
-  const state = requirement.state || {};
-  return `<span class="tbx-unit ${escapeAttr(state.tone || "far")}"><b>${escapeHtml(requirement.name)}</b><small>${escapeHtml(state.label || "LOCKED")}</small></span>`;
+  const unitState = requirement.state || {};
+  return `<span class="tbx-unit ${escapeAttr(unitState.tone || "far")}"><b>${escapeHtml(requirement.name)}</b><small>${escapeHtml(unitState.label || "LOCKED")}</small></span>`;
 }
 
 function missionStatusMarkup(row) {
@@ -105,17 +112,23 @@ function ensurePlayerPanel() {
   return section;
 }
 
+function playerPanelSignature(rows) {
+  if (!state.body) return "player:empty";
+  return `player:${state.signature}:${rows.map((row) => `${row.id}:${row.status}:${row.upgradeText}:${array(row.requirements).map((req) => `${req.baseId}:${req.state?.label || ""}`).join(",")}`).join("|")}`;
+}
+
 function renderPlayerPanel(rows) {
   const section = ensurePlayerPanel();
   if (!section) return;
   if (!state.body) {
-    section.innerHTML = `<header class="tbx-section-head"><div><span>YOUR TB CHECK</span><h3>Special Mission Readiness</h3><p>Load an Ally Code to see whether this player is ready for Zeffo, Mandalore, Reva and Wat.</p></div></header>`;
+    setStableMarkup(section, "player:empty", `<header class="tbx-section-head"><div><span>YOUR TB CHECK</span><h3>Special Mission Readiness</h3><p>Load an Ally Code to see whether this player is ready for Zeffo, Mandalore, Reva and Wat.</p></div></header>`);
     return;
   }
   const ready = rows.filter((row) => row.ready).length;
-  section.innerHTML = `
+  const html = `
     <header class="tbx-section-head"><div><span>YOUR TB CHECK</span><h3>Special Mission Readiness</h3><p>Exact personal entry gates from the same models used by Guild Officers.</p></div><strong>${ready}/${rows.length} READY</strong></header>
     <div class="tbx-player-grid">${rows.map(playerMissionCard).join("")}</div>`;
+  setStableMarkup(section, playerPanelSignature(rows), html);
 }
 
 function farmTargetCard(target) {
@@ -139,19 +152,25 @@ function ensureFarmPanel() {
   return section;
 }
 
+function farmPanelSignature(rows, targets) {
+  if (!state.body) return "farm:empty";
+  return `farm:${state.signature}:${rows.map((row) => `${row.id}:${row.status}`).join("|")}:${targets.map((target) => `${target.missionId}:${target.baseId}:${target.current}:${target.target}`).join("|")}`;
+}
+
 function renderFarmPanel(rows) {
   const section = ensureFarmPanel();
   if (!section) return;
   if (!state.body) {
-    section.innerHTML = `<header class="tbx-section-head"><div><span>TB READY FARMING</span><h3>Territory Battle Farm Guide</h3><p>Load an Ally Code to build a farming list from current special-mission gaps.</p></div></header>`;
+    setStableMarkup(section, "farm:empty", `<header class="tbx-section-head"><div><span>TB READY FARMING</span><h3>Territory Battle Farm Guide</h3><p>Load an Ally Code to build a farming list from current special-mission gaps.</p></div></header>`);
     return;
   }
   const targets = tbFarmTargets(rows);
   const ready = rows.filter((row) => row.ready).length;
-  section.innerHTML = `
+  const html = `
     <header class="tbx-section-head"><div><span>TB READY FARMING</span><h3>Territory Battle Farm Guide</h3><p>Mission-specific upgrades only. Close targets appear first; completed mission requirements are removed automatically.</p></div><strong>${ready}/${rows.length} MISSIONS READY</strong></header>
     <div class="tbx-farm-mission-strip">${rows.map((row) => `<span class="${statusTone(row.status)}"><b>${escapeHtml(row.shortLabel)}</b>${escapeHtml(row.status)}</span>`).join("")}</div>
     ${targets.length ? `<div class="tbx-farm-targets">${targets.map(farmTargetCard).join("")}</div>` : '<div class="tbx-all-ready">✅ All currently supported TB special-mission entry requirements are complete.</div>'}`;
+  setStableMarkup(section, farmPanelSignature(rows, targets), html);
 }
 
 function missionRowsById() {
@@ -171,7 +190,7 @@ function decorateRoteLocation(territoryId) {
   const missions = specialMissionsForLocation("rote", territoryId);
   if (!missions.length) return;
   for (const card of document.querySelectorAll(`[data-tb-open-rote="${CSS.escape(territoryId)}"]`)) {
-    let target = card.querySelector(".tb-phase-territory-copy") || card;
+    const target = card.querySelector(".tb-phase-territory-copy") || card;
     let badges = target.querySelector(":scope > [data-tbx-map-special]");
     const html = mapBadgeMarkup(missions);
     if (!badges) {
