@@ -1,4 +1,6 @@
+import { canonicalRosterService } from "./canonical-roster-service.mjs";
 import { discordStateStore } from "./discord-state-store.mjs";
+import { compactGuildTbReadinessRoster } from "./guild-tb-readiness-roster-service.mjs";
 
 const asArray = (value) => Array.isArray(value) ? value : [];
 const clean = (value) => String(value || "").trim();
@@ -54,33 +56,53 @@ function unbound(reason, extra = {}) {
   });
 }
 
+async function buildTbReadinessRoster(guildRoster = {}) {
+  try {
+    const catalog = await canonicalRosterService.getGameUnitCatalog();
+    return compactGuildTbReadinessRoster(guildRoster, catalog);
+  } catch (error) {
+    return Object.freeze({
+      source: "tb-readiness-unavailable",
+      error: clean(error?.message || error),
+      guild: guildRoster?.guild || null,
+      members: Object.freeze([]),
+    });
+  }
+}
+
 export async function resolveGuildPlanningOverlay(guildRoster = {}, options = {}) {
+  const tbReadinessRoster = await buildTbReadinessRoster(guildRoster);
+  const attachTbReadiness = (value) => Object.freeze({
+    ...value,
+    tbReadinessRoster,
+  });
+
   const stateStore = options.stateStore || discordStateStore;
   if (!stateStore || typeof stateStore.status !== "function" || typeof stateStore.readState !== "function") {
-    return unbound("state-store-unavailable");
+    return attachTbReadiness(unbound("state-store-unavailable"));
   }
 
   const status = stateStore.status();
   if (!status?.enabled || !status?.durable) {
-    return unbound(clean(status?.reason) || "durable-state-disabled");
+    return attachTbReadiness(unbound(clean(status?.reason) || "durable-state-disabled"));
   }
 
   const indexes = memberIndexes(guildRoster);
   const guildAllyCodes = new Set(indexes.members.map((member) => allyCode(member?.allyCode)).filter((code) => code.length === 9));
-  if (!guildAllyCodes.size) return unbound("guild-member-ally-codes-unavailable", { durable: true });
+  if (!guildAllyCodes.size) return attachTbReadiness(unbound("guild-member-ally-codes-unavailable", { durable: true }));
 
   let state;
   try {
     state = await stateStore.readState();
   } catch (error) {
-    return unbound("state-read-failed", { durable: true, error: clean(error?.code || error?.message) });
+    return attachTbReadiness(unbound("state-read-failed", { durable: true, error: clean(error?.code || error?.message) }));
   }
 
   const bindings = Object.values(state?.guilds && typeof state.guilds === "object" ? state.guilds : {})
     .filter((guild) => guildAllyCodes.has(allyCode(guild?.swgohAllyCode)));
-  if (!bindings.length) return unbound("discord-guild-not-bound", { durable: true });
+  if (!bindings.length) return attachTbReadiness(unbound("discord-guild-not-bound", { durable: true }));
   if (bindings.length > 1) {
-    return unbound("ambiguous-discord-guild-bindings", { durable: true, bindingCount: bindings.length });
+    return attachTbReadiness(unbound("ambiguous-discord-guild-bindings", { durable: true, bindingCount: bindings.length }));
   }
 
   const binding = bindings[0];
@@ -112,7 +134,7 @@ export async function resolveGuildPlanningOverlay(guildRoster = {}, options = {}
     }));
   }
 
-  return Object.freeze({
+  return attachTbReadiness({
     source: "durable-discord-planning-state",
     bound: true,
     durable: true,
