@@ -24,6 +24,8 @@ const required = [
   'public/gac-datacron-readiness.css',
   'public/gac-datacron-matrix-ui.js',
   'public/gac-datacron-matrix.css',
+  'public/gac-intelligence-export.js',
+  'public/gac-intelligence-export.css',
   'gac-datacron-counter-evidence-service.mjs',
   'supabase/migrations/20260822070000_gac_datacron_battle_evidence.sql',
 ];
@@ -41,6 +43,7 @@ test('every GAC intelligence runtime module referenced by the bootstrap exists',
     'gac-scouting-staging-ui.js',
     'gac-datacron-readiness-ui.js',
     'gac-datacron-matrix-ui.js',
+    'gac-intelligence-export.js',
   ]) assert.match(bootstrap, new RegExp(module.replaceAll('.', '\\.')));
 });
 
@@ -51,7 +54,7 @@ test('intelligence panels are on-demand rather than automatic recurring network 
   const staging = source('public/gac-scouting-staging-ui.js');
   assert.match(optimizer, /data-gac-opt-analyze/);
   assert.match(relic, /data-gac-relic-analyze/);
-  assert.match(dcMatrix, /data-gac-dc-matrix-analyze/);
+  assert.match(dcMatrix, /data-gac-dcm-load/);
   assert.match(staging, /data-gac-stage-build/);
   assert.doesNotMatch(optimizer, /setInterval\s*\(/);
   assert.doesNotMatch(relic, /setInterval\s*\(/);
@@ -102,4 +105,11 @@ test('whole-board optimizer explicitly describes banners as evidence, not guaran
   const ui = source('public/gac-board-optimization-ui.js');
   assert.match(ui, /not guaranteed scores/i);
   assert.match(ui, /Server Attack Plan remains authoritative/i);
+});
+
+test('matrix and plan exports are client-side only', () => {
+  const exportUi = source('public/gac-intelligence-export.js');
+  assert.match(exportUi, /DOWNLOAD CSV/);
+  assert.match(exportUi, /DOWNLOAD TXT/);
+  assert.doesNotMatch(exportUi, /fetch\s*\(/);
 });
