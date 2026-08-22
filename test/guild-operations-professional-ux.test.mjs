@@ -39,16 +39,18 @@ test('immutable planning is explicitly website-ready without Discord', () => {
   assert.match(enhancer, /WEB PLAN READY · DISCORD OFF/);
   assert.match(enhancer, /Website planning \+ approval ready/);
   assert.match(enhancer, /No Discord connection is required to generate, review, approve, cancel, or inspect immutable versions/);
-  assert.match(enhancer, /Website artifact is valid\. Connect and verify Discord when you want to publish/);
+  assert.match(enhancer, /Website artifact is valid\. When Discord is connected, generate and approve a fresh immutable version/);
   assert.doesNotMatch(enhancer, /BINDING REQUIRED/);
 });
 
-test('Stage 10 controls are gated separately from website immutable planning', () => {
+test('Stage 10 controls require both a verified destination and a Discord-aware artifact snapshot', () => {
   assert.match(enhancer, /function immutableDiscordReady\(\)/);
+  assert.match(enhancer, /function immutableVersionDiscordSnapshot\(version = \{\}\)/);
+  assert.match(enhancer, /planningMode === 'website-only'/);
   assert.match(enhancer, /discordPublicationReady/);
-  assert.match(enhancer, /approved && discordReady/);
-  assert.match(enhancer, /approved && !discordReady/);
-  assert.match(enhancer, /!immutableDiscordReady\(\)/);
+  assert.match(enhancer, /approved && discordReady && discordSnapshotReady/);
+  assert.match(enhancer, /DISCORD RE-PLAN REQUIRED/);
+  assert.match(enhancer, /Generate and approve a fresh immutable version now that Discord is connected/);
 });
 
 test('website Stage 10 requires preview before explicit PUBLISH delivery', () => {
@@ -62,6 +64,13 @@ test('website Stage 10 requires preview before explicit PUBLISH delivery', () =>
   assert.match(enhancer, /publish-immutable/);
   assert.match(enhancer, /confirm:'PUBLISH'/);
   assert.match(enhancer, /window\.confirm\(/);
+});
+
+test('Stage 10 preview remains preview-only when network delivery is disabled server-side', () => {
+  assert.match(enhancer, /preview\?\.deliveryEnabled !== false/);
+  assert.match(enhancer, /DELIVERY DISABLED/);
+  assert.match(enhancer, /No PUBLISH control is exposed/);
+  assert.match(enhancer, /delivery\.preview\?\.deliveryEnabled === false/);
 });
 
 test('changing mention policy invalidates a previously rendered delivery preview', () => {
