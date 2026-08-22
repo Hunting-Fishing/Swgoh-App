@@ -5,6 +5,7 @@ const finite = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(
 const text = (value) => String(value ?? "").trim();
 
 export const MANDALORE_UNLOCK_TARGET = 25;
+export const MANDALORE_GET2_PER_CLEAR = 50;
 export const MANDALORE_UNLOCK_UNITS = Object.freeze({
   boKatanMandalor: "MANDALORBOKATAN",
   beskarMando: "THEMANDALORIANBESKARARMOR",
@@ -14,15 +15,38 @@ function memberId(member = {}, index = 0) {
   return text(member.playerId || member.id || member.allyCode || member.name || `member-${index + 1}`);
 }
 
-function categoryNames(unit = {}) {
-  return asArray(unit.categories)
-    .map((row) => typeof row === "string" ? row : row?.name || row?.id || row?.categoryId || "")
-    .map(text)
-    .filter(Boolean);
+function tagText(value) {
+  if (value && typeof value === "object") {
+    return text(value.name || value.label || value.displayName || value.id || value.categoryId || value.tag);
+  }
+  return text(value);
+}
+
+function normalizedTag(value) {
+  return tagText(value).toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+function stripFactionPrefix(value) {
+  let key = normalizedTag(value);
+  for (const prefix of ["affiliation", "faction", "category", "tag"]) {
+    if (key.startsWith(prefix)) {
+      key = key.slice(prefix.length);
+      break;
+    }
+  }
+  return key;
+}
+
+function unitTags(unit = {}) {
+  return [
+    ...asArray(unit.factions),
+    ...asArray(unit.tags),
+    ...asArray(unit.categories),
+  ].map(tagText).filter(Boolean);
 }
 
 function isMandalorian(unit = {}) {
-  return categoryNames(unit).some((name) => name.toLowerCase().replace(/[_-]+/g, " ") === "mandalorian");
+  return unitTags(unit).some((tag) => stripFactionPrefix(tag) === "mandalorian");
 }
 
 function catalogIndex(catalog = []) {
@@ -42,6 +66,8 @@ function unitMap(member = {}, catalog = []) {
         baseId,
         name: text(owned.name || staticUnit.name || baseId),
         categories: asArray(owned.categories).length ? owned.categories : asArray(staticUnit.categories),
+        factions: asArray(owned.factions).length ? owned.factions : asArray(staticUnit.factions),
+        tags: asArray(owned.tags).length ? owned.tags : asArray(staticUnit.tags),
       }];
     }));
 }
@@ -104,6 +130,8 @@ export function buildMandaloreMemberReadiness(member = {}, catalog = [], index =
     galacticPower: finite(member.galacticPower, 0),
     rosterAvailable: member.rosterAvailable === true || asArray(member.units).length > 0,
     profileTitle: text(member.profileTitle || member.title || member.playerTitle),
+    playerPortrait: text(member.playerPortrait || member.profilePortrait),
+    memberLevel: finite(member.memberLevel, 0),
     memberRole: text(member.memberRole || member.guildRole || member.role),
     boKatanMandalor,
     beskarMando,
@@ -126,12 +154,15 @@ export function buildGuildMandaloreReadiness(guildBody = {}, catalog = []) {
   const almost = sorted.filter((row) => row.status === "ALMOST");
   const far = sorted.filter((row) => row.status === "FAR");
   const rosterUnavailable = sorted.filter((row) => !row.rosterAvailable).length;
+  const potentialSuccessfulClears = ready.length;
+  const unlockShortfall = Math.max(0, MANDALORE_UNLOCK_TARGET - potentialSuccessfulClears);
 
   return Object.freeze({
     missionId: "mandalore",
     missionName: "Mandalore Unlock",
     planetName: "Tatooine · Krayt Dragon",
     unlockTarget: MANDALORE_UNLOCK_TARGET,
+    rewardPerSuccessfulClear: Object.freeze({ currency: "GET2", amount: MANDALORE_GET2_PER_CLEAR }),
     gateText: "Bo-Katan (Mand'alor) R7 + The Mandalorian (Beskar Armor) R7 + any additional Mandalorian R7. 25 successful guild clears unlock Mandalore for that Territory Battle instance.",
     guild: Object.freeze({
       id: text(guildBody?.guild?.id),
@@ -149,6 +180,9 @@ export function buildGuildMandaloreReadiness(guildBody = {}, catalog = []) {
       far: far.length,
       rosterUnavailable,
       buffer: ready.length - MANDALORE_UNLOCK_TARGET,
+      unlockShortfall,
+      potentialSuccessfulClears,
+      potentialGet2: potentialSuccessfulClears * MANDALORE_GET2_PER_CLEAR,
       canFieldUnlockCount: ready.length >= MANDALORE_UNLOCK_TARGET,
     }),
   });
@@ -164,3 +198,5 @@ export function filterGuildMandaloreRows(rows = [], options = {}) {
       .join(" ").toLowerCase().replace(/-/g, "").includes(query);
   }));
 }
+
+export { bestAdditionalMandalorian, isMandalorian, normalizedTag, stripFactionPrefix, unitTags };
