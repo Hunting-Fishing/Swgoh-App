@@ -21,8 +21,9 @@ const base = {
   source: 'verified-owner-war-room',
 };
 
-test('team signatures retain leader identity and normalize duplicate members', () => {
-  assert.equal(teamSignature('LEAD', ['B', 'LEAD', 'A', 'A']), 'LEAD|B,LEAD,A');
+test('team signatures retain leader identity, deduplicate members and ignore member ordering', () => {
+  assert.equal(teamSignature('LEAD', ['B', 'LEAD', 'A', 'A']), 'LEAD|A,B,LEAD');
+  assert.equal(teamSignature('LEAD', ['B', 'LEAD', 'A']), teamSignature('LEAD', ['A', 'B', 'LEAD']));
   assert.notEqual(teamSignature('OTHER', ['B', 'LEAD', 'A']), teamSignature('LEAD', ['B', 'LEAD', 'A']));
 });
 
