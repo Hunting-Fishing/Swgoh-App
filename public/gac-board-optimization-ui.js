@@ -102,6 +102,20 @@ function zoneLabel(zone) {
 }
 function pct(value) { return Number.isFinite(Number(value)) ? `${Math.round(Number(value) * 100)}%` : '—'; }
 function banners(value) { return Number.isFinite(Number(value)) ? Number(value).toFixed(1).replace(/\.0$/, '') : '—'; }
+function riskLabel(value) {
+  return ({
+    'very-low':'VERY LOW',
+    low:'LOW',
+    moderate:'MODERATE',
+    high:'HIGH',
+    critical:'CRITICAL',
+    insufficient:'LOW SAMPLE',
+    unknown:'UNKNOWN',
+  })[clean(value).toLowerCase()] || 'UNKNOWN';
+}
+function relicLabel(value) {
+  return ({ high:'HIGH RELIC BURDEN', elevated:'ELEVATED RELIC BURDEN', slight:'SLIGHT RELIC EDGE', neutral:'RELIC NEUTRAL', efficient:'LOWER-RELIC EVIDENCE', unknown:'RELIC UNKNOWN' })[clean(value).toLowerCase()] || 'RELIC UNKNOWN';
+}
 
 async function analyze() {
   if (state.loading) return;
@@ -150,8 +164,9 @@ function summaryMarkup(opt) {
   const s = opt.scarcity || {};
   return `<div class="gac-opt-summary">
     <article><b>${opt.coveredDefenses}/${opt.totalDefenses}</b><span>BOARD COVERAGE</span><small>${pct(opt.coverageRate)} non-overlap allocation</small></article>
-    <article><b>${banners(opt.projectedBanners)}</b><span>PROJECTED BANNERS*</span><small>${opt.projectedBanners == null ? 'Incomplete evidence allocation' : `${opt.projectedUniqueAttackers} unique attackers`}</small></article>
-    <article><b>${pct(opt.projectedBattleWeightedWinRate)}</b><span>EVIDENCE-WEIGHTED WIN</span><small>${opt.exactEvidenceRows}/${opt.totalDefenses} exact squad rows</small></article>
+    <article><b>${banners(opt.projectedBanners)}</b><span>PROJECTED BANNERS*</span><small>${opt.projectedBanners == null ? 'Incomplete evidence allocation' : `${opt.projectedUniqueAttackers} unique attackers · ${opt.projectedUndersizeSlots || 0} undersize slot(s)`}</small></article>
+    <article><b>${pct(opt.projectedEvidenceFloor90)}</b><span>90% EVIDENCE FLOOR*</span><small>${pct(opt.projectedBattleWeightedWinRate)} historical observed · ${opt.exactEvidenceRows}/${opt.totalDefenses} exact rows</small></article>
+    <article class="${opt.projectedHighRiskAttacks ? 'is-alert' : opt.projectedCautionaryAttacks ? 'is-warn' : ''}"><b>${opt.projectedHighRiskAttacks || 0}/${opt.projectedCautionaryAttacks || 0}</b><span>HIGH-RISK / CAUTION</span><small>${opt.projectedRelicBurdenAttacks || 0} proposed counters historically used relic advantage</small></article>
     <article class="${s.uncovered ? 'is-alert' : s.critical ? 'is-warn' : ''}"><b>${s.uncovered || 0}/${s.critical || 0}</b><span>UNCOVERED / ONE-COUNTER</span><small>${s.scarce || 0} more scarce rows</small></article>
     <article><b>${plan.statuses?.planned || 0}</b><span>LOCKED PLANS</span><small>${plan.statuses?.attempted || 0} attempted · ${plan.statuses?.win || 0} wins</small></article>
     <article><b>${plan.recordedBannerSamples ? number.format(plan.recordedBanners) : '—'}</b><span>RECORDED BANNERS</span><small>${plan.recordedBannerSamples || 0} recorded results</small></article>
@@ -161,10 +176,15 @@ function summaryMarkup(opt) {
 function rowMarkup(row) {
   const proposed = row.proposedCounter;
   const existing = row.existingPlan;
+  const floor = proposed?.observedWinRateLowerBound90 ?? row.bestEvidenceFloor90;
+  const risk = proposed?.failureRiskBand || row.bestFailureRiskBand;
+  const sample = proposed?.sampleQuality || row.bestSampleQuality;
+  const undersize = Math.max(0, Number(proposed?.undersizeCount ?? row.bestUndersizeCount ?? 0));
+  const relicBurden = proposed?.relicBurdenBand || row.bestRelicBurdenBand;
   return `<article class="gac-opt-priority is-${escapeAttr(row.scarcity)}">
     <header><div>${portrait(row.leaderBaseId, 'is-defense')}<span><b>${escapeHtml(unitName(row.leaderBaseId))}</b><small>${escapeHtml(zoneLabel(row.zone))} · Slot ${Number(row.slot) + 1}</small></span></div><i>${escapeHtml(row.scarcity.toUpperCase())}</i></header>
-    <div class="gac-opt-metrics"><span><b>${row.counterSquads}</b> qualifying counters</span><span><b>${row.bestWinRate == null ? '—' : pct(row.bestWinRate)}</b> best observed</span><span><b>${row.bestBattles || 0}</b> best sample</span></div>
-    <footer>${existing ? `<div><span>SERVER PLAN</span><strong>${escapeHtml(unitName(existing.leaderBaseId))}</strong><small>${escapeHtml(existing.status.toUpperCase())}${existing.datacronId ? ' · Datacron locked' : ''}</small></div>` : proposed ? `<div><span>PROPOSED NON-OVERLAP COUNTER</span><strong>${escapeHtml(unitName(proposed.counterLeaderBaseId))}</strong><small>${pct(proposed.winRate)} · ${number.format(proposed.battles)} battles · B ${banners(proposed.averageBanners)}</small></div>` : '<div><span>PROPOSED COUNTER</span><strong>No qualifying unique counter</strong><small>Relax filters, confirm roster state, or inspect the matrix.</small></div>'}<button type="button" data-gac-opt-open-matrix>VIEW MATRIX</button></footer>
+    <div class="gac-opt-metrics"><span><b>${row.counterSquads}</b> qualifying counters</span><span><b>${row.bestObservedWinRate == null ? '—' : pct(row.bestObservedWinRate)}</b> observed</span><span><b>${pct(floor)}</b> 90% evidence floor</span><span><b>${escapeHtml(riskLabel(risk))}</b> failure-risk evidence</span><span><b>${row.bestBattles || 0}</b> best sample · ${escapeHtml(clean(sample).toUpperCase() || 'NONE')}</span></div>
+    <footer>${existing ? `<div><span>SERVER PLAN</span><strong>${escapeHtml(unitName(existing.leaderBaseId))}</strong><small>${escapeHtml(existing.status.toUpperCase())}${existing.datacronId ? ' · Datacron locked' : ''}</small></div>` : proposed ? `<div><span>PROPOSED RISK-AWARE COUNTER</span><strong>${escapeHtml(unitName(proposed.counterLeaderBaseId))}</strong><small>${pct(proposed.winRate)} observed · ${pct(proposed.observedWinRateLowerBound90)} floor · ${escapeHtml(riskLabel(proposed.failureRiskBand))} risk · ${number.format(proposed.battles)} battles · B ${banners(proposed.averageBanners)}${undersize ? ` · ${undersize}-unit undersize` : ''} · ${escapeHtml(relicLabel(relicBurden))}</small></div>` : '<div><span>PROPOSED COUNTER</span><strong>No qualifying unique counter</strong><small>Relax filters, confirm roster state, or inspect the matrix.</small></div>'}<button type="button" data-gac-opt-open-matrix>VIEW MATRIX</button></footer>
   </article>`;
 }
 
@@ -188,10 +208,10 @@ function render() {
   if (!root) return;
   const opt = state.optimization;
   const rows = opt ? priorityRows(opt).slice(0, 10) : [];
-  root.innerHTML = `<header><div><span>WHOLE-BOARD OPTIMIZER</span><strong>Coverage, scarcity and banner plan</strong><small>On-demand analysis only. Uses the visible board, your remaining roster and persisted counter evidence; it does not predict hidden defenses.</small></div><div>${state.analyzedKey ? `<button type="button" data-gac-opt-toggle>${state.open ? 'HIDE' : 'VIEW RESULTS'}</button>` : ''}<button type="button" data-gac-opt-analyze ${state.loading ? 'disabled' : ''}>${state.loading ? 'ANALYZING…' : state.analyzedKey ? 'REANALYZE BOARD' : 'ANALYZE BOARD'}</button></div></header>
-    <div class="gac-opt-controls"><label><span>Minimum battles</span><input type="number" min="1" max="1000" value="${state.minimumBattles}" data-gac-opt-min-battles></label><label><span>Minimum relic</span><select data-gac-opt-min-relic>${[0,3,5,6,7,8,9].map((value)=>`<option value="${value}" ${state.minimumRelic===value?'selected':''}>${value ? `R${value}+` : 'Any relic'}</option>`).join('')}</select></label><small>Scarcity is based on distinct currently-fieldable counter squads meeting these thresholds.</small></div>
+  root.innerHTML = `<header><div><span>WHOLE-BOARD OPTIMIZER</span><strong>Coverage, risk, scarcity and banner plan</strong><small>On-demand analysis only. Uses the visible board, your remaining roster and persisted historical counter evidence; it does not predict hidden defenses or guarantee a current battle.</small></div><div>${state.analyzedKey ? `<button type="button" data-gac-opt-toggle>${state.open ? 'HIDE' : 'VIEW RESULTS'}</button>` : ''}<button type="button" data-gac-opt-analyze ${state.loading ? 'disabled' : ''}>${state.loading ? 'ANALYZING…' : state.analyzedKey ? 'REANALYZE BOARD' : 'ANALYZE BOARD'}</button></div></header>
+    <div class="gac-opt-controls"><label><span>Minimum battles</span><input type="number" min="1" max="1000" value="${state.minimumBattles}" data-gac-opt-min-battles></label><label><span>Minimum relic</span><select data-gac-opt-min-relic>${[0,3,5,6,7,8,9].map((value)=>`<option value="${value}" ${state.minimumRelic===value?'selected':''}>${value ? `R${value}+` : 'Any relic'}</option>`).join('')}</select></label><small>Scarcity is based on distinct currently-fieldable counter squads meeting these thresholds. Risk ranking penalizes weak samples before banner/undersize value.</small></div>
     ${state.error ? `<div class="gac-opt-error">${escapeHtml(state.error)}</div>` : ''}
-    ${state.open && opt ? `${summaryMarkup(opt)}<div class="gac-opt-note">* Projected banners are evidence summaries, not guaranteed scores. Current server Attack Plan remains authoritative for locked squads, attempts and consumed units.</div><div class="gac-opt-priority-grid">${rows.map(rowMarkup).join('')}</div>` : ''}`;
+    ${state.open && opt ? `${summaryMarkup(opt)}<div class="gac-opt-note">* Projected banners are historical evidence summaries, not guaranteed scores. The 90% evidence floor is a lower confidence bound on recorded historical wins, not a predicted win probability. Current server Attack Plan remains authoritative for locked squads, attempts and consumed units.</div><div class="gac-opt-priority-grid">${rows.map(rowMarkup).join('')}</div>` : ''}`;
 }
 
 function installBoardOptimization() {
