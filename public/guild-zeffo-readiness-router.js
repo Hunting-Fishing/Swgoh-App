@@ -39,7 +39,7 @@ function ensureNavLink() {
   if (!link) {
     link = document.createElement("a");
     link.id = "guildZeffoReadinessNav";
-    link.textContent = "Zeffo Readiness";
+    link.textContent = "TB Readiness";
     const tb = [...nav.querySelectorAll("a")].find((row) => String(row.getAttribute("href") || "").startsWith("/guild/tb"));
     if (tb?.nextSibling) nav.insertBefore(link, tb.nextSibling); else nav.appendChild(link);
   }
@@ -56,7 +56,7 @@ function injectOverviewCard() {
   const article = document.createElement("article");
   article.id = "guildZeffoOverviewCard";
   article.className = "guild-capability-card";
-  article.innerHTML = `<div class="kicker">TB OFFICER TOOL</div><div class="guild-capability-title"><h3>Zeffo Readiness</h3><span>LIVE GUILD</span></div><p>Audit Cere, JKCK and Baby Cal across the entire guild, with a separate officer action list for members who are not ready.</p><a class="guild-zeffo-card-link" href="${escapeAttr(routeUrl())}">Open Zeffo Readiness →</a>`;
+  article.innerHTML = `<div class="kicker">TB OFFICER TOOL</div><div class="guild-capability-title"><h3>TB Mission Readiness</h3><span>LIVE GUILD</span></div><p>Profile-first readiness boards for special Territory Battle missions. Zeffo / Bracca is live; Mandalore, Reva, Wat Tambor and more plug into the same layout.</p><a class="guild-zeffo-card-link" href="${escapeAttr(routeUrl())}">Open TB Readiness →</a>`;
   const tbCard = [...grid.children].find((row) => row.textContent?.includes("TB Command"));
   if (tbCard?.nextSibling) grid.insertBefore(article, tbCard.nextSibling); else grid.appendChild(article);
 }
@@ -69,7 +69,7 @@ function injectTbLink() {
   link.id = "guildTbZeffoReadinessLink";
   link.className = "guild-zeffo-tb-link";
   link.href = routeUrl();
-  link.textContent = "Zeffo Readiness →";
+  link.textContent = "TB Mission Readiness →";
   heading.appendChild(link);
 }
 
@@ -83,7 +83,7 @@ async function renderRoute(force = false) {
 
   state.rendering = true;
   target.dataset.guildZeffoMounted = "true";
-  target.innerHTML = '<section class="guild-page-card"><div class="workspace-note">Loading live Zeffo readiness…</div></section>';
+  target.innerHTML = '<section class="guild-page-card"><div class="workspace-note">Loading live TB mission readiness…</div></section>';
   try {
     const [guildBody, module] = await Promise.all([
       fetchJson(`/api/guild/by-player/${allyCode}/roster`),
@@ -92,7 +92,7 @@ async function renderRoute(force = false) {
     await module.renderGuildZeffoReadinessPage({ target, guildBody, allyCode });
     state.renderedKey = key;
   } catch (error) {
-    target.innerHTML = `<section class="guild-page-card"><div class="workspace-error">${escapeHtml(error?.message || "Zeffo readiness is unavailable.")}</div></section>`;
+    target.innerHTML = `<section class="guild-page-card"><div class="workspace-error">${escapeHtml(error?.message || "TB mission readiness is unavailable.")}</div></section>`;
   } finally {
     state.rendering = false;
   }
