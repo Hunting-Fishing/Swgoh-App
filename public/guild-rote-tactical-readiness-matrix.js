@@ -4,6 +4,7 @@ import { TB_TACTICAL_READINESS } from './tb-mission-readiness-v2.js';
 
 const array = (value) => Array.isArray(value) ? value : [];
 const text = (value) => String(value ?? '').trim();
+const digits = (value) => text(value).replace(/\D/g, '').slice(0, 9);
 
 export const GUILD_ROTE_TACTICAL_STATE = Object.freeze({
   ENTRY_READY: 'ENTRY READY',
@@ -108,25 +109,109 @@ export function buildGuildRoteTacticalCell(member = {}, missionRow = {}, catalog
 }
 
 export function summarizeGuildRoteTacticalCells(cells = []) {
+  const rows = array(cells);
   const counts = Object.fromEntries(GUILD_ROTE_TACTICAL_STATE_ORDER.map((state) => [state, 0]));
-  for (const cell of array(cells)) {
+  for (const cell of rows) {
     const state = GUILD_ROTE_TACTICAL_STATE_ORDER.includes(cell?.state)
       ? cell.state
       : GUILD_ROTE_TACTICAL_STATE.UNKNOWN_EVIDENCE;
     counts[state] += 1;
   }
-  const known = array(cells).length - counts[GUILD_ROTE_TACTICAL_STATE.UNKNOWN_EVIDENCE];
-  const battleReady = counts[GUILD_ROTE_TACTICAL_STATE.MINIMUM_READY] + counts[GUILD_ROTE_TACTICAL_STATE.SAFER_READY];
+  const known = rows.length - counts[GUILD_ROTE_TACTICAL_STATE.UNKNOWN_EVIDENCE];
+  const saferReady = counts[GUILD_ROTE_TACTICAL_STATE.SAFER_READY];
+  const minimumReady = counts[GUILD_ROTE_TACTICAL_STATE.MINIMUM_READY] + saferReady;
+  const battleReady = minimumReady;
+  const officialEntryReady = rows.filter((cell) => {
+    if (cell?.officialEntryReady === true) return true;
+    if (cell?.officialEntryReady === false) return false;
+    return [
+      GUILD_ROTE_TACTICAL_STATE.ENTRY_READY,
+      GUILD_ROTE_TACTICAL_STATE.MINIMUM_READY,
+      GUILD_ROTE_TACTICAL_STATE.SAFER_READY,
+    ].includes(cell?.state);
+  }).length;
   return Object.freeze({
-    total: array(cells).length,
+    total: rows.length,
     known,
     battleReady,
+    officialEntryReady,
+    minimumReady,
+    saferReady,
+    blocked: counts[GUILD_ROTE_TACTICAL_STATE.BLOCKED],
+    unknownEvidence: counts[GUILD_ROTE_TACTICAL_STATE.UNKNOWN_EVIDENCE],
     counts: Object.freeze(counts),
+  });
+}
+
+function identityKeys(value = {}) {
+  const keys = [];
+  const playerId = text(value?.playerId || value?.player_id || value?.id);
+  const allyCode = digits(value?.allyCode || value?.ally_code);
+  if (playerId) keys.push(`player:${playerId}`);
+  if (allyCode.length === 9) keys.push(`ally:${allyCode}`);
+  return keys;
+}
+
+function sameIdentity(left = {}, right = {}) {
+  const leftKeys = new Set(identityKeys(left));
+  if (!leftKeys.size) return false;
+  return identityKeys(right).some((key) => leftKeys.has(key));
+}
+
+function missionIdentityKeys(missionRow = {}) {
+  return new Set([
+    text(missionRow?.key),
+    text(missionRow?.mission?.id),
+  ].filter(Boolean));
+}
+
+function attemptMatchesMission(attempt = {}, missionRow = {}, activeEventId = '') {
+  const eventId = text(attempt?.eventId || attempt?.event_id);
+  if (!activeEventId || eventId !== activeEventId) return false;
+  const missionId = text(attempt?.missionId || attempt?.mission_id);
+  return Boolean(missionId && missionIdentityKeys(missionRow).has(missionId));
+}
+
+export function summarizeGuildRoteMissionReadiness(cells = [], missionRow = {}, options = {}) {
+  const summary = summarizeGuildRoteTacticalCells(cells);
+  const activeEventId = text(options?.activeEvent?.id || options?.activeEventId || options?.eventId);
+  const attemptsAvailable = Array.isArray(options?.attempts);
+  const outstandingAvailable = Boolean(activeEventId && attemptsAvailable);
+
+  if (!outstandingAvailable) {
+    return Object.freeze({
+      ...summary,
+      activeEventId: '',
+      attemptsRecorded: null,
+      attemptedEntryReady: null,
+      outstanding: null,
+      outstandingMemberIds: Object.freeze([]),
+      outstandingAvailable: false,
+      participationEvidence: 'ACTIVE EVENT ATTEMPT EVIDENCE UNAVAILABLE',
+    });
+  }
+
+  const missionAttempts = array(options.attempts).filter((attempt) => attemptMatchesMission(attempt, missionRow, activeEventId));
+  const entryReadyCells = array(cells).filter((cell) => cell?.officialEntryReady === true);
+  const attemptedEntryReadyCells = entryReadyCells.filter((cell) => missionAttempts.some((attempt) => sameIdentity(cell?.member || {}, attempt)));
+  const outstandingCells = entryReadyCells.filter((cell) => !missionAttempts.some((attempt) => sameIdentity(cell?.member || {}, attempt)));
+
+  return Object.freeze({
+    ...summary,
+    activeEventId,
+    attemptsRecorded: missionAttempts.length,
+    attemptedEntryReady: attemptedEntryReadyCells.length,
+    outstanding: outstandingCells.length,
+    outstandingMemberIds: Object.freeze(outstandingCells.map((cell) => text(cell?.member?.id || cell?.member?.playerId || cell?.member?.allyCode)).filter(Boolean)),
+    outstandingAvailable: true,
+    participationEvidence: 'ACTIVE EVENT GUILD EVIDENCE',
   });
 }
 
 export function buildGuildRoteTacticalMissionRow(missionRow = {}, members = [], catalog = [], options = {}) {
   const cells = array(members).map((member) => buildGuildRoteTacticalCell(member, missionRow, catalog, options));
+  const summary = summarizeGuildRoteTacticalCells(cells);
+  const missionSummary = summarizeGuildRoteMissionReadiness(cells, missionRow, options);
   return Object.freeze({
     key: text(missionRow?.key || missionRow?.mission?.id),
     planetId: text(missionRow?.planetId),
@@ -136,7 +221,8 @@ export function buildGuildRoteTacticalMissionRow(missionRow = {}, members = [], 
     mission: missionRow?.mission || null,
     evidence: text(missionRow?.evidence || 'exact'),
     cells: Object.freeze(cells),
-    summary: summarizeGuildRoteTacticalCells(cells),
+    summary,
+    missionSummary,
   });
 }
 
@@ -155,6 +241,6 @@ export function buildGuildRoteTacticalReadinessMatrix(guildSnapshot = {}, catalo
     members: Object.freeze(members),
     missions: Object.freeze(missions),
     summary: summarizeGuildRoteTacticalCells(cells),
-    evidenceBoundary: 'Official entry legality, tactical battle preparation, and unknown evidence remain separate. UNKNOWN is never coerced to zero or failure.',
+    evidenceBoundary: 'Official entry legality, tactical battle preparation, active-event participation evidence, and unknown evidence remain separate. UNKNOWN is never coerced to zero or failure.',
   });
 }
