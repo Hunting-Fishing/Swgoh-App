@@ -1,4 +1,5 @@
 import { normalizeZeffoUnitState } from "./guild-zeffo-readiness-model.js";
+import { normalizedTag, stripFactionDecorators, unitHasFaction, unitTags } from "./guild-tb-faction-tags.js";
 
 const asArray = (value) => Array.isArray(value) ? value : [];
 const finite = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
@@ -15,38 +16,8 @@ function memberId(member = {}, index = 0) {
   return text(member.playerId || member.id || member.allyCode || member.name || `member-${index + 1}`);
 }
 
-function tagText(value) {
-  if (value && typeof value === "object") {
-    return text(value.name || value.label || value.displayName || value.id || value.categoryId || value.tag);
-  }
-  return text(value);
-}
-
-function normalizedTag(value) {
-  return tagText(value).toLowerCase().replace(/[^a-z0-9]+/g, "");
-}
-
-function stripFactionPrefix(value) {
-  let key = normalizedTag(value);
-  for (const prefix of ["affiliation", "faction", "category", "tag"]) {
-    if (key.startsWith(prefix)) {
-      key = key.slice(prefix.length);
-      break;
-    }
-  }
-  return key;
-}
-
-function unitTags(unit = {}) {
-  return [
-    ...asArray(unit.factions),
-    ...asArray(unit.tags),
-    ...asArray(unit.categories),
-  ].map(tagText).filter(Boolean);
-}
-
 function isMandalorian(unit = {}) {
-  return unitTags(unit).some((tag) => stripFactionPrefix(tag) === "mandalorian");
+  return unitHasFaction(unit, "mandalorian");
 }
 
 function catalogIndex(catalog = []) {
@@ -199,4 +170,4 @@ export function filterGuildMandaloreRows(rows = [], options = {}) {
   }));
 }
 
-export { bestAdditionalMandalorian, isMandalorian, normalizedTag, stripFactionPrefix, unitTags };
+export { bestAdditionalMandalorian, isMandalorian, normalizedTag, stripFactionDecorators, unitTags };
