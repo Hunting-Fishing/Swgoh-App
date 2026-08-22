@@ -1,4 +1,8 @@
-import "./tb-readiness-cross-surface.js";
+import "./guild-route-resilience-hotfix.js";
+
+if (!location.pathname.startsWith("/guild")) {
+  import("./tb-readiness-cross-surface.js").catch(() => {});
+}
 
 const ZEFFO_ROUTE = "/guild/zeffo";
 const ALLY_STORAGE_KEY = "swgoh:guild-route-ally-code";
