@@ -19,16 +19,16 @@ const guildBody = {
   guild: { id: "guild-1", name: "Test Guild", galacticPower: 19_000_000, memberCount: 3 },
   hydration: { requested: 3, hydrated: 2, failed: 1, complete: false },
   members: [
-    { playerId: "p1", allyCode: "111222333", name: "Alpha", galacticPower: 10_000_000, rosterAvailable: true, units: [
+    { playerId: "p1", allyCode: "111222333", name: "Alpha", galacticPower: 10_000_000, rosterAvailable: true, memberLevel: 4, profileTitle: "Guild Commander", playerPortrait: "PLAYERPORTRAIT_JEDIMASTER", units: [
       { baseId: "GL", power: 40000, gear: 13, relic: 9, stars: 7 },
       { baseId: "CHAR", power: 30000, gear: 13, relic: 7, stars: 7 },
       { baseId: "SHIP", power: 50000, stars: 7 },
     ] },
-    { playerId: "p2", allyCode: "444555666", name: "Bravo", galacticPower: 9_000_000, rosterAvailable: true, units: [
+    { playerId: "p2", allyCode: "444555666", name: "Bravo", galacticPower: 9_000_000, rosterAvailable: true, memberLevel: 3, units: [
       { baseId: "CHAR", power: 25000, gear: 13, relic: 5, stars: 7 },
       { baseId: "SHIP", power: 45000, stars: 6 },
     ] },
-    { playerId: "p3", allyCode: "777888999", name: "Charlie", galacticPower: 0, rosterAvailable: false, units: [] },
+    { playerId: "p3", allyCode: "777888999", name: "Charlie", galacticPower: 0, rosterAvailable: false, memberLevel: 2, units: [] },
   ],
 };
 
@@ -49,6 +49,17 @@ test("builds normalized guild and member roster statistics", () => {
   assert.equal(alpha.relic7, 2);
   assert.equal(alpha.relic9, 1);
   assert.equal(alpha.sevenStarShips, 1);
+});
+
+test("maps in-game guild levels into leader and officer leadership summary", () => {
+  const snapshot = buildGuildRosterSnapshot(guildBody, catalog);
+  assert.equal(snapshot.leadership.leader.name, "Alpha");
+  assert.equal(snapshot.leadership.leader.memberRole, "Guild Leader");
+  assert.equal(snapshot.leadership.leader.profileTitle, "Guild Commander");
+  assert.equal(snapshot.leadership.leader.playerPortrait, "PLAYERPORTRAIT_JEDIMASTER");
+  assert.deepEqual(snapshot.leadership.officers.map((row) => row.name), ["Bravo"]);
+  assert.equal(snapshot.summary.leaderCount, 1);
+  assert.equal(snapshot.summary.officerCount, 1);
 });
 
 test("compares membership joins leaves renames and GP deltas", () => {
@@ -93,4 +104,5 @@ test("compact snapshot keeps only membership identity and GP history fields", ()
   assert.equal(compact.guildId, "guild-1");
   assert.equal(compact.members.length, 3);
   assert.equal(Object.hasOwn(compact.members[0], "characterGp"), false);
+  assert.ok(compact.members.some((row) => row.memberRole === "Guild Leader"));
 });

@@ -1,5 +1,6 @@
 import { canonicalRosterService } from "./canonical-roster-service.mjs";
 import { supabaseCoreStore } from "./supabase-core-store.mjs";
+import { stripFactionDecorators, unitFactionKeys } from "./public/guild-tb-faction-tags.js";
 
 const PAGE_SIZE = 1000;
 const MAX_ROWS = 5000;
@@ -37,9 +38,8 @@ function normalizeAllyCode(value) {
   return allyCode;
 }
 
-function normalizeCategory(value) {
-  return clean(value).toLowerCase().replace(/[_-]+/g, " ");
-}
+const normalizeCategory = stripFactionDecorators;
+const unitCategoryKeys = unitFactionKeys;
 
 function relevantCatalogRows(catalog = []) {
   const explicit = new Set(TB_READINESS_EXPLICIT_BASE_IDS);
@@ -47,7 +47,7 @@ function relevantCatalogRows(catalog = []) {
   return asArray(catalog).filter((unit) => {
     const baseId = clean(unit?.baseId).toUpperCase();
     if (explicit.has(baseId)) return true;
-    return asArray(unit?.categories).some((category) => categories.has(normalizeCategory(category)));
+    return unitCategoryKeys(unit).some((category) => categories.has(category));
   });
 }
 
@@ -155,10 +155,7 @@ export function createGuildTbReadinessRosterService(options = {}) {
 
     const ids = relevantBaseIds(catalog);
     const members = asArray(guildBody?.members);
-    const memberIds = safeInValues(
-      members.map((member) => member?.persistentId),
-      /^[0-9a-fA-F-]{16,64}$/,
-    );
+    const memberIds = safeInValues(members.map((member) => member?.persistentId), /^[0-9a-fA-F-]{16,64}$/);
     const rows = await selectRelevantUnits(memberIds, ids);
     const unitsByPlayer = new Map();
     for (const row of rows) {
@@ -181,3 +178,5 @@ export function createGuildTbReadinessRosterService(options = {}) {
 }
 
 export const guildTbReadinessRosterService = createGuildTbReadinessRosterService();
+
+export { compactUnit, normalizeCategory, relevantBaseIds, relevantCatalogRows, unitCategoryKeys };

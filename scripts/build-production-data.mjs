@@ -8,6 +8,7 @@ const steps = [
   { name: "validate ROTE entry contracts", args: ["scripts/validate-rote-entry-contract.mjs"], blocking: true },
   { name: "validate TB Mission Unit contracts", args: ["scripts/validate-tb-mission-unit-contract.mjs"], blocking: true },
   { name: "refresh catalog", args: ["scripts/sync-gamedata.mjs", "--allow-stale"] },
+  { name: "refresh player portraits", args: ["scripts/sync-player-portraits.mjs", "--allow-stale"], optional: true },
   { name: "repair catalog", args: ["scripts/repair-catalog.mjs", "--allow-stale"] },
   { name: "build kit index", args: ["scripts/enrich-kit-intelligence.mjs"] },
   { name: "build raw + enemy combat indexes", args: ["scripts/sync-raw-combat-data.mjs", "--allow-stale"], optional: true },

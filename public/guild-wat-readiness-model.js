@@ -1,3 +1,5 @@
+import { guildMemberRole, playerPortraitId, playerPortraitUrl, playerProfileTitle } from './guild-member-identity.js';
+
 const asArray = (value) => Array.isArray(value) ? value : [];
 const finite = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
 const text = (value) => String(value ?? "").trim();
@@ -83,8 +85,11 @@ export function buildWatMemberReadiness(member = {}, index = 0) {
     name: text(member.name || member.playerName || `Member ${index + 1}`),
     galacticPower: finite(member.galacticPower, 0),
     rosterAvailable: member.rosterAvailable === true || asArray(member.units).length > 0,
-    profileTitle: text(member.profileTitle || member.title || member.playerTitle),
-    memberRole: text(member.memberRole || member.guildRole || member.role),
+    profileTitle: playerProfileTitle(member),
+    memberLevel: finite(member.memberLevel, 0),
+    memberRole: guildMemberRole(member),
+    playerPortrait: playerPortraitId(member),
+    playerPortraitUrl: playerPortraitUrl(member),
     geonosians: Object.freeze(geonosians),
     status,
     upgradeText: upgradeText(states, status),
@@ -133,6 +138,6 @@ export function filterGuildWatRows(rows = [], options = {}) {
   return Object.freeze(asArray(rows).filter((row) => {
     if (status !== "ALL" && row.status !== status) return false;
     if (!query) return true;
-    return [row.name, row.allyCode, row.status, row.upgradeText, ...row.geonosians.map((geo) => geo.name)].join(" ").toLowerCase().replace(/-/g, "").includes(query);
+    return [row.name, row.allyCode, row.status, row.upgradeText, row.profileTitle, row.memberRole, ...row.geonosians.map((geo) => geo.name)].join(" ").toLowerCase().replace(/-/g, "").includes(query);
   }));
 }
