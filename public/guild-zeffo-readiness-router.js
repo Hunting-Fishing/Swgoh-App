@@ -1,3 +1,5 @@
+import "./tb-readiness-cross-surface.js";
+
 const ZEFFO_ROUTE = "/guild/zeffo";
 const ALLY_STORAGE_KEY = "swgoh:guild-route-ally-code";
 
