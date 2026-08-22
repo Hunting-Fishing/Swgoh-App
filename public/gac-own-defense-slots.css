@@ -1,45 +1,129 @@
+/* Professional own-defense workspace. The legacy reserved ribbon stays in DOM as compatibility state but is not presented. */
+.gac-manual-own-defense.gac-own-defense-professional{
+  display:grid!important;
+  grid-template-columns:minmax(0,1fr) minmax(270px,320px)!important;
+  grid-template-areas:
+    'head head'
+    'summary builder'
+    'filters builder'
+    'roster builder'!important;
+  align-items:start;
+  gap:8px 10px!important;
+  padding:10px!important;
+  background:linear-gradient(180deg,#eef6f9 0,#f8fbfc 100%)!important;
+}
+.gac-manual-own-defense.gac-own-defense-professional>:scope{min-width:0}
+.gac-manual-own-defense.gac-own-defense-professional>header{grid-area:head!important;margin:0!important;padding:0 0 7px!important;border-bottom:1px solid #c8dbe4!important}
+.gac-manual-own-defense.gac-own-defense-professional>header .gac-manual-count{display:none!important}
+.gac-manual-own-defense.gac-own-defense-professional>header strong{font-size:13px!important;color:#092c40!important}
+.gac-manual-own-defense.gac-own-defense-professional>header small{font-size:8px!important;color:#5b7684!important}
+.gac-manual-own-defense.gac-own-defense-professional>.gac-manual-reserved{display:none!important}
+.gac-manual-own-defense.gac-own-defense-professional>.gac-manual-filterbar{grid-area:filters!important;margin:0!important;padding:0!important;background:transparent!important;border:0!important}
+.gac-manual-own-defense.gac-own-defense-professional>.gac-manual-roster-grid{
+  grid-area:roster!important;
+  grid-template-columns:repeat(3,minmax(0,1fr))!important;
+  gap:6px!important;
+  max-height:390px!important;
+  overflow:auto!important;
+  padding:1px 3px 4px 0!important;
+  align-content:start!important;
+}
+
+/* Compact status strip replaces the portrait pile. */
+.gac-own-defense-summary{grid-area:summary;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:7px;align-items:center;min-height:48px;padding:7px 8px;border:1px solid #bad4df;border-radius:9px;background:#fff;box-shadow:0 2px 8px rgba(7,39,55,.04)}
+.gac-own-defense-summary-stats{display:grid;grid-template-columns:repeat(4,minmax(85px,1fr));gap:5px;min-width:0}
+.gac-own-defense-summary-stats article{display:grid;grid-template-columns:auto 1fr;align-items:center;gap:6px;min-width:0;padding:5px 7px;border:1px solid #d5e4ea;border-radius:7px;background:#f7fbfc}
+.gac-own-defense-summary-stats article b{font-size:15px;line-height:1;color:#08799c}
+.gac-own-defense-summary-stats article span{font-size:6px;font-weight:950;letter-spacing:.07em;line-height:1.25;color:#527180}
+.gac-own-defense-summary-stats article.has-warning{border-color:#d8b961;background:#fffaf0}
+.gac-own-defense-summary-stats article.has-warning b{color:#ad7a00}
+.gac-own-defense-summary>[data-gac-own-reserved-drawer]{min-height:31px;padding:0 9px;border:1px solid #2c6179;border-radius:7px;background:#092d40;color:#dff7ff;font-size:7px;font-weight:950;letter-spacing:.04em;cursor:pointer;white-space:nowrap}
+.gac-own-defense-reserved-drawer{grid-column:1/-1;display:flex;gap:5px;overflow-x:auto;padding-top:6px;border-top:1px solid #d9e7ec}
+.gac-own-defense-reserved-drawer>span{flex:0 0 auto;display:grid;grid-template-columns:24px auto;grid-template-rows:auto auto;column-gap:5px;align-items:center;min-width:118px;padding:4px 6px;border:1px solid #d5b16a;border-radius:7px;background:#fff7ea}
+.gac-own-defense-reserved-drawer>span.is-assigned{border-color:#78b8cf;background:#eefaff}
+.gac-own-defense-reserved-drawer .gac-own-defense-portrait{grid-row:1/3;width:24px;height:24px}
+.gac-own-defense-reserved-drawer b{font-size:7px;color:#183848;max-width:88px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gac-own-defense-reserved-drawer small{font-size:6px;color:#8a6827}
+.gac-own-defense-reserved-drawer>span.is-assigned small{color:#277994}
+
+/* Dedicated slot builder. */
+.gac-own-defense-builder{grid-area:builder;position:sticky;top:76px;display:grid;gap:8px;min-height:270px;padding:10px;border:1px solid #27566d;border-radius:10px;background:linear-gradient(165deg,#071925,#0a2332 60%,#111c20);color:#d9f2fa;box-shadow:0 10px 24px rgba(3,21,31,.15);z-index:3}
+.gac-own-defense-builder>header{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;padding-bottom:7px;border-bottom:1px solid rgba(109,205,236,.16)}
+.gac-own-defense-builder>header>div{display:grid;gap:2px;min-width:0}
+.gac-own-defense-builder>header span,.gac-own-builder-empty>span{font-size:7px;font-weight:950;letter-spacing:.12em;color:#69d4f0}
+.gac-own-defense-builder>header strong,.gac-own-builder-empty>strong{font-size:12px;line-height:1.15;color:#f4fbfd}
+.gac-own-defense-builder>header small{font-size:7px;color:#789dad}
+.gac-own-defense-builder>header>b{padding:4px 6px;border:1px solid #37677b;border-radius:6px;background:#06151e;color:#83bdce;font-size:7px;white-space:nowrap}
+.gac-own-defense-builder>header>b.is-ready{border-color:#c5a233;background:#24200c;color:#f0cc50}
+.gac-own-defense-builder>p{margin:0;font-size:7px;line-height:1.45;color:#7899a8}
+.gac-own-builder-empty{display:grid;align-content:center;gap:7px;min-height:245px;text-align:center;padding:18px}
+.gac-own-builder-empty p{margin:0;font-size:8px;line-height:1.5;color:#7998a7}
+.gac-own-builder-steps{display:flex;align-items:center;justify-content:center;gap:6px;margin-top:4px;font-size:7px;color:#93b7c5}
+.gac-own-builder-steps b{width:20px;height:20px;display:grid;place-items:center;border:1px solid #3c738a;border-radius:50%;background:#09283a;color:#76d8f1;font-size:7px}
+.gac-own-builder-formation{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;align-content:start}
+.gac-own-builder-unit{min-width:0;min-height:82px;display:grid;place-items:center;align-content:center;gap:3px;padding:5px;border:1px solid #264e60;border-radius:8px;background:#071722;color:#8edcf0;text-align:center}
+button.gac-own-builder-unit{cursor:pointer}
+button.gac-own-builder-unit:hover{border-color:#55b8d7;background:#092433}
+.gac-own-builder-unit.is-leader{border-color:#d1ad38;background:#211d0b;box-shadow:0 0 0 2px rgba(209,173,56,.08)}
+.gac-own-builder-unit.is-empty{border-style:dashed;background:#06131c;color:#46798d}
+.gac-own-builder-unit.is-empty>span{font-size:20px;line-height:1}
+.gac-own-builder-unit .gac-own-defense-portrait{width:38px;height:38px}
+.gac-own-builder-unit.is-leader .gac-own-defense-portrait{border-color:#e3bf45;box-shadow:0 0 0 2px #071722,0 0 12px rgba(226,190,63,.16)}
+.gac-own-builder-unit strong{max-width:78px;font-size:7px;line-height:1.1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#e4f4f9}
+.gac-own-builder-unit small{font-size:5px;font-weight:950;letter-spacing:.06em;color:#6c9caf}
+.gac-own-builder-unit.is-leader small{color:#e1bf48}
+.gac-own-builder-actions{display:grid;grid-template-columns:1fr auto;gap:6px;margin-top:auto;padding-top:7px;border-top:1px solid rgba(109,205,236,.14)}
+.gac-own-builder-actions button{min-height:34px;padding:0 10px;border:1px solid #36677b;border-radius:7px;background:#082436;color:#bdebf6;font-size:7px;font-weight:950;letter-spacing:.04em;cursor:pointer}
+.gac-own-builder-actions [data-gac-own-defense-submit]{grid-column:1/-1;border-color:#c9a42f;background:linear-gradient(180deg,#f0cf59,#c99e29);color:#171406;box-shadow:0 0 13px rgba(231,190,59,.13)}
+.gac-own-builder-actions [data-gac-own-defense-submit]:disabled{opacity:.32;cursor:not-allowed;filter:grayscale(.7)}
+.gac-own-builder-actions [data-gac-own-defense-clear]{border-color:#82423e;background:#251312;color:#f1a9a1}
+
+/* Roster cards are now the picker; no duplicated assignment gallery. */
+.gac-own-defense-professional .gac-manual-roster-grid>[data-gac-manual-own-toggle]{position:relative;min-height:52px!important;padding:5px 8px!important;border:1px solid #c8dce4!important;border-radius:8px!important;background:#fff!important;box-shadow:none!important;transition:border-color .12s ease,background .12s ease,transform .12s ease!important}
+.gac-own-defense-professional .gac-manual-roster-grid>[data-gac-manual-own-toggle]:hover{transform:translateY(-1px);border-color:#6db6d0!important;background:#f3fbfe!important}
+.gac-own-defense-professional .gac-manual-roster-grid>[data-gac-manual-own-toggle]>b{justify-self:end!important;padding:3px 5px;border:1px solid #bdd7e1;border-radius:999px;background:#eef7fa;color:#2b7188!important;font-size:6px!important;letter-spacing:.04em}
+.gac-own-defense-professional .gac-manual-roster-grid>[data-gac-defense-state="selected"]{border-color:#d4ad34!important;background:#fff9e9!important;box-shadow:inset 3px 0 #e0b83b!important}
+.gac-own-defense-professional .gac-manual-roster-grid>[data-gac-defense-state="selected"]>b{border-color:#d1ad3a;background:#251f0b;color:#efcb4d!important}
+.gac-own-defense-professional .gac-manual-roster-grid>[data-gac-defense-state="assigned"]{border-color:#8abaca!important;background:#eef7fa!important;opacity:.76}
+.gac-own-defense-professional .gac-manual-roster-grid>[data-gac-defense-state="assigned"]>b{border-color:#6bafc5;background:#0a3346;color:#9ee2f2!important}
+.gac-own-defense-professional .gac-manual-roster-grid>[data-gac-defense-state="reserved"]{border-color:#d8c18c!important;background:#fffaf0!important}
+.gac-own-defense-professional .gac-manual-roster-grid>[data-gac-defense-state="reserved"]>b{border-color:#d4b86c;background:#f7e7bd;color:#755000!important}
+.gac-own-defense-professional .gac-manual-roster-grid>[data-gac-defense-state="assigned"].gac-defense-builder-active{cursor:not-allowed}
+
+/* Battlefield own-side slots. */
 .gac-full-own-territory{align-content:stretch}
 .gac-full-own-territory>header>b{min-width:38px;text-align:center}
-.gac-own-defense-slots{display:grid;grid-template-columns:repeat(2,minmax(74px,1fr));align-items:center;justify-items:center;gap:8px;padding:8px 4px;min-height:126px}
-.gac-full-own-territory:has(.gac-own-defense-slots .gac-own-defense-slot:nth-child(3)) .gac-own-defense-slots{grid-template-columns:repeat(3,minmax(64px,1fr))}
-.gac-own-defense-slot{width:100%;min-width:0;min-height:100px;display:grid;place-items:center;align-content:center;gap:4px;padding:6px;border:1px solid transparent;border-radius:10px;background:transparent;color:#79d8f2;cursor:pointer;transition:border-color .14s ease,background .14s ease,transform .14s ease,box-shadow .14s ease}
+.gac-own-defense-slots{display:grid;grid-template-columns:repeat(2,minmax(64px,1fr));align-items:center;justify-items:center;gap:6px;padding:7px 3px;min-height:120px}
+.gac-full-own-territory:has(.gac-own-defense-slots .gac-own-defense-slot:nth-child(3)) .gac-own-defense-slots{grid-template-columns:repeat(3,minmax(58px,1fr))}
+.gac-own-defense-slot{width:100%;min-width:0;min-height:96px;display:grid;place-items:center;align-content:center;gap:3px;padding:5px;border:1px solid transparent;border-radius:9px;background:transparent;color:#79d8f2;cursor:pointer;transition:border-color .14s ease,background .14s ease,transform .14s ease,box-shadow .14s ease}
 .gac-own-defense-slot:hover{transform:translateY(-2px);background:rgba(58,173,215,.06);border-color:rgba(78,197,238,.28)}
 .gac-own-defense-slot.is-selected{border-color:#edc643;background:rgba(237,198,67,.08);box-shadow:0 0 0 2px rgba(237,198,67,.10),0 0 18px rgba(237,198,67,.12)}
 .gac-full-own-territory.is-back-top .gac-own-defense-slot{color:#e4c448}
 .gac-own-defense-slot>strong{max-width:100%;font-size:7px;line-height:1.15;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#dff5fc}
-.gac-own-defense-slot>small{font-size:6px;letter-spacing:.05em;color:#6f98aa;text-transform:uppercase}
-.gac-own-defense-empty-orbit{width:56px;height:56px;display:grid;place-items:center;border:2px solid currentColor;border-radius:50%;background:radial-gradient(circle,#0d2c3e,#061522 66%,#031019);font-size:20px;font-weight:900;box-shadow:inset 0 0 0 5px rgba(255,255,255,.02),0 0 14px rgba(76,190,230,.10)}
-.gac-own-defense-slot.is-filled{gap:3px}
-.gac-own-defense-slot.is-incomplete{border-color:#a64a40;background:rgba(166,74,64,.06)}
-.gac-own-defense-formation{position:relative;min-width:72px;min-height:62px;display:grid;place-items:center}
+.gac-own-defense-slot>small{font-size:5px;letter-spacing:.05em;color:#6f98aa;text-transform:uppercase}
+.gac-own-defense-empty-orbit{width:52px;height:52px;display:grid;place-items:center;border:2px solid currentColor;border-radius:50%;background:radial-gradient(circle,#0d2c3e,#061522 66%,#031019);font-size:19px;font-weight:900;box-shadow:inset 0 0 0 5px rgba(255,255,255,.02),0 0 14px rgba(76,190,230,.10)}
+.gac-own-defense-formation{position:relative;min-width:68px;min-height:58px;display:grid;place-items:center}
 .gac-own-defense-portrait{width:22px;height:22px;display:grid;place-items:center;overflow:hidden;border:1px solid #4a9dbb;border-radius:50%;background:#071723;color:#84dff7;font-size:7px;font-weight:900;box-shadow:0 0 0 2px rgba(3,16,25,.9)}
 .gac-own-defense-portrait img{width:100%;height:100%;object-fit:cover;display:block}
-.gac-own-defense-portrait.is-leader{width:48px;height:48px;border:2px solid #65d7f4;box-shadow:0 0 0 3px #071723,0 0 12px rgba(78,203,241,.18)}
+.gac-own-defense-portrait.is-leader{width:46px;height:46px;border:2px solid #65d7f4;box-shadow:0 0 0 3px #071723,0 0 12px rgba(78,203,241,.18)}
 .gac-full-own-territory.is-back-top .gac-own-defense-portrait.is-leader{border-color:#e9c94c}
-.gac-own-defense-pips{position:absolute;left:50%;bottom:0;transform:translate(-50%,45%);display:flex;justify-content:center;gap:2px;min-width:80px}
-.gac-own-defense-pips .gac-own-defense-portrait{width:17px;height:17px}
+.gac-own-defense-pips{position:absolute;left:50%;bottom:0;transform:translate(-50%,45%);display:flex;justify-content:center;gap:2px;min-width:76px}
+.gac-own-defense-pips .gac-own-defense-portrait{width:16px;height:16px}
 
-.gac-own-defense-editor{display:grid;grid-template-columns:minmax(180px,.8fr) minmax(320px,2fr) auto;align-items:center;gap:10px;padding:9px 10px;margin:8px 0;border:1px solid #d1a93a;border-radius:9px;background:linear-gradient(90deg,#102536,#151d23 54%,#201d0c);box-shadow:0 0 0 1px rgba(238,196,61,.08),0 8px 20px rgba(0,0,0,.10)}
-.gac-own-defense-editor-copy{display:grid;gap:2px;min-width:0}
-.gac-own-defense-editor-copy>span{font-size:7px;font-weight:950;letter-spacing:.13em;color:#edc545}
-.gac-own-defense-editor-copy>strong{font-size:10px;color:#f3f8fa}
-.gac-own-defense-editor-copy>small{font-size:7px;color:#8fb3c2}
-.gac-own-defense-editor-members{display:flex;align-items:center;gap:6px;min-width:0;overflow-x:auto;padding:3px 1px}
-.gac-own-defense-editor-members>em{font-size:8px;color:#789bab;font-style:normal}
-.gac-own-defense-editor-members>button{position:relative;flex:0 0 auto;display:grid;place-items:center;gap:2px;min-width:48px;padding:4px;border:1px solid #315b6e;border-radius:7px;background:#071925;color:#8edcf1;cursor:pointer}
-.gac-own-defense-editor-members>button.is-leader{border-color:#e2bc3c;background:#211d0b;color:#edca4b;box-shadow:0 0 0 2px rgba(226,188,60,.10)}
-.gac-own-defense-editor-members>button .gac-own-defense-portrait{width:30px;height:30px}
-.gac-own-defense-editor-members>button>span{font-size:5px;font-weight:950;letter-spacing:.05em}
-.gac-own-defense-editor-actions{display:flex;align-items:center;justify-content:flex-end;gap:6px;flex-wrap:wrap}
-.gac-own-defense-editor-actions button{min-height:31px;padding:0 10px;border:1px solid #36667b;border-radius:7px;background:#082335;color:#b9eaf7;font-size:7px;font-weight:950;letter-spacing:.05em;cursor:pointer}
-.gac-own-defense-editor-actions [data-gac-own-defense-submit]{border-color:#c8a22e;background:linear-gradient(180deg,#f0cd57,#c99d28);color:#1a1608;box-shadow:0 0 13px rgba(231,190,59,.14)}
-.gac-own-defense-editor-actions [data-gac-own-defense-submit]:disabled{opacity:.35;cursor:not-allowed;filter:grayscale(.65)}
-.gac-own-defense-editor-actions [data-gac-own-defense-clear]{border-color:#8d433d;color:#f0a59c;background:#251110}
-
-@media(max-width:1050px){
-  .gac-own-defense-editor{grid-template-columns:1fr}
-  .gac-own-defense-editor-actions{justify-content:flex-start}
+@media(max-width:1180px){
+  .gac-manual-own-defense.gac-own-defense-professional{grid-template-columns:minmax(0,1fr) 270px!important}
+  .gac-manual-own-defense.gac-own-defense-professional>.gac-manual-roster-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+  .gac-own-defense-summary-stats{grid-template-columns:repeat(2,minmax(85px,1fr))}
 }
-@media(max-width:720px){
-  .gac-own-defense-slots,.gac-full-own-territory:has(.gac-own-defense-slots .gac-own-defense-slot:nth-child(3)) .gac-own-defense-slots{grid-template-columns:repeat(2,minmax(70px,1fr))}
+@media(max-width:880px){
+  .gac-manual-own-defense.gac-own-defense-professional{grid-template-columns:1fr!important;grid-template-areas:'head' 'summary' 'builder' 'filters' 'roster'!important}
+  .gac-own-defense-builder{position:relative;top:auto;min-height:0}
+  .gac-own-defense-summary{grid-template-columns:1fr}
+  .gac-own-defense-summary>[data-gac-own-reserved-drawer]{justify-self:start}
+}
+@media(max-width:620px){
+  .gac-manual-own-defense.gac-own-defense-professional>.gac-manual-roster-grid{grid-template-columns:1fr!important}
+  .gac-own-defense-summary-stats{grid-template-columns:1fr 1fr}
+  .gac-own-builder-formation{grid-template-columns:repeat(2,1fr)}
+  .gac-own-defense-slots,.gac-full-own-territory:has(.gac-own-defense-slots .gac-own-defense-slot:nth-child(3)) .gac-own-defense-slots{grid-template-columns:repeat(2,minmax(60px,1fr))}
 }

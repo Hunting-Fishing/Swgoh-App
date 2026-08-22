@@ -2,7 +2,7 @@ import './gac-ui-ready-guard.js';
 import './gac-canonical-faction-filter-ui.js';
 import './gac-league-board-ui.js';
 import './gac-full-battlefield.js';
-import './gac-own-defense-slots.js';
+import './gac-own-defense-slots.js?v=20260822-pro1';
 import './gac-live-arena-leader-fix.js';
 import './gac-live-arena-editor-side.js';
 import './gac-ux-polish.js';
