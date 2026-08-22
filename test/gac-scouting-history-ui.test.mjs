@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { eligiblePredictions, reviewTarget } from '../public/gac-scouting-history-ui.js';
+import { eligiblePredictions, reviewTarget } from '../public/gac-scouting-history-model.js';
 
 const snapshot = {
   format: '5v5',
@@ -17,7 +17,7 @@ const snapshot = {
   ],
 };
 
-test('scouting UI only exposes predictions for the current GAC format', () => {
+test('scouting model only exposes predictions for the current GAC format', () => {
   const report = {
     defensePrediction: {
       predictions: [
