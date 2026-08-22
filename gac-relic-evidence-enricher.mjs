@@ -34,8 +34,8 @@ function teamRelicSnapshot(members = [], roster = {}) {
     const unit = index.get(baseId);
     return unit ? Object.freeze({ baseId, ...unitInvestment(unit) }) : Object.freeze({ baseId, gear:null, relic:null, effectiveRelic:null });
   });
-  const complete = rows.length === ids.length && rows.every((row) => Number.isFinite(Number(row.effectiveRelic)));
-  const averageRelic = complete && rows.length ? rows.reduce((sum, row) => sum + Number(row.effectiveRelic), 0) / rows.length : null;
+  const complete = rows.length === ids.length && rows.length > 0 && rows.every((row) => row.effectiveRelic !== null && Number.isFinite(Number(row.effectiveRelic)));
+  const averageRelic = complete ? rows.reduce((sum, row) => sum + Number(row.effectiveRelic), 0) / rows.length : null;
   return Object.freeze({ complete, members:Object.freeze(rows), averageRelic });
 }
 
