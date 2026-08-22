@@ -14,10 +14,22 @@ test('matrix export is DOM-only and adds no API queries', () => {
   assert.doesNotMatch(source, /XMLHttpRequest/);
 });
 
-test('battle plan export explicitly preserves server plan authority wording', () => {
+test('battle plan export follows the numbered execution queue and officer blockers', () => {
+  assert.match(source, /gac-opt-execution-step/);
+  assert.match(source, /gac-opt-sequence b/);
+  assert.match(source, /gac-opt-execution-counter/);
+  assert.match(source, /BATTLE EXECUTION QUEUE/);
+  assert.match(source, /gac-opt-blocker/);
+  assert.match(source, /OFFICER BLOCKERS — NOT ATTACK NUMBERS/);
   assert.match(source, /current server Attack Plan remains authoritative/i);
+  assert.match(source, /not guaranteed win predictions/i);
   assert.match(source, /DOWNLOAD TXT/);
   assert.match(source, /COPY PLAN/);
+});
+
+test('legacy optimizer priority cards are only a fallback when the execution queue is absent', () => {
+  assert.match(source, /const legacy = execution\.length \? \[\] : legacyPriorityRows\(root\)/);
+  assert.match(source, /else if \(legacy\.length\)/);
 });
 
 test('export mutation observer is idempotent through existing export markers', () => {
