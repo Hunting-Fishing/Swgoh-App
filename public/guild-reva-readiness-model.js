@@ -7,15 +7,25 @@ const text = (value) => String(value ?? "").trim();
 export const REVA_UNITS = Object.freeze({ grandInquisitor: "GRANDINQUISITOR" });
 export const REVA_REQUIRED_SUPPORTS = 4;
 
-function categoryNames(unit = {}) {
-  return asArray(unit.categories)
-    .map((row) => typeof row === "string" ? row : row?.name || row?.id || row?.categoryId || "")
-    .map(text)
-    .filter(Boolean);
+function tagText(value) {
+  if (value && typeof value === "object") return text(value.name || value.label || value.displayName || value.id || value.categoryId || value.tag);
+  return text(value);
+}
+
+function normalizeTag(value) {
+  let key = tagText(value).toLowerCase().replace(/[^a-z0-9]+/g, "");
+  for (const prefix of ["affiliation", "faction", "category", "tag"]) {
+    if (key.startsWith(prefix)) { key = key.slice(prefix.length); break; }
+  }
+  return key;
+}
+
+function unitTags(unit = {}) {
+  return [...asArray(unit.categories), ...asArray(unit.factions), ...asArray(unit.tags)].map(tagText).filter(Boolean);
 }
 
 function isInquisitorius(unit = {}) {
-  return categoryNames(unit).some((name) => name.toLowerCase().replace(/[_-]+/g, " ") === "inquisitorius");
+  return unitTags(unit).some((tag) => normalizeTag(tag) === "inquisitorius");
 }
 
 function catalogIndex(catalog = []) {
@@ -33,6 +43,8 @@ function enrichedUnits(member = {}, catalog = []) {
       baseId,
       name: text(owned.name || staticUnit.name || baseId),
       categories: asArray(owned.categories).length ? owned.categories : asArray(staticUnit.categories),
+      factions: asArray(owned.factions).length ? owned.factions : asArray(staticUnit.factions),
+      tags: asArray(owned.tags).length ? owned.tags : asArray(staticUnit.tags),
     };
   });
 }
@@ -94,6 +106,9 @@ export function buildRevaMemberReadiness(member = {}, catalog = [], index = 0) {
     galacticPower: finite(member.galacticPower, 0),
     rosterAvailable: member.rosterAvailable === true || asArray(member.units).length > 0,
     profileTitle: text(member.profileTitle || member.title || member.playerTitle),
+    playerPortrait: text(member.playerPortrait || member.profilePortrait),
+    playerPortraitUrl: text(member.playerPortraitUrl || member.profilePortraitUrl),
+    memberLevel: finite(member.memberLevel, 0),
     memberRole: text(member.memberRole || member.guildRole || member.role),
     grandInquisitor,
     supports: Object.freeze(supports),
@@ -146,3 +161,5 @@ export function filterGuildRevaRows(rows = [], options = {}) {
     return [row.name, row.allyCode, row.status, row.upgradeText, ...row.supports.map((slot) => slot.name)].join(" ").toLowerCase().replace(/-/g, "").includes(query);
   }));
 }
+
+export { isInquisitorius, normalizeTag, unitTags };
