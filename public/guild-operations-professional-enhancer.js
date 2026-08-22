@@ -69,7 +69,7 @@ function ensureStyle() {
   if (document.querySelector('link[data-guild-ops-professional-style]')) return;
   const link = document.createElement('link');
   link.rel = 'stylesheet';
-  link.href = '/guild-operations-professional.css?v=20260822-immutable2';
+  link.href = '/guild-operations-professional.css?v=20260822-immutable3';
   link.dataset.guildOpsProfessionalStyle = 'true';
   document.head.appendChild(link);
 }
@@ -170,6 +170,16 @@ function immutableSummary(version = {}) {
   return `${assigned} assigned · ${unfilled} unfilled · ${help} HELP/risk`;
 }
 
+function immutableDiscordReady() {
+  return state.workspace?.discordBinding?.verified === true && state.workspace?.immutablePlanning?.discordPublicationReady === true;
+}
+
+function immutablePlanningBadge() {
+  const connected = state.workspace?.discordBinding?.verified === true;
+  if (connected) return { label: 'WEB + DISCORD CONTROLS', tone: 'ready' };
+  return { label: 'WEB PLAN READY · DISCORD OFF', tone: 'ready' };
+}
+
 function deliveryPreviewMarkup(runId, delivery = {}) {
   const preview = delivery?.preview;
   const published = delivery?.published;
@@ -199,6 +209,7 @@ function immutableVersionMarkup(entry = {}) {
   const approved = status.label === 'APPROVED';
   const actionable = !approved && status.label !== 'CANCELLED' && status.label !== 'SUPERSEDED';
   const delivery = state.immutable.delivery[id] || {};
+  const discordReady = immutableDiscordReady();
   return `<article class="guild-ops-immutable-version" data-immutable-version="${escapeHtml(id)}">
     <header>
       <div><span class="guild-ops-chip ${status.tone}">${escapeHtml(status.label)}</span><strong>v${Number(version.versionNumber || 0)} · ${escapeHtml(version.rotePhase || state.immutable.phase)}</strong></div>
@@ -207,12 +218,13 @@ function immutableVersionMarkup(entry = {}) {
     <div class="guild-ops-immutable-metrics"><span>${escapeHtml(immutableSummary(version))}</span><span>Hash verification: <b>${verification.valid === true ? 'VALID' : 'FAILED'}</b></span></div>
     <label class="guild-ops-immutable-hash-label"><span>IMMUTABLE PLAN HASH · FULL 64 CHARACTERS</span><code>${escapeHtml(hash || 'hash unavailable')}</code></label>
     ${actionable ? `<label class="guild-ops-immutable-review"><input type="checkbox" data-immutable-review="${escapeHtml(id)}"> <span>I reviewed this exact v${Number(version.versionNumber || 0)} artifact and hash.</span></label>` : ''}
-    ${approved ? `<label class="guild-ops-immutable-review"><input type="checkbox" data-immutable-mentions="${escapeHtml(id)}"${delivery.includeMentions === false ? '' : ' checked'}> <span>Mention linked assigned members in the verified Discord channel.</span></label>` : ''}
+    ${approved && discordReady ? `<label class="guild-ops-immutable-review"><input type="checkbox" data-immutable-mentions="${escapeHtml(id)}"${delivery.includeMentions === false ? '' : ' checked'}> <span>Mention linked assigned members in the verified Discord channel.</span></label>` : ''}
     <div class="guild-ops-actions">
       ${actionable ? `<button type="button" data-immutable-approve="${escapeHtml(id)}" data-plan-hash="${escapeHtml(hash)}" disabled>Approve Exact Artifact</button><button type="button" class="secondary" data-immutable-cancel="${escapeHtml(id)}">Cancel Version</button>` : ''}
-      ${approved ? `<button type="button" class="secondary" data-immutable-stage10-preview="${escapeHtml(id)}">Preview Stage 10 Delivery</button><button type="button" class="secondary" data-immutable-stage10-status="${escapeHtml(id)}">Delivery Status</button>` : ''}
+      ${approved && discordReady ? `<button type="button" class="secondary" data-immutable-stage10-preview="${escapeHtml(id)}">Preview Stage 10 Delivery</button><button type="button" class="secondary" data-immutable-stage10-status="${escapeHtml(id)}">Delivery Status</button>` : ''}
     </div>
-    ${approved ? deliveryPreviewMarkup(id, delivery) : ''}
+    ${approved && !discordReady ? `<div class="guild-ops-inline-result guild-ops-web-only-note"><span class="guild-ops-chip ready">APPROVAL COMPLETE</span><span>Website artifact is valid. Connect and verify Discord when you want to publish; no re-planning is required unless the plan/roster changes.</span></div>` : ''}
+    ${approved && discordReady ? deliveryPreviewMarkup(id, delivery) : ''}
   </article>`;
 }
 
@@ -220,13 +232,18 @@ function renderImmutablePanel() {
   const root = document.querySelector('[data-ops-immutable-review]');
   if (!root) return;
   const planId = currentPlanId();
-  const binding = state.workspace?.discordBinding;
+  const badge = immutablePlanningBadge();
   const versions = state.immutable.versions || [];
+  const discordReady = immutableDiscordReady();
   root.innerHTML = `
     <div class="kicker">IMMUTABLE OFFICER ASSIGNMENT REVIEW</div>
     <div class="guild-ops-immutable-head">
-      <div><h3>Website approval and Stage 10 delivery for the exact assignment artifact</h3><p>Generate from the saved web plan, inspect the exact immutable hash, approve it, preview the exact Discord messages, then explicitly publish.</p></div>
-      <span class="guild-ops-chip ${binding?.verified ? 'ready' : 'warn'}">${binding?.verified ? 'VERIFIED GUILD BINDING' : 'BINDING REQUIRED'}</span>
+      <div><h3>Website-first planning, exact-hash approval, optional Discord publication</h3><p>Generate and approve the immutable assignment artifact entirely in Command Center. Discord is only required for Stage 10 publication; when connected, verified Discord controls are included in the plan.</p></div>
+      <span class="guild-ops-chip ${badge.tone}">${escapeHtml(badge.label)}</span>
+    </div>
+    <div class="guild-ops-immutable-mode-note ${discordReady ? 'discord-ready' : 'web-only'}">
+      <strong>${discordReady ? 'Stage 10 publication ready' : 'Website planning + approval ready'}</strong>
+      <span>${discordReady ? 'Verified Discord destination is available for exact-message preview and controlled publish.' : 'No Discord connection is required to generate, review, approve, cancel, or inspect immutable versions.'}</span>
     </div>
     <div class="guild-ops-grid three">
       <label class="guild-ops-field"><span>Saved ROTE plan</span><strong>${escapeHtml(planId ? document.getElementById('opsTbPlanSelect')?.selectedOptions?.[0]?.textContent || planId : 'Select a saved plan')}</strong></label>
@@ -330,7 +347,7 @@ function immutableMentions(runId) {
 }
 
 async function previewImmutableDelivery(runId) {
-  if (!runId || state.immutable.loading) return;
+  if (!runId || state.immutable.loading || !immutableDiscordReady()) return;
   const includeMentions = immutableMentions(runId);
   state.immutable.loading = true;
   state.immutable.error = '';
@@ -347,7 +364,7 @@ async function previewImmutableDelivery(runId) {
 }
 
 async function refreshImmutableDeliveryStatus(runId) {
-  if (!runId || state.immutable.loading) return;
+  if (!runId || state.immutable.loading || !immutableDiscordReady()) return;
   const includeMentions = immutableMentions(runId);
   state.immutable.loading = true;
   state.immutable.error = '';
@@ -365,7 +382,7 @@ async function refreshImmutableDeliveryStatus(runId) {
 
 async function publishImmutableDelivery(runId, planHash) {
   const delivery = state.immutable.delivery[runId];
-  if (!runId || !delivery?.preview || !/^[0-9a-f]{64}$/i.test(planHash) || state.immutable.loading) return;
+  if (!runId || !delivery?.preview || !/^[0-9a-f]{64}$/i.test(planHash) || state.immutable.loading || !immutableDiscordReady()) return;
   const confirmation = document.querySelector(`[data-immutable-publish-confirm="${CSS.escape(runId)}"]`);
   if (text(confirmation?.value).toUpperCase() !== 'PUBLISH') return;
   if (!window.confirm('Publish this exact approved immutable artifact to the verified Discord destination now?')) return;
