@@ -79,6 +79,12 @@ const ALIASES = new Map([
   ['unalignedforceusers', 'Unaligned Force User'],
   ['order66', 'Order 66 Raid'],
   ['order66raid', 'Order 66 Raid'],
+  // Live CG / persisted game-unit spellings that differ from the player-facing filter labels.
+  ['nightsisters', 'Nightsister'],
+  ['imperialsecuritybureau', 'ISB'],
+  ['republic', 'Galactic Republic'],
+  ['galacticrepublicjedi', 'Galactic Republic'],
+  ['rebels', 'Rebel'],
 ]);
 
 function clean(value) {
