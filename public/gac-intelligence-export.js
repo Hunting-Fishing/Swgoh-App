@@ -41,6 +41,40 @@ function matrixTsv() {
   return matrixRows().map((row) => row.map((cell) => String(cell ?? '').replaceAll('\t', ' ')).join('\t')).join('\n');
 }
 
+function executionQueueRows(root) {
+  return [...root.querySelectorAll('.gac-opt-execution-step')].map((card, index) => {
+    const sequence = clean(card.querySelector('.gac-opt-sequence b')?.textContent) || String(index + 1);
+    const defender = clean(card.querySelector('.gac-opt-execution-main>header span b')?.textContent) || 'Defense';
+    const slot = clean(card.querySelector('.gac-opt-execution-main>header span small')?.textContent);
+    const action = clean(card.querySelector('.gac-opt-execution-main>header i')?.textContent);
+    const counter = clean(card.querySelector('.gac-opt-execution-counter strong')?.textContent);
+    const detail = clean(card.querySelector('.gac-opt-execution-counter small')?.textContent);
+    const reasons = [...card.querySelectorAll('.gac-opt-reasons span')].map((node) => clean(node.textContent)).filter(Boolean);
+    return `${sequence}. ${defender}${slot ? ` — ${slot}` : ''}${action ? ` [${action}]` : ''}${counter ? ` → ${counter}` : ''}${detail ? ` (${detail})` : ''}${reasons.length ? ` {${reasons.join('; ')}}` : ''}`;
+  });
+}
+
+function blockerRows(root) {
+  return [...root.querySelectorAll('.gac-opt-blocker')].map((card) => {
+    const defender = clean(card.querySelector(':scope>div b')?.textContent) || 'Defense';
+    const slot = clean(card.querySelector(':scope>div small')?.textContent);
+    const title = clean(card.querySelector(':scope>section>strong')?.textContent) || 'Officer review required';
+    const reasons = [...card.querySelectorAll('.gac-opt-reasons span')].map((node) => clean(node.textContent)).filter(Boolean);
+    return `- ${defender}${slot ? ` — ${slot}` : ''}: ${title}${reasons.length ? ` {${reasons.join('; ')}}` : ''}`;
+  });
+}
+
+function legacyPriorityRows(root) {
+  return [...root.querySelectorAll('.gac-opt-priority')].map((card, index) => {
+    const title = clean(card.querySelector('header span b')?.textContent);
+    const slot = clean(card.querySelector('header span small')?.textContent);
+    const scarcity = clean(card.querySelector('header i')?.textContent);
+    const proposal = clean(card.querySelector('footer strong')?.textContent);
+    const detail = clean(card.querySelector('footer small')?.textContent);
+    return `${index + 1}. ${title}${slot ? ` — ${slot}` : ''}${scarcity ? ` [${scarcity}]` : ''}${proposal ? ` → ${proposal}` : ''}${detail ? ` (${detail})` : ''}`;
+  });
+}
+
 function battlePlanText() {
   const root = document.querySelector('[data-gac-board-optimization]');
   if (!root) return '';
@@ -49,16 +83,18 @@ function battlePlanText() {
     const label = clean(card.querySelector('span')?.textContent);
     return value && label ? `${label}: ${value}` : '';
   }).filter(Boolean);
-  const priorities = [...root.querySelectorAll('.gac-opt-priority')].map((card, index) => {
-    const title = clean(card.querySelector('header span b')?.textContent);
-    const slot = clean(card.querySelector('header span small')?.textContent);
-    const scarcity = clean(card.querySelector('header i')?.textContent);
-    const proposal = clean(card.querySelector('footer strong')?.textContent);
-    const detail = clean(card.querySelector('footer small')?.textContent);
-    return `${index + 1}. ${title}${slot ? ` — ${slot}` : ''}${scarcity ? ` [${scarcity}]` : ''}${proposal ? ` → ${proposal}` : ''}${detail ? ` (${detail})` : ''}`;
-  });
-  if (!summary.length && !priorities.length) return '';
-  return ['SWGOH Command Center — GAC Whole-Board Plan', ...summary, '', ...priorities, '', 'Evidence-based planning only; current server Attack Plan remains authoritative.'].join('\n');
+  const execution = executionQueueRows(root);
+  const blockers = blockerRows(root);
+  const legacy = execution.length ? [] : legacyPriorityRows(root);
+  if (!summary.length && !execution.length && !blockers.length && !legacy.length) return '';
+
+  const lines = ['SWGOH Command Center — GAC Battle Execution Plan'];
+  if (summary.length) lines.push(...summary);
+  if (execution.length) lines.push('', 'BATTLE EXECUTION QUEUE', ...execution);
+  else if (legacy.length) lines.push('', 'BATTLE PRIORITY', ...legacy);
+  if (blockers.length) lines.push('', 'OFFICER BLOCKERS — NOT ATTACK NUMBERS', ...blockers);
+  lines.push('', 'Evidence-based planning only; current server Attack Plan remains authoritative. Attack order and historical evidence are not guaranteed win predictions.');
+  return lines.join('\n');
 }
 
 async function copyText(text, successLabel, button) {
@@ -138,4 +174,4 @@ function installIntelligenceExport() {
 }
 
 if (typeof window !== 'undefined' && typeof document !== 'undefined') installIntelligenceExport();
-export { battlePlanText, csvCell, installIntelligenceExport, matrixCsv, matrixRows, matrixTsv };
+export { battlePlanText, blockerRows, csvCell, executionQueueRows, installIntelligenceExport, matrixCsv, matrixRows, matrixTsv };
