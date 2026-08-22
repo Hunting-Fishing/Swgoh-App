@@ -1,4 +1,5 @@
 import { normalizeZeffoUnitState } from "./guild-zeffo-readiness-model.js";
+import { normalizedTag, stripFactionDecorators, unitHasFaction, unitTags } from "./guild-tb-faction-tags.js";
 
 const asArray = (value) => Array.isArray(value) ? value : [];
 const finite = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
@@ -7,25 +8,8 @@ const text = (value) => String(value ?? "").trim();
 export const REVA_UNITS = Object.freeze({ grandInquisitor: "GRANDINQUISITOR" });
 export const REVA_REQUIRED_SUPPORTS = 4;
 
-function tagText(value) {
-  if (value && typeof value === "object") return text(value.name || value.label || value.displayName || value.id || value.categoryId || value.tag);
-  return text(value);
-}
-
-function normalizeTag(value) {
-  let key = tagText(value).toLowerCase().replace(/[^a-z0-9]+/g, "");
-  for (const prefix of ["affiliation", "faction", "category", "tag"]) {
-    if (key.startsWith(prefix)) { key = key.slice(prefix.length); break; }
-  }
-  return key;
-}
-
-function unitTags(unit = {}) {
-  return [...asArray(unit.categories), ...asArray(unit.factions), ...asArray(unit.tags)].map(tagText).filter(Boolean);
-}
-
 function isInquisitorius(unit = {}) {
-  return unitTags(unit).some((tag) => normalizeTag(tag) === "inquisitorius");
+  return unitHasFaction(unit, "inquisitorius");
 }
 
 function catalogIndex(catalog = []) {
@@ -162,4 +146,4 @@ export function filterGuildRevaRows(rows = [], options = {}) {
   }));
 }
 
-export { isInquisitorius, normalizeTag, unitTags };
+export { isInquisitorius, normalizedTag, stripFactionDecorators, unitTags };
