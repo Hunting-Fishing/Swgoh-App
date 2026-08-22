@@ -65,12 +65,31 @@ async function invoke(api, method, pathname, body=null) {
   return {req,res,handled,body:JSON.parse(res.body||'{}')};
 }
 
-test('workspace syncs verified Discord destination state before returning', async () => {
+test('workspace reports website immutable planning independently from Discord publication readiness', async () => {
   const {api,calls}=apiWith();
   const result=await invoke(api,'GET','/api/account/guild-operations/732764286/workspace');
   assert.equal(result.handled,true); assert.equal(result.res.status,200);
   assert.deepEqual(calls.find((row)=>row[0]==='sync'),['sync','guild-1']);
   assert.equal(result.body.discordBinding.verified,true); assert.equal(result.body.publishing.enabled,true);
+  assert.deepEqual(result.body.immutablePlanning, {
+    enabled:true,
+    websiteOnly:false,
+    discordControlsIncluded:true,
+    discordPublicationReady:true,
+  });
+});
+
+test('workspace remains immutable-planning ready when Discord is not connected', async () => {
+  const {api}=apiWith({binding:null});
+  const result=await invoke(api,'GET','/api/account/guild-operations/732764286/workspace');
+  assert.equal(result.res.status,200);
+  assert.equal(result.body.discordBinding.verified,false);
+  assert.deepEqual(result.body.immutablePlanning, {
+    enabled:true,
+    websiteOnly:true,
+    discordControlsIncluded:false,
+    discordPublicationReady:false,
+  });
 });
 
 test('legacy TB publish route remains available and unchanged', async () => {
@@ -87,15 +106,22 @@ test('immutable web preview resolves Discord/SWGOH binding server-side and ignor
   assert.equal(result.res.status,201);
   assert.deepEqual(calls.find((row)=>row[0]==='binding'),['binding','guild-1']);
   const call=calls.find((row)=>row[0]==='immutable-preview');
-  assert.equal(call[1].guild.id,'guild-1'); assert.equal(call[1].userId,'user-1'); assert.equal(call[1].discordGuildId,'123456789012345678'); assert.equal(call[1].seedAllyCode,'732764286');
+  assert.equal(call[1].guild.id,'guild-1'); assert.equal(call[1].userId,'user-1'); assert.equal(call[1].discordGuildId,'123456789012345678'); assert.equal(call[1].discordBound,true); assert.equal(call[1].seedAllyCode,'732764286');
   assert.equal(call[2].planId,planId); assert.equal(call[2].phase,'P6'); assert.equal(call[2].interaction.guild_id,'123456789012345678');
 });
 
-test('immutable preview fails closed when no verified Guild binding exists', async () => {
+test('immutable website preview works without Discord and uses authorized URL Ally Code for live hydration', async () => {
   const {api,calls}=apiWith({binding:null}); const planId='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
-  const result=await invoke(api,'POST',`/api/account/guild-operations/732764286/tb/plans/${planId}/immutable-preview`,{phase:'P6'});
-  assert.equal(result.res.status,409); assert.equal(result.body.code,'TB_IMMUTABLE_VERIFIED_BINDING_REQUIRED');
-  assert.equal(calls.some((row)=>row[0]==='immutable-preview'),false);
+  const result=await invoke(api,'POST',`/api/account/guild-operations/732764286/tb/plans/${planId}/immutable-preview`,{phase:'P6',discordGuildId:'999999999999999999',seedAllyCode:'999999999'});
+  assert.equal(result.res.status,201);
+  const call=calls.find((row)=>row[0]==='immutable-preview');
+  assert.ok(call);
+  assert.equal(call[1].guild.id,'guild-1');
+  assert.equal(call[1].seedAllyCode,'732764286');
+  assert.equal(call[1].discordBound,false);
+  assert.equal(call[1].discordGuildId,'');
+  assert.deepEqual(call[2].interaction,{});
+  assert.notEqual(call[1].seedAllyCode,'999999999');
 });
 
 test('immutable version list is officer-scoped and plan/phase filtered from URL', async () => {
@@ -106,18 +132,20 @@ test('immutable version list is officer-scoped and plan/phase filtered from URL'
   assert.equal(call[1].guild.id,'guild-1'); assert.equal(call[1].userId,'user-1'); assert.equal(call[2].planId,planId); assert.equal(call[2].phase,'P6');
 });
 
-test('immutable approval sends exact full hash to existing version service', async () => {
-  const {api,calls}=apiWith();
+test('immutable approval sends exact full hash to existing version service and does not require Discord', async () => {
+  const {api,calls}=apiWith({binding:null});
   const result=await invoke(api,'POST',`/api/account/guild-operations/732764286/tb/assignment-versions/${immutableRunId}/approve`,{planHash:immutableHash});
   assert.equal(result.res.status,200);
   assert.deepEqual(calls.find((row)=>row[0]==='approve')[2],{runId:immutableRunId,planHash:immutableHash});
+  assert.equal(calls.some((row)=>row[0]==='binding'),false);
 });
 
-test('immutable cancellation delegates to append-only version lifecycle service', async () => {
-  const {api,calls}=apiWith();
+test('immutable cancellation delegates to append-only version lifecycle service without Discord', async () => {
+  const {api,calls}=apiWith({binding:null});
   const result=await invoke(api,'POST',`/api/account/guild-operations/732764286/tb/assignment-versions/${immutableRunId}/cancel`,{reason:'Officer replaced this plan'});
   assert.equal(result.res.status,200);
   assert.deepEqual(calls.find((row)=>row[0]==='cancel')[2],{runId:immutableRunId,reason:'Officer replaced this plan'});
+  assert.equal(calls.some((row)=>row[0]==='binding'),false);
 });
 
 test('Stage 10 web preview derives phase/version from stored immutable artifact rather than client body', async () => {
@@ -129,12 +157,31 @@ test('Stage 10 web preview derives phase/version from stored immutable artifact 
   assert.deepEqual(call[2],{phase:'P6',versionNumber:3,includeMentions:false,channelId:undefined});
 });
 
+test('Stage 10 web preview fails closed without Discord while leaving immutable artifact operations available', async () => {
+  const {api,calls}=apiWith({binding:null});
+  const result=await invoke(api,'POST',`/api/account/guild-operations/732764286/tb/assignment-versions/${immutableRunId}/stage10-preview`,{includeMentions:false});
+  assert.equal(result.res.status,409);
+  assert.equal(result.body.code,'TB_STAGE10_VERIFIED_BINDING_REQUIRED');
+  assert.match(result.body.error,/plan remains valid/i);
+  assert.equal(calls.some((row)=>row[0]==='get-version'),false);
+  assert.equal(calls.some((row)=>row[0]==='stage10-preview'),false);
+});
+
 test('Stage 10 website publish derives artifact phase/version server-side and passes explicit confirmation/hash unchanged', async () => {
   const {api,calls}=apiWith();
   const result=await invoke(api,'POST',`/api/account/guild-operations/732764286/tb/assignment-versions/${immutableRunId}/publish-immutable`,{phase:'P1',versionNumber:999,includeMentions:true,confirm:'PUBLISH',planHash:immutableHash});
   assert.equal(result.res.status,200); assert.equal(result.body.mode,'published');
   const call=calls.find((row)=>row[0]==='stage10-publish');
   assert.equal(call[2].phase,'P6'); assert.equal(call[2].versionNumber,3); assert.equal(call[2].confirm,'PUBLISH'); assert.equal(call[2].planHash,immutableHash);
+});
+
+test('Stage 10 publish fails before delivery/hash lookup when Discord is not connected', async () => {
+  const {api,calls}=apiWith({binding:null});
+  const result=await invoke(api,'POST',`/api/account/guild-operations/732764286/tb/assignment-versions/${immutableRunId}/publish-immutable`,{confirm:'PUBLISH',planHash:immutableHash});
+  assert.equal(result.res.status,409);
+  assert.equal(result.body.code,'TB_STAGE10_VERIFIED_BINDING_REQUIRED');
+  assert.equal(calls.some((row)=>row[0]==='get-version'),false);
+  assert.equal(calls.some((row)=>row[0]==='stage10-publish'),false);
 });
 
 test('Stage 10 status also derives stored artifact metadata', async () => {
