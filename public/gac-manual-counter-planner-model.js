@@ -1,6 +1,7 @@
 import './gac-manual-selection-guard.js';
 import { hybridBoardPlan } from './gac-hybrid-board-plan.js';
 import { allocateFleetCounters } from './gac-fleet-war-room-model.js';
+import { PLAYER_FACTIONS, canonicalFaction, unitPlayerFactions } from './gac-player-facing-factions.js';
 
 const SQUAD_ZONES = Object.freeze(['FRONT-TOP', 'FRONT-BOTTOM', 'BACK-BOTTOM']);
 const BOARD_ZONES = Object.freeze([
@@ -148,21 +149,19 @@ function unitFactions(unit = {}) {
   ].map(clean).filter(Boolean))];
 }
 
-function availableFactions(body = {}, type = 'character') {
-  const rows = clean(type).toLowerCase() === 'ship' ? rosterShips(body) : rosterCharacters(body);
-  return [...new Set(rows.flatMap(unitFactions))]
-    .filter((value) => !['Light Side', 'Dark Side', 'Neutral'].includes(value))
-    .sort((left, right) => left.localeCompare(right));
+function availableFactions(_body = {}, _type = 'character') {
+  return [...PLAYER_FACTIONS];
 }
 
 function filterRosterUnits(body = {}, { type = 'character', query = '', faction = '' } = {}) {
   const rows = clean(type).toLowerCase() === 'ship' ? rosterShips(body) : rosterCharacters(body);
   const needle = clean(query).toLowerCase();
-  const factionNeedle = clean(faction).toLowerCase();
+  const canonicalNeedle = canonicalFaction(faction) || clean(faction);
+  const factionNeedle = canonicalNeedle.toLowerCase();
   return rows.filter((unit) => {
     if (needle && !clean(unit?.name).toLowerCase().includes(needle) && !normalizeBaseId(unit).toLowerCase().includes(needle)) return false;
     if (factionNeedle && factionNeedle !== 'all') {
-      const factions = unitFactions(unit).map((value) => value.toLowerCase());
+      const factions = unitPlayerFactions(unit).map((value) => value.toLowerCase());
       if (!factions.includes(factionNeedle)) return false;
     }
     return true;
