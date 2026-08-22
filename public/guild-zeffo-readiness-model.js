@@ -19,6 +19,22 @@ function unitMap(member = {}) {
     .map((row) => [String(row.baseId).toUpperCase(), row]));
 }
 
+function memberInitials(value = "") {
+  const parts = text(value).split(/\s+/).filter(Boolean);
+  if (!parts.length) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return `${parts[0][0] || ""}${parts[parts.length - 1][0] || ""}`.toUpperCase();
+}
+
+function guildRole(member = {}) {
+  const direct = text(member.guildRole || member.role || member.guildMemberRole || member.memberRole);
+  if (direct) return direct;
+  const level = finite(member.memberLevel ?? member.guildMemberLevel, 0);
+  if (level >= 4) return "Leader";
+  if (level >= 3) return "Officer";
+  return "Member";
+}
+
 export function normalizeZeffoUnitState(unit = null) {
   if (!unit) {
     return Object.freeze({ owned: false, gear: 0, relic: -1, label: "LOCKED", tone: "far" });
@@ -76,12 +92,15 @@ export function buildZeffoMemberReadiness(member = {}, index = 0) {
   const status = readinessStatus(cere, jkck, babyCal);
   const cal = preferredCal(jkck, babyCal);
   const priorityScore = relicSteps(cere) + relicSteps(cal.state);
+  const name = text(member.name || member.playerName || memberId(member, index));
 
   return Object.freeze({
     id: memberId(member, index),
     playerId: text(member.playerId || member.id),
     allyCode: text(member.allyCode).replace(/\D/g, "").slice(0, 9),
-    name: text(member.name || member.playerName || memberId(member, index)),
+    name,
+    initials: memberInitials(name),
+    role: guildRole(member),
     galacticPower: finite(member.galacticPower, 0),
     rosterAvailable: member.rosterAvailable === true || asArray(member.units).length > 0,
     cere,
@@ -96,33 +115,31 @@ export function buildZeffoMemberReadiness(member = {}, index = 0) {
 
 export function buildGuildZeffoReadiness(guildBody = {}) {
   const members = asArray(guildBody.members).map(buildZeffoMemberReadiness);
-  const statusRank = { READY: 0, ALMOST: 1, FAR: 2 };
-  const sorted = members.slice().sort((a, b) =>
-    statusRank[a.status] - statusRank[b.status]
-      || (a.status === "READY" ? (b.jkck.relic - a.jkck.relic) : (a.priorityScore - b.priorityScore))
-      || b.galacticPower - a.galacticPower
-      || a.name.localeCompare(b.name));
-  const ready = sorted.filter((row) => row.status === "READY");
-  const almost = sorted.filter((row) => row.status === "ALMOST");
-  const far = sorted.filter((row) => row.status === "FAR");
+  const fullGuild = members.slice().sort((a, b) =>
+    b.galacticPower - a.galacticPower || a.name.localeCompare(b.name));
+  const almost = members.filter((row) => row.status === "ALMOST").slice().sort((a, b) =>
+    a.priorityScore - b.priorityScore || b.galacticPower - a.galacticPower || a.name.localeCompare(b.name));
+  const far = members.filter((row) => row.status === "FAR").slice().sort((a, b) =>
+    a.priorityScore - b.priorityScore || b.galacticPower - a.galacticPower || a.name.localeCompare(b.name));
+  const ready = members.filter((row) => row.status === "READY");
   const action = [...almost, ...far];
   const jkckReady = ready.filter((row) => row.cere.relic >= 7 && row.jkck.relic >= 7).length;
   const babyFallback = ready.filter((row) => row.cere.relic >= 7 && row.jkck.relic < 7 && row.babyCal.relic >= 7).length;
-  const rosterUnavailable = sorted.filter((row) => !row.rosterAvailable).length;
+  const rosterUnavailable = fullGuild.filter((row) => !row.rosterAvailable).length;
 
   return Object.freeze({
     guild: Object.freeze({
       id: text(guildBody?.guild?.id),
       name: text(guildBody?.guild?.name || "Guild"),
       galacticPower: finite(guildBody?.guild?.galacticPower, 0),
-      memberCount: finite(guildBody?.guild?.memberCount, sorted.length),
+      memberCount: finite(guildBody?.guild?.memberCount, fullGuild.length),
     }),
     fetchedAt: text(guildBody.fetchedAt),
     unlockTarget: ZEFFO_UNLOCK_TARGET,
-    members: Object.freeze(sorted),
+    members: Object.freeze(fullGuild),
     actionMembers: Object.freeze(action),
     summary: Object.freeze({
-      total: sorted.length,
+      total: fullGuild.length,
       ready: ready.length,
       almost: almost.length,
       far: far.length,
@@ -141,7 +158,7 @@ export function filterGuildZeffoRows(rows = [], options = {}) {
   return Object.freeze(asArray(rows).filter((row) => {
     if (status !== "ALL" && row.status !== status) return false;
     if (!query) return true;
-    return [row.name, row.allyCode, row.status, row.preferredPath, row.upgradeText]
+    return [row.name, row.allyCode, row.role, row.status, row.preferredPath, row.upgradeText]
       .join(" ").toLowerCase().replace(/-/g, "").includes(query);
   }));
 }
