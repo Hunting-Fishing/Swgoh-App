@@ -1,4 +1,5 @@
-import { buildCounterMatrix, normalizeId, normalizeMembers, teamSignature } from './gac-counter-matrix-model.js';
+import { buildCounterMatrix, normalizeId, normalizeMembers, teamSignature, variantScore } from './gac-counter-matrix-model.js';
+import { historicalGacEvidenceRisk } from './gac-evidence-risk-model.js';
 
 const clean = (value) => String(value ?? '').trim();
 const n = (value) => Number.isFinite(Number(value)) ? Number(value) : 0;
@@ -53,15 +54,57 @@ function rowCandidateSummary(row = {}, minimumBattles = 5) {
   for (const variant of variants) {
     squads.add(teamSignature(variant.counterLeaderBaseId, variant.counterMembers));
     if (normalizeId(variant.counterLeaderBaseId)) leaders.add(normalizeId(variant.counterLeaderBaseId));
-    if (!best || n(variant.winRate) > n(best.winRate) || (n(variant.winRate) === n(best.winRate) && n(variant.battles) > n(best.battles))) best = variant;
+    if (!best || variantScore(variant) > variantScore(best) || (variantScore(variant) === variantScore(best) && n(variant.battles) > n(best.battles))) best = variant;
   }
   const count = squads.size;
   const scarcity = count === 0 ? 'uncovered' : count === 1 ? 'critical' : count <= 3 ? 'scarce' : count <= 6 ? 'limited' : 'flexible';
+  const bestRisk = best ? historicalGacEvidenceRisk(best) : null;
   return Object.freeze({
     counterSquads: count,
     counterLeaders: leaders.size,
     scarcity,
     best,
+    bestRisk,
+  });
+}
+
+function riskSummary(assignments = []) {
+  const rows = Array.isArray(assignments) ? assignments : [];
+  const counts = { 'very-low': 0, low: 0, moderate: 0, high: 0, critical: 0, insufficient: 0, unknown: 0 };
+  let weightedFloorSum = 0;
+  let weightedFloorBattles = 0;
+  let undersizeAttacks = 0;
+  let undersizeSlots = 0;
+  let relicBurdenAttacks = 0;
+  for (const assignment of rows) {
+    const risk = historicalGacEvidenceRisk(assignment);
+    const band = clean(assignment?.failureRiskBand || risk.failureRiskBand) || 'unknown';
+    counts[band] = (counts[band] || 0) + 1;
+    const floor = Number.isFinite(Number(assignment?.observedWinRateLowerBound90))
+      ? Number(assignment.observedWinRateLowerBound90)
+      : risk.observedWinRateLowerBound90;
+    const battles = Math.max(0, n(assignment?.battles));
+    if (Number.isFinite(Number(floor)) && battles > 0) {
+      weightedFloorSum += Number(floor) * battles;
+      weightedFloorBattles += battles;
+    }
+    const undersize = Math.max(0, Math.floor(n(assignment?.undersizeCount ?? risk.undersizeCount)));
+    if (undersize > 0) {
+      undersizeAttacks += 1;
+      undersizeSlots += undersize;
+    }
+    const relicBand = clean(assignment?.relicBurdenBand || risk.relicBurdenBand);
+    if (relicBand === 'high' || relicBand === 'elevated') relicBurdenAttacks += 1;
+  }
+  return Object.freeze({
+    counts: Object.freeze(counts),
+    weightedEvidenceFloor90: weightedFloorBattles ? weightedFloorSum / weightedFloorBattles : null,
+    weightedFloorBattles,
+    highOrCritical: (counts.high || 0) + (counts.critical || 0),
+    cautionary: (counts.moderate || 0) + (counts.high || 0) + (counts.critical || 0) + (counts.insufficient || 0) + (counts.unknown || 0),
+    undersizeAttacks,
+    undersizeSlots,
+    relicBurdenAttacks,
   });
 }
 
@@ -96,6 +139,7 @@ function buildBoardOptimization({
     const candidates = rowCandidateSummary(row, minimumBattles);
     const proposed = allocationByRow.get(row.key) || null;
     const existing = row.defenseId ? existingByDefense.get(row.defenseId) || null : null;
+    const bestRisk = candidates.bestRisk;
     return Object.freeze({
       key: row.key,
       defenseId: row.defenseId,
@@ -108,6 +152,13 @@ function buildBoardOptimization({
       counterLeaders: candidates.counterLeaders,
       scarcity: candidates.scarcity,
       bestWinRate: candidates.best ? Number(candidates.best.winRate) : null,
+      bestObservedWinRate: candidates.best ? Number(candidates.best.winRate) : null,
+      bestEvidenceFloor90: bestRisk?.observedWinRateLowerBound90 ?? null,
+      bestFailureRiskBand: bestRisk?.failureRiskBand || 'unknown',
+      bestSampleQuality: bestRisk?.sampleQuality || 'none',
+      bestConfidence: bestRisk?.confidence ?? null,
+      bestUndersizeCount: bestRisk?.undersizeCount || 0,
+      bestRelicBurdenBand: bestRisk?.relicBurdenBand || 'unknown',
       bestBattles: candidates.best ? n(candidates.best.battles) : 0,
       bestAverageBanners: candidates.best && Number.isFinite(Number(candidates.best.averageBanners)) ? Number(candidates.best.averageBanners) : null,
       proposedCounter: proposed,
@@ -133,6 +184,7 @@ function buildBoardOptimization({
     : null;
   const projectedMembers = new Set(projected.flatMap((row) => normalizeMembers(row.counterMembers)));
   const plan = roundPlanSummary(attackPlan);
+  const evidenceRisk = riskSummary(projected);
   return Object.freeze({
     rows: Object.freeze(rows),
     totalDefenses: rows.length,
@@ -142,6 +194,13 @@ function buildBoardOptimization({
     projectedUniqueAttackers: projectedMembers.size,
     projectedAverageWinRate: winRates.length ? winRates.reduce((sum, value) => sum + value, 0) / winRates.length : null,
     projectedBattleWeightedWinRate: weightedWinRate,
+    projectedEvidenceFloor90: evidenceRisk.weightedEvidenceFloor90,
+    projectedHighRiskAttacks: evidenceRisk.highOrCritical,
+    projectedCautionaryAttacks: evidenceRisk.cautionary,
+    projectedUndersizeAttacks: evidenceRisk.undersizeAttacks,
+    projectedUndersizeSlots: evidenceRisk.undersizeSlots,
+    projectedRelicBurdenAttacks: evidenceRisk.relicBurdenAttacks,
+    evidenceRisk,
     exactEvidenceRows: exactRows,
     aggregateEvidenceRows: rows.length - exactRows,
     scarcity: Object.freeze({
@@ -153,17 +212,20 @@ function buildBoardOptimization({
     }),
     plan,
     allocation: matrix.allocation,
+    evidenceBoundary: 'Observed win rates, confidence bounds, banners, undersize and relic burden are historical evidence descriptors, not guaranteed current-battle outcomes.',
   });
 }
 
 function priorityRows(optimization = {}) {
   const order = { uncovered: 0, critical: 1, scarce: 2, limited: 3, flexible: 4 };
+  const riskOrder = { critical: 0, high: 1, insufficient: 2, unknown: 3, moderate: 4, low: 5, 'very-low': 6 };
   return (Array.isArray(optimization?.rows) ? optimization.rows : []).slice().sort((a, b) =>
     (order[a.scarcity] ?? 9) - (order[b.scarcity] ?? 9) ||
+    (riskOrder[a.bestFailureRiskBand] ?? 9) - (riskOrder[b.bestFailureRiskBand] ?? 9) ||
     n(a.counterSquads) - n(b.counterSquads) ||
-    n(a.bestWinRate) - n(b.bestWinRate) ||
+    n(a.bestEvidenceFloor90) - n(b.bestEvidenceFloor90) ||
     n(a.slot) - n(b.slot)
   );
 }
 
-export { buildBoardOptimization, priorityRows, roundPlanSummary, rowCandidateSummary };
+export { buildBoardOptimization, priorityRows, riskSummary, roundPlanSummary, rowCandidateSummary };
