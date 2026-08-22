@@ -14,7 +14,7 @@ The preserved ROTE Tactical Map v2 implementation has been reconciled onto the c
 - Original ROTE scope preserved: 47 changed files / 8,900 additions
 - Original PR #184 closed as superseded; branch history remains preserved
 - Active GAC Intelligence PR #306 was not modified
-- GAC #306 and ROTE #316 have zero changed-file overlap at the refresh checkpoint
+- GAC #306 and ROTE #316 had zero changed-file overlap at the refresh checkpoint
 
 ## Completed since the original checkpoint
 
@@ -40,7 +40,28 @@ The integration module automatically:
 
 The same integration module wires `hydrateSelectedMissionReadiness()` into the selected mission inspector and keeps official entry legality separate from tactical readiness.
 
-A new regression contract `test/rote-tactical-map-loader.test.mjs` verifies that the global Guild/TB entrypoint continues to activate the Tactical Map v2 integration and that browser auto-install/readiness wiring remains present.
+A regression contract `test/rote-tactical-map-loader.test.mjs` verifies that the global Guild/TB entrypoint continues to activate the Tactical Map v2 integration and that browser auto-install/readiness wiring remains present.
+
+### N4 — Guild readiness matrix per visible mission — COMPLETE IN BRANCH
+
+The tactical Guild matrix now exposes mission-level readiness intelligence instead of only cell-level status:
+
+- cumulative official entry-ready members;
+- cumulative minimum-ready members, including safer-ready members;
+- safer-target-ready members;
+- blocked members;
+- unknown-evidence members;
+- active-event outstanding entry-ready members when matching event + mission attempt evidence is loaded.
+
+Important truth boundaries:
+
+- `UNKNOWN EVIDENCE` remains distinct from `BLOCKED`.
+- A member can be officially entry-ready while tactical evidence is still unknown.
+- Outstanding is calculated only from entry-ready members for the exact active event and mission.
+- If active-event attempt evidence is absent, outstanding remains `UNKNOWN / NOT LOADED`; it is never inferred from missing records.
+- The browser integration accepts an optional `window.__swgohTbMissionAttemptSnapshot` contract and refresh event `swgoh:tb-mission-attempts-updated`, allowing the durable attempt-history slice to hydrate outstanding counts without creating a second readiness model.
+
+Focused model/UI regression coverage was expanded for cumulative readiness semantics, event scoping, mission scoping, identity matching and unavailable-evidence behavior.
 
 ## Existing preserved capabilities
 
@@ -60,28 +81,24 @@ The refreshed branch retains the implementation from the original ROTE workstrea
 
 ## Validation state
 
-GitHub reports PR #316 as cleanly mergeable against `main`.
+GitHub reports PR #316 as cleanly mergeable against `main` at the current checkpoint.
 
-The repository's Node regression workflow is intentionally `workflow_dispatch` only. No automatic CI result should be inferred from the absence of a workflow run. Before production merge, run the manual Node regression suite and complete an authenticated populated-state visual smoke.
+The repository's Node regression workflow is intentionally `workflow_dispatch` only. No automatic CI result should be inferred from the absence of a workflow run. The current execution environment cannot resolve `github.com` for a local clone, so executable Node regression remains a production-gate item rather than being falsely marked complete.
 
 ## Next build slices
 
-### N4 — Guild readiness matrix per visible mission
-
-Confirm the activated tactical overlay exposes, per mission:
-
-- official entry-ready members;
-- minimum-ready members;
-- safer-target-ready members;
-- blocked members;
-- unknown-evidence members;
-- outstanding members when active event state is available.
-
-Do not collapse unknown evidence into zero or failure.
-
-### N5 — durable evidence and migration review
+### N5 — durable evidence and migration review — NEXT
 
 Review both additive Supabase migrations against the current production schema before application. Preserve append-only/idempotent mission-attempt and contribution evidence semantics.
+
+Required review:
+
+- uniqueness/idempotency keys;
+- account/guild/event ownership boundaries;
+- row-level security and officer/member write separation where applicable;
+- indexes for event + mission + player aggregation;
+- compatibility with current production Supabase tables and naming;
+- no destructive alteration of existing Guild/TB evidence.
 
 ### N6 — observed-results UI
 
