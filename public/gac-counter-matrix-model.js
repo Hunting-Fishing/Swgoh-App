@@ -1,3 +1,5 @@
+import { gacEvidenceRankingScore, historicalGacEvidenceRisk } from './gac-evidence-risk-model.js';
+
 const clean = (value) => String(value ?? '').trim();
 const n = (value) => Number.isFinite(Number(value)) ? Number(value) : 0;
 const normalizeId = (value) => clean(value?.baseId || value).split(':')[0].toUpperCase();
@@ -30,11 +32,11 @@ function evidenceVariant(row = {}) {
   const wins = Math.max(0, Math.min(battles, n(row?.wins)));
   const rate = battles ? wins / battles : 0;
   const averageRelicDelta = row?.averageRelicDelta === null || row?.averageRelicDelta === undefined || row?.averageRelicDelta === '' ? null : Number(row.averageRelicDelta);
-  return Object.freeze({
+  const normalized = {
     enemyLeaderBaseId: normalizeId(row?.enemyLeaderBaseId),
-    enemyMembers: Object.freeze(normalizeMembers(row?.enemyMembers)),
+    enemyMembers: normalizeMembers(row?.enemyMembers),
     counterLeaderBaseId: normalizeId(row?.counterLeaderBaseId),
-    counterMembers: Object.freeze(normalizeMembers(row?.counterMembers)),
+    counterMembers: normalizeMembers(row?.counterMembers),
     battles,
     wins,
     winRate: Number.isFinite(Number(row?.winRate)) ? Math.max(0, Math.min(1, Number(row.winRate))) : rate,
@@ -45,7 +47,20 @@ function evidenceVariant(row = {}) {
     league: clean(row?.league),
     seasonId: clean(row?.seasonId),
     source: clean(row?.source),
-    evidenceSources: Object.freeze(Array.isArray(row?.evidenceSources) ? row.evidenceSources.map(clean).filter(Boolean) : []),
+    evidenceSources: Array.isArray(row?.evidenceSources) ? row.evidenceSources.map(clean).filter(Boolean) : [],
+  };
+  const evidenceRisk = historicalGacEvidenceRisk(normalized);
+  return Object.freeze({
+    ...normalized,
+    enemyMembers: Object.freeze(normalized.enemyMembers),
+    counterMembers: Object.freeze(normalized.counterMembers),
+    evidenceSources: Object.freeze(normalized.evidenceSources),
+    observedWinRateLowerBound90: evidenceRisk.observedWinRateLowerBound90,
+    sampleQuality: evidenceRisk.sampleQuality,
+    failureRiskBand: evidenceRisk.failureRiskBand,
+    undersizeCount: evidenceRisk.undersizeCount,
+    relicBurdenBand: evidenceRisk.relicBurdenBand,
+    evidenceRisk,
   });
 }
 
@@ -95,7 +110,7 @@ function aggregateVariants(variants = []) {
   const confidence = confidenceWeight
     ? rows.reduce((sum, row) => sum + n(row.confidence) * Math.max(1, n(row.battles)), 0) / confidenceWeight
     : 0;
-  return Object.freeze({
+  const aggregate = {
     battles,
     wins,
     winRate: battles ? wins / battles : 0,
@@ -103,6 +118,15 @@ function aggregateVariants(variants = []) {
     averageRelicDelta,
     relicDeltaSamples,
     confidence,
+  };
+  const evidenceRisk = historicalGacEvidenceRisk(aggregate);
+  return Object.freeze({
+    ...aggregate,
+    observedWinRateLowerBound90: evidenceRisk.observedWinRateLowerBound90,
+    sampleQuality: evidenceRisk.sampleQuality,
+    failureRiskBand: evidenceRisk.failureRiskBand,
+    relicBurdenBand: evidenceRisk.relicBurdenBand,
+    evidenceRisk,
   });
 }
 
@@ -117,9 +141,7 @@ function evidenceClass(cell = {}, minimumBattles = 5) {
 }
 
 function variantScore(variant = {}) {
-  const sample = Math.log10(Math.max(1, n(variant?.battles)) + 1);
-  const banner = Number.isFinite(Number(variant?.averageBanners)) ? Number(variant.averageBanners) : 0;
-  return Number(variant?.winRate || 0) * 1000 + sample * 35 + n(variant?.confidence) * 20 + banner * 0.5;
+  return gacEvidenceRankingScore(variant);
 }
 
 function allocateNonOverlapping(rows = [], minimumBattles = 5) {
@@ -140,6 +162,7 @@ function allocateNonOverlapping(rows = [], minimumBattles = 5) {
     if (!variant) continue;
     const members = normalizeMembers(variant.counterMembers);
     for (const id of members) used.add(id);
+    const evidenceRisk = historicalGacEvidenceRisk(variant);
     assignments.push(Object.freeze({
       rowKey: entry.row.key,
       defenseId: entry.row.defenseId,
@@ -153,6 +176,12 @@ function allocateNonOverlapping(rows = [], minimumBattles = 5) {
       averageRelicDelta: variant.averageRelicDelta,
       relicDeltaSamples: variant.relicDeltaSamples,
       confidence: variant.confidence,
+      observedWinRateLowerBound90: evidenceRisk.observedWinRateLowerBound90,
+      sampleQuality: evidenceRisk.sampleQuality,
+      failureRiskBand: evidenceRisk.failureRiskBand,
+      undersizeCount: evidenceRisk.undersizeCount,
+      relicBurdenBand: evidenceRisk.relicBurdenBand,
+      evidenceRankingScore: variantScore(variant),
     }));
   }
   const complete = rows.length > 0 && assignments.length === rows.length;
@@ -235,12 +264,12 @@ function buildCounterMatrix({
       cells.set(column.leaderBaseId, Object.freeze({
         ...aggregate,
         evidenceClass: evidenceClass(aggregate, minimumBattles),
-        variants: Object.freeze(variants.slice().sort((a, b) => b.battles - a.battles || b.winRate - a.winRate)),
+        variants: Object.freeze(variants.slice().sort((a, b) => variantScore(b) - variantScore(a) || b.battles - a.battles)),
         scope: row.scope,
       }));
     }
     const eligibleCells = [...cells.values()].filter((cell) => cell.battles >= Math.max(1, n(minimumBattles)));
-    const bestCell = eligibleCells.sort((a, b) => b.winRate - a.winRate || b.battles - a.battles || n(b.averageBanners) - n(a.averageBanners))[0] || null;
+    const bestCell = eligibleCells.sort((a, b) => variantScore(b) - variantScore(a) || b.battles - a.battles)[0] || null;
     return Object.freeze({ ...row, cells, bestCell });
   });
 
