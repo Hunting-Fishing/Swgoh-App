@@ -34,7 +34,7 @@ Latest consolidated targeted result before the release UI layer:
 - **0 failed**
 - **0 skipped**
 
-The release UI JavaScript was additionally syntax-checked on Node 22. A dedicated `test/gac-intelligence-ui-release.test.mjs` source contract now protects the global load chain, all five command-deck destinations, responsive/focus requirements, and the additive professional styling layer.
+The release UI JavaScript was additionally syntax-checked on Node 22. A dedicated `test/gac-intelligence-ui-release.test.mjs` source contract now protects the global load chain, all five command-deck destinations, responsive/focus requirements, and the additive professional styling layer. The Datacron schema contract additionally rejects any service-role DELETE/TRUNCATE/REFERENCES/TRIGGER grant in both foundation and additive hardening migrations.
 
 This is a real GAC-targeted release result. It is **not represented as a complete repository-wide `npm test` run**.
 
@@ -85,7 +85,7 @@ Fixes:
 - sequence privileges were similarly reset to USAGE/SELECT only;
 - foundation migration was corrected for clean/fresh environments;
 - additive `20260823012000_gac_datacron_battle_evidence_least_privilege.sql` protects environments that already created the table;
-- schema regression contract now enforces the least-privilege shape.
+- schema regression contract now enforces the least-privilege shape and explicitly prohibits elevated service-role grants.
 
 ## Professional release UI / reachability — COMPLETE
 
