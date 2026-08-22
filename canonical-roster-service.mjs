@@ -216,6 +216,7 @@ export function createCanonicalRosterService(options = {}) {
     const omicronCount = nullableFinite(snapshot?.omicron_count);
     const ultimateCount = nullableFinite(snapshot?.ultimate_count);
     const omegaCount = nullableFinite(snapshot?.omega_upgrade_count);
+    const playerMetadata = asObject(player.metadata);
 
     return Object.freeze({
       source: "canonical",
@@ -232,6 +233,8 @@ export function createCanonicalRosterService(options = {}) {
         shipGalacticPower: finite(player.ship_power),
         guildId: clean(guild?.swgoh_guild_id || guild?.id),
         guildName: clean(guild?.name),
+        profileTitle: clean(playerMetadata.playerTitle),
+        playerPortrait: clean(playerMetadata.playerPortrait),
         updatedAt: lastSyncedAt,
       }),
       units: Object.freeze(characters),
@@ -332,6 +335,8 @@ export function createCanonicalRosterService(options = {}) {
       const playerId = clean(membership.player_id);
       const player = playersById.get(playerId) || {};
       const snapshot = snapshotsByPlayer.get(playerId) || {};
+      const membershipMetadata = asObject(membership.metadata);
+      const playerMetadata = asObject(player.metadata);
       return Object.freeze({
         id: clean(player.swgoh_player_id || playerId),
         persistentId: playerId,
@@ -339,6 +344,10 @@ export function createCanonicalRosterService(options = {}) {
         allyCode: clean(player.ally_code),
         name: clean(player.name || membership.member_name || playerId),
         level: finite(player.level),
+        memberLevel: finite(membershipMetadata.memberLevel),
+        memberRole: clean(membershipMetadata.memberRole || membershipMetadata.guildRole),
+        profileTitle: clean(playerMetadata.playerTitle),
+        playerPortrait: clean(playerMetadata.playerPortrait),
         galacticPower: finite(player.galactic_power, finite(membership.member_galactic_power)),
         characterGalacticPower: finite(player.character_power, finite(membership.member_character_power)),
         shipGalacticPower: finite(player.ship_power, finite(membership.member_ship_power)),
