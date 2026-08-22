@@ -35,6 +35,11 @@ const matrix = {
     total: 4,
     known: 3,
     battleReady: 1,
+    officialEntryReady: 3,
+    minimumReady: 1,
+    saferReady: 1,
+    blocked: 1,
+    unknownEvidence: 1,
     counts: {
       [GUILD_ROTE_TACTICAL_STATE.SAFER_READY]: 1,
       [GUILD_ROTE_TACTICAL_STATE.MINIMUM_READY]: 0,
@@ -52,6 +57,16 @@ const matrix = {
       lane: 'Mixed',
       evidence: 'exact',
       mission: { id: 'felucia-hondo', name: 'Hondo Combat Mission' },
+      missionSummary: {
+        officialEntryReady: 2,
+        minimumReady: 1,
+        saferReady: 1,
+        blocked: 0,
+        unknownEvidence: 0,
+        outstandingAvailable: true,
+        outstanding: 1,
+        attemptsRecorded: 1,
+      },
       cells: [
         {
           member: alpha,
@@ -83,6 +98,16 @@ const matrix = {
       lane: 'Dark',
       evidence: 'exact',
       mission: { id: 'tatooine-reva', name: 'Third Sister Shard Mission' },
+      missionSummary: {
+        officialEntryReady: 0,
+        minimumReady: 0,
+        saferReady: 0,
+        blocked: 1,
+        unknownEvidence: 1,
+        outstandingAvailable: false,
+        outstanding: null,
+        attemptsRecorded: null,
+      },
       cells: [
         {
           member: alpha,
@@ -122,6 +147,9 @@ test('matrix UI renders mission × member readiness cells and evidence summary',
   assert.match(markup, /BLOCKED/);
   assert.match(markup, /UNKNOWN/);
   assert.match(markup, /UNKNOWN EVIDENCE/);
+  assert.match(markup, /OFFICIAL ENTRY READY/);
+  assert.match(markup, /ENTRY 2 · MIN 1 · SAFER 1 · BLOCKED 0 · UNKNOWN 0 · OUTSTANDING 1/);
+  assert.match(markup, /ENTRY 0 · MIN 0 · SAFER 0 · BLOCKED 1 · UNKNOWN 1/);
 });
 
 test('readiness filter keeps only missions containing the selected state', () => {
@@ -143,15 +171,28 @@ test('member search narrows matrix columns without losing mission rows', () => {
   assert.match(markup, /Third Sister Shard Mission/);
 });
 
-test('cell drill-down links to the existing Guild member command profile and mission planet', () => {
+test('cell drill-down links to the existing Guild member command profile and exposes mission-level Guild intelligence', () => {
   const selectedKey = 'felucia:felucia-hondo|m1';
   const markup = guildRoteTacticalCellDetailMarkup(matrix, selectedKey, '999888777');
 
   assert.match(markup, /Alpha Pilot/);
   assert.match(markup, /Hondo Combat Mission/);
+  assert.match(markup, /Guild entry-ready<\/span><strong>2/);
+  assert.match(markup, /Minimum-ready<\/span><strong>1/);
+  assert.match(markup, /Safer-ready<\/span><strong>1/);
+  assert.match(markup, /Active-event outstanding<\/span><strong>1/);
+  assert.match(markup, /Recorded attempts<\/span><strong>1/);
   assert.match(markup, /Official entry<\/span><strong>PASS/);
   assert.match(markup, /NEEDS ZETA/);
   assert.match(markup, /I Smell Profit!/);
   assert.match(markup, /data-guild-mission-planet="felucia"/);
   assert.match(markup, /href="\/guild\/members\/111222333\?allyCode=999888777"/);
+});
+
+test('mission detail keeps outstanding UNKNOWN when active-event participation evidence is absent', () => {
+  const selectedKey = 'tatooine:tatooine-reva|m1';
+  const markup = guildRoteTacticalCellDetailMarkup(matrix, selectedKey, '999888777');
+
+  assert.match(markup, /Active-event outstanding<\/span><strong>UNKNOWN/);
+  assert.match(markup, /Participation evidence<\/span><strong>NOT LOADED/);
 });
