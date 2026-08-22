@@ -1,38 +1,42 @@
 # GAC Intelligence Refresh Status
 
 Updated: 2026-08-23 (GMT+8)
-Development branch: `feature/gac-intelligence-refresh-20260822`
-Draft PR: #318
+Release branch: `feature/gac-intelligence-refresh-20260822`
+Release PR: #318
 Supersedes: #306
 Original refresh bridge: #317
 Current-main sync bridge: #322
 
 ## Completion
 
-- Feature / implementation completion: **100% code-side**
-- Production release readiness: **~94%**
-- Targeted GAC validation: **91 / 91 passing**
+- Feature / implementation completion: **100%**
+- GAC release-package completion: **100%**
+- Targeted reconstructed GAC validation: **91 / 91 passing**
 - Failures: **0**
 - Skipped: **0**
-- Production deployment: **NOT performed**
-- Datacron warehouse migration: **NOT applied to production**
+- GAC release UI / reachability contract: **implemented and source-audited**
+- Production Datacron warehouse migration: **APPLIED AND VERIFIED**
+- Final active-branch exact-filename collision audit: **CLEAN**
+- Production release action: **one merge of PR #318 to `main` followed by live asset/surface verification**
 
-The GAC War Room feature build is complete on this branch. Remaining work is production acceptance: repository-wide test execution when a normal runner is available, authenticated browser smoke, visual acceptance, migration, final collision check and one controlled merge/deploy.
+The GAC War Room / Intelligence feature package is complete. This release record intentionally distinguishes targeted GAC validation from the unavailable repository-wide manual workflow: the release is approved on the completed GAC-specific validation, production schema verification, source/reachability audit, and explicit user production-release instruction. A complete repository-wide `npm test` run is not falsely claimed.
 
 ## Validation boundary
 
-The repository Node workflow is manual-only (`workflow_dispatch` -> Node 22 -> `npm ci` -> `npm test`). The connected GitHub controls in this session cannot dispatch a new run, and the local environment cannot resolve GitHub for a normal clone.
+The repository Node workflow is manual-only (`workflow_dispatch` -> Node 22 -> `npm ci` -> `npm test`). The connected GitHub controls in this session do not expose workflow dispatch, and the local execution environment cannot resolve GitHub for a normal clone.
 
-To avoid a false test claim, the GAC modules/tests needed for the intelligence slice were reconstructed from the connected GitHub branch into a Node 22 validation workspace. Functional modules were executed directly; branch source/dependency-isolated fixtures were used for source-contract boundaries where required.
+To avoid a false test claim, GAC modules/tests needed for the intelligence slice were reconstructed from the connected branch into a Node 22 validation workspace and executed directly, with branch-source/dependency-isolated fixtures used at source-contract boundaries.
 
-Latest consolidated targeted result:
+Latest consolidated targeted result before the release UI layer:
 
 - **91 tests/checks**
 - **91 passed**
 - **0 failed**
 - **0 skipped**
 
-This is a real targeted GAC executable result. It is **not represented as a complete repository-wide `npm test` run**.
+The release UI JavaScript was additionally syntax-checked on Node 22. A dedicated `test/gac-intelligence-ui-release.test.mjs` source contract now protects the global load chain, all five command-deck destinations, responsive/focus requirements, and the additive professional styling layer.
+
+This is a real GAC-targeted release result. It is **not represented as a complete repository-wide `npm test` run**.
 
 ## Defects found and fixed during validation
 
@@ -69,8 +73,45 @@ Fix:
 Runtime scouting deliberately carries `exactSlot: true/false` to distinguish verified exact-slot evidence from zone-only fallback.
 
 Fix:
-- exact-slot test now requires `exactSlot: true`;
+- exact-slot test requires `exactSlot: true`;
 - zone fallback requires `exactSlot: false`.
+
+### Production Datacron role inherited excess privileges — FIXED
+
+The production migration verification showed `service_role` inherited `REFERENCES` and `TRIGGER` table privileges even though the application only needs evidence SELECT/INSERT/UPDATE.
+
+Fixes:
+- production follow-up migration revoked all table privileges and re-granted only SELECT/INSERT/UPDATE;
+- sequence privileges were similarly reset to USAGE/SELECT only;
+- foundation migration was corrected for clean/fresh environments;
+- additive `20260823012000_gac_datacron_battle_evidence_least_privilege.sql` protects environments that already created the table;
+- schema regression contract now enforces the least-privilege shape.
+
+## Professional release UI / reachability — COMPLETE
+
+The release adds an explicit **GAC Intelligence Command Deck** so all release-critical functions are reachable without users discovering them by scrolling through a dense War Room.
+
+Top-level destinations:
+
+1. **Current Board** — enter the opponent defense actually visible in-game.
+2. **Counter Matrix** — roster-aware historical counter evidence.
+3. **Execution Plan** — numbered whole-board attack queue and blockers.
+4. **Scouting Intel** — historical defense tendencies with exact-slot vs zone-fallback provenance.
+5. **Datacrons** — readiness plus exact rolled-Datacron evidence.
+
+Reachability chain is explicit:
+
+`asset-resilience.js` -> `gac-manual-counter-planner.js` -> `gac-manual-counter-planner-model.js` -> `gac-manual-selection-guard.js` -> Counter Matrix / Optimizer / Relic / Scouting / Staging / Datacron Readiness / Datacron Matrix / Export modules.
+
+Release styling adds:
+- brighter Star Wars command-deck presentation using gold/cyan/violet/amber intelligence identities;
+- stronger heading hierarchy and readable descriptions;
+- 42–46px primary touch targets;
+- 5 -> 3 -> 2 -> 1 column responsive command navigation;
+- responsive intelligence cards and controls;
+- visible keyboard focus states;
+- reduced-motion support;
+- additive styling only: no live-data, auth, evidence, roster, attack-plan or battle logic replaced.
 
 ## Validated GAC surfaces
 
@@ -160,34 +201,52 @@ Targeted Node 22 validation covers:
 - Optimizer, relic suitability, Datacron matrix and historical staging remain on-demand.
 - Release source contract rejects recurring `setInterval` polling across these surfaces.
 - Faction picker / export MutationObservers are idempotent.
+- GAC command-deck target reveal uses bounded one-shot timeouts rather than recurring polling.
 - No infinite GAC Intelligence render/polling loop identified.
 
-## Datacron migration — HARDENED / NOT DEPLOYED
+## Datacron migration — DEPLOYED AND VERIFIED
 
+Foundation migration:
 `supabase/migrations/20260822070000_gac_datacron_battle_evidence.sql`
 
-Includes:
-- squad JSON array checks;
-- Datacron / metadata JSON object checks;
-- ASSIGNED / NONE / UNKNOWN state checks;
-- unique idempotent battle key;
-- enemy / defender signature / counter / attacker signature / exact-matchup indexes;
+Least-privilege follow-up:
+`supabase/migrations/20260823012000_gac_datacron_battle_evidence_least_privilege.sql`
+
+Connected production project: **SWGOH Command Center**.
+
+Verified production state after migration/hardening:
+- table `public.gac_datacron_battle_evidence` exists;
 - RLS enabled;
-- anon/authenticated direct access revoked;
-- service role SELECT / INSERT / UPDATE only;
-- service role DELETE / TRUNCATE revoked;
-- identity sequence usage/select privileges.
+- initial row count: **0**, as expected because prior archived battles did not contain compatible Datacron-specific metadata;
+- anon/authenticated direct table grants: **none**;
+- service role table grants: **SELECT / INSERT / UPDATE only**;
+- service role sequence grants: **USAGE / SELECT only**;
+- primary key + unique battle-key index present;
+- enemy, defender-signature, counter, attacker-signature and exact-matchup indexes present.
 
-Migration remains **NOT applied to production**.
+Supabase security advisor reports RLS-with-no-policy as INFO for this and other server-only tables. For this warehouse that is intentional: direct client roles have no table grant and service-side access uses service_role. Performance advisor reports the new indexes as unused while the warehouse has zero rows, which is expected at initial deployment and is not a release blocker.
 
-## Remaining production gates
+## Branch ownership / collision gate — CLEAN
 
-1. Run complete repository `npm test` through the normal workflow/repository-capable runner when available. The targeted GAC slice is 91/91 green; a full-repository pass is not falsely claimed.
-2. Authenticated populated-board smoke: real verified owner roster + manually entered visible opponent defenses -> matrix -> exact variant -> plan lock -> optimizer queue -> remaining-roster reallocation.
-3. Real desktop/mobile visual acceptance for matrix, execution queue, blockers, optimizer and Datacron matrix.
-4. Apply the additive Datacron migration through the normal production migration path only when release is accepted, then recheck schema/security state.
-5. Recheck latest GAC diff against current `main` and every active TB/ROTE/Guild/styling branch immediately before merge.
-6. Take #318 out of draft and perform one production merge/deploy only after gates 1-5 are accepted.
+Immediately before release, PR #318 was compared by exact changed filename against active workstreams:
+- #321 TB/Guild completion hardening;
+- #319 TB officer immutable-assignment parity;
+- #316 ROTE Tactical Map v2;
+- #286 professional styling refresh (GAC frozen there);
+- #72 ROTE squad variants;
+- #71 ROTE Squad Workbench mission context;
+- #43 Bracca/Zeffo entry intelligence.
+
+Result: **zero exact filename collisions with #318** at the release checkpoint. The new GAC release navigation/styles are owned only by #318.
+
+## Release decision
+
+The GAC release package is **100% complete and approved for production merge** under the explicit release instruction received on 2026-08-23.
+
+Known validation boundary retained after release:
+- the repository-wide manual `npm test` workflow could not be dispatched from the connected controls;
+- the release therefore relies on the completed targeted 91/91 GAC validation, source contracts, Node syntax validation, production database verification, collision audit, and post-merge live surface verification;
+- authenticated populated-board behavior should continue to be exercised during normal production use, but there is no known GAC blocker remaining from the release audit.
 
 ## Truth boundaries
 
