@@ -40,6 +40,8 @@
   background: rgba(15,23,42,.58);
   font-weight: 850;
 }
+.guild-tb-mission-tab:not(:disabled) { cursor: pointer; }
+.guild-tb-mission-tab:not(:disabled):hover { border-color: rgba(96,165,250,.42); background: rgba(30,58,138,.18); }
 .guild-tb-mission-tab small {
   font-size: .58rem;
   letter-spacing: .08em;
@@ -215,6 +217,7 @@
   min-width: 0;
   display: grid;
   justify-items: center;
+  align-content: center;
   gap: 5px;
   padding: 8px 6px;
   border: 1px solid rgba(148,163,184,.12);
@@ -222,11 +225,17 @@
   background: rgba(2,6,23,.26);
 }
 .guild-zeffo-toon > span {
+  max-width: 100%;
+  min-height: 30px;
+  display: grid;
+  align-content: center;
   text-align: center;
   font-size: .67rem;
+  line-height: 1.15;
   font-weight: 850;
   color: #94a3b8;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 .guild-zeffo-toon em {
   display: block;
@@ -293,5 +302,4 @@
 @media (max-width: 480px) {
   .guild-zeffo-stat-grid { grid-template-columns: 1fr 1fr; }
   .guild-zeffo-avatar { width: 42px; height: 42px; }
-  .guild-zeffo-toon > span { white-space: normal; }
 }
