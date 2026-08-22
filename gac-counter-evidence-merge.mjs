@@ -37,6 +37,9 @@ function verifiedBattleObservation(row = {}) {
   if (!["3v3", "5v5"].includes(format) || !enemyLeader || !counterLeader || !enemyMembers.length || !counterMembers.length) return null;
   if (!["win", "loss", "draw"].includes(outcome)) return null;
   const banners = nullableFinite(row?.metadata?.banners);
+  const relicDelta = row?.metadata?.historicalRelicSnapshotComplete === true
+    ? nullableFinite(row?.metadata?.historicalRelicDelta)
+    : null;
   return Object.freeze({
     format,
     enemy_leader_base_id: enemyLeader,
@@ -48,6 +51,8 @@ function verifiedBattleObservation(row = {}) {
     holds: outcome === "loss" ? 1 : 0,
     draws: outcome === "draw" ? 1 : 0,
     average_banners: banners,
+    average_relic_delta: relicDelta,
+    relic_delta_samples: relicDelta === null ? 0 : 1,
     league: null,
     season_id: clean(row.season_id) || null,
     source: "verified-owner-war-room",
@@ -70,6 +75,10 @@ function mergeCounterEvidence(rows = []) {
     const holds = Math.max(0, Math.min(battles, finite(input.holds)));
     const draws = Math.max(0, Math.min(battles, finite(input.draws)));
     const avgBanners = nullableFinite(input.average_banners);
+    const avgRelicDelta = nullableFinite(input.average_relic_delta ?? input.historical_relic_delta);
+    const relicSamples = avgRelicDelta === null
+      ? 0
+      : Math.max(1, Math.floor(finite(input.relic_delta_samples, battles)));
     const source = clean(input.source || "historical-evidence");
     const confidence = Math.max(0, Math.min(1, finite(input.confidence, 1)));
     if (!groups.has(key)) {
@@ -85,6 +94,8 @@ function mergeCounterEvidence(rows = []) {
         draws: 0,
         bannerWeightedTotal: 0,
         bannerBattleCount: 0,
+        relicDeltaWeightedTotal: 0,
+        relicDeltaSamples: 0,
         confidenceWeightedTotal: 0,
         sources: new Set(),
         sourceRefs: new Set(),
@@ -102,6 +113,10 @@ function mergeCounterEvidence(rows = []) {
     if (avgBanners !== null) {
       group.bannerWeightedTotal += avgBanners * battles;
       group.bannerBattleCount += battles;
+    }
+    if (avgRelicDelta !== null && relicSamples > 0) {
+      group.relicDeltaWeightedTotal += avgRelicDelta * relicSamples;
+      group.relicDeltaSamples += relicSamples;
     }
     group.confidenceWeightedTotal += confidence * battles;
     if (source) group.sources.add(source);
@@ -126,6 +141,8 @@ function mergeCounterEvidence(rows = []) {
       holds: Math.min(group.battles, group.holds),
       draws: Math.min(group.battles, group.draws),
       average_banners: group.bannerBattleCount ? group.bannerWeightedTotal / group.bannerBattleCount : null,
+      average_relic_delta: group.relicDeltaSamples ? group.relicDeltaWeightedTotal / group.relicDeltaSamples : null,
+      relic_delta_samples: group.relicDeltaSamples,
       league: group.league || null,
       season_id: seasons.length === 1 ? seasons[0] : null,
       source: sources.length === 1 ? sources[0] : "combined-evidence",
