@@ -57,6 +57,8 @@ function counterRow(row = {}) {
     draws: Math.max(0, finite(row.draws)),
     winRate: battles ? wins / battles : 0,
     averageBanners: nullableFinite(row.average_banners),
+    averageRelicDelta: nullableFinite(row.average_relic_delta),
+    relicDeltaSamples: Math.max(0, Math.floor(finite(row.relic_delta_samples))),
     league: clean(row.league),
     seasonId: clean(row.season_id),
     seasonIds: Object.freeze(asArray(row.season_ids)),
@@ -125,6 +127,7 @@ export function createGacCounterEvidenceBatchService(options = {}) {
         count: observations.length,
         evidenceSources: Object.freeze([...new Set(observations.flatMap((row) => row.evidenceSources.length ? row.evidenceSources : [row.source]).filter(Boolean))].sort()),
         verifiedBattleSamples: verifiedObservations.filter((row) => normalizeBaseId(row.enemy_leader_base_id) === leader).length,
+        relicDeltaSamples: observations.reduce((sum, row) => sum + row.relicDeltaSamples, 0),
       });
     });
 
@@ -135,6 +138,7 @@ export function createGacCounterEvidenceBatchService(options = {}) {
       results: Object.freeze(results),
       count: results.reduce((sum, result) => sum + result.count, 0),
       verifiedBattleSamples: verifiedObservations.length,
+      relicDeltaSamples: results.reduce((sum, result) => sum + result.relicDeltaSamples, 0),
       evidenceSources: Object.freeze([...new Set(results.flatMap((result) => result.evidenceSources))].sort()),
       datacronEvidence: datacronBatch || Object.freeze({
         source: "gac-datacron-battle-evidence",
@@ -152,4 +156,4 @@ export function createGacCounterEvidenceBatchService(options = {}) {
 
 export const gacCounterEvidenceBatchService = createGacCounterEvidenceBatchService();
 
-export { boundedLimit, normalizeBaseId, normalizeFormat, normalizeLeaderList, textInFilter };
+export { boundedLimit, counterRow, normalizeBaseId, normalizeFormat, normalizeLeaderList, textInFilter };
