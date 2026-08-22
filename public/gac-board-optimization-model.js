@@ -26,11 +26,13 @@ function roundPlanSummary(attackPlan = {}) {
     if (!(status in statuses)) statuses.unknown += 1;
     else statuses[status] += 1;
     for (const id of assignmentMembers(assignment)) used.add(id);
+    const attemptBanners = [];
     for (const attempt of Array.isArray(assignment?.attemptLog) ? assignment.attemptLog : []) {
       for (const id of normalizeMembers(attempt?.members)) used.add(id);
-      if (Number.isFinite(Number(attempt?.banners))) banners.push(Number(attempt.banners));
+      if (Number.isFinite(Number(attempt?.banners))) attemptBanners.push(Number(attempt.banners));
     }
-    if (Number.isFinite(Number(assignment?.banners))) banners.push(Number(assignment.banners));
+    if (attemptBanners.length) banners.push(...attemptBanners);
+    else if (Number.isFinite(Number(assignment?.banners))) banners.push(Number(assignment.banners));
   }
   return Object.freeze({
     assignments: assignments.length,
