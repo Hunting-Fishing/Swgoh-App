@@ -44,6 +44,15 @@ test('web preview injects server officer context into the existing Stage 10 engi
   assert.deepEqual(options(call[2]),{phase:'P6',version:4,mentions:'on'});
 });
 
+test('web adapter rejects website-only context before constructing Stage 10 delivery', async () => {
+  const {service,calls}=fixture();
+  await assert.rejects(
+    () => service.preview({guild:{id:'guild-1'},userId:'user-1',discordGuildId:''},{phase:'P6',versionNumber:4}),
+    (error)=>error?.status===409 && error?.code==='DISCORD_GUILD_REQUIRED',
+  );
+  assert.equal(calls.length,0);
+});
+
 test('web publish converts explicit website confirmation into the same Stage 10 option contract', async () => {
   const {service,calls}=fixture();
   const hash='a'.repeat(64);
