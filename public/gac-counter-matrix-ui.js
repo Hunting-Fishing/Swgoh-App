@@ -23,7 +23,6 @@ const state = {
   planBusyKey: '',
   planMessage: '',
   renderSignature: '',
-  timer: null,
 };
 
 const clean = (value) => String(value ?? '').trim();
@@ -434,17 +433,16 @@ function installCounterMatrix() {
   if (window.__gacCounterMatrixInstalled) return;
   window.__gacCounterMatrixInstalled = true;
   installEvents();
-  const tick = () => {
+  const refreshIfActive = () => {
     if (location.hash && location.hash !== '#gac') return;
     void refresh();
   };
-  tick();
-  document.addEventListener('DOMContentLoaded', tick, { once: true });
-  window.addEventListener('hashchange', tick);
+  refreshIfActive();
+  document.addEventListener('DOMContentLoaded', refreshIfActive, { once: true });
+  window.addEventListener('hashchange', refreshIfActive);
   window.addEventListener('gac-visible-board-rendered', () => { state.renderSignature = ''; void refresh(); });
   window.addEventListener('gac-board-evidence-updated', () => { state.evidenceKey = ''; state.renderSignature = ''; void refresh({ force: true, forceEvidence: true }); });
   window.addEventListener('gac-war-room-updated', invalidateRoundContext);
-  state.timer = window.setInterval(tick, 5000);
 }
 
 if (typeof window !== 'undefined' && typeof document !== 'undefined') installCounterMatrix();
