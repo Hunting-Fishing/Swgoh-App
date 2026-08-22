@@ -22,7 +22,17 @@ create table if not exists public.gac_datacron_battle_evidence (
   source text not null,
   source_ref text,
   observed_at timestamptz not null,
-  metadata jsonb not null default '{}'::jsonb
+  metadata jsonb not null default '{}'::jsonb,
+  constraint gac_dc_battle_enemy_members_array_check
+    check (jsonb_typeof(enemy_members) = 'array'),
+  constraint gac_dc_battle_counter_members_array_check
+    check (jsonb_typeof(counter_members) = 'array'),
+  constraint gac_dc_battle_defender_datacron_object_check
+    check (defender_datacron is null or jsonb_typeof(defender_datacron) = 'object'),
+  constraint gac_dc_battle_attacker_datacron_object_check
+    check (attacker_datacron is null or jsonb_typeof(attacker_datacron) = 'object'),
+  constraint gac_dc_battle_metadata_object_check
+    check (jsonb_typeof(metadata) = 'object')
 );
 
 create index if not exists gac_dc_battle_enemy_idx
@@ -43,7 +53,11 @@ create index if not exists gac_dc_battle_exact_matchup_idx
   );
 
 alter table public.gac_datacron_battle_evidence enable row level security;
-revoke all on public.gac_datacron_battle_evidence from anon, authenticated;
+revoke all on table public.gac_datacron_battle_evidence from anon, authenticated;
+
+grant select, insert, update on table public.gac_datacron_battle_evidence to service_role;
+revoke delete, truncate on table public.gac_datacron_battle_evidence from service_role;
+grant usage, select on sequence public.gac_datacron_battle_evidence_id_seq to service_role;
 
 comment on table public.gac_datacron_battle_evidence is 'Battle-level GAC counter evidence with normalized defender and attacker Datacron signatures; never interpreted as a predicted current-battle outcome.';
 comment on column public.gac_datacron_battle_evidence.battle_key is 'Idempotent source battle identity matching gac_battles.battle_key when available.';
