@@ -9,59 +9,27 @@ const finite = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(
 
 export const TB_SPECIAL_MISSIONS = Object.freeze([
   Object.freeze({
-    id: "zeffo",
-    label: "Zeffo / Bracca",
-    shortLabel: "Zeffo",
-    tbId: "rote",
-    phase: 2,
-    territoryId: "bracca",
-    territoryName: "Bracca",
-    missionId: "bracca-zeffo-unlock",
-    rewardMode: "unlock",
-    officerTarget: 30,
-    officerRouteMission: "zeffo",
+    id: "zeffo", label: "Zeffo / Bracca", shortLabel: "Zeffo", tbId: "rote", phase: 2,
+    territoryId: "bracca", territoryName: "Bracca", missionId: "bracca-zeffo-unlock",
+    rewardMode: "unlock", officerTarget: 30, officerRouteMission: "zeffo",
     gateText: "Cere Junda R7+ and either JKCK R7+ or Baby Cal R7+.",
   }),
   Object.freeze({
-    id: "mandalore",
-    label: "Mandalore Unlock",
-    shortLabel: "Mandalore",
-    tbId: "rote",
-    phase: 3,
-    territoryId: "tatooine",
-    territoryName: "Tatooine",
-    missionId: "tatooine-mandalore-unlock",
-    rewardMode: "unlock",
-    officerTarget: 25,
-    officerRouteMission: "mandalore",
+    id: "mandalore", label: "Mandalore Unlock", shortLabel: "Mandalore", tbId: "rote", phase: 3,
+    territoryId: "tatooine", territoryName: "Tatooine", missionId: "tatooine-mandalore-unlock",
+    rewardMode: "unlock", officerTarget: 25, officerRouteMission: "mandalore",
     gateText: "Bo-Katan (Mand'alor) R7+ + Beskar Mando R7+ + any additional Mandalorian R7+.",
   }),
   Object.freeze({
-    id: "reva",
-    label: "Reva Shard Mission",
-    shortLabel: "Reva",
-    tbId: "rote",
-    phase: 3,
-    territoryId: "tatooine",
-    territoryName: "Tatooine",
-    missionId: "tatooine-reva",
-    rewardMode: "shards",
-    officerTarget: null,
-    officerRouteMission: "reva",
+    id: "reva", label: "Reva Shard Mission", shortLabel: "Reva", tbId: "rote", phase: 3,
+    territoryId: "tatooine", territoryName: "Tatooine", missionId: "tatooine-reva",
+    rewardMode: "shards", officerTarget: null, officerRouteMission: "reva",
     gateText: "Grand Inquisitor R7+ plus four additional Inquisitorius R7+.",
   }),
   Object.freeze({
-    id: "wat",
-    label: "Wat Tambor Shard Mission",
-    shortLabel: "Wat",
-    tbId: "geo-separatist",
-    phase: 3,
-    territoryId: "p3-middle",
-    territoryName: "Battleground",
-    missionId: "s3",
-    rewardMode: "shards",
-    officerTarget: null,
-    officerRouteMission: "wat",
+    id: "wat", label: "Wat Tambor Shard Mission", shortLabel: "Wat", tbId: "geo-separatist", phase: 3,
+    territoryId: "p3-middle", territoryName: "Battleground", missionId: "s3",
+    rewardMode: "shards", officerTarget: null, officerRouteMission: "wat",
     gateText: "All five Geonosians at 7★ and at least 16,500 character GP each.",
   }),
 ]);
@@ -92,8 +60,8 @@ export function playerBodyAsReadinessMember(body = {}) {
 function zeffoRequirements(row) {
   return Object.freeze([
     Object.freeze({ baseId: "CEREJUNDA", name: "Cere Junda", state: row.cere, target: "R7" }),
-    Object.freeze({ baseId: "JEDIKNIGHTCAL", name: "JKCK", state: row.jkck, target: "R7", optionalPath: true, preferred: true }),
-    Object.freeze({ baseId: "CALKESTIS", name: "Baby Cal", state: row.babyCal, target: "R7", optionalPath: true }),
+    Object.freeze({ baseId: "JEDIKNIGHTCAL", name: "JKCK", state: row.jkck, target: "R7", optionalPath: true, preferred: row.preferredPath === "JKCK" }),
+    Object.freeze({ baseId: "CALKESTIS", name: "Baby Cal", state: row.babyCal, target: "R7", optionalPath: true, preferred: row.preferredPath === "Baby Cal" }),
   ]);
 }
 
@@ -114,10 +82,7 @@ function revaRequirements(row) {
 
 function watRequirements(row) {
   return Object.freeze(array(row.geonosians).map((geo) => Object.freeze({
-    baseId: geo.baseId,
-    name: geo.name,
-    state: geo.state,
-    target: "7★ · 16.5K GP",
+    baseId: geo.baseId, name: geo.name, state: geo.state, target: "7★ · 16.5K GP",
   })));
 }
 
@@ -127,6 +92,7 @@ function missionResult(definition, row, requirements) {
     status: row.status,
     upgradeText: row.upgradeText,
     priorityScore: finite(row.priorityScore, 0),
+    preferredPath: text(row.preferredPath),
     requirements,
     ready: row.status === "READY",
     almost: row.status === "ALMOST",
@@ -152,7 +118,9 @@ export function buildPlayerTbSpecialReadiness(body = {}, catalog = []) {
 export function tbFarmTargets(readinessRows = []) {
   const targets = [];
   for (const mission of array(readinessRows)) {
+    if (mission.ready) continue;
     for (const requirement of array(mission.requirements)) {
+      if (mission.id === "zeffo" && requirement.optionalPath && !requirement.preferred) continue;
       const state = requirement.state || {};
       const complete = mission.id === "wat" ? state.ready === true : finite(state.relic, -1) >= 7;
       if (complete) continue;
@@ -171,7 +139,8 @@ export function tbFarmTargets(readinessRows = []) {
       }));
     }
   }
-  return Object.freeze(targets);
+  const toneRank = { close: 0, far: 1, good: 2 };
+  return Object.freeze(targets.sort((a, b) => (toneRank[a.tone] ?? 9) - (toneRank[b.tone] ?? 9) || a.phase - b.phase || a.missionLabel.localeCompare(b.missionLabel) || a.name.localeCompare(b.name)));
 }
 
 export function officerReadinessUrl(missionId, allyCode = "") {
