@@ -34,7 +34,7 @@ function ensureStylesheet() {
   if (document.querySelector('link[data-guild-rote-tactical-matrix-css]')) return;
   const link = document.createElement('link');
   link.rel = 'stylesheet';
-  link.href = '/guild-rote-tactical-readiness-matrix-ui.css?v=20260820-tactical1';
+  link.href = '/guild-rote-tactical-readiness-matrix-ui.css?v=20260822-n4';
   link.dataset.guildRoteTacticalMatrixCss = 'true';
   document.head.appendChild(link);
 }
@@ -58,9 +58,23 @@ function ensureShell() {
   return shell;
 }
 
+function attemptSignature(snapshot = null, attempts = null) {
+  if (!snapshot || !Array.isArray(attempts)) return 'no-active-attempt-evidence';
+  const explicit = text(snapshot?.signature || snapshot?.version || snapshot?.fetchedAt);
+  if (explicit) return explicit;
+  return attempts.map((row) => [
+    text(row?.id),
+    text(row?.eventId || row?.event_id),
+    text(row?.missionId || row?.mission_id),
+    text(row?.playerId || row?.player_id || row?.allyCode || row?.ally_code),
+    text(row?.reportedAt || row?.reported_at),
+  ].join(':')).join('|');
+}
+
 function snapshotInput() {
   const guildSnapshot = window.__swgohGuildRosterSnapshot || null;
   const catalogSnapshot = window.__swgohCatalogSnapshot || null;
+  const attemptSnapshot = window.__swgohTbMissionAttemptSnapshot || null;
   const guild = guildSnapshot?.body || null;
   const catalog = catalogSnapshot?.body || null;
   if (!Array.isArray(guild?.members) || !Array.isArray(catalog?.units)) return null;
@@ -70,12 +84,23 @@ function snapshotInput() {
   if (inputCode.length === 9 && snapshotCode.length === 9 && inputCode !== snapshotCode) return null;
 
   const redundancyTarget = Math.max(1, Math.min(5, Math.floor(Number(window.__swgohGuildRoteRedundancyTarget || 2) || 2)));
+  const activeEventId = text(attemptSnapshot?.eventId || attemptSnapshot?.event?.id);
+  const attempts = Array.isArray(attemptSnapshot?.attempts) ? attemptSnapshot.attempts : null;
   return {
     allyCode: snapshotCode || inputCode,
     guild,
     catalog: catalog.units,
     redundancyTarget,
-    signature: [snapshotCode || inputCode, guildSnapshot?.fetchedAt || 0, catalogSnapshot?.fetchedAt || 0, redundancyTarget].join('|'),
+    activeEvent: activeEventId ? { id: activeEventId } : null,
+    attempts,
+    signature: [
+      snapshotCode || inputCode,
+      guildSnapshot?.fetchedAt || 0,
+      catalogSnapshot?.fetchedAt || 0,
+      redundancyTarget,
+      activeEventId || 'no-active-event',
+      attemptSignature(attemptSnapshot, attempts),
+    ].join('|'),
   };
 }
 
@@ -122,16 +147,54 @@ function cellKey(mission, cell) {
   return `${text(mission?.key)}|${text(cell?.member?.id)}`;
 }
 
+function fallbackMissionSummary(mission = {}) {
+  const summary = mission?.missionSummary || mission?.summary || {};
+  const counts = summary?.counts || {};
+  const saferReady = Number(summary?.saferReady ?? counts[GUILD_ROTE_TACTICAL_STATE.SAFER_READY] ?? 0);
+  const minimumReady = Number(summary?.minimumReady ?? ((counts[GUILD_ROTE_TACTICAL_STATE.MINIMUM_READY] || 0) + saferReady));
+  const officialEntryReady = Number(summary?.officialEntryReady ?? (
+    (counts[GUILD_ROTE_TACTICAL_STATE.ENTRY_READY] || 0)
+    + (counts[GUILD_ROTE_TACTICAL_STATE.MINIMUM_READY] || 0)
+    + saferReady
+  ));
+  return {
+    officialEntryReady,
+    minimumReady,
+    saferReady,
+    blocked: Number(summary?.blocked ?? counts[GUILD_ROTE_TACTICAL_STATE.BLOCKED] ?? 0),
+    unknownEvidence: Number(summary?.unknownEvidence ?? counts[GUILD_ROTE_TACTICAL_STATE.UNKNOWN_EVIDENCE] ?? 0),
+    outstandingAvailable: summary?.outstandingAvailable === true,
+    outstanding: summary?.outstandingAvailable === true ? Number(summary?.outstanding || 0) : null,
+    attemptsRecorded: summary?.outstandingAvailable === true ? Number(summary?.attemptsRecorded || 0) : null,
+  };
+}
+
+function missionReadinessText(mission = {}) {
+  const summary = fallbackMissionSummary(mission);
+  const parts = [
+    `ENTRY ${summary.officialEntryReady}`,
+    `MIN ${summary.minimumReady}`,
+    `SAFER ${summary.saferReady}`,
+    `BLOCKED ${summary.blocked}`,
+    `UNKNOWN ${summary.unknownEvidence}`,
+  ];
+  if (summary.outstandingAvailable) parts.push(`OUTSTANDING ${summary.outstanding}`);
+  return parts.join(' · ');
+}
+
 function matrixSummaryMarkup(matrix = {}) {
   const summary = matrix?.summary || { total: 0, known: 0, battleReady: 0, counts: {} };
   const count = (key) => Number(summary?.counts?.[key] || 0);
+  const saferReady = Number(summary?.saferReady ?? count(GUILD_ROTE_TACTICAL_STATE.SAFER_READY));
+  const minimumReady = Number(summary?.minimumReady ?? (count(GUILD_ROTE_TACTICAL_STATE.MINIMUM_READY) + saferReady));
+  const officialEntryReady = Number(summary?.officialEntryReady ?? (count(GUILD_ROTE_TACTICAL_STATE.ENTRY_READY) + count(GUILD_ROTE_TACTICAL_STATE.MINIMUM_READY) + saferReady));
   return `<div class="guild-rote-tactical-summary">
-    <article><span>BATTLE READY</span><strong>${Number(summary.battleReady || 0)}</strong><small>Minimum + safer cells</small></article>
-    <article><span>SAFER READY</span><strong>${count(GUILD_ROTE_TACTICAL_STATE.SAFER_READY)}</strong><small>Safer target met</small></article>
-    <article><span>MINIMUM READY</span><strong>${count(GUILD_ROTE_TACTICAL_STATE.MINIMUM_READY)}</strong><small>Sourced minimum met</small></article>
-    <article><span>ENTRY READY</span><strong>${count(GUILD_ROTE_TACTICAL_STATE.ENTRY_READY)}</strong><small>Legal, tactical work remains</small></article>
-    <article><span>BLOCKED</span><strong>${count(GUILD_ROTE_TACTICAL_STATE.BLOCKED)}</strong><small>Official entry fails</small></article>
-    <article><span>UNKNOWN EVIDENCE</span><strong>${count(GUILD_ROTE_TACTICAL_STATE.UNKNOWN_EVIDENCE)}</strong><small>${Number(summary.known || 0)}/${Number(summary.total || 0)} cells known</small></article>
+    <article><span>BATTLE READY</span><strong>${minimumReady}</strong><small>Minimum or safer target met</small></article>
+    <article><span>SAFER READY</span><strong>${saferReady}</strong><small>Safer target met</small></article>
+    <article><span>MINIMUM READY</span><strong>${minimumReady}</strong><small>Cumulative: includes safer</small></article>
+    <article><span>OFFICIAL ENTRY READY</span><strong>${officialEntryReady}</strong><small>Legal entry; tactical state separate</small></article>
+    <article><span>BLOCKED</span><strong>${Number(summary?.blocked ?? count(GUILD_ROTE_TACTICAL_STATE.BLOCKED))}</strong><small>Official entry fails</small></article>
+    <article><span>UNKNOWN EVIDENCE</span><strong>${Number(summary?.unknownEvidence ?? count(GUILD_ROTE_TACTICAL_STATE.UNKNOWN_EVIDENCE))}</strong><small>${Number(summary.known || 0)}/${Number(summary.total || 0)} cells known</small></article>
   </div>`;
 }
 
@@ -152,7 +215,7 @@ function matrixTableMarkup(matrix, options = {}) {
   return `<div class="guild-rote-tactical-scroll"><table class="guild-rote-tactical-table">
     <thead><tr><th><strong>MISSION</strong><small>${filtered.missions.length} rows · ${filtered.members.length} members</small></th>${filtered.members.map((member) => `<th><strong>${escapeHtml(member.name || member.id)}</strong><small>${escapeHtml(member.allyCode || 'No Ally Code')}</small></th>`).join('')}</tr></thead>
     <tbody>${filtered.missions.map((mission) => `<tr>
-      <th class="guild-rote-tactical-mission"><button type="button" data-guild-mission-planet="${escapeAttr(mission.planetId)}"><span>${escapeHtml(`${mission.phase} · ${mission.planetName} · ${mission.lane}`)}</span><strong>${escapeHtml(mission.mission?.name || mission.key)}</strong><small>${escapeHtml(mission.evidence === 'exact' ? 'Verified entry evidence' : 'Partial entry evidence')}</small></button></th>
+      <th class="guild-rote-tactical-mission"><button type="button" data-guild-mission-planet="${escapeAttr(mission.planetId)}"><span>${escapeHtml(`${mission.phase} · ${mission.planetName} · ${mission.lane}`)}</span><strong>${escapeHtml(mission.mission?.name || mission.key)}</strong><small>${escapeHtml(mission.evidence === 'exact' ? 'Verified entry evidence' : 'Partial entry evidence')}</small><small>${escapeHtml(missionReadinessText(mission))}</small></button></th>
       ${filtered.members.map((member) => missionCell(mission, member, options.selectedKey)).join('')}
     </tr>`).join('')}</tbody>
   </table></div>`;
@@ -177,6 +240,17 @@ function memberProfileHref(member = {}, guildAllyCode = '') {
   return `/guild/members/${memberCode}${params.toString() ? `?${params}` : ''}`;
 }
 
+function missionIntelligenceMarkup(mission = {}) {
+  const summary = fallbackMissionSummary(mission);
+  return `<div class="guild-rote-tactical-detail-grid">
+    <div><span>Guild entry-ready</span><strong>${summary.officialEntryReady}</strong></div>
+    <div><span>Minimum-ready</span><strong>${summary.minimumReady}</strong></div>
+    <div><span>Safer-ready</span><strong>${summary.saferReady}</strong></div>
+    <div><span>Blocked / Unknown</span><strong>${summary.blocked} / ${summary.unknownEvidence}</strong></div>
+    ${summary.outstandingAvailable ? `<div><span>Active-event outstanding</span><strong>${summary.outstanding}</strong></div><div><span>Recorded attempts</span><strong>${summary.attemptsRecorded}</strong></div>` : '<div><span>Active-event outstanding</span><strong>UNKNOWN</strong></div><div><span>Participation evidence</span><strong>NOT LOADED</strong></div>'}
+  </div>`;
+}
+
 export function guildRoteTacticalCellDetailMarkup(matrix, selectedKey, guildAllyCode = '') {
   const selected = findSelected(matrix, selectedKey);
   if (!selected) return '<div class="guild-rote-tactical-empty">Select a mission/member cell to inspect tactical readiness evidence.</div>';
@@ -188,6 +262,9 @@ export function guildRoteTacticalCellDetailMarkup(matrix, selectedKey, guildAlly
   const progression = Number(cell.progressionFailureCount || 0);
   return `<section class="guild-rote-tactical-detail">
     <header><div><span>${escapeHtml(`${mission.phase} · ${mission.planetName} · ${member.name || member.id}`)}</span><strong>${escapeHtml(mission.mission?.name || mission.key)}</strong></div><b>${escapeHtml(cell.state)}</b></header>
+    <div class="kicker">GUILD MISSION INTELLIGENCE</div>
+    ${missionIntelligenceMarkup(mission)}
+    <div class="kicker">MEMBER READINESS EVIDENCE</div>
     <div class="guild-rote-tactical-detail-grid">
       <div><span>Official entry</span><strong>${escapeHtml(official)}</strong></div>
       <div><span>Tactical verdict</span><strong>${escapeHtml(cell.verdict || cell.tacticalGap || 'UNKNOWN')}</strong></div>
@@ -207,7 +284,7 @@ export function guildRoteTacticalMatrixMarkup(matrix, options = {}) {
   const selectedKey = text(options.selectedKey);
   return `
     <div class="guild-rote-tactical-head">
-      <div><div class="kicker">ROTE TACTICAL READINESS · GUILD MATRIX</div><h2>Mission × Member Readiness</h2><p>Entry legality and tactical battle preparation stay separate. Filter the guild by phase or readiness state, then select a cell for Level, Gear/Relic, Zeta, TB Omicron and mod/stat evidence.</p></div>
+      <div><div class="kicker">ROTE TACTICAL READINESS · GUILD MATRIX</div><h2>Mission × Member Readiness</h2><p>Entry legality and tactical battle preparation stay separate. Every mission shows cumulative Guild entry/minimum/safer readiness plus blocked and unknown evidence; active-event outstanding counts appear only when matching attempt evidence is loaded.</p></div>
       <span class="status ready">${Number(matrix.summary?.battleReady || 0)} battle-ready cells</span>
     </div>
     ${matrixSummaryMarkup(matrix)}
@@ -248,6 +325,8 @@ function refreshFromSnapshots() {
   state.dataSignature = input.signature;
   state.matrix = buildGuildRoteTacticalReadinessMatrix(input.guild, input.catalog, {
     redundancyTarget: input.redundancyTarget,
+    activeEvent: input.activeEvent,
+    attempts: input.attempts,
   });
   state.selectedKey = '';
   render();
@@ -269,6 +348,10 @@ function install() {
 
   window.addEventListener('swgoh:workspace-activated', scheduleRefresh);
   window.addEventListener('swgoh:guild-rote-redundancy-target', () => {
+    state.dataSignature = '';
+    scheduleRefresh();
+  });
+  window.addEventListener('swgoh:tb-mission-attempts-updated', () => {
     state.dataSignature = '';
     scheduleRefresh();
   });
