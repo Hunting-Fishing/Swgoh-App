@@ -10,6 +10,9 @@ const state = {
   catalog: [],
   rows: [],
   body: null,
+  bodyAllyCode: "",
+  bodyFetchedAt: 0,
+  bodyPromise: null,
   signature: "",
   scheduled: false,
   rendering: false,
@@ -25,6 +28,7 @@ const escapeHtml = (value) => String(value ?? "")
   .replaceAll('"', "&quot;")
   .replaceAll("'", "&#039;");
 const escapeAttr = escapeHtml;
+const PLAYER_CACHE_MS = 25_000;
 
 function ensureCss() {
   if (document.querySelector('link[data-tb-readiness-cross-surface="true"]')) return;
@@ -61,12 +65,34 @@ async function loadCatalog() {
   return state.catalogPromise;
 }
 
-function currentBody() {
-  return window.__swgohLiveSnapshot?.body || null;
-}
-
 function currentAllyCode() {
   return digits(window.__swgohLiveSnapshot?.allyCode || document.getElementById("allyCode")?.value || window.__swgohAccountAllyCode);
+}
+
+async function loadPlayerBody(force = false) {
+  const allyCode = currentAllyCode();
+  if (allyCode.length !== 9) return null;
+  const shared = window.__swgohLiveSnapshot;
+  if (!force && shared?.body && digits(shared.allyCode) === allyCode) {
+    state.body = shared.body;
+    state.bodyAllyCode = allyCode;
+    state.bodyFetchedAt = Number(shared.fetchedAt || Date.now());
+    return state.body;
+  }
+  if (!force && state.body && state.bodyAllyCode === allyCode && Date.now() - state.bodyFetchedAt < PLAYER_CACHE_MS) return state.body;
+  if (state.bodyPromise) return state.bodyPromise;
+  state.bodyPromise = fetch(`/api/player/${allyCode}`, { cache: "no-store" })
+    .then(async (response) => {
+      const body = await response.json();
+      if (!response.ok) throw new Error(body?.error || `Live roster returned HTTP ${response.status}`);
+      state.body = body;
+      state.bodyAllyCode = allyCode;
+      state.bodyFetchedAt = Date.now();
+      window.__swgohLiveSnapshot = { allyCode, body, fetchedAt: state.bodyFetchedAt };
+      return body;
+    })
+    .finally(() => { state.bodyPromise = null; });
+  return state.bodyPromise;
 }
 
 function statusTone(status) {
@@ -280,18 +306,21 @@ async function refresh(force = false) {
   state.rendering = true;
   try {
     ensureCss();
-    const body = currentBody();
-    state.body = body;
-    if (body) {
-      const catalog = await loadCatalog();
-      const signature = `${currentAllyCode()}|${window.__swgohLiveSnapshot?.fetchedAt || 0}|${catalog.length}`;
-      if (force || signature !== state.signature) {
-        state.rows = buildPlayerTbSpecialReadiness(body, catalog);
-        state.signature = signature;
-      }
-    } else {
+    const allyCode = currentAllyCode();
+    if (allyCode.length === 9) await loadPlayerBody(force);
+    else {
+      state.body = null;
+      state.bodyAllyCode = "";
       state.rows = [];
       state.signature = "";
+    }
+    if (state.body) {
+      const catalog = await loadCatalog();
+      const signature = `${state.bodyAllyCode}|${state.bodyFetchedAt}|${catalog.length}`;
+      if (force || signature !== state.signature) {
+        state.rows = buildPlayerTbSpecialReadiness(state.body, catalog);
+        state.signature = signature;
+      }
     }
     renderPlayerPanel(state.rows);
     renderFarmPanel(state.rows);
