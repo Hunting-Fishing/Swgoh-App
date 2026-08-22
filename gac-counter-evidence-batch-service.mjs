@@ -1,4 +1,5 @@
 import { mergeCounterEvidence, verifiedBattleObservation } from "./gac-counter-evidence-merge.mjs";
+import { gacDatacronCounterEvidenceService } from "./gac-datacron-counter-evidence-service.mjs";
 import { supabaseCoreStore } from "./supabase-core-store.mjs";
 
 function clean(value) { return String(value ?? "").trim(); }
@@ -56,6 +57,8 @@ function counterRow(row = {}) {
     draws: Math.max(0, finite(row.draws)),
     winRate: battles ? wins / battles : 0,
     averageBanners: nullableFinite(row.average_banners),
+    averageRelicDelta: nullableFinite(row.average_relic_delta),
+    relicDeltaSamples: Math.max(0, Math.floor(finite(row.relic_delta_samples))),
     league: clean(row.league),
     seasonId: clean(row.season_id),
     seasonIds: Object.freeze(asArray(row.season_ids)),
@@ -70,6 +73,7 @@ function counterRow(row = {}) {
 
 export function createGacCounterEvidenceBatchService(options = {}) {
   const store = options.store || supabaseCoreStore;
+  const datacronEvidence = options.datacronEvidence || gacDatacronCounterEvidenceService;
 
   async function getCounterEvidenceBatch(input = {}) {
     const format = normalizeFormat(input.format);
@@ -78,7 +82,7 @@ export function createGacCounterEvidenceBatchService(options = {}) {
     const leaderFilter = textInFilter(leaders);
     const rowLimit = Math.min(5000, Math.max(250, leaders.length * limit * 3));
 
-    const [aggregateRows, verifiedBattleRows] = await Promise.all([
+    const [aggregateRows, verifiedBattleRows, datacronBatch] = await Promise.all([
       store.select("gac_counter_observations", {
         select: "format,enemy_leader_base_id,enemy_members,counter_leader_base_id,counter_members,battles,wins,holds,draws,average_banners,league,season_id,source,source_ref,source_updated_at,confidence,observed_at",
         format: `eq.${format}`,
@@ -94,6 +98,17 @@ export function createGacCounterEvidenceBatchService(options = {}) {
         order: "source_updated_at.desc",
         limit: rowLimit,
       }),
+      datacronEvidence?.getBatch
+        ? datacronEvidence.getBatch({ format, enemyLeaderBaseIds: leaders, limit }).catch((error) => Object.freeze({
+            source: "gac-datacron-battle-evidence",
+            format,
+            leaders: Object.freeze(leaders),
+            results: Object.freeze(leaders.map((leader) => Object.freeze({ enemyLeaderBaseId: leader, observations: Object.freeze([]), count: 0 }))),
+            count: 0,
+            warehouseReady: false,
+            error: clean(error?.message || error).slice(0, 200),
+          }))
+        : Promise.resolve(null),
     ]);
 
     const verifiedObservations = asArray(verifiedBattleRows).map(verifiedBattleObservation).filter(Boolean);
@@ -112,6 +127,7 @@ export function createGacCounterEvidenceBatchService(options = {}) {
         count: observations.length,
         evidenceSources: Object.freeze([...new Set(observations.flatMap((row) => row.evidenceSources.length ? row.evidenceSources : [row.source]).filter(Boolean))].sort()),
         verifiedBattleSamples: verifiedObservations.filter((row) => normalizeBaseId(row.enemy_leader_base_id) === leader).length,
+        relicDeltaSamples: observations.reduce((sum, row) => sum + row.relicDeltaSamples, 0),
       });
     });
 
@@ -122,7 +138,16 @@ export function createGacCounterEvidenceBatchService(options = {}) {
       results: Object.freeze(results),
       count: results.reduce((sum, result) => sum + result.count, 0),
       verifiedBattleSamples: verifiedObservations.length,
+      relicDeltaSamples: results.reduce((sum, result) => sum + result.relicDeltaSamples, 0),
       evidenceSources: Object.freeze([...new Set(results.flatMap((result) => result.evidenceSources))].sort()),
+      datacronEvidence: datacronBatch || Object.freeze({
+        source: "gac-datacron-battle-evidence",
+        format,
+        leaders: Object.freeze(leaders),
+        results: Object.freeze([]),
+        count: 0,
+        warehouseReady: false,
+      }),
     });
   }
 
@@ -131,4 +156,4 @@ export function createGacCounterEvidenceBatchService(options = {}) {
 
 export const gacCounterEvidenceBatchService = createGacCounterEvidenceBatchService();
 
-export { boundedLimit, normalizeBaseId, normalizeFormat, normalizeLeaderList, textInFilter };
+export { boundedLimit, counterRow, normalizeBaseId, normalizeFormat, normalizeLeaderList, textInFilter };

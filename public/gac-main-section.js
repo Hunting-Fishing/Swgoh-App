@@ -4,11 +4,19 @@ const PANEL_SELECTOR = '[data-workspace-panel="gac"]';
 const ROOT_SELECTOR = '[data-gacv2-root]';
 const state = { timer: null, bound: false };
 
+const INTELLIGENCE_TARGETS = Object.freeze({
+  board: Object.freeze({ tab: 'board', selector: '[data-gac-board-workspace],[data-gac-manual-counter-planner]' }),
+  matrix: Object.freeze({ tab: 'board', selector: '[data-gac-counter-matrix]' }),
+  execution: Object.freeze({ tab: 'board', selector: '[data-gac-board-optimization]' }),
+  scouting: Object.freeze({ tab: 'board', selector: '[data-gac-scout-history]' }),
+  datacrons: Object.freeze({ tab: 'board', selector: '[data-gac-datacron-matrix],[data-gac-datacron-readiness]' }),
+});
+
 function ensureStyle() {
   if (document.querySelector('link[data-gac-main-section-style]')) return;
   const link = document.createElement('link');
   link.rel = 'stylesheet';
-  link.href = '/gac-main-section.css?v=20260822-gacmain1';
+  link.href = '/gac-main-section.css?v=20260823-gacrelease2';
   link.dataset.gacMainSectionStyle = 'true';
   document.head.appendChild(link);
 }
@@ -29,6 +37,16 @@ function enhanceWorkspaceIntro(panel) {
   intro.dataset.gacMainIntroEnhanced = 'true';
 }
 
+function intelligenceDeckMarkup() {
+  return `<nav class="gac-main-intelligence-deck" aria-label="GAC Intelligence Command Deck">
+    <button type="button" data-gac-intel-open="board"><span>01</span><strong>Current Board</strong><small>Enter visible defense truth</small></button>
+    <button type="button" data-gac-intel-open="matrix"><span>02</span><strong>Counter Matrix</strong><small>Roster-aware evidence</small></button>
+    <button type="button" data-gac-intel-open="execution" class="primary"><span>03</span><strong>Execution Plan</strong><small>Numbered attack queue</small></button>
+    <button type="button" data-gac-intel-open="scouting"><span>04</span><strong>Scouting Intel</strong><small>Historical tendencies</small></button>
+    <button type="button" data-gac-intel-open="datacrons"><span>05</span><strong>Datacrons</strong><small>Exact rolled-DC evidence</small></button>
+  </nav>`;
+}
+
 function ensureOperationsHost(panel) {
   let host = panel.querySelector(':scope > [data-gac-main-operations]');
   if (host) return host;
@@ -46,9 +64,10 @@ function ensureOperationsHost(panel) {
         <button type="button" data-gac-main-open="matchup">Matchup</button>
         <button type="button" data-gac-main-open="board" class="primary">Board & Counters</button>
         <button type="button" data-gac-main-open="delta">Roster Delta</button>
-        <button type="button" data-gac-main-open="history">Scouting</button>
+        <button type="button" data-gac-main-open="history">Round History</button>
       </nav>
     </header>
+    ${intelligenceDeckMarkup()}
     <div data-gac-main-war-room-host></div>`;
   const stats = panel.querySelector(':scope > #workspaceGacBody');
   if (stats) stats.insertAdjacentElement('afterend', host);
@@ -92,6 +111,34 @@ function openWarRoomTab(tab) {
   return true;
 }
 
+function focusTarget(node) {
+  if (!node) return false;
+  node.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+  node.classList.add('gac-main-focus-target');
+  window.setTimeout(() => node.classList.remove('gac-main-focus-target'), 1600);
+  return true;
+}
+
+function openIntelligenceSurface(key) {
+  const target = INTELLIGENCE_TARGETS[key];
+  if (!target) return false;
+  openWarRoomTab(target.tab);
+
+  let attempts = 0;
+  const reveal = () => {
+    const node = document.querySelector(target.selector);
+    if (focusTarget(node)) return;
+    attempts += 1;
+    if (attempts < 10) {
+      window.setTimeout(reveal, 80);
+      return;
+    }
+    focusTarget(document.querySelector('[data-gac-board-workspace],[data-gac-manual-counter-planner]') || document.querySelector(ROOT_SELECTOR));
+  };
+  window.setTimeout(reveal, 40);
+  return true;
+}
+
 function schedule(delay = 40) {
   clearTimeout(state.timer);
   state.timer = setTimeout(() => mountMainGac(), Math.max(0, delay));
@@ -101,6 +148,11 @@ function bind() {
   if (state.bound) return;
   state.bound = true;
   document.addEventListener('click', (event) => {
+    const intelShortcut = event.target.closest?.('[data-gac-intel-open]');
+    if (intelShortcut) {
+      openIntelligenceSurface(intelShortcut.dataset.gacIntelOpen);
+      return;
+    }
     const shortcut = event.target.closest?.('[data-gac-main-open]');
     if (!shortcut) return;
     openWarRoomTab(shortcut.dataset.gacMainOpen);
@@ -122,4 +174,13 @@ function bind() {
 
 if (typeof document !== 'undefined') bind();
 
-export { enhanceWorkspaceIntro, ensureOperationsHost, mountMainGac, openWarRoomTab, placeWarRoom };
+export {
+  INTELLIGENCE_TARGETS,
+  enhanceWorkspaceIntro,
+  ensureOperationsHost,
+  focusTarget,
+  mountMainGac,
+  openIntelligenceSurface,
+  openWarRoomTab,
+  placeWarRoom,
+};

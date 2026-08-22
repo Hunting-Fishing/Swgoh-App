@@ -1,0 +1,25 @@
+.gac-faction-picker{position:relative;min-width:0;z-index:12}
+.gac-faction-trigger{width:100%;min-height:34px;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:0 10px;border:1px solid #b8d1dc;border-radius:7px;background:#fff;color:#123246;font:inherit;font-size:13px;cursor:pointer;box-shadow:none}
+.gac-faction-trigger:hover,.gac-faction-trigger[aria-expanded="true"]{border-color:#5fa9c4;box-shadow:0 0 0 2px rgba(67,165,198,.08)}
+.gac-faction-trigger>b{font-size:14px;color:#326f84}
+.gac-faction-menu{position:absolute;right:0;top:calc(100% + 6px);width:min(620px,calc(100vw - 36px));max-height:min(520px,70vh);overflow:hidden;border:1px solid #2d6177;border-radius:10px;background:#071a29;color:#e3f5fb;box-shadow:0 18px 42px rgba(0,0,0,.34),0 0 0 1px rgba(107,207,239,.06);z-index:500}
+.gac-faction-menu[hidden]{display:none!important}
+.gac-faction-menu-head{display:grid;grid-template-columns:auto minmax(180px,1fr);align-items:center;gap:12px;padding:10px 11px;border-bottom:1px solid rgba(102,195,228,.16);background:linear-gradient(90deg,#092233,#0b1c29)}
+.gac-faction-menu-head>strong{font-size:8px;letter-spacing:.12em;color:#68d4ef;white-space:nowrap}
+.gac-faction-menu-head>input{width:100%;min-height:31px;padding:0 9px;border:1px solid #315f73;border-radius:7px;background:#06131d;color:#e8f7fb;outline:0;font:inherit;font-size:10px}
+.gac-faction-menu-head>input:focus{border-color:#59bddb;box-shadow:0 0 0 2px rgba(77,191,220,.10)}
+.gac-faction-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:2px 6px;padding:9px;max-height:430px;overflow:auto;scrollbar-color:#567b8c #07141e}
+.gac-faction-grid>button{min-width:0;min-height:30px;padding:5px 7px;border:1px solid transparent;border-radius:6px;background:transparent;color:#dceff6;text-align:left;font:inherit;font-size:10px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gac-faction-grid>button:hover{border-color:#315f73;background:#0c2b3c;color:#fff}
+.gac-faction-grid>button.is-selected{border-color:#c7a632;background:#27220d;color:#f0ca48;box-shadow:inset 3px 0 #e0bc3d}
+.gac-faction-grid>button.is-all{grid-column:1/-1;margin-bottom:3px;border-color:#284f62;background:#082333;color:#8fdcf0;font-weight:800}
+.gac-faction-grid>p{grid-column:1/-1;margin:0;padding:18px;text-align:center;color:#7695a4;font-size:9px}
+
+@media(max-width:760px){
+  .gac-faction-menu{left:0;right:auto;width:min(94vw,520px)}
+  .gac-faction-menu-head{grid-template-columns:1fr}
+  .gac-faction-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:480px){
+  .gac-faction-grid{grid-template-columns:1fr}
+}

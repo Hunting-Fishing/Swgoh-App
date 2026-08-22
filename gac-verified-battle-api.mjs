@@ -7,6 +7,7 @@ import {
 } from "./gac-board-observation-api.mjs";
 import { gacBracketIndexService } from "./gac-bracket-index-service.mjs";
 import { gacCurrentOpponentConfirmationService } from "./gac-current-opponent-confirmation-service.mjs";
+import { gacRelicEvidenceEnricher } from "./gac-relic-evidence-enricher.mjs";
 import { supabaseAuthSession } from "./supabase-auth-session.mjs";
 import { gacVerifiedBattleService } from "./gac-verified-battle-service.mjs";
 
@@ -22,6 +23,7 @@ export function createGacVerifiedBattleApi(options = {}) {
   const bracketIndex = options.bracketIndex || gacBracketIndexService;
   const confirmation = options.confirmation || gacCurrentOpponentConfirmationService;
   const battles = options.battles || gacVerifiedBattleService;
+  const relicEvidence = options.relicEvidence || gacRelicEvidenceEnricher;
   if (typeof requestGateway !== "function") throw new TypeError("requestGateway is required");
   if (typeof writeJson !== "function") throw new TypeError("writeJson is required");
 
@@ -58,6 +60,14 @@ export function createGacVerifiedBattleApi(options = {}) {
     return { eventInstanceId: id, round, confirmed };
   }
 
+  async function softRosterSnapshots(ownerCode, opponentCode) {
+    const [ownerRosterSnapshot, opponentRosterSnapshot] = await Promise.all([
+      requestGateway(`/v1/player/${ownerCode}`, true).catch(() => null),
+      opponentCode ? requestGateway(`/v1/player/${opponentCode}`, true).catch(() => null) : Promise.resolve(null),
+    ]);
+    return { ownerRosterSnapshot, opponentRosterSnapshot };
+  }
+
   return Object.freeze({
     async handle(request, response, url) {
       const match = request.method === "POST" && url.pathname.match(/^\/api\/gac\/verified-battle\/(\d{9})$/);
@@ -73,16 +83,27 @@ export function createGacVerifiedBattleApi(options = {}) {
         const code = normalizeAllyCode(match[1]);
         const body = await readJsonBody(request);
         const context = await currentContext(code, body?.round);
+        const opponentAllyCode = normalizeAllyCode(context.confirmed.opponent.allyCode);
         const result = await battles.verifyAttempt(user.id, {
           allyCode: code,
-          opponentAllyCode: normalizeAllyCode(context.confirmed.opponent.allyCode),
+          opponentAllyCode,
           eventInstanceId: context.eventInstanceId,
           round: context.round,
           assignmentId: body?.assignmentId,
           attemptIndex: body?.attemptIndex,
           confirm: body?.confirm === true,
         });
-        writeJson(response, 200, result, {
+        const snapshots = await softRosterSnapshots(code, opponentAllyCode);
+        const relicResult = relicEvidence?.enrichBattle
+          ? await relicEvidence.enrichBattle({
+              battleKey: result?.battle?.battleKey,
+              battle: result?.battle,
+              ownerRosterSnapshot: snapshots.ownerRosterSnapshot,
+              opponentRosterSnapshot: snapshots.opponentRosterSnapshot,
+            }).catch((error) => Object.freeze({ enriched:false, reason:"supplemental-relic-enrichment-failed", error:String(error?.message || error).slice(0,180) }))
+          : null;
+        const enrichedResult = relicResult ? { ...result, relicEvidence: relicResult } : result;
+        writeJson(response, 200, enrichedResult, {
           "X-GAC-Source": result.source,
           "X-GAC-Battle-Evidence": "verified-owner-explicit-confirmation",
         });
