@@ -7,6 +7,7 @@ import {
 } from "./gac-board-observation-api.mjs";
 import { gacBracketIndexService } from "./gac-bracket-index-service.mjs";
 import { gacCurrentOpponentConfirmationService } from "./gac-current-opponent-confirmation-service.mjs";
+import { gacRelicEvidenceEnricher } from "./gac-relic-evidence-enricher.mjs";
 import { supabaseAuthSession } from "./supabase-auth-session.mjs";
 import { gacVerifiedBattleService } from "./gac-verified-battle-service.mjs";
 
@@ -22,6 +23,7 @@ export function createGacVerifiedBattleApi(options = {}) {
   const bracketIndex = options.bracketIndex || gacBracketIndexService;
   const confirmation = options.confirmation || gacCurrentOpponentConfirmationService;
   const battles = options.battles || gacVerifiedBattleService;
+  const relicEvidence = options.relicEvidence || gacRelicEvidenceEnricher;
   if (typeof requestGateway !== "function") throw new TypeError("requestGateway is required");
   if (typeof writeJson !== "function") throw new TypeError("writeJson is required");
 
@@ -91,10 +93,17 @@ export function createGacVerifiedBattleApi(options = {}) {
           assignmentId: body?.assignmentId,
           attemptIndex: body?.attemptIndex,
           confirm: body?.confirm === true,
-          ownerRosterSnapshot: snapshots.ownerRosterSnapshot,
-          opponentRosterSnapshot: snapshots.opponentRosterSnapshot,
         });
-        writeJson(response, 200, result, {
+        const relicResult = relicEvidence?.enrichBattle
+          ? await relicEvidence.enrichBattle({
+              battleKey: result?.battle?.battleKey,
+              battle: result?.battle,
+              ownerRosterSnapshot: snapshots.ownerRosterSnapshot,
+              opponentRosterSnapshot: snapshots.opponentRosterSnapshot,
+            }).catch((error) => Object.freeze({ enriched:false, reason:"supplemental-relic-enrichment-failed", error:String(error?.message || error).slice(0,180) }))
+          : null;
+        const enrichedResult = relicResult ? { ...result, relicEvidence: relicResult } : result;
+        writeJson(response, 200, enrichedResult, {
           "X-GAC-Source": result.source,
           "X-GAC-Battle-Evidence": "verified-owner-explicit-confirmation",
         });
