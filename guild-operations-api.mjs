@@ -9,6 +9,10 @@ import { guildOperationsService } from './guild-operations-service.mjs';
 import { resolveGuildPlanningOverlay } from './guild-planning-overlay.mjs';
 import { aggregateRoteOperations } from './rote-operations.mjs';
 import { supabaseAuthSession } from './supabase-auth-session.mjs';
+import { tbAssignmentVersionService } from './tb-assignment-version-service.mjs';
+import { createTbImmutableWebContextResolver } from './tb-immutable-web-context.mjs';
+import { tbStage9PlanPreviewService } from './tb-stage9-plan-preview-service.mjs';
+import { tbStage10WebDeliveryService } from './tb-stage10-web-delivery-service.mjs';
 import { buildGuildRoteOperationSafety } from './public/guild-rote-operation-safety.js';
 import { planGuildTbOperationsParity } from './public/guild-operations-parity-planner.js';
 import { planGuildTwDefenseAssignments } from './public/guild-tw-defense-assigner.js';
@@ -272,6 +276,10 @@ export function createGuildOperationsApi(options = {}) {
   const service = options.service || guildOperationsService;
   const canonical = options.canonical || canonicalRosterService;
   const delivery = options.delivery || guildOperationsDiscordDelivery;
+  const immutablePreview = options.immutablePreview || tbStage9PlanPreviewService;
+  const assignmentVersions = options.assignmentVersions || tbAssignmentVersionService;
+  const immutableDelivery = options.immutableDelivery || tbStage10WebDeliveryService;
+  const immutableContextResolver = options.immutableContextResolver || createTbImmutableWebContextResolver({ service, delivery });
   const fetchImpl = options.fetch || fetch;
 
   async function requireUser(request) {
@@ -292,6 +300,12 @@ export function createGuildOperationsApi(options = {}) {
         discordGuildId: synced.binding.discordGuildId,
         commandChannelConfigured: Boolean(synced.binding.guildState?.commandChannelId),
       } : { verified: false },
+      immutablePlanning: {
+        enabled: true,
+        websiteOnly: !synced.binding,
+        discordControlsIncluded: Boolean(synced.binding),
+        discordPublicationReady: Boolean(synced.binding?.guildState?.commandChannelId),
+      },
       publishing: {
         enabled: config.deliveryEnabled,
         botTokenConfigured: Boolean(config.botToken),
@@ -312,6 +326,25 @@ export function createGuildOperationsApi(options = {}) {
     });
   }
 
+  async function listImmutableVersions(userId, code, planId, phase) {
+    const officer = await service.requireOfficer(userId, code);
+    return assignmentVersions.listVersions({ guild: officer.guild, userId }, {
+      planId,
+      phase: text(phase),
+      limit: 100,
+    });
+  }
+
+  async function immutableVersionAndContext(userId, code, runId) {
+    const context = await immutableContextResolver.deliveryContext(userId, code);
+    const selected = await assignmentVersions.getVersion({ guild: context.guild, userId }, { runId });
+    const version = selected?.version;
+    if (!version?.id || !Number(version?.versionNumber) || !/^P[1-6]$/.test(text(version?.rotePhase))) {
+      throw httpError('Immutable assignment version is missing phase/version metadata required for Stage 10.', 409, 'STAGE10_VERSION_REQUIRED');
+    }
+    return Object.freeze({ context, selected, version });
+  }
+
   async function handle(request, response, url) {
     if (!url.pathname.startsWith('/api/account/guild-operations/')) return false;
     try {
@@ -329,6 +362,19 @@ export function createGuildOperationsApi(options = {}) {
       const tbDetail = suffix.match(/^\/tb\/plans\/([0-9a-f-]{36})$/i);
       if (request.method === 'GET' && tbDetail) {
         writeJson(response, 200, await service.getTbPlanDetail(user.id, code, tbDetail[1]));
+        return true;
+      }
+
+      const tbVersions = suffix.match(/^\/tb\/plans\/([0-9a-f-]{36})\/assignment-versions$/i);
+      if (request.method === 'GET' && tbVersions) {
+        writeJson(response, 200, await listImmutableVersions(user.id, code, tbVersions[1], url.searchParams.get('phase')));
+        return true;
+      }
+
+      const tbVersionDetail = suffix.match(/^\/tb\/assignment-versions\/([0-9a-f-]{36})$/i);
+      if (request.method === 'GET' && tbVersionDetail) {
+        const officer = await service.requireOfficer(user.id, code);
+        writeJson(response, 200, await assignmentVersions.getVersion({ guild: officer.guild, userId: user.id }, { runId: tbVersionDetail[1] }));
         return true;
       }
 
@@ -365,6 +411,70 @@ export function createGuildOperationsApi(options = {}) {
       const tbPreview = suffix.match(/^\/tb\/plans\/([0-9a-f-]{36})\/preview$/i);
       if (tbPreview) {
         writeJson(response, 201, await buildTbPreview(user.id, code, tbPreview[1], service, canonical, fetchImpl, delivery));
+        return true;
+      }
+      const tbImmutablePreview = suffix.match(/^\/tb\/plans\/([0-9a-f-]{36})\/immutable-preview$/i);
+      if (tbImmutablePreview) {
+        const immutableContext = await immutableContextResolver.planning(user.id, code);
+        const result = await immutablePreview.createPreview(immutableContext, {
+          planId: tbImmutablePreview[1],
+          phase: body?.phase,
+          interaction: immutableContext.discordBound ? { guild_id: immutableContext.discordGuildId } : {},
+        });
+        writeJson(response, 201, result);
+        return true;
+      }
+      const tbApproveVersion = suffix.match(/^\/tb\/assignment-versions\/([0-9a-f-]{36})\/approve$/i);
+      if (tbApproveVersion) {
+        const officer = await service.requireOfficer(user.id, code);
+        writeJson(response, 200, await assignmentVersions.approveVersion(
+          { guild: officer.guild, userId: user.id },
+          { runId: tbApproveVersion[1], planHash: body?.planHash || body?.hash },
+        ));
+        return true;
+      }
+      const tbCancelVersion = suffix.match(/^\/tb\/assignment-versions\/([0-9a-f-]{36})\/cancel$/i);
+      if (tbCancelVersion) {
+        const officer = await service.requireOfficer(user.id, code);
+        writeJson(response, 200, await assignmentVersions.cancelVersion(
+          { guild: officer.guild, userId: user.id },
+          { runId: tbCancelVersion[1], reason: body?.reason },
+        ));
+        return true;
+      }
+      const tbStage10Preview = suffix.match(/^\/tb\/assignment-versions\/([0-9a-f-]{36})\/stage10-preview$/i);
+      if (tbStage10Preview) {
+        const resolved = await immutableVersionAndContext(user.id, code, tbStage10Preview[1]);
+        writeJson(response, 200, await immutableDelivery.preview(resolved.context, {
+          phase: resolved.version.rotePhase,
+          versionNumber: resolved.version.versionNumber,
+          includeMentions: body?.includeMentions !== false,
+          channelId: body?.channelId,
+        }));
+        return true;
+      }
+      const tbStage10Status = suffix.match(/^\/tb\/assignment-versions\/([0-9a-f-]{36})\/stage10-status$/i);
+      if (tbStage10Status) {
+        const resolved = await immutableVersionAndContext(user.id, code, tbStage10Status[1]);
+        writeJson(response, 200, await immutableDelivery.status(resolved.context, {
+          phase: resolved.version.rotePhase,
+          versionNumber: resolved.version.versionNumber,
+          includeMentions: body?.includeMentions !== false,
+          channelId: body?.channelId,
+        }));
+        return true;
+      }
+      const tbStage10Publish = suffix.match(/^\/tb\/assignment-versions\/([0-9a-f-]{36})\/publish-immutable$/i);
+      if (tbStage10Publish) {
+        const resolved = await immutableVersionAndContext(user.id, code, tbStage10Publish[1]);
+        writeJson(response, 200, await immutableDelivery.publish(resolved.context, {
+          phase: resolved.version.rotePhase,
+          versionNumber: resolved.version.versionNumber,
+          includeMentions: body?.includeMentions !== false,
+          channelId: body?.channelId,
+          confirm: body?.confirm,
+          planHash: body?.planHash || body?.hash,
+        }));
         return true;
       }
       const tbPublish = suffix.match(/^\/tb\/runs\/([0-9a-f-]{36})\/publish$/i);

@@ -10,24 +10,26 @@ const context = Object.freeze({
   seedAllyCode: '123456789',
 });
 
-function planner(overrides = {}) {
+const guild = Object.freeze({
+  guild: { id: 'swgoh-guild-1', name: 'Test Guild' },
+  members: [
+    { playerId: 'P1', allyCode: '111111111', name: 'One', rosterAvailable: true, units: [{ baseId: 'A', stars: 7, relic: 9 }] },
+    { playerId: 'P2', allyCode: '222222222', name: 'Two', rosterAvailable: true, units: [{ baseId: 'B', stars: 7, relic: 8 }] },
+  ],
+});
+
+function livePlanner(overrides = {}) {
   return {
-    guild: {
-      guild: { id: 'swgoh-guild-1', name: 'Test Guild' },
-      members: [
-        { playerId: 'P1', allyCode: '111111111', name: 'One', galacticPower: 10000000, rosterAvailable: true, units: [{ baseId: 'A', stars: 7, relic: 9 }] },
-        { playerId: 'P2', allyCode: '222222222', name: 'Two', galacticPower: 9000000, rosterAvailable: true, units: [{ baseId: 'B', stars: 7, relic: 8 }] },
-      ],
-    },
+    guild,
     cache: 'live',
     guildAgeMs: 50,
     guildBindingSource: 'durable-guild-binding',
     planningControls: { preferenceCount: 1, unavailableMemberCount: 0, hardReservationCount: 1 },
     operations: {
       slots: [
-        { id: 'P6-S1', phase: 'P6', baseId: 'A', requiredRelic: 9 },
-        { id: 'P6-S2', phase: 'P6', baseId: 'B', requiredRelic: 8 },
-        { id: 'P1-S1', phase: 'P1', baseId: 'A', requiredRelic: 5 },
+        { id: 'P6-S1', phase: 'P6', conflictId: 'P6-C1', squadId: 'P6-PLATOON-1', baseId: 'A', requiredRelic: 9 },
+        { id: 'P6-S2', phase: 'P6', conflictId: 'P6-C1', squadId: 'P6-PLATOON-1', baseId: 'B', requiredRelic: 8 },
+        { id: 'P1-S1', phase: 'P1', conflictId: 'P1-C1', squadId: 'P1-PLATOON-1', baseId: 'A', requiredRelic: 5 },
       ],
     },
     safety: {
@@ -36,38 +38,39 @@ function planner(overrides = {}) {
         { memberId: 'P1', phase: 'P1', baseId: 'A', severity: 20 },
       ],
     },
-    plan: {
-      strategy: 'scarcity-first-mission-safe-echo-style-draft',
-      maxPerTerritory: 10,
-      phases: [
-        { phase: 'P1', total: 1, assigned: 1, unfilled: 0 },
-        { phase: 'P6', total: 2, assigned: 1, unfilled: 1 },
-      ],
-      assignments: [
-        { id: 'P1-S1', phase: 'P1', baseId: 'A', member: { playerId: 'P1', name: 'One' }, safety: { status: 'SAFE', help: false } },
-        { id: 'P6-S1', phase: 'P6', baseId: 'A', member: { playerId: 'P1', name: 'One' }, safety: { status: 'MISSION PROTECTED OVERRIDE', help: true } },
-      ],
-      unfilled: [
-        { id: 'P6-S2', phase: 'P6', baseId: 'B', safeOwners: 0, availableOwners: 0 },
-      ],
-    },
+    plan: { strategy: 'scarcity-first-mission-safe-echo-style-draft', maxPerTerritory: 10 },
     ...overrides,
   };
 }
 
-function baselinePlan(overrides = {}) {
+function persistedPlan(overrides = {}) {
   return {
-    id: 'plan-1',
-    guild_id: 'guild-1',
-    tb_key: 'rote',
-    name: 'Live ROTE Plan',
-    status: 'previewed',
-    phase_layout: {},
-    requirement_overrides: {},
-    ignored_missions: [],
-    ignored_platoons: [],
-    ignored_slots: [],
+    id: 'plan-1', guild_id: 'guild-1', tb_key: 'rote', name: 'Live ROTE Plan', status: 'previewed',
+    phase_layout: {}, requirement_overrides: {}, ignored_missions: [], ignored_platoons: [], ignored_slots: [],
     updated_at: '2026-08-19T14:00:00Z',
+    ...overrides,
+  };
+}
+
+function parityOutput(overrides = {}) {
+  return {
+    strategy: 'echobase-parity-command-center',
+    maxPerTerritory: 10,
+    phases: [
+      { phase: 'P1', total: 1, assigned: 1, unfilled: 0 },
+      { phase: 'P6', total: 2, assigned: 1, unfilled: 1 },
+    ],
+    assignments: [
+      { id: 'P1-S1', phase: 'P1', baseId: 'A', member: { playerId: 'P1', name: 'One' }, safety: { status: 'SAFE', help: false } },
+      { id: 'P6-S1', phase: 'P6', baseId: 'A', member: { playerId: 'P1', name: 'One' }, safety: { status: 'MISSION PROTECTED OVERRIDE', help: true } },
+    ],
+    unfilled: [{ id: 'P6-S2', phase: 'P6', baseId: 'B', safeOwners: 0, availableOwners: 0 }],
+    lockIssues: [],
+    parity: {
+      mode: 'echobase-parity-command-center', iterations: 1, unresolvedRequirements: [], groupingRulesApplied: [],
+      previewReady: true, publishReady: false,
+      completion: { sourceSlots: 3, activeSlots: 3, assigned: 2, unfilled: 1, lockIssues: 0 },
+    },
     ...overrides,
   };
 }
@@ -81,35 +84,54 @@ function fixture(options = {}) {
       stateReads += 1;
       return {
         swgohAllyCode: '123456789',
-        userLinks: { '234567890123456789': { swgohAllyCode: '111111111' } },
+        userLinks: {
+          '234567890123456789': { playerId: 'P1', swgohAllyCode: '111111111' },
+          '345678901234567890': { playerId: 'P2', swgohAllyCode: '222222222' },
+        },
         memberPreferences: stateReads > 1 && options.controlsChange
           ? { changed: { memberId: 'P1', baseId: 'A', preference: 'keep' } }
           : { stable: { memberId: 'P1', baseId: 'A', preference: 'give' } },
-        memberAvailability: {},
+        memberAvailability: options.discordUnavailable ? { p2: { memberId: 'P2', availability: 'unavailable' } } : {},
       };
     },
   };
   const reservationStore = {
     status() { return { enabled: true, durable: true }; },
-    async readGuild() { return { reservations: { one: { memberId: 'P2', phase: 'P6', baseId: 'B', reserved: true } } }; },
+    async readGuild() {
+      return { reservations: {
+        one: { discordUserId: '345678901234567890', memberId: 'P2', phase: 'P6', baseId: 'B', reserved: true },
+      } };
+    },
   };
+  const players = [
+    { id: 'db-p1', ally_code: '111111111', swgoh_player_id: 'P1', name: 'One', current_guild_id: 'guild-1' },
+    { id: 'db-p2', ally_code: '222222222', swgoh_player_id: 'P2', name: 'Two', current_guild_id: 'guild-1' },
+  ];
   const store = {
     async select(table, query) {
       calls.push({ table, query });
-      if (table === 'guild_tb_plans') return options.noPlan ? [] : [baselinePlan(options.planOverrides)];
-      if (table === 'guild_tb_grouping_rules') return options.groupingRule ? [{ id: 'rule-1', rule_type: 'max_member_assignments', priority: 10 }] : [];
-      if (table === 'guild_tb_plan_preassignments') return options.preassignment ? [{ id: 'pre-1', slot_id: 'P6-S1', player_id: 'P1' }] : [];
-      if (table === 'guild_member_operation_controls') return [{ guild_id: 'guild-1', player_id: 'P2', available: true, ignored_until: null, source: 'command-center', updated_at: '2026-08-19T13:00:00Z' }];
-      if (table === 'guild_unit_donation_preferences') return [{ guild_id: 'guild-1', player_id: 'P1', base_id: 'A', preference: 'give', source: 'command-center', updated_at: '2026-08-19T13:00:00Z' }];
+      if (table === 'guild_tb_plans') return options.noPlan ? [] : [persistedPlan(options.planOverrides)];
+      if (table === 'guild_tb_grouping_rules') return options.groupingRules || [];
+      if (table === 'guild_tb_plan_preassignments') return options.preassignments || [];
+      if (table === 'players') return players;
+      if (table === 'guild_member_operation_controls') return options.memberControls || [
+        { guild_id: 'guild-1', player_id: 'db-p2', available: true, ignored_until: null, source: 'command-center' },
+      ];
+      if (table === 'guild_unit_donation_preferences') return options.donationPreferences || [
+        { guild_id: 'guild-1', player_id: 'db-p1', base_id: 'A', preference: 'give', source: 'command-center' },
+      ];
       throw new Error(`Unexpected table: ${table}`);
     },
   };
-  const livePlanner = options.planner || planner();
   const live = {
     async buildPlan(input) {
       calls.push({ service: 'buildPlan', input });
-      return livePlanner;
+      return options.livePlanner || livePlanner();
     },
+  };
+  const parityPlanner = (guildInput, operations, parityOptions) => {
+    calls.push({ service: 'parityPlanner', guild: guildInput, operations, options: parityOptions });
+    return options.parityOutput || parityOutput();
   };
   const versionService = {
     async createVersion(receivedContext, input) {
@@ -126,91 +148,127 @@ function fixture(options = {}) {
     },
   };
   const service = createTbStage9PlanPreviewService({
-    store,
-    stateStore,
-    reservationStore,
-    live,
-    versionService,
+    store, stateStore, reservationStore, live, parityPlanner, versionService,
+    now: () => new Date('2026-08-22T13:00:00Z'),
     discordConfig: { redundancyTarget: 2 },
   });
   return { service, calls };
 }
 
-test('creates an immutable phase version from the exact Stage 8 planner while keeping delivery disabled', async () => {
+function preview(service) {
+  return service.createPreview(context, { planId: 'plan-1', phase: 'P6', interaction: { guild_id: context.discordGuildId } });
+}
+
+test('creates immutable P6 preview from shared web parity planner and keeps delivery disabled', async () => {
   const { service, calls } = fixture();
-  const result = await service.createPreview(context, { planId: 'plan-1', phase: 'P6', interaction: { guild_id: context.discordGuildId } });
-
-  const plannerCall = calls.find((row) => row.service === 'buildPlan');
-  assert.equal(plannerCall.input.phase, undefined);
-  assert.equal(plannerCall.input.allyCode, '123456789');
-  assert.equal(plannerCall.input.redundancyTarget, 2);
-
+  const result = await preview(service);
+  const hydration = calls.find((row) => row.service === 'buildPlan');
+  const parity = calls.find((row) => row.service === 'parityPlanner');
   const create = calls.find((row) => row.service === 'createVersion');
-  assert.equal(create.receivedContext.userId, context.userId);
-  assert.equal(create.input.planId, 'plan-1');
+
+  assert.equal(hydration.input.allyCode, '123456789');
+  assert.equal(hydration.input.redundancyTarget, 2);
+  assert.deepEqual(parity.guild, guild);
+  assert.deepEqual(parity.options.preferences.map((row) => [row.memberId,row.baseId,row.preference]), [['P1','A','give']]);
+  assert.deepEqual(parity.options.reservations.map((row) => [row.memberId,row.phase,row.baseId]), [['P2','P6','B']]);
+  assert.deepEqual(parity.options.ignoredMembers, []);
+  assert.equal(parity.options.maxPerTerritory, 10);
+
   assert.equal(create.input.rotePhase, 'P6');
   assert.deepEqual(create.input.assignments.map((row) => row.id), ['P6-S1']);
   assert.deepEqual(create.input.unfilled.map((row) => row.id), ['P6-S2']);
   assert.equal(create.input.delivery.published, false);
   assert.equal(create.input.delivery.memberDms, false);
+  assert.equal(create.input.diagnostics.plannerContract, 'stage9-web-discord-parity-v2');
+  assert.equal(create.input.diagnostics.sourceHydrationContract, 'stage8-discord-mission-safe-v1');
   assert.match(create.input.inputFingerprint, /^[0-9a-f]{64}$/);
-  assert.equal(create.input.diagnostics.phaseSummary.assigned, 1);
-  assert.equal(create.input.diagnostics.phaseSummary.unfilled, 1);
-  assert.equal(create.input.diagnostics.phaseSummary.helpAssignments, 1);
-  assert.equal(create.input.diagnostics.safetySummary.protectedUnits, 1);
-  assert.equal(create.input.diagnostics.safetySummary.criticalProtections, 1);
-  assert.equal(result.controlsStable, true);
   assert.equal(result.version.versionNumber, 1);
+  assert.equal(result.controlsStable, true);
 });
 
-test('refuses to persist when durable planning controls change while Stage 8 planner is running', async () => {
+test('persisted phase layout, overrides, ignores, grouping rules and preassignments flow into parity planner', async () => {
+  const groupingRules = [{ id:'rule-1', rule_type:'avoid_pair', priority:10, enabled:true, when_spec:{phase:'P6'}, then_spec:{baseIds:['B']} }];
+  const preassignments = [{ id:'pre-1', slot_id:'P6-S1', player_id:'db-p1' }];
+  const planOverrides = {
+    phase_layout: { includedPhases:['P6'], excludedConflictIds:['P6-EXCLUDED'] },
+    requirement_overrides: { 'P6-S2': { baseId:'B', requiredRelic:9 } },
+    ignored_missions: ['P6-IGNORED-MISSION'],
+    ignored_platoons: ['P6-IGNORED-PLATOON'],
+    ignored_slots: ['P6-IGNORED-SLOT'],
+  };
+  const { service, calls } = fixture({ groupingRules, preassignments, planOverrides });
+  const result = await preview(service);
+  const parity = calls.find((row) => row.service === 'parityPlanner');
+
+  assert.deepEqual(parity.options.phaseLayout, planOverrides.phase_layout);
+  assert.deepEqual(parity.options.requirementOverrides, planOverrides.requirement_overrides);
+  assert.deepEqual(parity.options.ignoredMissions, planOverrides.ignored_missions);
+  assert.deepEqual(parity.options.ignoredPlatoons, planOverrides.ignored_platoons);
+  assert.deepEqual(parity.options.ignoredSlots, planOverrides.ignored_slots);
+  assert.deepEqual(parity.options.groupingRules, groupingRules);
+  assert.deepEqual(parity.options.preAssignments, [{ slotId:'P6-S1', memberId:'P1' }]);
+  assert.deepEqual(result.customization, {
+    phaseLayout:true, requirementOverrides:1, ignoredMissions:1, ignoredPlatoons:1, ignoredSlots:1, groupingRules:1, preassignments:1,
+  });
+  assert.equal(calls.some((row) => row.service === 'createVersion'), true);
+});
+
+test('canonical database controls override duplicate Discord preferences and normalize unavailable members', async () => {
+  const { service, calls } = fixture({
+    discordUnavailable: true,
+    donationPreferences: [{ guild_id:'guild-1', player_id:'db-p1', base_id:'A', preference:'keep', source:'command-center' }],
+    memberControls: [{ guild_id:'guild-1', player_id:'db-p2', available:false, ignored_until:null, source:'command-center' }],
+  });
+  await preview(service);
+  const parity = calls.find((row) => row.service === 'parityPlanner');
+  assert.deepEqual(parity.options.preferences.map((row) => [row.memberId,row.baseId,row.preference]), [['P1','A','keep']]);
+  assert.deepEqual(parity.options.ignoredMembers, ['P2']);
+});
+
+test('fails closed when durable planning controls mutate during live source hydration', async () => {
   const { service, calls } = fixture({ controlsChange: true });
+  await assert.rejects(() => preview(service), (error) => error?.code === 'TB_ASSIGNMENT_PLANNING_CONTROLS_CHANGED');
+  assert.equal(calls.some((row) => row.service === 'parityPlanner'), false);
+  assert.equal(calls.some((row) => row.service === 'createVersion'), false);
+});
+
+test('fails closed when parity planner reports unresolved officer requirement overrides', async () => {
+  const unresolved = parityOutput({
+    assignments: [], unfilled: [],
+    parity: { mode:'echobase-parity-command-center', unresolvedRequirements:[{slotId:'P6-S1'}], previewReady:false, publishReady:false },
+  });
+  const { service, calls } = fixture({
+    planOverrides: { requirement_overrides: { 'P6-S1': { clear:true } } },
+    parityOutput: unresolved,
+  });
   await assert.rejects(
-    () => service.createPreview(context, { planId: 'plan-1', phase: 'P6', interaction: { guild_id: context.discordGuildId } }),
-    (error) => error?.code === 'TB_ASSIGNMENT_PLANNING_CONTROLS_CHANGED',
+    () => preview(service),
+    (error) => error?.code === 'TB_ASSIGNMENT_PARITY_PREVIEW_NOT_READY' && /1 unresolved requirement/i.test(error.message),
   );
   assert.equal(calls.some((row) => row.service === 'createVersion'), false);
 });
 
-test('input fingerprint changes when actual Operation requirements change even if slot count stays constant', async () => {
-  const firstFixture = fixture();
-  const firstResult = await firstFixture.service.createPreview(context, { planId: 'plan-1', phase: 'P6', interaction: { guild_id: context.discordGuildId } });
-
-  const changed = planner();
-  changed.operations = {
-    slots: changed.operations.slots.map((row) => row.id === 'P6-S2' ? { ...row, requiredRelic: 9 } : row),
-  };
-  const secondFixture = fixture({ planner: changed });
-  const secondResult = await secondFixture.service.createPreview(context, { planId: 'plan-1', phase: 'P6', interaction: { guild_id: context.discordGuildId } });
-
-  assert.notEqual(firstResult.inputFingerprint, secondResult.inputFingerprint);
+test('input fingerprint changes when live Operation requirements change', async () => {
+  const first = await preview(fixture().service);
+  const changedLive = livePlanner();
+  changedLive.operations = { slots: changedLive.operations.slots.map((row) => row.id === 'P6-S2' ? { ...row, requiredRelic: 9 } : row) };
+  const second = await preview(fixture({ livePlanner: changedLive }).service);
+  assert.notEqual(first.inputFingerprint, second.inputFingerprint);
 });
 
-test('refuses immutable preview creation for missing/archived source plan', async () => {
-  const { service, calls } = fixture({ noPlan: true });
-  await assert.rejects(
-    () => service.createPreview(context, { planId: 'plan-1', phase: 'P6', interaction: { guild_id: context.discordGuildId } }),
-    (error) => error?.code === 'TB_ASSIGNMENT_SOURCE_PLAN_STALE',
-  );
+test('input fingerprint changes when persisted plan controls, grouping rules or preassignments change', async () => {
+  const baseline = await preview(fixture().service);
+  const ignored = await preview(fixture({ planOverrides:{ ignored_slots:['P6-S2'] } }).service);
+  const ruled = await preview(fixture({ groupingRules:[{ id:'r1', rule_type:'avoid_pair', priority:10, enabled:true, when_spec:{phase:'P6'}, then_spec:{baseIds:['B']} }] }).service);
+  const locked = await preview(fixture({ preassignments:[{ id:'pre1', slot_id:'P6-S1', player_id:'db-p1' }] }).service);
+  assert.notEqual(baseline.inputFingerprint, ignored.inputFingerprint);
+  assert.notEqual(baseline.inputFingerprint, ruled.inputFingerprint);
+  assert.notEqual(baseline.inputFingerprint, locked.inputFingerprint);
+});
+
+test('missing or archived source plans are rejected before hydration and immutable version creation', async () => {
+  const { service, calls } = fixture({ noPlan:true });
+  await assert.rejects(() => preview(service), (error) => error?.code === 'TB_ASSIGNMENT_SOURCE_PLAN_STALE');
   assert.equal(calls.some((row) => row.service === 'buildPlan'), false);
+  assert.equal(calls.some((row) => row.service === 'createVersion'), false);
 });
-
-for (const scenario of [
-  ['phase layout', { planOverrides: { phase_layout: { includedPhases: ['P6'] } } }],
-  ['requirement overrides', { planOverrides: { requirement_overrides: { 'P6-S1': { baseId: 'B' } } } }],
-  ['ignored missions', { planOverrides: { ignored_missions: ['P6-C1'] } }],
-  ['ignored platoons', { planOverrides: { ignored_platoons: ['P6-PLATOON-1'] } }],
-  ['ignored slots', { planOverrides: { ignored_slots: ['P6-S1'] } }],
-  ['grouping rules', { groupingRule: true }],
-  ['preassignments', { preassignment: true }],
-]) {
-  test(`fails closed before planner/version creation when persisted plan contains ${scenario[0]}`, async () => {
-    const { service, calls } = fixture(scenario[1]);
-    await assert.rejects(
-      () => service.createPreview(context, { planId: 'plan-1', phase: 'P6', interaction: { guild_id: context.discordGuildId } }),
-      (error) => error?.code === 'TB_ASSIGNMENT_PLAN_CUSTOMIZATION_UNSUPPORTED' && new RegExp(scenario[0], 'i').test(error.message),
-    );
-    assert.equal(calls.some((row) => row.service === 'buildPlan'), false);
-    assert.equal(calls.some((row) => row.service === 'createVersion'), false);
-  });
-}
