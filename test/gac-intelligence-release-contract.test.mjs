@@ -11,6 +11,7 @@ const required = [
   'public/gac-board-optimization-model.js',
   'public/gac-board-optimization-ui.js',
   'public/gac-board-optimization.css',
+  'public/gac-battle-execution-queue.js',
   'public/gac-relic-suitability-model.js',
   'public/gac-relic-suitability-ui.js',
   'public/gac-relic-suitability.css',
@@ -45,6 +46,24 @@ test('every GAC intelligence runtime module referenced by the bootstrap exists',
     'gac-datacron-matrix-ui.js',
     'gac-intelligence-export.js',
   ]) assert.match(bootstrap, new RegExp(module.replaceAll('.', '\\.')));
+});
+
+test('battle execution queue is wired to the authoritative server plan and responsive UI', () => {
+  const optimizer = source('public/gac-board-optimization-ui.js');
+  const queue = source('public/gac-battle-execution-queue.js');
+  const css = source('public/gac-board-optimization.css');
+  assert.match(optimizer, /import\s*\{\s*buildBattleExecutionQueue\s*\}\s*from\s*['"]\.\/gac-battle-execution-queue\.js['"]/);
+  assert.match(optimizer, /\/api\/gac\/attack-plan\/\$\{mine\}/);
+  assert.match(optimizer, /method\s*:\s*['"]POST['"]/);
+  assert.match(optimizer, /gac-war-room-updated/);
+  assert.match(queue, /gac-battle-execution-queue-v1/);
+  assert.match(queue, /cleanup-review/);
+  assert.match(queue, /sequence\s*:\s*null/);
+  assert.match(css, /\.gac-opt-execution-queue/);
+  assert.match(css, /\.gac-opt-execution-step/);
+  assert.match(css, /\.gac-opt-blocker/);
+  assert.match(css, /@media\(max-width:650px\)/);
+  assert.match(css, /@media\(max-width:420px\)/);
 });
 
 test('intelligence panels are on-demand rather than automatic recurring network analyzers', () => {
