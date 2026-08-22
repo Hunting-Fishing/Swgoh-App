@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { gacBoardObservationService } from "./gac-board-observation-service.mjs";
+import { gacDatacronCounterEvidenceService } from "./gac-datacron-counter-evidence-service.mjs";
 import { supabaseCoreStore } from "./supabase-core-store.mjs";
 
 function clean(value) { return String(value ?? "").trim(); }
@@ -19,15 +20,34 @@ function deterministicKey(parts) {
 function normalizedMembers(values) {
   return [...new Set(asArray(values).map(normalizeBaseId).filter(Boolean))];
 }
+function defenderDatacronState(defense = {}) {
+  if (clean(defense?.datacron?.id)) return "assigned";
+  const state = clean(defense?.metadata?.datacronState).toLowerCase();
+  return state === "none" ? "none" : "unknown";
+}
+function attackerDatacronState(assignment = {}) {
+  return clean(assignment?.datacron?.id) ? "assigned" : "none";
+}
 
 export function createGacVerifiedBattleService(options = {}) {
   const store = options.store || supabaseCoreStore;
   const boards = options.boards || gacBoardObservationService;
+  const datacronEvidence = options.datacronEvidence || gacDatacronCounterEvidenceService;
   const now = options.now || (() => new Date());
 
   async function selectOne(table, query) {
     const rows = asArray(await store.select(table, { ...query, limit: 1 }));
     return rows[0] || null;
+  }
+
+  async function archiveDatacronEvidence(input = {}) {
+    if (!datacronEvidence?.recordBattle) return null;
+    try {
+      return await datacronEvidence.recordBattle(input);
+    } catch (error) {
+      console.warn("Verified GAC battle saved without supplemental Datacron evidence", error?.message || error);
+      return null;
+    }
   }
 
   async function verifyAttempt(userId, input = {}) {
@@ -46,7 +66,7 @@ export function createGacVerifiedBattleService(options = {}) {
     }
 
     const assignment = await selectOne("gac_attack_plan_assignments", {
-      select: "id,round_id,defense_squad_id,attempt_log,source",
+      select: "id,round_id,defense_squad_id,attempt_log,datacron,source",
       id: `eq.${assignmentId}`,
       round_id: `eq.${resolved.roundRow.id}`,
       source: "eq.verified-owner-war-room",
@@ -75,7 +95,7 @@ export function createGacVerifiedBattleService(options = {}) {
     }
 
     const defense = await selectOne("gac_round_squads", {
-      select: "id,round_id,leader_base_id,members,datacron,zone,squad_slot,owner,side,source",
+      select: "id,round_id,leader_base_id,members,datacron,zone,squad_slot,owner,side,source,metadata",
       id: `eq.${Number(assignment.defense_squad_id)}`,
       round_id: `eq.${resolved.roundRow.id}`,
       owner: "eq.opponent",
@@ -134,11 +154,40 @@ export function createGacVerifiedBattleService(options = {}) {
       defense.id,
       attemptIndex,
     ]);
+    const sourceRef = `war-room:${assignmentId}:attempt:${attemptIndex + 1}`;
+    const importedAt = now().toISOString();
+    const dcEvidenceInput = {
+      battleKey,
+      format: verifiedFormat,
+      enemyLeaderBaseId: defenderLeader,
+      enemyMembers: defenderMembers,
+      defenderDatacronState: defenderDatacronState(defense),
+      defenderDatacron: defense.datacron || null,
+      counterLeaderBaseId: attackerLeader,
+      counterMembers: attackerMembers,
+      attackerDatacronState: attackerDatacronState(assignment),
+      attackerDatacron: assignment.datacron || null,
+      battleOutcome: result,
+      banners: attempt.banners == null ? null : Math.max(0, Number(attempt.banners) || 0),
+      seasonId: clean(event?.season_id),
+      source: "verified-owner-war-room",
+      sourceRef,
+      observedAt: clean(attempt.at) || importedAt,
+      metadata: {
+        explicitOwnerConfirmation: true,
+        assignmentId,
+        defenseId: Number(defense.id),
+        round: resolved.round,
+        eventInstanceId,
+      },
+    };
+
     const existing = await selectOne("gac_battles", {
       select: "id,battle_key,battle_outcome,source,source_ref,imported_at,metadata",
       battle_key: `eq.${battleKey}`,
     });
     if (existing?.id) {
+      const datacronEvidenceResult = await archiveDatacronEvidence(dcEvidenceInput);
       return Object.freeze({
         source: "verified-owner-war-room",
         saved: true,
@@ -147,12 +196,11 @@ export function createGacVerifiedBattleService(options = {}) {
         round: resolved.round,
         assignmentId,
         attemptIndex,
+        datacronEvidence: datacronEvidenceResult,
         battle: Object.freeze({ id: existing.id, battleKey, outcome: clean(existing.battle_outcome), sourceRef: clean(existing.source_ref) }),
       });
     }
 
-    const sourceRef = `war-room:${assignmentId}:attempt:${attemptIndex + 1}`;
-    const importedAt = now().toISOString();
     const row = {
       battle_key: battleKey,
       player_id: resolved.player.id,
@@ -185,9 +233,11 @@ export function createGacVerifiedBattleService(options = {}) {
         assignmentId,
         defenseId: Number(defense.id),
         attemptIndex,
-        banners: attempt.banners == null ? null : Math.max(0, Number(attempt.banners) || 0),
-        attackerDatacronId: clean(attempt.datacronId) || null,
+        banners: dcEvidenceInput.banners,
+        attackerDatacronId: clean(attempt.datacronId || assignment?.datacron?.id) || null,
         defenderDatacronId: clean(defense?.datacron?.id) || null,
+        attackerDatacronState: dcEvidenceInput.attackerDatacronState,
+        defenderDatacronState: dcEvidenceInput.defenderDatacronState,
         zone: clean(defense.zone) || null,
         slot: defense.squad_slot == null ? null : Number(defense.squad_slot),
         coordinateSemantics: "verified-round/defense-slot/war-room-attempt",
@@ -196,6 +246,7 @@ export function createGacVerifiedBattleService(options = {}) {
     };
     const inserted = asArray(await store.upsert("gac_battles", [row], { onConflict: "battle_key" }));
     const saved = inserted[0] || row;
+    const datacronEvidenceResult = await archiveDatacronEvidence(dcEvidenceInput);
     return Object.freeze({
       source: "verified-owner-war-room",
       saved: true,
@@ -204,6 +255,7 @@ export function createGacVerifiedBattleService(options = {}) {
       round: resolved.round,
       assignmentId,
       attemptIndex,
+      datacronEvidence: datacronEvidenceResult,
       battle: Object.freeze({
         id: saved.id ?? null,
         battleKey,
@@ -221,4 +273,11 @@ export function createGacVerifiedBattleService(options = {}) {
 
 export const gacVerifiedBattleService = createGacVerifiedBattleService();
 
-export { deterministicKey, normalizedMembers, validAttemptIndex, validResult };
+export {
+  attackerDatacronState,
+  defenderDatacronState,
+  deterministicKey,
+  normalizedMembers,
+  validAttemptIndex,
+  validResult,
+};
