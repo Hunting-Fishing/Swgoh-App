@@ -1,5 +1,11 @@
 import { normalizeId, normalizeMembers, relicTier, rosterIndex } from './gac-counter-matrix-model.js';
 
+function nullableFinite(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
 function teamAverageRelic(members = [], roster = {}) {
   const index = roster instanceof Map ? roster : rosterIndex(roster);
   const ids = normalizeMembers(members);
@@ -18,9 +24,9 @@ function currentRelicSuitability({ defenseMembers = [], counterMembers = [], opp
 }
 
 function formatRelicDelta(value) {
-  if (!Number.isFinite(Number(value))) return '—';
-  const n = Number(value);
-  return `${n >= 0 ? '+' : ''}${n.toFixed(1).replace(/\.0$/, '')}`;
+  const number = nullableFinite(value);
+  if (number === null) return '—';
+  return `${number >= 0 ? '+' : ''}${number.toFixed(1).replace(/\.0$/, '')}`;
 }
 
 function relicSuitabilityForAllocation(allocation = [], defenses = [], ownRoster = {}, opponentRoster = {}) {
@@ -36,16 +42,16 @@ function relicSuitabilityForAllocation(allocation = [], defenses = [], ownRoster
       opponentRoster,
       ownRoster,
     });
-    const historicalAverageRelicDelta = Number.isFinite(Number(assignment?.averageRelicDelta)) ? Number(assignment.averageRelicDelta) : null;
+    const historicalAverageRelicDelta = nullableFinite(assignment?.averageRelicDelta);
     const historicalRelicSamples = Math.max(0, Math.floor(Number(assignment?.relicDeltaSamples) || 0));
     return Object.freeze({
       rowKey: String(assignment?.rowKey || ''),
       defenseLeaderBaseId: normalizeId(defense?.leaderBaseId || defense?.members?.[0]),
       counterLeaderBaseId: normalizeId(assignment?.counterLeaderBaseId),
       counterMembers: Object.freeze(normalizeMembers(assignment?.counterMembers)),
-      battles: Number(assignment?.battles || 0),
-      winRate: Number.isFinite(Number(assignment?.winRate)) ? Number(assignment.winRate) : null,
-      averageBanners: Number.isFinite(Number(assignment?.averageBanners)) ? Number(assignment.averageBanners) : null,
+      battles: Math.max(0, Number(assignment?.battles) || 0),
+      winRate: nullableFinite(assignment?.winRate),
+      averageBanners: nullableFinite(assignment?.averageBanners),
       historicalAverageRelicDelta,
       historicalRelicSamples,
       historicalRelicEvidenceAvailable: historicalRelicSamples > 0 && historicalAverageRelicDelta !== null,
@@ -54,4 +60,4 @@ function relicSuitabilityForAllocation(allocation = [], defenses = [], ownRoster
   }));
 }
 
-export { currentRelicSuitability, formatRelicDelta, relicSuitabilityForAllocation, teamAverageRelic };
+export { currentRelicSuitability, formatRelicDelta, nullableFinite, relicSuitabilityForAllocation, teamAverageRelic };
