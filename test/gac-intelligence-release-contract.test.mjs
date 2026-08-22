@@ -11,6 +11,9 @@ const required = [
   'public/gac-board-optimization-model.js',
   'public/gac-board-optimization-ui.js',
   'public/gac-board-optimization.css',
+  'public/gac-relic-suitability-model.js',
+  'public/gac-relic-suitability-ui.js',
+  'public/gac-relic-suitability.css',
   'public/gac-scouting-history-model.js',
   'public/gac-scouting-history-ui.js',
   'public/gac-scouting-history.css',
@@ -33,6 +36,7 @@ test('every GAC intelligence runtime module referenced by the bootstrap exists',
   for (const module of [
     'gac-counter-matrix-ui.js',
     'gac-board-optimization-ui.js',
+    'gac-relic-suitability-ui.js',
     'gac-scouting-history-ui.js',
     'gac-scouting-staging-ui.js',
     'gac-datacron-readiness-ui.js',
@@ -42,12 +46,15 @@ test('every GAC intelligence runtime module referenced by the bootstrap exists',
 
 test('intelligence panels are on-demand rather than automatic recurring network analyzers', () => {
   const optimizer = source('public/gac-board-optimization-ui.js');
+  const relic = source('public/gac-relic-suitability-ui.js');
   const dcMatrix = source('public/gac-datacron-matrix-ui.js');
   const staging = source('public/gac-scouting-staging-ui.js');
   assert.match(optimizer, /data-gac-opt-analyze/);
+  assert.match(relic, /data-gac-relic-analyze/);
   assert.match(dcMatrix, /data-gac-dc-matrix-analyze/);
   assert.match(staging, /data-gac-stage-build/);
   assert.doesNotMatch(optimizer, /setInterval\s*\(/);
+  assert.doesNotMatch(relic, /setInterval\s*\(/);
   assert.doesNotMatch(dcMatrix, /setInterval\s*\(/);
   assert.doesNotMatch(staging, /setInterval\s*\(/);
 });
@@ -58,6 +65,13 @@ test('historical staging never silently saves current-board defenses', () => {
   assert.match(staging, /openSquadSlot/);
   assert.doesNotMatch(staging, /\/api\/gac\/current-board\/.*POST/);
   assert.doesNotMatch(staging, /fetchJson\([^\n]*method\s*:\s*['"]POST['"]/);
+});
+
+test('relic suitability is explicitly current-roster context rather than historical relic evidence', () => {
+  const relic = source('public/gac-relic-suitability-ui.js');
+  assert.match(relic, /Current RΔ is a roster-fit check/i);
+  assert.match(relic, /not relic-normalized/i);
+  assert.doesNotMatch(relic, /historical average relic delta/i);
 });
 
 test('Datacron evidence preserves none versus unknown and excludes instance IDs from signatures', () => {
