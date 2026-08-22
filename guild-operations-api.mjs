@@ -10,6 +10,7 @@ import { resolveGuildPlanningOverlay } from './guild-planning-overlay.mjs';
 import { aggregateRoteOperations } from './rote-operations.mjs';
 import { supabaseAuthSession } from './supabase-auth-session.mjs';
 import { tbAssignmentVersionService } from './tb-assignment-version-service.mjs';
+import { createTbImmutableWebContextResolver } from './tb-immutable-web-context.mjs';
 import { tbStage9PlanPreviewService } from './tb-stage9-plan-preview-service.mjs';
 import { tbStage10WebDeliveryService } from './tb-stage10-web-delivery-service.mjs';
 import { buildGuildRoteOperationSafety } from './public/guild-rote-operation-safety.js';
@@ -278,6 +279,7 @@ export function createGuildOperationsApi(options = {}) {
   const immutablePreview = options.immutablePreview || tbStage9PlanPreviewService;
   const assignmentVersions = options.assignmentVersions || tbAssignmentVersionService;
   const immutableDelivery = options.immutableDelivery || tbStage10WebDeliveryService;
+  const immutableContextResolver = options.immutableContextResolver || createTbImmutableWebContextResolver({ service, delivery });
   const fetchImpl = options.fetch || fetch;
 
   async function requireUser(request) {
@@ -298,6 +300,12 @@ export function createGuildOperationsApi(options = {}) {
         discordGuildId: synced.binding.discordGuildId,
         commandChannelConfigured: Boolean(synced.binding.guildState?.commandChannelId),
       } : { verified: false },
+      immutablePlanning: {
+        enabled: true,
+        websiteOnly: !synced.binding,
+        discordControlsIncluded: Boolean(synced.binding),
+        discordPublicationReady: Boolean(synced.binding?.guildState?.commandChannelId),
+      },
       publishing: {
         enabled: config.deliveryEnabled,
         botTokenConfigured: Boolean(config.botToken),
@@ -318,21 +326,6 @@ export function createGuildOperationsApi(options = {}) {
     });
   }
 
-  async function immutableOfficerContext(userId, code) {
-    const officer = await service.requireOfficer(userId, code);
-    const binding = await delivery.resolveBinding(officer.guild.id);
-    const discordGuildId = text(binding?.discordGuildId);
-    const seedAllyCode = text(binding?.guildState?.swgohAllyCode).replace(/\D/g, '');
-    if (!/^\d{16,22}$/.test(discordGuildId) || !/^\d{9}$/.test(seedAllyCode)) {
-      throw httpError(
-        'Immutable TB preview currently requires the Guild verified Discord/SWGOH binding so durable reservations and member controls can be materialized safely.',
-        409,
-        'TB_IMMUTABLE_VERIFIED_BINDING_REQUIRED',
-      );
-    }
-    return Object.freeze({ guild: officer.guild, userId, discordGuildId, seedAllyCode });
-  }
-
   async function listImmutableVersions(userId, code, planId, phase) {
     const officer = await service.requireOfficer(userId, code);
     return assignmentVersions.listVersions({ guild: officer.guild, userId }, {
@@ -343,7 +336,7 @@ export function createGuildOperationsApi(options = {}) {
   }
 
   async function immutableVersionAndContext(userId, code, runId) {
-    const context = await immutableOfficerContext(userId, code);
+    const context = await immutableContextResolver.deliveryContext(userId, code);
     const selected = await assignmentVersions.getVersion({ guild: context.guild, userId }, { runId });
     const version = selected?.version;
     if (!version?.id || !Number(version?.versionNumber) || !/^P[1-6]$/.test(text(version?.rotePhase))) {
@@ -422,11 +415,11 @@ export function createGuildOperationsApi(options = {}) {
       }
       const tbImmutablePreview = suffix.match(/^\/tb\/plans\/([0-9a-f-]{36})\/immutable-preview$/i);
       if (tbImmutablePreview) {
-        const immutableContext = await immutableOfficerContext(user.id, code);
+        const immutableContext = await immutableContextResolver.planning(user.id, code);
         const result = await immutablePreview.createPreview(immutableContext, {
           planId: tbImmutablePreview[1],
           phase: body?.phase,
-          interaction: { guild_id: immutableContext.discordGuildId },
+          interaction: immutableContext.discordBound ? { guild_id: immutableContext.discordGuildId } : {},
         });
         writeJson(response, 201, result);
         return true;
