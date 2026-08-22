@@ -84,7 +84,6 @@ export function createGacVerifiedBattleApi(options = {}) {
         const body = await readJsonBody(request);
         const context = await currentContext(code, body?.round);
         const opponentAllyCode = normalizeAllyCode(context.confirmed.opponent.allyCode);
-        const snapshots = await softRosterSnapshots(code, opponentAllyCode);
         const result = await battles.verifyAttempt(user.id, {
           allyCode: code,
           opponentAllyCode,
@@ -94,6 +93,7 @@ export function createGacVerifiedBattleApi(options = {}) {
           attemptIndex: body?.attemptIndex,
           confirm: body?.confirm === true,
         });
+        const snapshots = await softRosterSnapshots(code, opponentAllyCode);
         const relicResult = relicEvidence?.enrichBattle
           ? await relicEvidence.enrichBattle({
               battleKey: result?.battle?.battleKey,
