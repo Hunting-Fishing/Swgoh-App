@@ -1,3 +1,4 @@
+import './rote-tactical-map-integration.js';
 import { rotePlanetById } from "./rote-map-data.js";
 import { ROTE_MISSIONS_BY_PLANET } from "./rote-mission-data.js";
 import { TB_MISSION_VISUAL_ASSETS } from "./tb-visual-assets-data.js";
