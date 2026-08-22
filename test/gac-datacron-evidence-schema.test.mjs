@@ -30,6 +30,7 @@ test('additive least-privilege migration hardens already-created warehouses', ()
   assert.match(hardening, /grant select, insert, update on table public\.gac_datacron_battle_evidence to service_role/i);
   assert.match(hardening, /revoke all on sequence public\.gac_datacron_battle_evidence_id_seq from anon, authenticated, service_role/i);
   assert.match(hardening, /grant usage, select on sequence public\.gac_datacron_battle_evidence_id_seq to service_role/i);
+  assert.doesNotMatch(hardening, /grant[^;]*(?:delete|truncate|references|trigger)[^;]*service_role/i);
 });
 
 test('Datacron evidence indexes support enemy, defender DC, counter and exact matchup lookup', () => {
