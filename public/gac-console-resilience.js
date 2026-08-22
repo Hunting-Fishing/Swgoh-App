@@ -1,5 +1,5 @@
 const GATEWAY_ERROR_TTL_MS = 15000;
-const BLOCKED_SWGOH_GG_ASSET = /^https:\/\/swgoh\.gg\/static\/img\/assets\//i;
+const BLOCKED_SWGOH_GG_ASSET = /^https:\/\/(?:www\.)?swgoh\.gg\/static\/img\//i;
 const gatewayCache = new Map();
 
 function cacheKey(input, init = {}) {
@@ -68,25 +68,68 @@ function blockedPortraitPlaceholder() {
   return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="32" fill="#071522"/><circle cx="32" cy="32" r="21" fill="none" stroke="#54d7ff" stroke-width="3"/><path d="M32 18l5 9 10 2-7 7 2 10-10-5-10 5 2-10-7-7 10-2z" fill="#54d7ff"/></svg>');
 }
 
+function sanitizePortraitUrl(value) {
+  const next = String(value || '');
+  return BLOCKED_SWGOH_GG_ASSET.test(next) ? blockedPortraitPlaceholder() : value;
+}
+
 function installBlockedPortraitGuard() {
   if (typeof window === 'undefined' || typeof HTMLImageElement === 'undefined' || window.__gacBlockedPortraitGuardInstalled) return;
-  const descriptor = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src');
-  if (!descriptor?.get || !descriptor?.set) return;
   window.__gacBlockedPortraitGuardInstalled = true;
-  Object.defineProperty(HTMLImageElement.prototype, 'src', {
-    configurable: descriptor.configurable,
-    enumerable: descriptor.enumerable,
-    get: descriptor.get,
-    set(value) {
-      const next = String(value || '');
-      if (BLOCKED_SWGOH_GG_ASSET.test(next)) {
-        this.dataset.gacBlockedExternalAsset = 'swgoh-gg';
-        descriptor.set.call(this, blockedPortraitPlaceholder());
-        return;
+
+  const srcDescriptor = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src');
+  if (srcDescriptor?.get && srcDescriptor?.set) {
+    Object.defineProperty(HTMLImageElement.prototype, 'src', {
+      configurable: srcDescriptor.configurable,
+      enumerable: srcDescriptor.enumerable,
+      get: srcDescriptor.get,
+      set(value) {
+        const sanitized = sanitizePortraitUrl(value);
+        if (sanitized !== value) this.dataset.gacBlockedExternalAsset = 'swgoh-gg';
+        srcDescriptor.set.call(this, sanitized);
+      },
+    });
+  }
+
+  const nativeSetAttribute = Element.prototype.setAttribute;
+  Element.prototype.setAttribute = function gacSafeSetAttribute(name, value) {
+    if (this instanceof HTMLImageElement && String(name).toLowerCase() === 'src') {
+      const sanitized = sanitizePortraitUrl(value);
+      if (sanitized !== value) this.dataset.gacBlockedExternalAsset = 'swgoh-gg';
+      return nativeSetAttribute.call(this, name, sanitized);
+    }
+    return nativeSetAttribute.call(this, name, value);
+  };
+
+  const sanitizeExisting = (root = document) => {
+    for (const img of root.querySelectorAll?.('img[src*="swgoh.gg/static/img/"]') || []) {
+      const current = img.getAttribute('src') || '';
+      if (!BLOCKED_SWGOH_GG_ASSET.test(current)) continue;
+      img.dataset.gacBlockedExternalAsset = 'swgoh-gg';
+      nativeSetAttribute.call(img, 'src', blockedPortraitPlaceholder());
+    }
+  };
+
+  sanitizeExisting(document);
+  new MutationObserver((records) => {
+    for (const record of records) {
+      if (record.type === 'attributes' && record.target instanceof HTMLImageElement) {
+        const current = record.target.getAttribute('src') || '';
+        if (BLOCKED_SWGOH_GG_ASSET.test(current)) {
+          record.target.dataset.gacBlockedExternalAsset = 'swgoh-gg';
+          nativeSetAttribute.call(record.target, 'src', blockedPortraitPlaceholder());
+        }
       }
-      descriptor.set.call(this, value);
-    },
-  });
+      for (const node of record.addedNodes || []) {
+        if (!(node instanceof Element)) continue;
+        if (node instanceof HTMLImageElement) {
+          const current = node.getAttribute('src') || '';
+          if (BLOCKED_SWGOH_GG_ASSET.test(current)) nativeSetAttribute.call(node, 'src', blockedPortraitPlaceholder());
+        }
+        sanitizeExisting(node);
+      }
+    }
+  }).observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['src'] });
 }
 
 if (typeof window !== 'undefined') {
@@ -101,4 +144,5 @@ export {
   gatewayStatus,
   installBlockedPortraitGuard,
   installGatewayCircuitBreaker,
+  sanitizePortraitUrl,
 };
