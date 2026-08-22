@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#0a0d16">
+  <title>SWGOH Guild Command Center</title>
+  <link rel="stylesheet" href="/styles.css?v=20260815-pro10">
+  <link rel="stylesheet" href="/fixes.css?v=20260815-pro10">
+  <link rel="stylesheet" href="/command-center-v2.css?v=20260820-ui2">
+  <link rel="stylesheet" href="/guild-command-page.css?v=20260817-guildpage1">
+  <link rel="stylesheet" href="/guild-route-pages.css?v=20260817-guildroutes1">
+  <link rel="stylesheet" href="/guild-zeffo-readiness.css?v=20260822-mandalore1">
+  <link rel="stylesheet" href="/guild-tb-readiness.css?v=20260822-revawat1">
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <div>
+        <div class="kicker">SWGOH COMMAND CENTER · GUILD OPERATIONS</div>
+        <h1>Guild Command Center</h1>
+      </div>
+      <div class="status ready">Guild shell</div>
+    </header>
+
+    <main>
+      <section class="hero card">
+        <div>
+          <div class="kicker">LIVE GUILD COMMAND</div>
+          <h2>Guild roster, TB readiness, TW and raid operations.</h2>
+          <p>This dedicated Guild shell loads only Guild code so officer navigation remains responsive.</p>
+        </div>
+        <form id="allyForm" class="ally-form">
+          <label for="allyCode">Member Ally Code</label>
+          <div class="input-row">
+            <input id="allyCode" inputmode="numeric" autocomplete="off" maxlength="11" placeholder="123-456-789">
+            <button id="loadButton" type="submit">Load Guild</button>
+          </div>
+          <div id="error" class="error hidden"></div>
+        </form>
+      </section>
+    </main>
+  </div>
+
+  <script type="module" src="/navigation-guard.js?v=20260822-guildsafe1"></script>
+</body>
+</html>
