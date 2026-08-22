@@ -1,3 +1,5 @@
+import './guild-player-portrait-enhancer.js';
+
 const READINESS_PATH = "/guild/zeffo";
 const ALLY_STORAGE_KEY = "swgoh:guild-route-ally-code";
 const BASELINE_CONCURRENCY = 6;
@@ -102,6 +104,8 @@ async function hydrateTbGuildRoster(guildBody, target) {
     return {
       ...member,
       units,
+      profileTitle: member?.profileTitle || baseline?.player?.profileTitle || "",
+      playerPortrait: member?.playerPortrait || baseline?.player?.playerPortrait || "",
       rosterAvailable: member?.rosterAvailable === true || units.length > 0,
       tbRosterError: baseline?.__error || "",
       lastSyncedAt: baseline?.player?.updatedAt || baseline?.fetchedAt || member?.lastSyncedAt || "",
