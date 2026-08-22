@@ -1,3 +1,5 @@
+import { loadPlayerPortraitRegistry, resolvePlayerPortraitUrl } from './guild-player-portrait-registry.js';
+
 const clean = (value) => String(value ?? '').trim();
 const number = new Intl.NumberFormat('en-US');
 const escapeHtml = (value) => String(value ?? '')
@@ -17,20 +19,39 @@ function roleTone(role) {
   return 'member';
 }
 
+function roleSymbol(role) {
+  return role === 'Guild Leader' ? '★' : role === 'Officer' ? '◆' : '•';
+}
+
 function safePortrait(member = {}) {
-  const value = clean(member.playerPortraitUrl || member.profilePortraitUrl);
-  return value.startsWith('/') ? value : '';
+  return resolvePlayerPortraitUrl(
+    member.playerPortrait || member.portraitKey,
+    member.playerPortraitUrl || member.profilePortraitUrl,
+  );
 }
 
 function identityMark(member = {}) {
-  const portrait = safePortrait(member);
-  if (portrait) {
-    return `<span class="guild-leadership-portrait"><img src="${escapeAttr(portrait)}" alt="" loading="lazy"></span>`;
-  }
   const role = clean(member.memberRole) || 'Member';
-  const symbol = role === 'Guild Leader' ? '★' : role === 'Officer' ? '◆' : '•';
+  const symbol = roleSymbol(role);
+  const portrait = safePortrait(member);
   const portraitId = clean(member.playerPortrait);
-  return `<span class="guild-leadership-portrait is-glyph"${portraitId ? ` data-player-portrait-id="${escapeAttr(portraitId)}" title="Portrait asset ${escapeAttr(portraitId)} is captured; local image asset not installed yet."` : ''}>${symbol}</span>`;
+  if (portrait) {
+    return `<span class="guild-leadership-portrait has-image" data-portrait-fallback="${escapeAttr(symbol)}"${portraitId ? ` data-player-portrait-id="${escapeAttr(portraitId)}"` : ''}><img data-guild-portrait-image src="${escapeAttr(portrait)}" alt="" loading="lazy" referrerpolicy="no-referrer"></span>`;
+  }
+  return `<span class="guild-leadership-portrait is-glyph"${portraitId ? ` data-player-portrait-id="${escapeAttr(portraitId)}" title="Game portrait ${escapeAttr(portraitId)} is captured; artwork will appear when the portrait registry resolves it."` : ''}>${symbol}</span>`;
+}
+
+function wirePortraitFallbacks(root) {
+  for (const image of root?.querySelectorAll?.('[data-guild-portrait-image]') || []) {
+    image.addEventListener('error', () => {
+      const mark = image.closest('.guild-leadership-portrait');
+      if (!mark) return;
+      const fallback = clean(mark.dataset.portraitFallback) || '•';
+      mark.classList.remove('has-image');
+      mark.classList.add('is-glyph');
+      mark.textContent = fallback;
+    }, { once: true });
+  }
 }
 
 function profileLink(member = {}) {
@@ -68,7 +89,7 @@ function ensureStyles() {
   if (document.querySelector('link[data-guild-leadership-css="true"]')) return;
   const link = document.createElement('link');
   link.rel = 'stylesheet';
-  link.href = '/guild-leadership-ui.css?v=20260822-tb1';
+  link.href = '/guild-leadership-ui.css?v=20260822-tb2';
   link.dataset.guildLeadershipCss = 'true';
   document.head.appendChild(link);
 }
@@ -106,7 +127,8 @@ function render(snapshot = window.__swgohGuildCommandSnapshot) {
   ${identityReady ? `<div class="guild-leadership-layout">
     <section><span class="guild-leadership-label">GUILD LEADER</span>${leader ? personCard(leader) : '<div class="guild-leadership-empty">Leader rank has not been captured yet.</div>'}</section>
     <section><span class="guild-leadership-label">OFFICERS</span><div class="guild-leadership-officers">${officers.length ? officers.map((row) => personCard(row, true)).join('') : '<div class="guild-leadership-empty">No officer ranks captured yet.</div>'}</div></section>
-  </div>` : '<div class="guild-leadership-empty">The app already stores the in-game rank field during Guild sync. After the identity read-shape migration and next Guild refresh, Leader and Officers will appear here automatically.</div>'}`;
+  </div>` : '<div class="guild-leadership-empty">The app stores the in-game rank field during Guild sync. After the identity read-shape migration and next Guild refresh, Leader and Officers appear here automatically.</div>'}`;
+  wirePortraitFallbacks(root);
 }
 
 function install() {
@@ -116,10 +138,11 @@ function install() {
   window.addEventListener('swgoh:guild-command-snapshot', (event) => render(event.detail?.snapshot));
   window.addEventListener('swgoh:guild-route-changed', () => requestAnimationFrame(() => render()));
   window.addEventListener('popstate', () => requestAnimationFrame(() => render()));
+  loadPlayerPortraitRegistry().then(() => requestAnimationFrame(() => render()));
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => render(), { once: true });
   else render();
 }
 
 if (typeof window !== 'undefined' && typeof document !== 'undefined') install();
 
-export { identityMark, leadershipFromSnapshot, render, safePortrait };
+export { identityMark, leadershipFromSnapshot, render, roleSymbol, safePortrait, wirePortraitFallbacks };
