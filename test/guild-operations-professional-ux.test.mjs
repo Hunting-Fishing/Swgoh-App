@@ -35,6 +35,22 @@ test('website exposes immutable ROTE version generation, history, exact hash app
   assert.match(enhancer, /\/cancel/);
 });
 
+test('immutable planning is explicitly website-ready without Discord', () => {
+  assert.match(enhancer, /WEB PLAN READY · DISCORD OFF/);
+  assert.match(enhancer, /Website planning \+ approval ready/);
+  assert.match(enhancer, /No Discord connection is required to generate, review, approve, cancel, or inspect immutable versions/);
+  assert.match(enhancer, /Website artifact is valid\. Connect and verify Discord when you want to publish/);
+  assert.doesNotMatch(enhancer, /BINDING REQUIRED/);
+});
+
+test('Stage 10 controls are gated separately from website immutable planning', () => {
+  assert.match(enhancer, /function immutableDiscordReady\(\)/);
+  assert.match(enhancer, /discordPublicationReady/);
+  assert.match(enhancer, /approved && discordReady/);
+  assert.match(enhancer, /approved && !discordReady/);
+  assert.match(enhancer, /!immutableDiscordReady\(\)/);
+});
+
 test('website Stage 10 requires preview before explicit PUBLISH delivery', () => {
   assert.match(enhancer, /Preview Stage 10 Delivery/);
   assert.match(enhancer, /EXACT DELIVERY PREVIEW/);
@@ -79,6 +95,8 @@ test('professional layer includes responsive immutable and focus-visible styling
   assert.match(css, /@media\(max-width:560px\)/);
   assert.match(css, /guild-ops-professional-bar/);
   assert.match(css, /guild-ops-immutable-review-card/);
+  assert.match(css, /guild-ops-immutable-mode-note/);
+  assert.match(css, /guild-ops-web-only-note/);
   assert.match(css, /guild-ops-stage10-preview/);
   assert.match(css, /guild-ops-immutable-publish-confirm/);
 });
