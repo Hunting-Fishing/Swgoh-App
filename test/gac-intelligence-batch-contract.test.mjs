@@ -62,6 +62,13 @@ test('Datacron evidence uses normalized signatures and preserves unknown versus 
   assert.match(service, /gac_datacron_battle_evidence/);
 });
 
+test('normal counter batch carries supplemental Datacron evidence to avoid a second browser query', () => {
+  const batch = read('gac-counter-evidence-batch-service.mjs');
+  assert.match(batch, /gacDatacronCounterEvidenceService/);
+  assert.match(batch, /datacronEvidence:/);
+  assert.match(batch, /warehouseReady/);
+});
+
 test('verified owner battle results feed supplemental Datacron evidence without blocking battle archival', () => {
   const verified = read('gac-verified-battle-service.mjs');
   assert.match(verified, /gacDatacronCounterEvidenceService/);
