@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   buildRevaMemberReadiness,
   buildGuildRevaReadiness,
+  isInquisitorius,
 } from "../public/guild-reva-readiness-model.js";
 
 const catalog = [
@@ -12,7 +13,7 @@ const catalog = [
   ["EIGHTHBROTHER", "Eighth Brother"],
   ["NINTHSISTER", "Ninth Sister"],
   ["THIRDSISTER", "Third Sister"],
-].map(([baseId, name]) => ({ baseId, name, categories: [{ name: "Inquisitorius" }] }));
+].map(([baseId, name]) => ({ baseId, name, categories: [{ id: "affiliation_ds_inquisitorius" }] }));
 
 function unit(baseId, relic, power = 30000) {
   return { baseId, gear: 13, relic, power, stars: 7 };
@@ -33,6 +34,13 @@ function member(overrides = {}) {
     ...overrides,
   };
 }
+
+test("Inquisitorius detection accepts actual dark-side-prefixed game tag", () => {
+  assert.equal(isInquisitorius({ categories: ["Inquisitorius"] }), true);
+  assert.equal(isInquisitorius({ categories: ["affiliation_ds_inquisitorius"] }), true);
+  assert.equal(isInquisitorius({ categories: [{ id: "affiliation_ds_inquisitorius" }] }), true);
+  assert.equal(isInquisitorius({ categories: ["affiliation_ds_sith"] }), false);
+});
 
 test("Reva readiness requires GI plus four additional Inquisitorius at R7", () => {
   const row = buildRevaMemberReadiness(member(), catalog);
@@ -58,9 +66,10 @@ test("Reva readiness marks all-R5+ gates as ALMOST and lower gates as FAR", () =
   assert.equal(buildRevaMemberReadiness(member({ units: farUnits }), catalog).status, "FAR");
 });
 
-test("guild Reva summary treats ready accounts as potential shards per TB", () => {
+test("guild Reva summary treats ready accounts as potential shards only if successful", () => {
   const guild = buildGuildRevaReadiness({ guild: { name: "Test Guild" }, members: [member(), member({ allyCode: "987654321", name: "Second" })] }, catalog);
   assert.equal(guild.summary.ready, 2);
   assert.equal(guild.summary.potentialShards, 2);
   assert.equal(guild.rewardMode, "shards");
+  assert.match(guild.gateText, /successful guild member/i);
 });

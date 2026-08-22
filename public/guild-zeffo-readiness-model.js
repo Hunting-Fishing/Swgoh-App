@@ -1,3 +1,5 @@
+import { guildMemberRole, playerPortraitId, playerPortraitUrl, playerProfileTitle } from './guild-member-identity.js';
+
 const asArray = (value) => Array.isArray(value) ? value : [];
 const finite = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
 const text = (value) => String(value ?? "").trim();
@@ -20,9 +22,7 @@ function unitMap(member = {}) {
 }
 
 export function normalizeZeffoUnitState(unit = null) {
-  if (!unit) {
-    return Object.freeze({ owned: false, gear: 0, relic: -1, label: "LOCKED", tone: "far" });
-  }
+  if (!unit) return Object.freeze({ owned: false, gear: 0, relic: -1, label: "LOCKED", tone: "far" });
   const gear = Math.max(0, Math.floor(finite(unit.gear ?? unit.gearLevel, 0)));
   const relic = Math.max(0, Math.floor(finite(unit.relic ?? unit.relicTier, 0)));
   const reliced = gear >= 13;
@@ -60,24 +60,11 @@ function upgradeText(cere, jkck, babyCal, status) {
     if (jkck.relic >= 7) return "Ready via JKCK";
     return "Ready via Baby Cal";
   }
-
   const cal = preferredCal(jkck, babyCal);
   const needs = [];
   if (cere.relic < 7) needs.push(`Cere ${cere.label} → R7`);
   if (cal.state.relic < 7) needs.push(`${cal.name} ${cal.state.label} → R7`);
   return needs.join(" + ") || "Ready";
-}
-
-function profileTitle(member = {}) {
-  return text(member.playerTitle || member.title || member.namePlate || member.nameplate || member.profileTitle);
-}
-
-function memberRole(member = {}) {
-  return text(member.role || member.memberRole || member.guildRole || member.guildMemberLevel);
-}
-
-function portraitKey(member = {}) {
-  return text(member.portraitId || member.portrait || member.avatarId || member.avatar || member.profileIconId);
 }
 
 export function buildZeffoMemberReadiness(member = {}, index = 0) {
@@ -88,7 +75,6 @@ export function buildZeffoMemberReadiness(member = {}, index = 0) {
   const status = readinessStatus(cere, jkck, babyCal);
   const cal = preferredCal(jkck, babyCal);
   const priorityScore = relicSteps(cere) + relicSteps(cal.state);
-
   return Object.freeze({
     id: memberId(member, index),
     playerId: text(member.playerId || member.id),
@@ -96,9 +82,11 @@ export function buildZeffoMemberReadiness(member = {}, index = 0) {
     name: text(member.name || member.playerName || memberId(member, index)),
     galacticPower: finite(member.galacticPower, 0),
     rosterAvailable: member.rosterAvailable === true || asArray(member.units).length > 0,
-    profileTitle: profileTitle(member),
-    memberRole: memberRole(member),
-    portraitKey: portraitKey(member),
+    profileTitle: playerProfileTitle(member),
+    memberLevel: finite(member.memberLevel, 0),
+    memberRole: guildMemberRole(member),
+    playerPortrait: playerPortraitId(member),
+    playerPortraitUrl: playerPortraitUrl(member),
     cere,
     jkck,
     babyCal,
@@ -120,12 +108,15 @@ export function buildGuildZeffoReadiness(guildBody = {}) {
   const ready = sorted.filter((row) => row.status === "READY");
   const almost = sorted.filter((row) => row.status === "ALMOST");
   const far = sorted.filter((row) => row.status === "FAR");
-  const action = [...almost, ...far];
   const jkckReady = ready.filter((row) => row.cere.relic >= 7 && row.jkck.relic >= 7).length;
   const babyFallback = ready.filter((row) => row.cere.relic >= 7 && row.jkck.relic < 7 && row.babyCal.relic >= 7).length;
   const rosterUnavailable = sorted.filter((row) => !row.rosterAvailable).length;
-
+  const potentialSuccessfulClears = ready.length;
   return Object.freeze({
+    missionId: 'zeffo',
+    missionName: 'Bracca / Zeffo Unlock',
+    rewardMode: 'unlock-with-mission-reward',
+    rewardCurrency: 'GET2',
     guild: Object.freeze({
       id: text(guildBody?.guild?.id),
       name: text(guildBody?.guild?.name || "Guild"),
@@ -135,7 +126,7 @@ export function buildGuildZeffoReadiness(guildBody = {}) {
     fetchedAt: text(guildBody.fetchedAt),
     unlockTarget: ZEFFO_UNLOCK_TARGET,
     members: Object.freeze(sorted),
-    actionMembers: Object.freeze(action),
+    actionMembers: Object.freeze([...almost, ...far]),
     summary: Object.freeze({
       total: sorted.length,
       ready: ready.length,
@@ -144,6 +135,8 @@ export function buildGuildZeffoReadiness(guildBody = {}) {
       jkckReady,
       babyFallback,
       rosterUnavailable,
+      potentialSuccessfulClears,
+      unlockShortfall: Math.max(0, ZEFFO_UNLOCK_TARGET - potentialSuccessfulClears),
       buffer: ready.length - ZEFFO_UNLOCK_TARGET,
       canFieldUnlockCount: ready.length >= ZEFFO_UNLOCK_TARGET,
     }),

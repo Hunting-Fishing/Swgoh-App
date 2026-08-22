@@ -2,6 +2,7 @@ import { buildGuildZeffoReadiness, filterGuildZeffoRows } from "./guild-zeffo-re
 import { buildGuildMandaloreReadiness, filterGuildMandaloreRows } from "./guild-mandalore-readiness-model.js";
 import { buildGuildRevaReadiness, filterGuildRevaRows } from "./guild-reva-readiness-model.js";
 import { buildGuildWatReadiness, filterGuildWatRows } from "./guild-wat-readiness-model.js";
+import { guildMemberRole } from "./guild-member-identity.js";
 
 const MISSION_TABS = Object.freeze([
   { id: "zeffo", label: "Zeffo / Bracca", live: true },
@@ -20,6 +21,7 @@ function ensureStyles() {
   for (const [key, href] of [
     ["base", "/guild-zeffo-readiness.css?v=20260822-mandalore1"],
     ["tb", "/guild-tb-readiness.css?v=20260822-revawat1"],
+    ["correctness", "/guild-tb-correctness.css?v=20260822-tb1"],
   ]) {
     if (document.querySelector(`link[data-guild-tb-readiness-css="${key}"]`)) continue;
     const link = document.createElement("link");
@@ -28,12 +30,6 @@ function ensureStyles() {
     link.dataset.guildTbReadinessCss = key;
     document.head.appendChild(link);
   }
-}
-
-function initials(name = "") {
-  const parts = String(name || "?").trim().split(/\s+/).filter(Boolean);
-  if (!parts.length) return "?";
-  return parts.length === 1 ? parts[0].slice(0, 2).toUpperCase() : `${parts[0][0] || ""}${parts.at(-1)?.[0] || ""}`.toUpperCase();
 }
 
 function stateBadge(unit = {}) {
@@ -48,6 +44,18 @@ function memberLink(row) {
 function swgohLink(row) {
   return row.allyCode ? `https://swgoh.gg/p/${encodeURIComponent(row.allyCode)}/` : "";
 }
+function localPortraitUrl(row = {}) {
+  const url = String(row.playerPortraitUrl || row.profilePortraitUrl || "").trim();
+  return url.startsWith("/") ? url : "";
+}
+function identityMark(row = {}) {
+  const portrait = localPortraitUrl(row);
+  const role = guildMemberRole(row);
+  if (portrait) return `<span class="guild-tb-identity-mark has-image"><img src="${escapeAttr(portrait)}" alt="" loading="lazy"></span>`;
+  const glyph = role === "Guild Leader" ? "★" : role === "Officer" ? "◆" : "●";
+  const portraitId = String(row.playerPortrait || row.portraitKey || "").trim();
+  return `<span class="guild-tb-identity-mark is-rank role-${escapeAttr(role.toLowerCase().replaceAll(" ", "-"))}"${portraitId ? ` data-player-portrait-id="${escapeAttr(portraitId)}" title="Game portrait ${escapeAttr(portraitId)} is captured; local portrait artwork is not installed yet."` : ""}>${glyph}</span>`;
+}
 
 function missionTabs() {
   return `<nav class="guild-tb-mission-tabs" aria-label="Territory Battle readiness missions">${MISSION_TABS.map((tab) => `
@@ -57,7 +65,8 @@ function missionTabs() {
 }
 
 function profileMeta(row) {
-  const detail = [row.profileTitle, row.memberRole].filter(Boolean).join(" · ");
+  const role = guildMemberRole(row);
+  const detail = [role, row.profileTitle].filter(Boolean).join(" · ");
   return detail ? `<small class="guild-zeffo-profile-title">${escapeHtml(detail)}</small>` : "";
 }
 
@@ -74,13 +83,14 @@ function zeffoView() {
     ],
     resultNote: (row) => row.preferredPath === "JKCK" ? "JKCK priority route" : "Baby Cal fallback route",
     actionTitle: "Bracca / Zeffo Officer Action List",
+    opportunityText: "Eligibility only means the roster can enter the mission. Zeffo requires 30 successful clears in the same ROTE run. The Bracca mission also awards GET2; this page does not invent a GET2 total until a verified per-clear amount is encoded.",
     stats: () => [
-      ["Ready", report.summary.ready, `${report.summary.buffer >= 0 ? "+" : ""}${report.summary.buffer} vs 30`, report.summary.ready >= report.unlockTarget ? "good" : "warn"],
+      ["Eligible Attempts", report.summary.ready, "rosters meet the entry gate", report.summary.ready >= report.unlockTarget ? "good" : "warn"],
+      ["Successful Clears Required", report.unlockTarget, "wins needed to unlock Zeffo", "primary"],
+      ["Eligibility Shortfall", report.summary.unlockShortfall, report.summary.unlockShortfall ? "more eligible accounts needed" : "roster threshold reached", report.summary.unlockShortfall ? "close" : "good"],
       ["JKCK Ready", report.summary.jkckReady, "preferred route", "primary"],
       ["Baby Cal Fallback", report.summary.babyFallback, "ready without R7 JKCK", "secondary"],
       ["Almost", report.summary.almost, "R5–R6 gate pieces", "close"],
-      ["Far", report.summary.far, "R4 / pre-relic / locked", "far"],
-      ["Roster Data", `${number(report.summary.total - report.summary.rosterUnavailable)}/${number(report.summary.total)}`, "hydrated members", ""],
     ],
   };
 }
@@ -98,15 +108,16 @@ function mandaloreView() {
       { label: "Beskar Mando", note: "Required", preferred: true, state: row.beskarMando },
       { label: row.thirdMando.name || "Additional Mandalorian", note: "Best +1", state: row.thirdMando.state },
     ],
-    resultNote: () => "Best additional Mandalorian selected automatically",
+    resultNote: () => "Best eligible additional Mandalorian selected automatically from the captured roster",
     actionTitle: "Mandalore Unlock Officer Action List",
+    opportunityText: `Eligibility does not guarantee a mission clear. Mandalore unlocks only after ${report.unlockTarget} successful guild clears. Potential GET2 below assumes every currently eligible attempt succeeds (${number(report.rewardPerSuccessfulClear?.amount || 0)} GET2 per successful clear).`,
     stats: () => [
-      ["Ready", report.summary.ready, `${report.summary.buffer >= 0 ? "+" : ""}${report.summary.buffer} vs 25`, report.summary.ready >= report.unlockTarget ? "good" : "warn"],
+      ["Eligible Attempts", report.summary.ready, "rosters meet the exact R7 entry gate", report.summary.ready >= report.unlockTarget ? "good" : "warn"],
+      ["Successful Clears Required", report.unlockTarget, "wins needed to unlock Mandalore", "primary"],
+      ["Potential GET2", number(report.summary.potentialGet2), "if every eligible attempt succeeds", "secondary"],
       ["Bo-Katan R7+", bkmReady, "required core", "primary"],
       ["Beskar Mando R7+", bamReady, "required core", "primary"],
-      ["3rd Mando R7+", thirdReady, "best additional Mandalorian", "secondary"],
-      ["Almost", report.summary.almost, "all 3 at R5–R6+", "close"],
-      ["Far", report.summary.far, "one or more below R5", "far"],
+      ["3rd Mando R7+", thirdReady, "any additional Mandalorian", "secondary"],
     ],
   };
 }
@@ -122,9 +133,10 @@ function revaView() {
     ],
     resultNote: () => "GI + best four additional Inquisitorius selected automatically",
     actionTitle: "Reva Shard Mission Officer Action List",
+    opportunityText: "Potential shards equal currently eligible attempts only if every eligible member wins the Special Mission. Eligibility is not a shard guarantee.",
     stats: () => [
-      ["Ready", report.summary.ready, "eligible attempts", "good"],
-      ["Potential Shards", report.summary.potentialShards, "per TB if all succeed", "primary"],
+      ["Eligible Attempts", report.summary.ready, "exact entry gate", "good"],
+      ["Potential Shards", report.summary.potentialShards, "if all eligible attempts succeed", "primary"],
       ["GI R7+", report.summary.grandInquisitorReady, "mandatory leader", "primary"],
       ["4 Inqs R7+", report.summary.fourSupportsReady, "additional slots ready", "secondary"],
       ["Almost", report.summary.almost, "all required pieces R5–R6+", "close"],
@@ -141,9 +153,10 @@ function watView() {
     requirements: (row) => row.geonosians.map((geo, index) => ({ label: geo.name, note: index === 0 ? "GBA required" : "7★ · 16.5K GP", preferred: index === 0, state: geo.state })),
     resultNote: () => report.closeText,
     actionTitle: "Wat Tambor Shard Mission Officer Action List",
+    opportunityText: "Potential shards equal currently eligible attempts only if every eligible member wins. Yellow ALMOST remains a planning band and never counts as a shard opportunity.",
     stats: () => [
-      ["Ready", report.summary.ready, "exact game gate", "good"],
-      ["Potential Shards", report.summary.potentialShards, "per TB if all succeed", "primary"],
+      ["Eligible Attempts", report.summary.ready, "exact game gate", "good"],
+      ["Potential Shards", report.summary.potentialShards, "if all eligible attempts succeed", "primary"],
       ["GBA Ready", report.summary.gbaReady, "7★ + 16.5K GP", "primary"],
       ["All 5 at 7★", report.summary.allSevenStar, "power may still block", "secondary"],
       ["Almost", report.summary.almost, "planning heuristic only", "close"],
@@ -162,11 +175,11 @@ function currentView() {
 function renderMemberCard(view, row) {
   const rosterHref = memberLink(row);
   const ggHref = swgohLink(row);
-  const avatar = `<div class="guild-zeffo-avatar" aria-hidden="true"><span>${escapeHtml(initials(row.name))}</span></div>`;
+  const mark = identityMark(row);
   const requirements = view.requirements(row);
   return `<article class="guild-zeffo-member-card status-${escapeAttr(row.status.toLowerCase())}">
     <div class="guild-zeffo-member-profile">
-      ${rosterHref ? `<a class="guild-zeffo-avatar-link" href="${escapeAttr(rosterHref)}">${avatar}</a>` : avatar}
+      ${rosterHref ? `<a class="guild-zeffo-avatar-link" href="${escapeAttr(rosterHref)}">${mark}</a>` : mark}
       <div class="guild-zeffo-member-identity">
         ${rosterHref ? `<a class="guild-zeffo-member-name" href="${escapeAttr(rosterHref)}">${escapeHtml(row.name)}</a>` : `<strong class="guild-zeffo-member-name">${escapeHtml(row.name)}</strong>`}
         <strong class="guild-zeffo-member-gp">${number(row.galacticPower)} GP</strong>
@@ -191,36 +204,40 @@ function requirementText(view, row) {
   return view.requirements(row).map((requirement) => `${requirement.label} ${requirement.state.label}`).join(" | ");
 }
 function scoreText(view) {
-  return view.mode === "unlock" ? `${view.report.summary.ready} / ${view.report.unlockTarget}` : `${view.report.summary.ready} / 50`;
+  if (view.mode === "unlock") return `${number(view.report.summary.ready)} eligible`;
+  return `${number(view.report.summary.potentialShards)} / 50`;
 }
 function scoreLabel(view) {
-  return view.mode === "unlock" ? "mission eligible" : "potential shards / TB";
+  return view.mode === "unlock" ? "accounts meet entry gate" : "potential shards if all win";
 }
 function gateTone(view) {
   if (view.mode === "unlock") return view.report.summary.canFieldUnlockCount ? "good" : "warn";
   return view.report.summary.ready > 0 ? "good" : "warn";
 }
 function gateTitle(view) {
-  if (view.mode === "unlock") return view.report.summary.canFieldUnlockCount ? "Guild has enough eligible accounts" : "More eligible accounts are needed";
+  if (view.mode === "unlock") return view.report.summary.canFieldUnlockCount ? "Roster has enough eligible attempts to reach the clear target" : "More mission-eligible accounts are needed";
   return `${number(view.report.summary.ready)} members currently meet the entry gate`;
 }
 function gateMetric(view) {
   if (view.mode === "unlock") {
-    const buffer = view.report.summary.buffer;
-    return [`${buffer >= 0 ? "+" : ""}${number(buffer)}`, "eligibility buffer"];
+    const shortfall = Number(view.report.summary.unlockShortfall || 0);
+    if (shortfall > 0) return [`-${number(shortfall)}`, "eligible-account shortfall"];
+    const buffer = Number(view.report.summary.buffer || 0);
+    return [`+${number(Math.max(0, buffer))}`, "eligibility buffer"];
   }
   return [number(view.report.summary.potentialShards), "potential shards / TB"];
 }
 
 function actionText(view) {
   const report = view.report;
-  const lines = [
-    `${report.guild.name} — ${view.actionTitle}`,
-    view.mode === "unlock" ? `Ready: ${report.summary.ready}/${report.unlockTarget} · Almost: ${report.summary.almost} · Far: ${report.summary.far}` : `Eligible: ${report.summary.ready}/50 · Potential shards: ${report.summary.potentialShards} · Almost: ${report.summary.almost} · Far: ${report.summary.far}`,
-    "",
-  ];
+  const header = view.mode === "unlock"
+    ? `Eligible: ${report.summary.ready}/${report.unlockTarget} · Successful clears required: ${report.unlockTarget} · Eligibility shortfall: ${report.summary.unlockShortfall || 0}`
+    : `Eligible attempts: ${report.summary.ready}/50 · Potential shards if all succeed: ${report.summary.potentialShards} · Almost: ${report.summary.almost} · Far: ${report.summary.far}`;
+  const lines = [`${report.guild.name} — ${view.actionTitle}`, header];
+  if (view.id === "mandalore") lines.push(`Potential GET2 if all currently eligible attempts succeed: ${number(report.summary.potentialGet2)}`);
+  lines.push("");
   for (const row of report.actionMembers) lines.push(`${row.status === "ALMOST" ? "🟡" : "🔴"} ${row.name} — ${number(row.galacticPower)} GP — ${requirementText(view, row)} — ${row.upgradeText}`);
-  if (!report.actionMembers.length) lines.push("✅ Every hydrated member in this guild is mission-ready.");
+  if (!report.actionMembers.length) lines.push("✅ Every hydrated member in this guild meets the mission entry gate.");
   return lines.join("\n");
 }
 
@@ -231,11 +248,11 @@ function csvCell(value) {
 function downloadCsv(view) {
   const report = view.report;
   const maxRequirements = Math.max(0, ...report.members.map((row) => view.requirements(row).length));
-  const header = ["Player", "Overall GP", "Ally Code", ...Array.from({ length: maxRequirements }, (_, i) => `Requirement ${i + 1}`), "Status", "Upgrade / Ready Path", "SWGOH.GG"];
+  const header = ["Player", "Guild Role", "Profile Title", "Overall GP", "Ally Code", ...Array.from({ length: maxRequirements }, (_, i) => `Requirement ${i + 1}`), "Status", "Upgrade / Ready Path", "SWGOH.GG"];
   const rows = report.members.map((row) => {
     const requirements = view.requirements(row).map((requirement) => `${requirement.label} ${requirement.state.label}`);
     while (requirements.length < maxRequirements) requirements.push("");
-    return [row.name, row.galacticPower, row.allyCode, ...requirements, row.status, row.upgradeText, row.allyCode ? `https://swgoh.gg/p/${row.allyCode}/` : ""];
+    return [row.name, guildMemberRole(row), row.profileTitle || "", row.galacticPower, row.allyCode, ...requirements, row.status, row.upgradeText, row.allyCode ? `https://swgoh.gg/p/${row.allyCode}/` : ""];
   });
   const csv = [header, ...rows].map((row) => row.map(csvCell).join(",")).join("\n");
   const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
@@ -266,14 +283,15 @@ function render() {
   const [metric, metricLabel] = gateMetric(view);
 
   target.innerHTML = `
-    <section class="guild-route-page-heading guild-zeffo-heading"><div><div class="kicker">TB OFFICER READINESS</div><h2>Territory Battle Mission Readiness</h2><p>Profile-first guild roster readiness for Zeffo, Mandalore, Reva and Wat Tambor. Exact game entry gates are separated from officer planning heuristics.</p></div><a class="guild-zeffo-back-link" href="/guild/tb?allyCode=${encodeURIComponent(state.allyCode)}">← TB Command</a></section>
+    <section class="guild-route-page-heading guild-zeffo-heading"><div><div class="kicker">TB OFFICER READINESS</div><h2>Territory Battle Mission Readiness</h2><p>Profile-first guild roster readiness for Zeffo, Mandalore, Reva and Wat Tambor. Entry eligibility, successful clears and reward opportunities are kept separate.</p></div><a class="guild-zeffo-back-link" href="/guild/tb?allyCode=${encodeURIComponent(state.allyCode)}">← TB Command</a></section>
     ${missionTabs()}
     <section class="guild-zeffo-guild-summary"><div><div class="kicker">${escapeHtml(report.guild.name)}</div><h3>${escapeHtml(view.label)}</h3><p>${number(report.guild.galacticPower)} guild GP · ${number(report.guild.memberCount)} members · ${escapeHtml(view.planet)}</p></div><div class="guild-zeffo-guild-score ${escapeAttr(tone)}"><strong>${escapeHtml(scoreText(view))}</strong><span>${escapeHtml(scoreLabel(view))}</span></div></section>
     <section class="guild-zeffo-gate ${escapeAttr(tone)}"><div><strong>${escapeHtml(gateTitle(view))}</strong><span>${escapeHtml(view.gateText)}</span></div><div class="guild-zeffo-gate-score"><strong>${escapeHtml(metric)}</strong><span>${escapeHtml(metricLabel)}</span></div></section>
     <div class="guild-zeffo-stat-grid">${view.stats().map(([label, value, detail, statTone]) => stat(label, value, detail, statTone)).join("")}</div>
+    <section class="guild-tb-opportunity-note"><strong>MISSION OPPORTUNITY</strong><span>${escapeHtml(view.opportunityText)}</span></section>
     <section class="guild-page-card guild-zeffo-action-card"><div class="guild-zeffo-section-title"><div><div class="kicker">OFFICER ACTION LIST</div><h2>Members not ready</h2><p>Closest upgrades first. Every row starts with member profile and overall GP, then the exact mission requirements.</p></div><div class="guild-zeffo-actions"><button id="guildTbCopyAction" type="button">Copy Action List</button><button id="guildTbDownloadCsv" type="button">Download CSV</button></div></div>${renderRows(view, report.actionMembers)}</section>
-    <section class="guild-page-card guild-zeffo-full-card"><div class="guild-zeffo-section-title"><div><div class="kicker">FULL GUILD</div><h2>Member readiness</h2></div><div class="guild-zeffo-toolbar"><label>Search<input id="guildTbReadinessSearch" value="${escapeAttr(state.search)}" placeholder="Member or Ally Code"></label><label>Status<select id="guildTbReadinessStatus"><option value="ALL"${state.status === "ALL" ? " selected" : ""}>All</option><option value="READY"${state.status === "READY" ? " selected" : ""}>Ready</option><option value="ALMOST"${state.status === "ALMOST" ? " selected" : ""}>Almost</option><option value="FAR"${state.status === "FAR" ? " selected" : ""}>Far</option></select></label></div></div>${renderRows(view, rows)}</section>
-    <section class="guild-zeffo-footnote"><strong>Truth boundary:</strong> green means the current roster data meets the encoded game entry gate. Yellow is an officer planning band and never overrides the actual mission requirement. Data comes from the current guild roster response.</section>`;
+    <section class="guild-page-card guild-zeffo-full-card"><div class="guild-zeffo-section-title"><div><div class="kicker">FULL GUILD</div><h2>Member readiness</h2></div><div class="guild-zeffo-toolbar"><label>Search<input id="guildTbReadinessSearch" value="${escapeAttr(state.search)}" placeholder="Member, Ally Code, role or title"></label><label>Status<select id="guildTbReadinessStatus"><option value="ALL"${state.status === "ALL" ? " selected" : ""}>All</option><option value="READY"${state.status === "READY" ? " selected" : ""}>Ready</option><option value="ALMOST"${state.status === "ALMOST" ? " selected" : ""}>Almost</option><option value="FAR"${state.status === "FAR" ? " selected" : ""}>Far</option></select></label></div></div>${renderRows(view, rows)}</section>
+    <section class="guild-zeffo-footnote"><strong>Truth boundary:</strong> green means the current roster data meets the encoded game entry gate. It does not mean the player will win the mission. Yellow is an officer planning band and never overrides the actual game requirement. Potential shards/GET2 are opportunity ceilings, not guaranteed rewards.</section>`;
 
   for (const button of target.querySelectorAll("[data-tb-readiness-mission]:not(:disabled)")) button.addEventListener("click", () => setMission(button.dataset.tbReadinessMission));
   target.querySelector("#guildTbReadinessSearch")?.addEventListener("input", (event) => { state.search = event.target.value; render(); requestAnimationFrame(() => target.querySelector("#guildTbReadinessSearch")?.focus()); });
@@ -287,7 +305,7 @@ function render() {
 
 async function loadCatalog() {
   try {
-    const response = await fetch("/data/catalog.json?tb-readiness=1", { cache: "no-store" });
+    const response = await fetch("/data/catalog.json?tb-readiness=2", { cache: "no-store" });
     const body = await response.json();
     return Array.isArray(body?.units) ? body.units : [];
   } catch { return []; }
@@ -310,3 +328,5 @@ export async function renderGuildTbReadinessPage({ target, guildBody, allyCode =
   render();
   return state.reports;
 }
+
+export { gateMetric, gateTitle, identityMark, localPortraitUrl, scoreLabel, scoreText };

@@ -1,3 +1,5 @@
+import { guildMemberRole, guildRoleRank, isGuildLeadership, playerPortraitId, playerPortraitUrl, playerProfileTitle } from './guild-member-identity.js';
+
 const asArray = (value) => Array.isArray(value) ? value : [];
 const finite = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
 
@@ -61,12 +63,8 @@ export function enrichGuildMember(member = {}, catalogIndex = new Map(), index =
   const ships = units.filter((row) => row.unitType === "Ship");
   const derivedCharacterGp = characters.reduce((sum, row) => sum + finite(row.power, 0), 0);
   const derivedShipGp = ships.reduce((sum, row) => sum + finite(row.power, 0), 0);
-  const characterGp = hasDetailedUnits
-    ? derivedCharacterGp
-    : suppliedNumber(member.characterGalacticPower ?? member.characterGp ?? member.memberCharacterPower, 0);
-  const shipGp = hasDetailedUnits
-    ? derivedShipGp
-    : suppliedNumber(member.shipGalacticPower ?? member.shipGp ?? member.memberShipPower, 0);
+  const characterGp = hasDetailedUnits ? derivedCharacterGp : suppliedNumber(member.characterGalacticPower ?? member.characterGp ?? member.memberCharacterPower, 0);
+  const shipGp = hasDetailedUnits ? derivedShipGp : suppliedNumber(member.shipGalacticPower ?? member.shipGp ?? member.memberShipPower, 0);
   const derivedGalacticLegends = characters.filter(isGalacticLegend);
   const galacticLegends = hasDetailedUnits ? derivedGalacticLegends : asArray(member.galacticLegends);
   const derivedTopUnits = units.slice().sort((a, b) => finite(b.power, 0) - finite(a.power, 0) || a.name.localeCompare(b.name)).slice(0, 8);
@@ -76,6 +74,8 @@ export function enrichGuildMember(member = {}, catalogIndex = new Map(), index =
   const derivedUltimateCount = hasDetailedUnits ? units.filter((row) => row.ultimateUnlocked === true).length : null;
   const omegaEvidenceComplete = hasDetailedUnits && units.every((row) => nullableNumber(row.omegas) !== null);
   const derivedOmegaCount = omegaEvidenceComplete ? units.reduce((sum, row) => sum + finite(row.omegas, 0), 0) : null;
+  const memberLevel = suppliedNumber(member.memberLevel ?? member.guildMemberLevel, 0);
+  const memberRole = guildMemberRole({ ...member, memberLevel });
 
   return Object.freeze({
     id: memberId(member, index),
@@ -85,6 +85,11 @@ export function enrichGuildMember(member = {}, catalogIndex = new Map(), index =
     galacticPower: finite(member.galacticPower, characterGp + shipGp),
     rosterAvailable: member.rosterAvailable === true || hasDetailedUnits,
     persistenceSummary: member.persistenceSummary === true,
+    memberLevel,
+    memberRole,
+    profileTitle: playerProfileTitle(member),
+    playerPortrait: playerPortraitId(member),
+    playerPortraitUrl: playerPortraitUrl(member),
     characterGp,
     shipGp,
     characterCount: hasDetailedUnits ? characters.length : suppliedNumber(member.characterCount, 0),
@@ -99,20 +104,22 @@ export function enrichGuildMember(member = {}, catalogIndex = new Map(), index =
     omicronCount: member.omicronCount == null ? derivedOmicronCount : suppliedNumber(member.omicronCount, 0),
     ultimateCount: member.ultimateCount == null ? derivedUltimateCount : suppliedNumber(member.ultimateCount, 0),
     omegaUpgradeCount: member.omegaUpgradeCount == null ? derivedOmegaCount : suppliedNumber(member.omegaUpgradeCount, 0),
-    galacticLegends: Object.freeze(galacticLegends.map((row) => Object.freeze({
-      baseId: row.baseId,
-      name: row.name,
-      power: finite(row.power, 0),
-      relic: finite(row.relic, 0),
-    }))),
-    topUnits: Object.freeze(topUnits.map((row) => Object.freeze({
-      baseId: row.baseId,
-      name: row.name,
-      unitType: row.unitType,
-      power: finite(row.power, 0),
-      relic: finite(row.relic, 0),
-      stars: finite(row.stars, 0),
-    }))),
+    galacticLegends: Object.freeze(galacticLegends.map((row) => Object.freeze({ baseId: row.baseId, name: row.name, power: finite(row.power, 0), relic: finite(row.relic, 0) }))),
+    topUnits: Object.freeze(topUnits.map((row) => Object.freeze({ baseId: row.baseId, name: row.name, unitType: row.unitType, power: finite(row.power, 0), relic: finite(row.relic, 0), stars: finite(row.stars, 0) }))),
+  });
+}
+
+function guildLeadership(members = []) {
+  const leadership = asArray(members).filter(isGuildLeadership).slice().sort((a, b) => guildRoleRank(a.memberRole) - guildRoleRank(b.memberRole) || b.galacticPower - a.galacticPower || a.name.localeCompare(b.name));
+  const leader = leadership.find((row) => row.memberRole === 'Guild Leader') || null;
+  const officers = leadership.filter((row) => row.memberRole === 'Officer');
+  return Object.freeze({
+    leader,
+    officers: Object.freeze(officers),
+    leadership: Object.freeze(leadership),
+    leaderCount: leader ? 1 : 0,
+    officerCount: officers.length,
+    memberCount: asArray(members).filter((row) => row.memberRole === 'Member').length,
   });
 }
 
@@ -136,6 +143,8 @@ export function buildGuildRosterSnapshot(guildBody = {}, catalog = []) {
   const totalUltimates = hydrated.reduce((sum, row) => sum + finite(row.ultimateCount, 0), 0);
   const omegaComplete = hydrated.length > 0 && hydrated.every((row) => row.omegaUpgradeCount !== null);
   const totalOmegaUpgrades = omegaComplete ? hydrated.reduce((sum, row) => sum + finite(row.omegaUpgradeCount, 0), 0) : null;
+  const sortedMembers = members.slice().sort((a, b) => b.galacticPower - a.galacticPower || a.name.localeCompare(b.name));
+  const leadership = guildLeadership(sortedMembers);
 
   return Object.freeze({
     source: text(guildBody.source || "live"),
@@ -154,10 +163,13 @@ export function buildGuildRosterSnapshot(guildBody = {}, catalog = []) {
       failed: finite(hydration.failed, Math.max(0, members.length - hydrated.length)),
       complete: hydration.complete === true || (members.length > 0 && hydrated.length === members.length),
     }),
-    members: Object.freeze(members.slice().sort((a, b) => b.galacticPower - a.galacticPower || a.name.localeCompare(b.name))),
+    leadership,
+    members: Object.freeze(sortedMembers),
     summary: Object.freeze({
       totalMembers: members.length,
       hydratedMembers: hydrated.length,
+      leaderCount: leadership.leaderCount,
+      officerCount: leadership.officerCount,
       guildGp: suppliedNumber(suppliedSummary.guildGp, finite(guild.galacticPower, guildGpFromMembers)),
       averageGp: gpValues.length ? Math.round(guildGpFromMembers / gpValues.length) : 0,
       medianGp: median(gpValues),
@@ -188,6 +200,7 @@ export function compactGuildSnapshot(snapshot = {}) {
       allyCode: text(member.allyCode),
       name: text(member.name),
       galacticPower: finite(member.galacticPower, 0),
+      memberRole: text(member.memberRole),
     })).sort((a, b) => a.id.localeCompare(b.id))),
   });
 }
@@ -202,10 +215,7 @@ export function compareGuildSnapshots(previous = null, current = null) {
 
   for (const [id, member] of currentMembers) {
     const before = previousMembers.get(id);
-    if (!before) {
-      joined.push(member);
-      continue;
-    }
+    if (!before) { joined.push(member); continue; }
     if (text(before.name) && text(member.name) && text(before.name) !== text(member.name)) renamed.push({ id, before: text(before.name), after: text(member.name) });
     const delta = finite(member.galacticPower, 0) - finite(before.galacticPower, 0);
     if (delta !== 0) gpChanges.push({ id, name: text(member.name), before: finite(before.galacticPower, 0), after: finite(member.galacticPower, 0), delta });
@@ -213,14 +223,7 @@ export function compareGuildSnapshots(previous = null, current = null) {
   for (const [id, member] of previousMembers) if (!currentMembers.has(id)) left.push(member);
 
   gpChanges.sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta) || a.name.localeCompare(b.name));
-  return Object.freeze({
-    hasPrevious: Boolean(previous),
-    joined: Object.freeze(joined),
-    left: Object.freeze(left),
-    renamed: Object.freeze(renamed),
-    gpChanges: Object.freeze(gpChanges),
-    changed: joined.length + left.length + renamed.length + gpChanges.length > 0,
-  });
+  return Object.freeze({ hasPrevious: Boolean(previous), joined: Object.freeze(joined), left: Object.freeze(left), renamed: Object.freeze(renamed), gpChanges: Object.freeze(gpChanges), changed: joined.length + left.length + renamed.length + gpChanges.length > 0 });
 }
 
 export function filterGuildMembers(members = [], options = {}) {
@@ -230,12 +233,16 @@ export function filterGuildMembers(members = [], options = {}) {
   let rows = asArray(members).filter((member) => {
     if (status === "Hydrated" && !member.rosterAvailable) return false;
     if (status === "Unavailable" && member.rosterAvailable) return false;
+    if (status === "Leadership" && !isGuildLeadership(member)) return false;
+    if (status === "Officers" && member.memberRole !== 'Officer') return false;
+    if (status === "Members" && member.memberRole !== 'Member') return false;
     if (!search) return true;
-    return [member.name, member.allyCode, member.playerId, ...asArray(member.galacticLegends).map((row) => row.name)].join(" ").toLowerCase().replace(/-/g, "").includes(search);
+    return [member.name, member.allyCode, member.playerId, member.memberRole, member.profileTitle, ...asArray(member.galacticLegends).map((row) => row.name)].join(" ").toLowerCase().replace(/-/g, "").includes(search);
   });
 
   const comparators = {
     gp: (a, b) => b.galacticPower - a.galacticPower,
+    role: (a, b) => guildRoleRank(a.memberRole) - guildRoleRank(b.memberRole) || b.galacticPower - a.galacticPower,
     characterGp: (a, b) => b.characterGp - a.characterGp,
     shipGp: (a, b) => b.shipGp - a.shipGp,
     gl: (a, b) => b.galacticLegendCount - a.galacticLegendCount || b.galacticPower - a.galacticPower,
@@ -245,3 +252,5 @@ export function filterGuildMembers(members = [], options = {}) {
   rows = rows.slice().sort((comparators[sort] || comparators.gp));
   return Object.freeze(rows);
 }
+
+export { guildLeadership };
