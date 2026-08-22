@@ -53,10 +53,14 @@ create index if not exists gac_dc_battle_exact_matchup_idx
   );
 
 alter table public.gac_datacron_battle_evidence enable row level security;
-revoke all on table public.gac_datacron_battle_evidence from anon, authenticated;
 
+-- Server-only warehouse: clear inherited/default table privileges first, then grant only
+-- the capabilities required for evidence upsert and relic-context enrichment.
+revoke all on table public.gac_datacron_battle_evidence from anon, authenticated, service_role;
 grant select, insert, update on table public.gac_datacron_battle_evidence to service_role;
-revoke delete, truncate on table public.gac_datacron_battle_evidence from service_role;
+
+-- Identity sequence is server-only and needs no mutation privileges beyond nextval/currval reads.
+revoke all on sequence public.gac_datacron_battle_evidence_id_seq from anon, authenticated, service_role;
 grant usage, select on sequence public.gac_datacron_battle_evidence_id_seq to service_role;
 
 comment on table public.gac_datacron_battle_evidence is 'Battle-level GAC counter evidence with normalized defender and attacker Datacron signatures; never interpreted as a predicted current-battle outcome.';
