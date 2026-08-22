@@ -106,6 +106,55 @@ function evidenceClass(cell = {}, minimumBattles = 5) {
   return 'poor';
 }
 
+function variantScore(variant = {}) {
+  const sample = Math.log10(Math.max(1, n(variant?.battles)) + 1);
+  const banner = Number.isFinite(Number(variant?.averageBanners)) ? Number(variant.averageBanners) : 0;
+  return Number(variant?.winRate || 0) * 1000 + sample * 35 + n(variant?.confidence) * 20 + banner * 0.5;
+}
+
+function allocateNonOverlapping(rows = [], minimumBattles = 5) {
+  const threshold = Math.max(1, n(minimumBattles));
+  const candidates = rows.map((row) => {
+    const variants = (Array.isArray(row?.variants) ? row.variants : [])
+      .filter((variant) => variant?.availability?.available === true && n(variant?.battles) >= threshold)
+      .slice()
+      .sort((a, b) => variantScore(b) - variantScore(a) || b.battles - a.battles)
+      .slice(0, 24);
+    return { row, variants };
+  });
+  candidates.sort((a, b) => a.variants.length - b.variants.length || variantScore(b.variants[0]) - variantScore(a.variants[0]));
+  const used = new Set();
+  const assignments = [];
+  for (const entry of candidates) {
+    const variant = entry.variants.find((candidate) => normalizeMembers(candidate.counterMembers).every((id) => !used.has(id))) || null;
+    if (!variant) continue;
+    const members = normalizeMembers(variant.counterMembers);
+    for (const id of members) used.add(id);
+    assignments.push(Object.freeze({
+      rowKey: entry.row.key,
+      defenseId: entry.row.defenseId,
+      defenseLeaderBaseId: entry.row.leaderBaseId,
+      counterLeaderBaseId: variant.counterLeaderBaseId,
+      counterMembers: Object.freeze(members),
+      battles: variant.battles,
+      wins: variant.wins,
+      winRate: variant.winRate,
+      averageBanners: variant.averageBanners,
+      confidence: variant.confidence,
+    }));
+  }
+  const complete = rows.length > 0 && assignments.length === rows.length;
+  const bannersKnown = complete && assignments.every((row) => Number.isFinite(Number(row.averageBanners)));
+  return Object.freeze({
+    assignments: Object.freeze(assignments),
+    usedBaseIds: Object.freeze([...used]),
+    coveredRows: assignments.length,
+    totalRows: rows.length,
+    complete,
+    projectedBanners: bannersKnown ? assignments.reduce((sum, row) => sum + Number(row.averageBanners), 0) : null,
+  });
+}
+
 function buildCounterMatrix({
   defenses = [],
   batch = {},
@@ -183,10 +232,7 @@ function buildCounterMatrix({
     return Object.freeze({ ...row, cells, bestCell });
   });
 
-  const plannedRows = rows.filter((row) => row.bestCell);
-  const projectedBanners = plannedRows.length === rows.length && rows.length
-    ? plannedRows.reduce((sum, row) => sum + (Number.isFinite(Number(row.bestCell.averageBanners)) ? Number(row.bestCell.averageBanners) : 0), 0)
-    : null;
+  const allocation = allocateNonOverlapping(rows, minimumBattles);
   return Object.freeze({
     rows: Object.freeze(rows),
     columns: Object.freeze(columns),
@@ -194,14 +240,16 @@ function buildCounterMatrix({
     minimumRelic: Math.max(0, n(minimumRelic)),
     rosterOnly: Boolean(rosterOnly),
     exactDefenseFirst: Boolean(exactDefenseFirst),
-    projectedBanners,
-    coveredRows: plannedRows.length,
+    projectedBanners: allocation.projectedBanners,
+    coveredRows: allocation.coveredRows,
     totalRows: rows.length,
+    allocation,
   });
 }
 
 export {
   aggregateVariants,
+  allocateNonOverlapping,
   buildCounterMatrix,
   counterAvailability,
   evidenceClass,
@@ -211,4 +259,5 @@ export {
   relicTier,
   rosterIndex,
   teamSignature,
+  variantScore,
 };
