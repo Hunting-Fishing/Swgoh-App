@@ -59,6 +59,23 @@ test("cross-surface UI exposes map, personal check and TB farming projections", 
   assert.match(source, /TB READY FARMING/);
   assert.match(source, /data-tb-open-rote/);
   assert.match(source, /p3-middle/);
+  assert.match(source, /roteMissionBoard/);
+  assert.match(source, /SPECIAL MISSION READINESS/);
+});
+
+test("personal readiness loads its own player snapshot when another workspace has not", async () => {
+  const source = await readFile(new URL("../public/tb-readiness-cross-surface.js", import.meta.url), "utf8");
+  assert.match(source, /async function loadPlayerBody/);
+  assert.match(source, /fetch\(`\/api\/player\/\$\{allyCode\}`/);
+  assert.match(source, /__swgohLiveSnapshot/);
+});
+
+test("cross-surface render uses stable signatures instead of mutation-observer repaint loops", async () => {
+  const source = await readFile(new URL("../public/tb-readiness-cross-surface.js", import.meta.url), "utf8");
+  assert.match(source, /function setStableMarkup/);
+  assert.match(source, /dataset\.tbxSignature/);
+  assert.match(source, /playerPanelSignature/);
+  assert.match(source, /farmPanelSignature/);
 });
 
 test("global Guild router imports the cross-surface readiness enhancer", async () => {
