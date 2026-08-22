@@ -62,11 +62,9 @@ test('unsynced or uncovered defenses are blockers and never receive executable s
     row({key:'UNSYNCED',defenseId:null}),
     row({key:'UNCOVERED',proposedCounter:null,scarcity:'uncovered',counterSquads:0}),
   ]});
-  assert.deepEqual(result.blockers.map((entry)=>entry.action),['officer-review','sync-defense'].sort(()=>0).length ? result.blockers.map((entry)=>entry.action) : []);
-  assert.equal(result.blockers.length,2);
+  assert.deepEqual(result.blockers.map((entry)=>entry.key),['UNCOVERED','UNSYNCED']);
+  assert.deepEqual(result.blockers.map((entry)=>entry.action),['officer-review','sync-defense']);
   assert.ok(result.blockers.every((entry)=>entry.sequence===null));
-  assert.ok(result.blockers.some((entry)=>entry.action==='sync-defense'));
-  assert.ok(result.blockers.some((entry)=>entry.action==='officer-review'));
 });
 
 test('reason tags explain scarcity, evidence scope, risk, undersize and relic burden without inventing probability', () => {
