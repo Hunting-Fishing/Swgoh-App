@@ -36,6 +36,8 @@ function relicSuitabilityForAllocation(allocation = [], defenses = [], ownRoster
       opponentRoster,
       ownRoster,
     });
+    const historicalAverageRelicDelta = Number.isFinite(Number(assignment?.averageRelicDelta)) ? Number(assignment.averageRelicDelta) : null;
+    const historicalRelicSamples = Math.max(0, Math.floor(Number(assignment?.relicDeltaSamples) || 0));
     return Object.freeze({
       rowKey: String(assignment?.rowKey || ''),
       defenseLeaderBaseId: normalizeId(defense?.leaderBaseId || defense?.members?.[0]),
@@ -44,6 +46,9 @@ function relicSuitabilityForAllocation(allocation = [], defenses = [], ownRoster
       battles: Number(assignment?.battles || 0),
       winRate: Number.isFinite(Number(assignment?.winRate)) ? Number(assignment.winRate) : null,
       averageBanners: Number.isFinite(Number(assignment?.averageBanners)) ? Number(assignment.averageBanners) : null,
+      historicalAverageRelicDelta,
+      historicalRelicSamples,
+      historicalRelicEvidenceAvailable: historicalRelicSamples > 0 && historicalAverageRelicDelta !== null,
       ...fit,
     });
   }));
