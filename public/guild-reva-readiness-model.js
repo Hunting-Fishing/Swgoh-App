@@ -1,12 +1,14 @@
 import { normalizeZeffoUnitState } from "./guild-zeffo-readiness-model.js";
 import { normalizedTag, stripFactionDecorators, unitHasFaction, unitTags } from "./guild-tb-faction-tags.js";
+import { potentialMissionReward, tbSpecialMissionFact } from './tb-special-mission-facts.js';
 
 const asArray = (value) => Array.isArray(value) ? value : [];
 const finite = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
 const text = (value) => String(value ?? "").trim();
 
+const REVA_FACT = tbSpecialMissionFact('reva');
 export const REVA_UNITS = Object.freeze({ grandInquisitor: "GRANDINQUISITOR" });
-export const REVA_REQUIRED_SUPPORTS = 4;
+export const REVA_REQUIRED_SUPPORTS = REVA_FACT.gate.additionalCount;
 
 function isInquisitorius(unit = {}) {
   return unitHasFaction(unit, "inquisitorius");
@@ -109,11 +111,14 @@ export function buildGuildRevaReadiness(guildBody = {}, catalog = []) {
   const ready = sorted.filter((row) => row.status === "READY");
   const almost = sorted.filter((row) => row.status === "ALMOST");
   const far = sorted.filter((row) => row.status === "FAR");
+  const rewardOpportunity = potentialMissionReward('reva', ready.length);
   return Object.freeze({
     missionId: "reva",
     missionName: "Third Sister Reva Shard Mission",
     planetName: "Tatooine · ROTE Phase 3",
     rewardMode: "shards",
+    rewardPerSuccessfulClear: REVA_FACT.reward,
+    source: REVA_FACT.source,
     gateText: "Grand Inquisitor R7+ plus four additional Inquisitorius R7+. Each successful guild member earns 1 Third Sister shard for the guild reward; up to 50 shards can be earned per Territory Battle.",
     guild: Object.freeze({
       id: text(guildBody?.guild?.id),
@@ -128,7 +133,8 @@ export function buildGuildRevaReadiness(guildBody = {}, catalog = []) {
       ready: ready.length,
       almost: almost.length,
       far: far.length,
-      potentialShards: ready.length,
+      potentialShards: rewardOpportunity?.amount || 0,
+      theoreticalShardMaximum: rewardOpportunity?.theoreticalGuildMaximum || 0,
       grandInquisitorReady: sorted.filter((row) => row.grandInquisitor.relic >= 7).length,
       fourSupportsReady: sorted.filter((row) => row.supports.every((slot) => slot.state.relic >= 7)).length,
       rosterUnavailable: sorted.filter((row) => !row.rosterAvailable).length,
