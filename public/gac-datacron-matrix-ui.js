@@ -1,5 +1,6 @@
 import { boardSnapshot } from './gac-manual-board-workspace.js';
 import { datacronEvidenceSignature } from './gac-datacron-evidence-signature.js';
+import { summarizeDatacronWarehouseMaturity } from './gac-datacron-evidence-maturity.js';
 import { normalizeId, normalizeMembers, rosterIndex, teamSignature } from './gac-counter-matrix-model.js';
 
 const state = { loading:false, open:false, minBattles:3, key:'', data:null, error:'', selected:'' };
@@ -110,7 +111,8 @@ function render() {
   const snapshot = boardSnapshot();
   const index = unitIndex(snapshot);
   const defenses = activeDefenses(snapshot);
-  const batch = state.data || { results:[], warehouseReady:false };
+  const batch = state.data || { results:[], warehouseReady:false, count:0 };
+  const maturity = state.data ? summarizeDatacronWarehouseMaturity(batch) : null;
   const cards = defenses.map((defense) => {
     const current = rowsForDefense(snapshot,defense,batch);
     const leader = normalizeId(defense?.leaderBaseId || defense?.members?.[0]);
@@ -125,7 +127,10 @@ function render() {
     const current = defense ? rowsForDefense(snapshot,defense,batch) : null;
     selectedRow = current?.rows?.[Number(indexRaw)] || null;
   }
-  root.innerHTML = `<header><div><span>DATACRON MATRIX</span><strong>Exact rolled-DC counter evidence</strong><small>Matches the entered defense squad and confirmed defender Datacron signature. Unknown DC state is never treated as none.</small></div><div><label>MIN SAMPLES <select data-gac-dcm-min>${[1,3,5,10,25].map((value)=>`<option value="${value}" ${value===state.minBattles?'selected':''}>${value}</option>`).join('')}</select></label><button type="button" data-gac-dcm-load ${state.loading?'disabled':''}>${state.loading?'LOADING…':state.data?'REFRESH':'LOAD DC EVIDENCE'}</button><button type="button" data-gac-dcm-toggle ${!state.data?'disabled':''}>${state.open?'HIDE':'VIEW'}</button></div></header>${state.error?`<div class="gac-dcm-error">${escapeHtml(state.error)}</div>`:''}${state.data && !batch.warehouseReady?'<div class="gac-dcm-warning">Datacron evidence warehouse is not ready yet. Normal counter evidence remains available.</div>':''}${state.open?`<div class="gac-dcm-grid">${cards || '<div class="gac-dcm-empty">Enter enemy defenses first.</div>'}</div>${detailMarkup(snapshot,selectedRow,index)}`:''}`;
+  const maturityNotice = maturity
+    ? `<div class="gac-dcm-warning"><strong>${escapeHtml(maturity.label)}</strong> · ${escapeHtml(maturity.detail)} Normal counter evidence remains available independently.</div>`
+    : '';
+  root.innerHTML = `<header><div><span>DATACRON MATRIX${maturity ? ` · ${escapeHtml(maturity.label)}` : ''}</span><strong>Exact rolled-DC counter evidence</strong><small>Matches the entered defense squad and confirmed defender Datacron signature. Unknown DC state is never treated as none. Sample maturity is based on verified Datacron battle counts.</small></div><div><label>MIN SAMPLES <select data-gac-dcm-min>${[1,3,5,10,25].map((value)=>`<option value="${value}" ${value===state.minBattles?'selected':''}>${value}</option>`).join('')}</select></label><button type="button" data-gac-dcm-load ${state.loading?'disabled':''}>${state.loading?'LOADING…':state.data?'REFRESH':'LOAD DC EVIDENCE'}</button><button type="button" data-gac-dcm-toggle ${!state.data?'disabled':''}>${state.open?'HIDE':'VIEW'}</button></div></header>${state.error?`<div class="gac-dcm-error">${escapeHtml(state.error)}</div>`:''}${maturityNotice}${state.open?`<div class="gac-dcm-grid">${cards || '<div class="gac-dcm-empty">Enter enemy defenses first.</div>'}</div>${detailMarkup(snapshot,selectedRow,index)}`:''}`;
 }
 async function load(force = false) {
   if (state.loading) return;
