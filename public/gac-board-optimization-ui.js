@@ -1,16 +1,20 @@
 import { boardSnapshot } from './gac-manual-board-workspace.js';
 import { normalizeId, normalizeMembers, rosterIndex } from './gac-counter-matrix-model.js';
-import { buildBoardOptimization, priorityRows } from './gac-board-optimization-model.js';
+import { buildBoardOptimization } from './gac-board-optimization-model.js';
+import { buildBattleExecutionQueue } from './gac-battle-execution-queue.js';
 
 const state = {
   loading: false,
   error: '',
   analyzedKey: '',
   optimization: null,
+  queue: null,
   unitIndex: new Map(),
   minimumBattles: 5,
   minimumRelic: 0,
   open: false,
+  planBusyKey: '',
+  planMessage: '',
 };
 
 const clean = (value) => String(value ?? '').trim();
@@ -40,8 +44,17 @@ function activeDefenses(snapshot = {}) {
     .filter((row) => normalizeId(row?.leaderBaseId || row?.members?.[0]));
 }
 
-async function fetchJson(pathname) {
-  const response = await fetch(pathname, { cache:'no-store', credentials:'same-origin', headers:{ Accept:'application/json' } });
+async function fetchJson(pathname, options = {}) {
+  const response = await fetch(pathname, {
+    cache:'no-store',
+    credentials:'same-origin',
+    ...options,
+    headers:{
+      Accept:'application/json',
+      ...(options.body ? { 'Content-Type':'application/json' } : {}),
+      ...(options.headers || {}),
+    },
+  });
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
     const error = new Error(body?.error || `HTTP ${response.status}`);
@@ -104,13 +117,8 @@ function pct(value) { return Number.isFinite(Number(value)) ? `${Math.round(Numb
 function banners(value) { return Number.isFinite(Number(value)) ? Number(value).toFixed(1).replace(/\.0$/, '') : '—'; }
 function riskLabel(value) {
   return ({
-    'very-low':'VERY LOW',
-    low:'LOW',
-    moderate:'MODERATE',
-    high:'HIGH',
-    critical:'CRITICAL',
-    insufficient:'LOW SAMPLE',
-    unknown:'UNKNOWN',
+    'very-low':'VERY LOW', low:'LOW', moderate:'MODERATE', high:'HIGH', critical:'CRITICAL',
+    insufficient:'LOW SAMPLE', unknown:'UNKNOWN',
   })[clean(value).toLowerCase()] || 'UNKNOWN';
 }
 function relicLabel(value) {
@@ -149,12 +157,57 @@ async function analyze() {
       minimumRelic: state.minimumRelic,
       exactDefenseFirst: true,
     });
+    state.queue = buildBattleExecutionQueue(state.optimization);
     state.analyzedKey = `${mine}|${snapshot?.opponentCode || ''}|${round || 0}|${format}|${defenses.map((row)=>`${row.zone}:${row.slot}:${normalizeId(row.leaderBaseId)}`).join(';')}|${state.minimumBattles}|${state.minimumRelic}`;
   } catch (error) {
     state.optimization = null;
+    state.queue = null;
     state.error = clean(error?.message || error || 'Whole-board optimization failed.');
   } finally {
     state.loading = false;
+    render();
+  }
+}
+
+async function lockQueueCounter(key) {
+  if (state.planBusyKey || state.loading) return;
+  const entry = state.queue?.steps?.find((row) => row.key === key && row.action === 'plan-proposed');
+  const proposed = entry?.proposedCounter;
+  const snapshot = boardSnapshot();
+  const mine = ownerCode(snapshot);
+  const round = currentRound(snapshot);
+  if (!entry?.defenseId || !proposed || !mine || !round) return;
+
+  const members = normalizeMembers(proposed.counterMembers);
+  const leaderBaseId = normalizeId(proposed.counterLeaderBaseId);
+  if (!leaderBaseId || !members.length || !members.includes(leaderBaseId)) {
+    state.planMessage = 'Optimizer proposal no longer contains a complete lockable counter. Reanalyze the board.';
+    render();
+    return;
+  }
+
+  state.planBusyKey = key;
+  state.planMessage = '';
+  render();
+  try {
+    await fetchJson(`/api/gac/attack-plan/${mine}`, {
+      method:'POST',
+      body:JSON.stringify({
+        round,
+        defenseId:entry.defenseId,
+        leaderBaseId,
+        members,
+        datacronId:'',
+      }),
+    });
+    state.planMessage = `${unitName(leaderBaseId)} locked into the authoritative Round ${round} Attack Plan. Queue recalculated from remaining roster.`;
+    state.analyzedKey = '';
+    state.planBusyKey = '';
+    window.dispatchEvent(new CustomEvent('gac-war-room-updated', { detail:{ action:'optimizer-counter-locked', defenseId:entry.defenseId, leaderBaseId } }));
+    await analyze();
+  } catch (error) {
+    state.planMessage = clean(error?.message || error || 'The proposed counter could not be locked.');
+    state.planBusyKey = '';
     render();
   }
 }
@@ -173,19 +226,55 @@ function summaryMarkup(opt) {
   </div>`;
 }
 
-function rowMarkup(row) {
-  const proposed = row.proposedCounter;
-  const existing = row.existingPlan;
-  const floor = proposed?.observedWinRateLowerBound90 ?? row.bestEvidenceFloor90;
-  const risk = proposed?.failureRiskBand || row.bestFailureRiskBand;
-  const sample = proposed?.sampleQuality || row.bestSampleQuality;
-  const undersize = Math.max(0, Number(proposed?.undersizeCount ?? row.bestUndersizeCount ?? 0));
-  const relicBurden = proposed?.relicBurdenBand || row.bestRelicBurdenBand;
-  return `<article class="gac-opt-priority is-${escapeAttr(row.scarcity)}">
-    <header><div>${portrait(row.leaderBaseId, 'is-defense')}<span><b>${escapeHtml(unitName(row.leaderBaseId))}</b><small>${escapeHtml(zoneLabel(row.zone))} · Slot ${Number(row.slot) + 1}</small></span></div><i>${escapeHtml(row.scarcity.toUpperCase())}</i></header>
-    <div class="gac-opt-metrics"><span><b>${row.counterSquads}</b> qualifying counters</span><span><b>${row.bestObservedWinRate == null ? '—' : pct(row.bestObservedWinRate)}</b> observed</span><span><b>${pct(floor)}</b> 90% evidence floor</span><span><b>${escapeHtml(riskLabel(risk))}</b> failure-risk evidence</span><span><b>${row.bestBattles || 0}</b> best sample · ${escapeHtml(clean(sample).toUpperCase() || 'NONE')}</span></div>
-    <footer>${existing ? `<div><span>SERVER PLAN</span><strong>${escapeHtml(unitName(existing.leaderBaseId))}</strong><small>${escapeHtml(existing.status.toUpperCase())}${existing.datacronId ? ' · Datacron locked' : ''}</small></div>` : proposed ? `<div><span>PROPOSED RISK-AWARE COUNTER</span><strong>${escapeHtml(unitName(proposed.counterLeaderBaseId))}</strong><small>${pct(proposed.winRate)} observed · ${pct(proposed.observedWinRateLowerBound90)} floor · ${escapeHtml(riskLabel(proposed.failureRiskBand))} risk · ${number.format(proposed.battles)} battles · B ${banners(proposed.averageBanners)}${undersize ? ` · ${undersize}-unit undersize` : ''} · ${escapeHtml(relicLabel(relicBurden))}</small></div>` : '<div><span>PROPOSED COUNTER</span><strong>No qualifying unique counter</strong><small>Relax filters, confirm roster state, or inspect the matrix.</small></div>'}<button type="button" data-gac-opt-open-matrix>VIEW MATRIX</button></footer>
+function reasonTagsMarkup(reasons = []) {
+  return `<div class="gac-opt-reasons">${reasons.slice(0,6).map((reason) => `<span>${escapeHtml(reason)}</span>`).join('')}</div>`;
+}
+
+function actionLabel(entry = {}) {
+  if (entry.action === 'active-attempt') return 'ATTEMPT IN PROGRESS';
+  if (entry.action === 'server-plan') return 'LOCKED SERVER PLAN';
+  if (entry.action === 'plan-proposed') return 'READY TO LOCK';
+  if (entry.action === 'cleanup-review') return 'CLEANUP REVIEW';
+  if (entry.action === 'sync-defense') return 'SYNC DEFENSE';
+  if (entry.action === 'complete') return 'CLEARED';
+  return 'OFFICER REVIEW';
+}
+
+function executionStepMarkup(entry) {
+  const existing = entry.existingPlan;
+  const proposed = entry.proposedCounter;
+  const attackerLeader = existing?.leaderBaseId || proposed?.counterLeaderBaseId;
+  const floor = proposed?.observedWinRateLowerBound90 ?? entry.evidenceFloor90;
+  const risk = proposed?.failureRiskBand || entry.evidenceRisk;
+  const sample = proposed?.sampleQuality || '';
+  const undersize = Math.max(0, Number(proposed?.undersizeCount || 0));
+  const relicBurden = proposed?.relicBurdenBand || 'unknown';
+  const busy = state.planBusyKey === entry.key;
+  return `<article class="gac-opt-execution-step is-${escapeAttr(entry.scarcity)} is-action-${escapeAttr(entry.action)}" data-gac-opt-queue-key="${escapeAttr(entry.key)}">
+    <div class="gac-opt-sequence"><b>${entry.sequence}</b><span>ATTACK</span></div>
+    <div class="gac-opt-execution-main">
+      <header><div>${portrait(entry.defenderLeaderBaseId,'is-defense')}<span><b>${escapeHtml(unitName(entry.defenderLeaderBaseId))}</b><small>${escapeHtml(zoneLabel(entry.zone))} · Slot ${Number(entry.slot) + 1}</small></span></div><i>${escapeHtml(actionLabel(entry))}</i></header>
+      ${reasonTagsMarkup(entry.reasons)}
+      <div class="gac-opt-execution-counter"><span>${existing ? 'AUTHORITATIVE ATTACK PLAN' : 'NON-OVERLAP PROPOSED COUNTER'}</span><strong>${escapeHtml(unitName(attackerLeader))}</strong><small>${existing ? `${escapeHtml(clean(existing.status).toUpperCase())}${existing.datacronId ? ' · Datacron locked' : ''}` : `${pct(proposed?.winRate)} historical observed · ${pct(floor)} 90% evidence floor · ${escapeHtml(riskLabel(risk))} risk · ${number.format(entry.evidenceBattles)} battles${sample ? ` · ${escapeHtml(clean(sample).toUpperCase())}` : ''}${undersize ? ` · ${undersize}-unit undersize` : ''} · ${escapeHtml(relicLabel(relicBurden))}`}</small></div>
+    </div>
+    <div class="gac-opt-execution-actions">${entry.action === 'plan-proposed' ? `<button type="button" data-gac-opt-lock-counter="${escapeAttr(entry.key)}" ${busy ? 'disabled' : ''}>${busy ? 'LOCKING…' : 'LOCK COUNTER'}</button>` : `<button type="button" class="secondary" data-gac-opt-open-war-room>OPEN WAR ROOM</button>`}<button type="button" class="secondary" data-gac-opt-open-matrix>VIEW MATRIX</button></div>
   </article>`;
+}
+
+function blockerMarkup(entry) {
+  const title = entry.action === 'cleanup-review' ? 'Cleanup state needs officer review' : entry.action === 'sync-defense' ? 'Defense must be synced to the current board' : 'No qualifying unique counter is currently available';
+  return `<article class="gac-opt-blocker is-${escapeAttr(entry.action)}"><div>${portrait(entry.defenderLeaderBaseId,'is-defense')}<span><b>${escapeHtml(unitName(entry.defenderLeaderBaseId))}</b><small>${escapeHtml(zoneLabel(entry.zone))} · Slot ${Number(entry.slot) + 1}</small></span></div><section><strong>${escapeHtml(title)}</strong>${reasonTagsMarkup(entry.reasons)}<small>Blocked rows are intentionally not numbered as executable attacks.</small></section><button type="button" data-gac-opt-open-${entry.action === 'cleanup-review' ? 'war-room' : 'matrix'}>${entry.action === 'cleanup-review' ? 'OPEN WAR ROOM' : 'VIEW MATRIX'}</button></article>`;
+}
+
+function executionQueueMarkup(queue = {}) {
+  const summary = queue.summary || {};
+  return `<section class="gac-opt-execution-queue">
+    <header><div><span>BATTLE EXECUTION QUEUE</span><strong>Run what is actionable; isolate what needs officer intervention</strong><small>Attack numbers are derived from current server plan state, non-overlap allocation, scarcity and historical evidence quality. They are not guaranteed win predictions.</small></div><div class="gac-opt-queue-summary"><b>${summary.executableSteps || 0}</b><span>RUNNABLE</span><b>${summary.blockers || 0}</b><span>BLOCKERS</span><b>${summary.completed || 0}</b><span>CLEARED</span></div></header>
+    ${state.planMessage ? `<div class="gac-opt-plan-message">${escapeHtml(state.planMessage)}</div>` : ''}
+    ${queue.steps?.length ? `<div class="gac-opt-execution-list">${queue.steps.map(executionStepMarkup).join('')}</div>` : '<div class="gac-opt-note">No runnable attack steps are currently available.</div>'}
+    ${queue.blockers?.length ? `<div class="gac-opt-blocker-section"><strong>OFFICER BLOCKERS · NOT ATTACK NUMBERS</strong>${queue.blockers.map(blockerMarkup).join('')}</div>` : ''}
+    <div class="gac-opt-note">${escapeHtml(queue.evidenceBoundary || '')} The authoritative server Attack Plan still validates roster ownership, current round/opponent context, own-defense conflicts and attacker overlap when a counter is locked.</div>
+  </section>`;
 }
 
 function ensureRoot() {
@@ -203,15 +292,32 @@ function ensureRoot() {
   return root;
 }
 
+function openMatrix() {
+  const matrix = document.querySelector('[data-gac-counter-matrix]');
+  matrix?.scrollIntoView?.({ behavior:'smooth', block:'start' });
+}
+function openWarRoom() {
+  const warRoom = document.querySelector('[data-gac-round-war-room], .gac-round-war-room, .gac-war-room-shell') || document.getElementById('gacRoundWarRoom');
+  if (warRoom?.scrollIntoView) warRoom.scrollIntoView({ behavior:'smooth', block:'start' });
+  else openMatrix();
+}
+
 function render() {
   const root = ensureRoot();
   if (!root) return;
   const opt = state.optimization;
-  const rows = opt ? priorityRows(opt).slice(0, 10) : [];
-  root.innerHTML = `<header><div><span>WHOLE-BOARD OPTIMIZER</span><strong>Coverage, risk, scarcity and banner plan</strong><small>On-demand analysis only. Uses the visible board, your remaining roster and persisted historical counter evidence; it does not predict hidden defenses or guarantee a current battle.</small></div><div>${state.analyzedKey ? `<button type="button" data-gac-opt-toggle>${state.open ? 'HIDE' : 'VIEW RESULTS'}</button>` : ''}<button type="button" data-gac-opt-analyze ${state.loading ? 'disabled' : ''}>${state.loading ? 'ANALYZING…' : state.analyzedKey ? 'REANALYZE BOARD' : 'ANALYZE BOARD'}</button></div></header>
+  root.innerHTML = `<header><div><span>WHOLE-BOARD OPTIMIZER</span><strong>Coverage, risk, scarcity and battle execution order</strong><small>On-demand analysis only. Uses the visible board, your remaining roster and persisted historical counter evidence; it does not predict hidden defenses or guarantee a current battle.</small></div><div>${state.analyzedKey ? `<button type="button" data-gac-opt-toggle>${state.open ? 'HIDE' : 'VIEW RESULTS'}</button>` : ''}<button type="button" data-gac-opt-analyze ${state.loading ? 'disabled' : ''}>${state.loading ? 'ANALYZING…' : state.analyzedKey ? 'REANALYZE BOARD' : 'ANALYZE BOARD'}</button></div></header>
     <div class="gac-opt-controls"><label><span>Minimum battles</span><input type="number" min="1" max="1000" value="${state.minimumBattles}" data-gac-opt-min-battles></label><label><span>Minimum relic</span><select data-gac-opt-min-relic>${[0,3,5,6,7,8,9].map((value)=>`<option value="${value}" ${state.minimumRelic===value?'selected':''}>${value ? `R${value}+` : 'Any relic'}</option>`).join('')}</select></label><small>Scarcity is based on distinct currently-fieldable counter squads meeting these thresholds. Risk ranking penalizes weak samples before banner/undersize value.</small></div>
     ${state.error ? `<div class="gac-opt-error">${escapeHtml(state.error)}</div>` : ''}
-    ${state.open && opt ? `${summaryMarkup(opt)}<div class="gac-opt-note">* Projected banners are historical evidence summaries, not guaranteed scores. The 90% evidence floor is a lower confidence bound on recorded historical wins, not a predicted win probability. Current server Attack Plan remains authoritative for locked squads, attempts and consumed units.</div><div class="gac-opt-priority-grid">${rows.map(rowMarkup).join('')}</div>` : ''}`;
+    ${state.open && opt ? `${summaryMarkup(opt)}<div class="gac-opt-note">* Projected banners are historical evidence summaries, not guaranteed scores. The 90% evidence floor is a lower confidence bound on recorded historical wins, not a predicted win probability.</div>${executionQueueMarkup(state.queue || buildBattleExecutionQueue(opt))}` : ''}`;
+}
+
+function invalidateOptimization() {
+  state.analyzedKey = '';
+  state.optimization = null;
+  state.queue = null;
+  if (state.open) void analyze();
+  else render();
 }
 
 function installBoardOptimization() {
@@ -221,22 +327,25 @@ function installBoardOptimization() {
     if (!event.target?.closest?.('[data-gac-board-optimization]')) return;
     if (event.target.closest('[data-gac-opt-analyze]')) { void analyze(); return; }
     if (event.target.closest('[data-gac-opt-toggle]')) { state.open = !state.open; render(); return; }
-    if (event.target.closest('[data-gac-opt-open-matrix]')) {
-      const matrix = document.querySelector('[data-gac-counter-matrix]');
-      matrix?.scrollIntoView?.({ behavior:'smooth', block:'start' });
-    }
+    const lock = event.target.closest('[data-gac-opt-lock-counter]');
+    if (lock) { void lockQueueCounter(clean(lock.dataset.gacOptLockCounter)); return; }
+    if (event.target.closest('[data-gac-opt-open-war-room]')) { openWarRoom(); return; }
+    if (event.target.closest('[data-gac-opt-open-matrix]')) { openMatrix(); }
   });
   document.addEventListener('change', (event) => {
     if (!event.target?.closest?.('[data-gac-board-optimization]')) return;
     if (event.target.matches('[data-gac-opt-min-battles]')) state.minimumBattles = Math.max(1, Math.min(1000, Math.floor(n(event.target.value) || 5)));
     if (event.target.matches('[data-gac-opt-min-relic]')) state.minimumRelic = Math.max(0, Math.floor(n(event.target.value)));
+    state.analyzedKey = '';
+    state.queue = null;
   });
   const tick = () => { if (location.hash && location.hash !== '#gac') return; render(); };
   tick();
   document.addEventListener('DOMContentLoaded', tick, { once:true });
   window.addEventListener('hashchange', tick);
   window.addEventListener('gac-visible-board-rendered', tick);
+  window.addEventListener('gac-war-room-updated', invalidateOptimization);
 }
 
 if (typeof window !== 'undefined' && typeof document !== 'undefined') installBoardOptimization();
-export { analyze, installBoardOptimization, unavailableIds };
+export { analyze, installBoardOptimization, lockQueueCounter, unavailableIds };
