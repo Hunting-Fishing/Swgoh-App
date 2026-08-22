@@ -7,16 +7,23 @@ import './gac-live-arena-leader-fix.js';
 import './gac-live-arena-editor-side.js';
 import './gac-ux-polish.js';
 import './gac-counter-matrix-ui.js';
+import './gac-scouting-history-ui.js';
 
 const REPLAY = Symbol('gac-manual-selection-replay');
 
-function ensureCounterMatrixStyles() {
-  if (document.querySelector('link[data-gac-counter-matrix-css]')) return;
-  const link = document.createElement('link');
-  link.rel = 'stylesheet';
-  link.href = '/gac-counter-matrix.css?v=20260822-intel1';
-  link.dataset.gacCounterMatrixCss = 'true';
-  document.head.appendChild(link);
+function ensureIntelligenceStyles() {
+  const styles = [
+    ['gac-counter-matrix-css', '/gac-counter-matrix.css?v=20260822-intel1'],
+    ['gac-scout-history-css', '/gac-scouting-history.css?v=20260822-intel1'],
+  ];
+  for (const [key, href] of styles) {
+    if (document.querySelector(`link[data-${key}]`)) continue;
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = href;
+    link.setAttribute(`data-${key}`, 'true');
+    document.head.appendChild(link);
+  }
 }
 
 function manualActionButton(target) {
@@ -26,7 +33,7 @@ function manualActionButton(target) {
 function installManualSelectionGuard() {
   if (window.__gacManualSelectionGuardInstalled) return;
   window.__gacManualSelectionGuardInstalled = true;
-  ensureCounterMatrixStyles();
+  ensureIntelligenceStyles();
   window.addEventListener('click', (event) => {
     if (event?.[REPLAY]) return;
     const button = manualActionButton(event.target);
