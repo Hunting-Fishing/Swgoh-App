@@ -13,6 +13,7 @@ import './gac-scouting-history-ui.js';
 import './gac-scouting-staging-ui.js';
 import './gac-datacron-readiness-ui.js';
 import './gac-datacron-matrix-ui.js';
+import './gac-intelligence-export.js';
 
 const REPLAY = Symbol('gac-manual-selection-replay');
 
@@ -25,6 +26,7 @@ function ensureIntelligenceStyles() {
     ['gac-scout-staging-css', '/gac-scouting-staging.css?v=20260822-intel1'],
     ['gac-datacron-readiness-css', '/gac-datacron-readiness.css?v=20260822-intel1'],
     ['gac-datacron-matrix-css', '/gac-datacron-matrix.css?v=20260822-intel1'],
+    ['gac-intelligence-export-css', '/gac-intelligence-export.css?v=20260822-intel1'],
   ];
   for (const [key, href] of styles) {
     if (document.querySelector(`link[data-${key}]`)) continue;
