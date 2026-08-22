@@ -6,8 +6,18 @@ import './gac-own-defense-slots.js?v=20260822-pro1';
 import './gac-live-arena-leader-fix.js';
 import './gac-live-arena-editor-side.js';
 import './gac-ux-polish.js';
+import './gac-counter-matrix-ui.js';
 
 const REPLAY = Symbol('gac-manual-selection-replay');
+
+function ensureCounterMatrixStyles() {
+  if (document.querySelector('link[data-gac-counter-matrix-css]')) return;
+  const link = document.createElement('link');
+  link.rel = 'stylesheet';
+  link.href = '/gac-counter-matrix.css?v=20260822-intel1';
+  link.dataset.gacCounterMatrixCss = 'true';
+  document.head.appendChild(link);
+}
 
 function manualActionButton(target) {
   return target?.closest?.('[data-gac-manual-own-toggle],[data-gac-manual-enemy-toggle],[data-gac-manual-enemy-remove],[data-gac-manual-make-leader]') || null;
@@ -16,6 +26,7 @@ function manualActionButton(target) {
 function installManualSelectionGuard() {
   if (window.__gacManualSelectionGuardInstalled) return;
   window.__gacManualSelectionGuardInstalled = true;
+  ensureCounterMatrixStyles();
   window.addEventListener('click', (event) => {
     if (event?.[REPLAY]) return;
     const button = manualActionButton(event.target);
