@@ -31,7 +31,7 @@ test('scouting model only exposes predictions for the current GAC format', () =>
   assert.equal(rows[0].leaderBaseId, 'A');
 });
 
-test('review target prefers an open verified slot tendency', () => {
+test('review target prefers an open verified slot tendency and preserves exact-slot provenance', () => {
   const prediction = {
     slotTendencies: [
       { zone: 'FRONT-TOP', slot: 0, verifiedBoards: 3 },
@@ -40,10 +40,10 @@ test('review target prefers an open verified slot tendency', () => {
     zoneTendencies: [{ zone: 'FRONT-BOTTOM', verifiedBoards: 5 }],
   };
   const target = reviewTarget(prediction, snapshot);
-  assert.deepEqual(target, { zone: 'FRONT-TOP', slot: 1, source: 'verified-slot-tendency', samples: 2 });
+  assert.deepEqual(target, { zone: 'FRONT-TOP', slot: 1, source: 'verified-slot-tendency', samples: 2, exactSlot: true });
 });
 
-test('review target falls back to first open slot in a verified zone tendency', () => {
+test('review target falls back to first open slot in a verified zone tendency and labels it non-exact', () => {
   const prediction = {
     slotTendencies: [],
     zoneTendencies: [{ zone: 'FRONT-TOP', verifiedBoards: 4 }],
@@ -52,6 +52,7 @@ test('review target falls back to first open slot in a verified zone tendency', 
   assert.equal(target.zone, 'FRONT-TOP');
   assert.equal(target.slot, 1);
   assert.equal(target.source, 'verified-zone-tendency');
+  assert.equal(target.exactSlot, false);
 });
 
 test('fleet territory is never staged through squad scouting', () => {
