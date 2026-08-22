@@ -8,6 +8,7 @@ import './gac-live-arena-editor-side.js';
 import './gac-ux-polish.js';
 import './gac-counter-matrix-ui.js';
 import './gac-scouting-history-ui.js';
+import './gac-datacron-readiness-ui.js';
 
 const REPLAY = Symbol('gac-manual-selection-replay');
 
@@ -15,6 +16,7 @@ function ensureIntelligenceStyles() {
   const styles = [
     ['gac-counter-matrix-css', '/gac-counter-matrix.css?v=20260822-intel1'],
     ['gac-scout-history-css', '/gac-scouting-history.css?v=20260822-intel1'],
+    ['gac-datacron-readiness-css', '/gac-datacron-readiness.css?v=20260822-intel1'],
   ];
   for (const [key, href] of styles) {
     if (document.querySelector(`link[data-${key}]`)) continue;
