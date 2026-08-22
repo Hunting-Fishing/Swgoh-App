@@ -37,8 +37,26 @@ function normalizeAllyCode(value) {
   return allyCode;
 }
 
+function tagText(value) {
+  if (value && typeof value === "object") return clean(value.name || value.label || value.displayName || value.id || value.categoryId || value.tag);
+  return clean(value);
+}
+
 function normalizeCategory(value) {
-  return clean(value).toLowerCase().replace(/[_-]+/g, " ");
+  let key = tagText(value).toLowerCase().replace(/[^a-z0-9]+/g, "");
+  for (const prefix of ["affiliation", "faction", "category", "tag"]) {
+    if (key.startsWith(prefix)) {
+      key = key.slice(prefix.length);
+      break;
+    }
+  }
+  return key;
+}
+
+function unitCategoryKeys(unit = {}) {
+  return [...asArray(unit.categories), ...asArray(unit.factions), ...asArray(unit.tags)]
+    .map(normalizeCategory)
+    .filter(Boolean);
 }
 
 function relevantCatalogRows(catalog = []) {
@@ -47,7 +65,7 @@ function relevantCatalogRows(catalog = []) {
   return asArray(catalog).filter((unit) => {
     const baseId = clean(unit?.baseId).toUpperCase();
     if (explicit.has(baseId)) return true;
-    return asArray(unit?.categories).some((category) => categories.has(normalizeCategory(category)));
+    return unitCategoryKeys(unit).some((category) => categories.has(category));
   });
 }
 
@@ -155,10 +173,7 @@ export function createGuildTbReadinessRosterService(options = {}) {
 
     const ids = relevantBaseIds(catalog);
     const members = asArray(guildBody?.members);
-    const memberIds = safeInValues(
-      members.map((member) => member?.persistentId),
-      /^[0-9a-fA-F-]{16,64}$/,
-    );
+    const memberIds = safeInValues(members.map((member) => member?.persistentId), /^[0-9a-fA-F-]{16,64}$/);
     const rows = await selectRelevantUnits(memberIds, ids);
     const unitsByPlayer = new Map();
     for (const row of rows) {
@@ -181,3 +196,5 @@ export function createGuildTbReadinessRosterService(options = {}) {
 }
 
 export const guildTbReadinessRosterService = createGuildTbReadinessRosterService();
+
+export { compactUnit, normalizeCategory, relevantBaseIds, relevantCatalogRows, unitCategoryKeys };
