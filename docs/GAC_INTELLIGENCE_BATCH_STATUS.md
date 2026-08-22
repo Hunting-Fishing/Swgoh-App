@@ -17,7 +17,7 @@ Current-main sync bridge: #322
 - GAC release UI / reachability contract: **implemented and source-audited**
 - Production Datacron warehouse migration: **APPLIED AND VERIFIED**
 - Final active-branch exact-filename collision audit: **CLEAN**
-- Production release action: **one merge of PR #318 to `main` followed by live asset/surface verification**
+- Production release action: **PR #318 approved for one merge to `main`, followed by live asset/surface verification**
 
 The GAC War Room / Intelligence feature package is complete. This release record intentionally distinguishes targeted GAC validation from the unavailable repository-wide manual workflow: the release is approved on the completed GAC-specific validation, production schema verification, source/reachability audit, and explicit user production-release instruction. A complete repository-wide `npm test` run is not falsely claimed.
 
@@ -34,7 +34,7 @@ Latest consolidated targeted result before the release UI layer:
 - **0 failed**
 - **0 skipped**
 
-The release UI JavaScript was additionally syntax-checked on Node 22. A dedicated `test/gac-intelligence-ui-release.test.mjs` source contract now protects the global load chain, all five command-deck destinations, responsive/focus requirements, and the additive professional styling layer. The Datacron schema contract additionally rejects any service-role DELETE/TRUNCATE/REFERENCES/TRIGGER grant in both foundation and additive hardening migrations.
+The release UI JavaScript was additionally syntax-checked on Node 22. A dedicated `test/gac-intelligence-ui-release.test.mjs` source contract protects the global load chain, all five command-deck destinations, responsive/focus requirements, and the additive professional styling layer. The Datacron schema contract additionally rejects any service-role DELETE/TRUNCATE/REFERENCES/TRIGGER grant in both foundation and additive hardening migrations.
 
 This is a real GAC-targeted release result. It is **not represented as a complete repository-wide `npm test` run**.
 
