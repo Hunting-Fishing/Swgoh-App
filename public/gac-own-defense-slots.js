@@ -46,8 +46,9 @@ function readAssignments() {
 }
 
 function writeAssignments(rows) {
-  localStorage.setItem(storageKey(), JSON.stringify(rows.map(normalizeAssignment)));
-  window.dispatchEvent(new CustomEvent('swgoh:gac-own-defense-updated', { detail: { assignments: rows.map(normalizeAssignment) } }));
+  const normalized = rows.map(normalizeAssignment);
+  localStorage.setItem(storageKey(), JSON.stringify(normalized));
+  window.dispatchEvent(new CustomEvent('swgoh:gac-own-defense-updated', { detail: { assignments: normalized } }));
 }
 
 function reservedIds() {
@@ -94,8 +95,7 @@ function zoneCapacity(map, zone) {
   if (!enemy) return 0;
   const placements = enemy.querySelectorAll('.gac-league-placement');
   if (placements.length) return placements.length;
-  const adds = enemy.querySelectorAll('[data-gac-league-slot-add]');
-  return adds.length;
+  return enemy.querySelectorAll('[data-gac-league-slot-add]').length;
 }
 
 function assignmentKey(row) { return `${row.zone}:${row.slot}`; }
@@ -103,11 +103,10 @@ function assignmentAt(rows, zone, slot) { return rows.find((row) => row.zone ===
 
 function eligiblePending(rows, selected) {
   if (!selected) return [];
-  const reserved = reservedIds();
   const occupiedElsewhere = new Set(rows
     .filter((row) => assignmentKey(row) !== `${selected.zone}:${selected.slot}`)
     .flatMap((row) => row.members));
-  return reserved.filter((id) => {
+  return reservedIds().filter((id) => {
     if (occupiedElsewhere.has(id)) return false;
     const kind = knownUnitKind(id);
     return !kind || kind === selected.kind;
@@ -120,9 +119,12 @@ function isComplete(row) {
   return row.members.length === squadSize() && row.members.includes(row.leaderBaseId);
 }
 
+function safeAttr(value) { return clean(value).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+function safeText(value) { return clean(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+
 function portraitMarkup(meta, cls = '') {
-  const image = meta.image ? `<img src="${meta.image.replace(/"/g, '&quot;')}" alt="${meta.name.replace(/"/g, '&quot;')}" loading="lazy">` : `<b>${meta.name.slice(0, 2).toUpperCase()}</b>`;
-  return `<span class="gac-own-defense-portrait ${cls}" title="${meta.name.replace(/"/g, '&quot;')}">${image}</span>`;
+  const image = meta.image ? `<img src="${safeAttr(meta.image)}" alt="${safeAttr(meta.name)}" loading="lazy">` : `<b>${safeText(meta.name.slice(0, 2).toUpperCase())}</b>`;
+  return `<span class="gac-own-defense-portrait ${cls}" title="${safeAttr(meta.name)}">${image}</span>`;
 }
 
 function ownSlotMarkup(row, zone, slot, kind) {
@@ -135,23 +137,22 @@ function ownSlotMarkup(row, zone, slot, kind) {
   const leader = unitMeta(row.leaderBaseId || row.members[0]);
   const others = row.members.filter((id) => id !== row.leaderBaseId).map(unitMeta);
   return `<button type="button" class="gac-own-defense-slot is-filled ${selected ? 'is-selected' : ''} ${isComplete(row) ? '' : 'is-incomplete'}" data-gac-own-defense-slot data-zone="${zone}" data-slot="${slot}" data-kind="${kind}">
-    <span class="gac-own-defense-formation">
-      ${portraitMarkup(leader, 'is-leader')}
-      <span class="gac-own-defense-pips">${others.map((meta) => portraitMarkup(meta)).join('')}</span>
-    </span>
-    <strong>${leader.name}</strong><small>${isComplete(row) ? `SLOT ${slot + 1}` : 'INCOMPLETE · EDIT'}</small>
+    <span class="gac-own-defense-formation">${portraitMarkup(leader, 'is-leader')}<span class="gac-own-defense-pips">${others.map((meta) => portraitMarkup(meta)).join('')}</span></span>
+    <strong>${safeText(leader.name)}</strong><small>${isComplete(row) ? `SLOT ${slot + 1}` : 'INCOMPLETE · EDIT'}</small>
   </button>`;
 }
 
 function renderOwnTerritories(map) {
   const rows = readAssignments();
+  const reserved = reservedIds();
   for (const config of ZONES) {
     const section = map.querySelector(`[data-gac-full-own-zone="${config.zone}"]`);
     if (!section) continue;
     const capacity = zoneCapacity(map, config.zone);
     const filled = rows.filter((row) => row.zone === config.zone && row.slot < capacity && isComplete(row)).length;
     const badge = section.querySelector(':scope > header > b');
-    if (badge) badge.textContent = `${filled}/${capacity}`;
+    const badgeText = `${filled}/${capacity}`;
+    if (badge && badge.textContent !== badgeText) badge.textContent = badgeText;
     let host = section.querySelector(':scope > [data-gac-own-defense-slots]');
     if (!host) {
       section.querySelector(':scope > .gac-full-own-focus')?.remove();
@@ -160,49 +161,78 @@ function renderOwnTerritories(map) {
       host.dataset.gacOwnDefenseSlots = config.zone;
       section.appendChild(host);
     }
-    const next = Array.from({ length: capacity }, (_, slot) => ownSlotMarkup(assignmentAt(rows, config.zone, slot), config.zone, slot, config.kind)).join('');
-    if (host.innerHTML !== next) host.innerHTML = next;
+    const signature = JSON.stringify({
+      zone: config.zone,
+      capacity,
+      selected: ownState.selected?.zone === config.zone ? ownState.selected.slot : null,
+      rows: rows.filter((row) => row.zone === config.zone && row.slot < capacity),
+      reserved,
+    });
+    if (host.dataset.gacOwnDefenseSignature === signature) continue;
+    host.dataset.gacOwnDefenseSignature = signature;
+    host.innerHTML = Array.from({ length: capacity }, (_, slot) => ownSlotMarkup(assignmentAt(rows, config.zone, slot), config.zone, slot, config.kind)).join('');
   }
 }
 
 function ensureOwnDefenseExpanded() {
   const section = document.querySelector('[data-gac-manual-counter-planner] .gac-manual-own-defense');
   if (!section) return null;
-  if (section.classList.contains('gac-ux-collapsed')) section.querySelector('[data-gac-ux-collapse-defense]')?.click();
+  if (section.classList.contains('gac-ux-collapsed')) {
+    section.querySelector('[data-gac-ux-collapse-defense]')?.click();
+    return null;
+  }
   return section;
 }
 
-function renderAssignmentEditor() {
-  document.querySelector('[data-gac-own-defense-editor]')?.remove();
-  if (!ownState.selected) return;
-  const section = ensureOwnDefenseExpanded();
-  if (!section) return;
-  const rows = readAssignments();
-  const current = assignmentAt(rows, ownState.selected.zone, ownState.selected.slot);
-  const pending = eligiblePending(rows, ownState.selected);
-  if (!ownState.leaderBaseId || !pending.includes(ownState.leaderBaseId)) ownState.leaderBaseId = current?.leaderBaseId && pending.includes(current.leaderBaseId) ? current.leaderBaseId : (pending[0] || '');
-  const needed = ownState.selected.kind === 'fleet' ? '4–8' : String(squadSize());
-  const canSubmit = ownState.selected.kind === 'fleet'
-    ? pending.length >= 4 && pending.length <= 8 && pending.includes(ownState.leaderBaseId)
-    : pending.length === squadSize() && pending.includes(ownState.leaderBaseId);
-  const editor = document.createElement('div');
-  editor.className = 'gac-own-defense-editor';
-  editor.dataset.gacOwnDefenseEditor = 'true';
-  editor.innerHTML = `<div class="gac-own-defense-editor-copy">
+function assignmentEditorMarkup(current, pending, canSubmit) {
+  return `<div class="gac-own-defense-editor-copy">
       <span>ROUND DEFENSE SLOT</span>
-      <strong>${ownState.selected.zone.replaceAll('-', ' ')} · SLOT ${ownState.selected.slot + 1}</strong>
-      <small>${pending.length}/${needed} ${ownState.selected.kind === 'fleet' ? 'ships selected · choose capital ship' : 'units selected · choose leader'}</small>
+      <strong>${safeText(ownState.selected.zone.replaceAll('-', ' '))} · SLOT ${ownState.selected.slot + 1}</strong>
+      <small>${pending.length}/${ownState.selected.kind === 'fleet' ? '4–8' : squadSize()} ${ownState.selected.kind === 'fleet' ? 'ships selected · choose capital ship' : 'units selected · choose leader'}</small>
     </div>
     <div class="gac-own-defense-editor-members">${pending.length ? pending.map((id) => {
       const meta = unitMeta(id);
       const leader = id === ownState.leaderBaseId;
-      return `<button type="button" class="${leader ? 'is-leader' : ''}" data-gac-own-defense-leader="${id}" title="Set ${meta.name.replace(/"/g, '&quot;')} as ${ownState.selected.kind === 'fleet' ? 'capital' : 'leader'}">${portraitMarkup(meta)}<span>${leader ? (ownState.selected.kind === 'fleet' ? 'CAPITAL' : 'LEADER') : 'SET LEADER'}</span></button>`;
+      return `<button type="button" class="${leader ? 'is-leader' : ''}" data-gac-own-defense-leader="${id}" title="Set ${safeAttr(meta.name)} as ${ownState.selected.kind === 'fleet' ? 'capital' : 'leader'}">${portraitMarkup(meta)}<span>${leader ? (ownState.selected.kind === 'fleet' ? 'CAPITAL' : 'LEADER') : 'SET LEADER'}</span></button>`;
     }).join('') : '<em>Mark units below as ON DEFENSE. Unassigned reserved units become the pending squad for this slot.</em>'}</div>
     <div class="gac-own-defense-editor-actions">
       <button type="button" data-gac-own-defense-submit ${canSubmit ? '' : 'disabled'}>SUBMIT DEFENSE</button>
       ${current ? '<button type="button" data-gac-own-defense-clear>CLEAR SLOT</button>' : ''}
       <button type="button" data-gac-own-defense-cancel>CANCEL</button>
     </div>`;
+}
+
+function renderAssignmentEditor() {
+  const existing = document.querySelector('[data-gac-own-defense-editor]');
+  if (!ownState.selected) {
+    existing?.remove();
+    return;
+  }
+  const section = ensureOwnDefenseExpanded();
+  if (!section) {
+    schedule();
+    return;
+  }
+  const rows = readAssignments();
+  const current = assignmentAt(rows, ownState.selected.zone, ownState.selected.slot);
+  const pending = eligiblePending(rows, ownState.selected);
+  if (!ownState.leaderBaseId || !pending.includes(ownState.leaderBaseId)) ownState.leaderBaseId = current?.leaderBaseId && pending.includes(current.leaderBaseId) ? current.leaderBaseId : (pending[0] || '');
+  const canSubmit = ownState.selected.kind === 'fleet'
+    ? pending.length >= 4 && pending.length <= 8 && pending.includes(ownState.leaderBaseId)
+    : pending.length === squadSize() && pending.includes(ownState.leaderBaseId);
+  const signature = JSON.stringify({ selected: ownState.selected, leader: ownState.leaderBaseId, pending, current, canSubmit });
+  const markup = assignmentEditorMarkup(current, pending, canSubmit);
+  if (existing && existing.dataset.gacOwnDefenseSignature === signature) return;
+  if (existing) {
+    existing.dataset.gacOwnDefenseSignature = signature;
+    existing.innerHTML = markup;
+    return;
+  }
+  const editor = document.createElement('div');
+  editor.className = 'gac-own-defense-editor';
+  editor.dataset.gacOwnDefenseEditor = 'true';
+  editor.dataset.gacOwnDefenseSignature = signature;
+  editor.innerHTML = markup;
   section.insertBefore(editor, section.querySelector('.gac-manual-reserved'));
 }
 
@@ -212,7 +242,7 @@ function selectSlot(zone, slot, kind) {
   ownState.leaderBaseId = current?.leaderBaseId || '';
   const section = ensureOwnDefenseExpanded();
   schedule();
-  window.setTimeout(() => section?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0);
+  window.setTimeout(() => (section || document.querySelector('[data-gac-manual-counter-planner] .gac-manual-own-defense'))?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0);
 }
 
 function submitSelected() {
@@ -298,6 +328,7 @@ if (typeof window !== 'undefined') {
   bind();
   window.addEventListener('swgoh:gac-battlefield-ready', schedule);
   window.addEventListener('swgoh:workspace-activated', schedule);
+  window.addEventListener('swgoh:gac-own-defense-updated', schedule);
   window.addEventListener('hashchange', schedule);
   new MutationObserver((records) => {
     if (records.some((record) => record.addedNodes?.length || record.removedNodes?.length)) schedule();
@@ -305,4 +336,4 @@ if (typeof window !== 'undefined') {
   schedule();
 }
 
-export { readAssignments, storageKey, zoneCapacity };
+export { eligiblePending, isComplete, readAssignments, storageKey, zoneCapacity };
