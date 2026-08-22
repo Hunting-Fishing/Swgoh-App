@@ -6,6 +6,7 @@ import './gac-own-defense-slots.js?v=20260822-pro1';
 import './gac-live-arena-leader-fix.js';
 import './gac-live-arena-editor-side.js';
 import './gac-ux-polish.js';
+import './gac-image-resilience.js';
 import './gac-counter-matrix-ui.js';
 import './gac-board-optimization-ui.js';
 import './gac-relic-suitability-ui.js';
