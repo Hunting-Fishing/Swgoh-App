@@ -3,233 +3,200 @@
 Updated: 2026-08-23 (GMT+8)
 Development branch: `feature/gac-intelligence-refresh-20260822`
 Draft PR: #318
-Supersedes: #306 / `feature/gac-complete-faction-filter`
+Supersedes: #306
 Original refresh bridge: #317
 Current-main sync bridge: #322
 
-This branch is the canonical GAC War Room / Intelligence completion path. It remains isolated from production until the final authenticated acceptance, migration and single merge/deploy gate.
-
-## Current completion
+## Completion
 
 - Feature / implementation completion: **100% code-side**
 - Production release readiness: **~94%**
-- Draft PR #318: **mergeable at the latest checked head**
-- Branch baseline: **0 commits behind current `main` at the latest comparison before final collision recheck**
-- Targeted reconstructed GAC validation: **90 / 90 passing, 0 failed, 0 skipped**
+- Targeted GAC validation: **91 / 91 passing**
+- Failures: **0**
+- Skipped: **0**
 - Production deployment: **NOT performed**
 - Datacron warehouse migration: **NOT applied to production**
 
-The remaining work is release acceptance and controlled production change, not missing GAC War Room capability.
+The GAC War Room feature build is complete on this branch. Remaining work is production acceptance: repository-wide test execution when a normal runner is available, authenticated browser smoke, visual acceptance, migration, final collision check and one controlled merge/deploy.
 
-## Validation method and boundary
+## Validation boundary
 
-The repository Node workflow is intentionally manual-only (`workflow_dispatch` -> Node 22 -> `npm ci` -> `npm test`). The connected GitHub controls available in this session can inspect/rerun existing workflow runs but cannot dispatch a new one, and the local execution environment cannot resolve GitHub for a normal clone.
+The repository Node workflow is manual-only (`workflow_dispatch` -> Node 22 -> `npm ci` -> `npm test`). The connected GitHub controls in this session cannot dispatch a new run, and the local environment cannot resolve GitHub for a normal clone.
 
-To avoid claiming a test pass that did not occur, the GAC branch modules/tests needed for the current intelligence slice were reconstructed from the connected GitHub branch into a Node 22 validation workspace. Functional modules were executed directly; source-contract checks used the connected branch source/dependency-isolated fixtures where required.
+To avoid a false test claim, the GAC modules/tests needed for the intelligence slice were reconstructed from the connected GitHub branch into a Node 22 validation workspace. Functional modules were executed directly; branch source/dependency-isolated fixtures were used for source-contract boundaries where required.
 
 Latest consolidated targeted result:
 
-- **90 tests/checks**
-- **90 passed**
+- **91 tests/checks**
+- **91 passed**
 - **0 failed**
 - **0 skipped**
 
-This is a real executable targeted GAC validation result. It is **not represented as a complete repository-wide `npm test` run**.
+This is a real targeted GAC executable result. It is **not represented as a complete repository-wide `npm test` run**.
 
-## Defects found and fixed during executable validation
+## Defects found and fixed during validation
 
-### 1. Missing relic delta displayed as synthetic `+0` — FIXED
+### Missing relic values becoming synthetic zero — FIXED
 
-`formatRelicDelta(null)` previously passed through `Number(null) === 0`, which could render missing relic context as a false neutral `+0`.
+`Number(null) === 0` caused missing relic context to risk appearing as `+0` and could coerce absent historical win/banner/relic fields into zero-like values.
 
-Fix:
-- added null-aware finite parsing in `public/gac-relic-suitability-model.js`;
-- `null`, `undefined` and empty-string relic deltas now remain unknown and render `—`;
-- missing historical win rate / average banners / relic delta remain `null` rather than synthetic zeroes;
-- regression coverage expanded.
+Fixes:
+- null-aware finite parsing in `public/gac-relic-suitability-model.js`;
+- null / undefined / empty relic delta renders `—`;
+- missing historical win rate, banners and relic delta remain `null`;
+- regression coverage added.
 
-### 2. Unresolved historical roster member could be treated as complete R0 evidence — FIXED
+### Missing roster member incorrectly completing historical relic snapshot — FIXED
 
-`teamRelicSnapshot()` previously used `Number.isFinite(Number(row.effectiveRelic))`; because `Number(null) === 0`, a missing roster member could incorrectly make a historical relic snapshot look complete.
+An unresolved member had `effectiveRelic: null`, but `Number(null)` made the prior completeness predicate pass.
 
-Fix:
-- completeness now requires a non-null effective relic value for every resolved battle member;
+Fixes:
+- every historical battle member must resolve to a non-null effective relic value;
+- incomplete snapshots remain incomplete;
 - incomplete snapshots cannot generate historical relic delta evidence;
-- supplemental metadata remains UNKNOWN/incomplete instead of inventing R0 context.
+- supplemental battle/DC metadata remains UNKNOWN instead of inventing R0 context;
+- explicit regression test added.
 
-### 3. Datacron team-signature test contradicted canonical grouping — FIXED
+### Datacron team-signature test expected input order — FIXED
 
-The Datacron service intentionally sorts deduplicated team members so equivalent squad permutations share one evidence key, while leader identity remains a separate dimension. The old test expected input order.
-
-Fix:
-- updated the contract to require ordering-insensitive team identity;
-- added explicit permutation-equivalence coverage;
-- runtime grouping behavior was retained because it is the correct evidence model.
-
-### 4. Scouting UI test omitted exact-slot provenance — FIXED
-
-The scouting model deliberately returns `exactSlot: true/false` so verified exact-slot evidence is distinguishable from zone-only fallback. An older test expected the pre-provenance shape.
+Runtime grouping correctly canonicalizes deduplicated team members so equivalent squad permutations share one evidence bucket while preserving leader identity. The stale test expected original input order.
 
 Fix:
-- exact verified slot targets now explicitly test `exactSlot: true`;
-- zone fallback explicitly tests `exactSlot: false`;
-- no provenance information was removed from runtime behavior.
+- contract now enforces ordering-insensitive squad identity and leader-sensitive identity.
 
-## Executed GAC coverage
+### Scouting UI test omitted slot provenance — FIXED
 
-The targeted Node 22 validation covers the major GAC Intelligence logic and safety boundaries, including:
+Runtime scouting deliberately carries `exactSlot: true/false` to distinguish verified exact-slot evidence from zone-only fallback.
 
-- evidence-risk / 90% Wilson lower-bound model;
-- sample-quality and descriptive failure-risk bands;
-- relic burden and historical undersize descriptors;
-- roster-aware counter matrix;
+Fix:
+- exact-slot test now requires `exactSlot: true`;
+- zone fallback requires `exactSlot: false`.
+
+## Validated GAC surfaces
+
+Targeted Node 22 validation covers:
+
+- 90% Wilson evidence floor;
+- sample-quality / failure-risk bands;
+- historical undersize / relic burden descriptors;
+- roster-aware Counter Intelligence Matrix;
 - exact-defense-first evidence matching;
-- minimum battle / relic gates;
-- consumed, own-defense and reserved attacker exclusion;
-- non-overlapping whole-board counter allocation;
+- minimum battle / relic thresholds;
+- own-defense / reserved / planned / consumed attacker exclusion;
+- non-overlapping whole-board allocation;
 - projected-banner boundaries;
-- risk/scarcity-aware board optimization;
-- Battle Execution Queue ordering and blocker classification;
-- canonical attack-plan separation;
-- Datacron signature normalization;
-- ASSIGNED / NONE / UNKNOWN distinction;
+- risk/scarcity board optimizer;
+- numbered Battle Execution Queue and blockers;
+- canonical server Attack Plan separation;
+- 48-item player-facing faction/role taxonomy;
+- Datacron ASSIGNED / NONE / UNKNOWN normalization;
+- equivalent Datacron signature grouping without instance IDs;
 - Datacron evidence maturity labels;
+- Datacron evidence service aggregation;
 - hardened Datacron migration schema/security/index contract;
-- Datacron evidence aggregation and canonical team signatures;
 - current relic suitability;
-- historical relic evidence enrichment;
-- historical scouting/staging and slot provenance;
-- canonical 48-item player-facing faction/role taxonomy;
-- client-only matrix and Battle Execution Queue exports;
-- verified-battle API confirmation/auth/origin/round boundaries;
+- historical relic enrichment;
+- historical scouting/staging and exact-slot provenance;
+- client-only matrix + execution-plan export;
+- verified-battle API auth/origin/round/confirmation boundaries;
 - supplemental relic enrichment fail-soft behavior after primary battle archival.
 
-## Baseline / branch safety
-
-- Preserved GAC Intelligence work was originally reconciled onto production `main` at `9ba43d7` through isolated bridge PR #317.
-- Production `main` later advanced through TB/Guild work to `a1a63ac38a4ad91cc80e1e05f38bd8da88d7c5f2`, leaving the GAC refresh branch 37 commits behind.
-- Sync-only bridge PR #322 merged the new `main` into the isolated GAC branch; it did **not** merge GAC into production.
-- After #322, the GAC branch was 0 commits behind `main` and PR #318 returned to a mergeable state.
-- The files imported by #322 were TB/Guild files and had no exact filename overlap with the GAC-specific changed-file set at that checkpoint.
-- Superseded PR #306 remains closed with history preserved.
-- No Railway deployment was triggered by GAC branch reconciliation or subsequent validation fixes.
-
-## Implemented GAC War Room flow
+## Implemented War Room flow
 
 ### Current-board truth
 
-- Manual entry of squads actually visible in-game remains the current-board truth source when hidden live board placement cannot be pulled.
-- Full player-facing faction/role taxonomy with searchable picker.
-- Current owner roster / current opponent roster context.
-- Exact entered defense composition preferred over leader-only aggregate evidence.
+- User-entered squads actually visible in-game remain the current-board truth source when hidden live placements cannot be pulled.
+- Exact entered squad composition is preferred over leader-only historical aggregates.
+- Full searchable player-facing faction/role taxonomy.
 
 ### Counter Intelligence Matrix
 
-- Roster-aware counter matrix for entered defenses.
-- Exact-defense-first evidence matching with explicit leader fallback.
-- Minimum battle and minimum relic controls.
-- Current roster ownership / relic availability checks.
-- Own-defense, reserved, planned and consumed attacker exclusion.
-- Exact variant drilldown with samples, wins, historical win rate, banners, confidence and source context.
-- Evidence variant can be locked into the authoritative server Attack Plan.
+- Current-roster constrained counters.
+- Exact-defense-first evidence with explicit leader fallback.
+- Minimum battle/relic filters.
+- Exact variant drilldown: battles, wins, historical win rate, banners, confidence and source context.
+- Counter can be locked into the authoritative server Attack Plan.
 
-### Whole-board optimizer and Battle Execution Queue
+### Whole-board optimizer / execution queue
 
-- Non-overlapping counter allocation across the entered board.
-- Risk/scarcity-aware prioritization.
-- Projected banners only when complete unique allocation + banner evidence exists.
-- Numbered execution queue:
-  1. active attempt;
-  2. locked server plan;
-  3. fresh non-overlap proposal.
-- Loss/abandoned states become cleanup-review blockers.
-- Unsynced/uncovered rows remain unnumbered officer blockers.
-- Locking a proposal recalculates from the remaining roster.
-- Queue reasons expose scarcity, exact/fallback evidence, sample risk, undersize evidence and relic burden.
-- Responsive execution layout covers desktop/tablet/mobile including 650px and 420px breakpoints.
+- Non-overlapping whole-board counter allocation.
+- Risk/scarcity-aware ordering.
+- Projected banners only with complete unique allocation + banner evidence.
+- Numbered queue order: active attempt -> locked server plan -> fresh proposal.
+- Loss/abandoned -> cleanup blocker.
+- Unsynced/uncovered -> unnumbered officer blocker.
+- Locking a proposal recalculates remaining roster availability.
+- Desktop/tablet/mobile responsive queue/blocker layout.
 
 ### Historical scouting
 
-- Historical opponent defense tendencies remain explicitly historical.
-- Exact historical slot tendencies carry `exactSlot: true`.
-- Zone fallback carries `exactSlot: false` and requires explicit fallback behavior where staging uses it.
-- Fleet territory is not staged through squad scouting.
-- Review flow can prefill the manual editor but does not silently save a current defense.
+- Historical tendencies never become current hidden-board truth.
+- Exact slot evidence carries `exactSlot: true`.
+- Zone fallback carries `exactSlot: false`.
+- Fleet territory is never staged through squad scouting.
+- Review can prefill manual editor but never silently saves a current defense.
 
 ### Datacron intelligence
 
-- Datacron evidence normalized by state + set/template/level/affixes, excluding player-specific instance ID.
-- `DC:NONE` and `DC:UNKNOWN` stay distinct.
-- Equivalent squad member permutations + equivalent Datacron rolls aggregate into the same evidence group.
-- Current owned Datacron readiness analysis.
-- Exact entered defense + confirmed defender Datacron signature matrix.
-- Supplemental verified-battle Datacron evidence warehouse.
-- Primary verified battle save remains valid if supplemental Datacron/relic enrichment is unavailable.
+- Evidence groups by state + set/template/level/normalized affixes.
+- Player-specific Datacron instance IDs do not fragment evidence.
+- `DC:NONE` and `DC:UNKNOWN` remain distinct.
+- Equivalent team permutations aggregate canonically.
+- Current owned Datacron readiness + exact-defense signature matrix.
+- Primary verified battle remains valid if supplemental Datacron/relic evidence storage is unavailable.
 
-### Export / officer utility
+### Export
 
 - Counter Matrix: COPY TSV / DOWNLOAD CSV.
-- Battle plan: COPY PLAN / DOWNLOAD TXT.
-- Plan export follows the numbered Battle Execution Queue, not deprecated optimizer priority cards.
+- Battle Execution Plan: COPY PLAN / DOWNLOAD TXT.
+- Export follows numbered execution queue.
 - Officer blockers export separately as **NOT ATTACK NUMBERS**.
-- Export remains client-only and makes no API write/query.
+- Export is client-only.
 
-## Startup / render-loop review — COMPLETE IN CODE
+## Startup / render-loop audit
 
-- Removed the Counter Matrix's former 5-second `setInterval` background tick.
-- Intelligence refresh is now event-driven / user-triggered.
+- Removed former 5-second Counter Matrix interval.
+- Intelligence refresh is event-driven / user-triggered.
 - Optimizer, relic suitability, Datacron matrix and historical staging remain on-demand.
-- Release source contract rejects recurring `setInterval` polling across these intelligence surfaces.
-- Existing faction-picker/export MutationObservers are idempotent through installed/presence markers.
-- No infinite GAC Intelligence render/polling loop was identified in the source audit.
+- Release source contract rejects recurring `setInterval` polling across these surfaces.
+- Faction picker / export MutationObservers are idempotent.
+- No infinite GAC Intelligence render/polling loop identified.
 
-## Datacron warehouse migration — HARDENED / NOT DEPLOYED
+## Datacron migration — HARDENED / NOT DEPLOYED
 
-Migration:
 `supabase/migrations/20260822070000_gac_datacron_battle_evidence.sql`
 
-Hardening includes:
-
-- enemy/counter squad JSON array checks;
-- Datacron/metadata JSON object checks;
+Includes:
+- squad JSON array checks;
+- Datacron / metadata JSON object checks;
 - ASSIGNED / NONE / UNKNOWN state checks;
-- idempotent unique battle key;
-- enemy, defender signature, counter, attacker signature and exact-matchup indexes;
+- unique idempotent battle key;
+- enemy / defender signature / counter / attacker signature / exact-matchup indexes;
 - RLS enabled;
-- no direct anon/authenticated access;
-- service-role `SELECT, INSERT, UPDATE` only for required evidence operations;
-- service-role `DELETE` / `TRUNCATE` revoked;
-- explicit identity-sequence usage/select privileges.
+- anon/authenticated direct access revoked;
+- service role SELECT / INSERT / UPDATE only;
+- service role DELETE / TRUNCATE revoked;
+- identity sequence usage/select privileges.
 
-The migration remains **NOT applied to production**.
+Migration remains **NOT applied to production**.
 
-## Datacron evidence maturity UX
+## Remaining production gates
 
-- warehouse unavailable -> `WAREHOUSE NOT READY`
-- 0 samples -> `EXPERIMENTAL · NO VERIFIED DC SAMPLES`
-- <25 samples -> `EXPERIMENTAL · LOW SAMPLE`
-- 25-99 samples -> `GROWING EVIDENCE`
-- 100+ samples -> `VERIFIED EVIDENCE`
-
-These are evidence-maturity labels, not current-battle win guarantees.
-
-## Remaining production approval gates
-
-1. **Repository-wide executable suite:** run the normal complete `npm test` workflow when a repository-capable runner / workflow dispatch is available. The targeted GAC slice is 90/90 green, but a full-repository pass is not falsely claimed.
-2. **Authenticated populated-board smoke:** verified owner roster + manually entered visible opponent defenses; exercise matrix -> exact variant -> plan lock -> optimizer queue -> remaining-roster reallocation.
-3. **Desktop/mobile visual acceptance:** verify matrix, execution queue, blockers, optimizer summaries and Datacron matrix in a real authenticated browser.
-4. **Migration gate:** apply the hardened additive Datacron evidence migration through the normal production migration path only when production release is accepted, then recheck schema/security state.
-5. **Final collision/head check:** compare the latest GAC diff against current `main` and all active TB/ROTE/Guild/styling branches immediately before merge.
-6. **Single production merge/deploy:** take #318 out of draft and merge once only after gates 1-5 are accepted, minimizing Railway rebuild/deploy churn.
+1. Run complete repository `npm test` through the normal workflow/repository-capable runner when available. The targeted GAC slice is 91/91 green; a full-repository pass is not falsely claimed.
+2. Authenticated populated-board smoke: real verified owner roster + manually entered visible opponent defenses -> matrix -> exact variant -> plan lock -> optimizer queue -> remaining-roster reallocation.
+3. Real desktop/mobile visual acceptance for matrix, execution queue, blockers, optimizer and Datacron matrix.
+4. Apply the additive Datacron migration through the normal production migration path only when release is accepted, then recheck schema/security state.
+5. Recheck latest GAC diff against current `main` and every active TB/ROTE/Guild/styling branch immediately before merge.
+6. Take #318 out of draft and perform one production merge/deploy only after gates 1-5 are accepted.
 
 ## Truth boundaries
 
-- Historical scouting never claims current hidden-board truth.
-- Historical win rates and Wilson evidence floors are descriptors, not predicted current-battle probabilities.
-- Missing relic / banner / win-rate evidence remains unknown rather than synthetic zero.
+- Historical evidence never claims current hidden-board truth.
+- Historical rates / Wilson floors are not predicted current-battle probabilities.
+- Missing relic/banner/win-rate evidence stays unknown, never synthetic zero.
 - Incomplete historical roster snapshots cannot generate relic delta evidence.
-- Exact entered defense variants are preferred over leader aggregates.
-- Current roster reservations/consumption constrain availability, with server-side Attack Plan validation authoritative.
+- Exact entered defenses are preferred over leader aggregates.
+- Current roster reservations/consumption constrain recommendations; server Attack Plan validation remains authoritative.
 - `DC:UNKNOWN` is never coerced to `DC:NONE`.
-- Projected banners are historical allocation evidence, not a guaranteed round score.
-- Battle Execution Queue order is a deterministic planning aid, not a guarantee that an attack will win.
+- Projected banners are evidence summaries, not guaranteed scores.
+- Battle Execution Queue ordering is a planning aid, not a guaranteed win sequence.
