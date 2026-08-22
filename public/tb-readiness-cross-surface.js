@@ -213,6 +213,38 @@ function decorateRoteLocation(territoryId) {
   }
 }
 
+function selectedRoteTerritoryId() {
+  return text(document.querySelector("#roteGalaxyMap [data-rote-planet].selected")?.dataset?.rotePlanet).toLowerCase();
+}
+
+function decorateRoteMissionBoard() {
+  const board = document.getElementById("roteMissionBoard");
+  if (!board) return;
+  const territoryId = selectedRoteTerritoryId();
+  const definitions = territoryId ? specialMissionsForLocation("rote", territoryId) : [];
+  let section = board.querySelector(":scope > [data-tbx-map-mission-detail]");
+  if (!definitions.length) {
+    section?.remove();
+    return;
+  }
+  if (!section) {
+    section = document.createElement("section");
+    section.dataset.tbxMapMissionDetail = "true";
+    section.className = "rote-board-section tbx-map-mission-detail";
+    const head = board.querySelector(":scope > .rote-board-head");
+    if (head?.nextSibling) board.insertBefore(section, head.nextSibling); else board.prepend(section);
+  }
+  const byId = missionRowsById();
+  const rows = definitions.map((definition) => byId.get(definition.id)).filter(Boolean);
+  const signature = `${territoryId}:${state.signature}:${rows.map((row) => `${row.id}:${row.status}:${row.upgradeText}`).join("|")}`;
+  const html = `<div class="rote-board-section-head"><div><span>SPECIAL MISSION READINESS</span><h4>Your exact entry gates here</h4></div><b>${rows.filter((row) => row.ready).length}/${definitions.length}</b></div>
+    <div class="tbx-map-mission-list">${definitions.map((definition) => {
+      const row = byId.get(definition.id);
+      return `<article class="tbx-map-mission-row ${row ? statusTone(row.status) : "unknown"}"><header><strong>${escapeHtml(definition.label)}</strong>${row ? missionStatusMarkup(row) : ""}</header>${row ? `<div class="tbx-player-requirements">${array(row.requirements).map(stateChip).join("")}</div><p>${escapeHtml(row.upgradeText || definition.gateText)}</p>` : `<p>${escapeHtml(definition.gateText)}</p>`}</article>`;
+    }).join("")}</div>`;
+  setStableMarkup(section, signature, html);
+}
+
 function decorateWatLocation() {
   const missions = specialMissionsForLocation("geo-separatist", "p3-middle");
   if (!missions.length) return;
@@ -232,6 +264,7 @@ function decorateWatLocation() {
 function decorateMaps() {
   decorateRoteLocation("bracca");
   decorateRoteLocation("tatooine");
+  decorateRoteMissionBoard();
   decorateWatLocation();
 }
 
