@@ -33,6 +33,14 @@ create index if not exists gac_dc_battle_counter_idx
   on public.gac_datacron_battle_evidence(format, counter_leader_base_id, observed_at desc);
 create index if not exists gac_dc_battle_attacker_sig_idx
   on public.gac_datacron_battle_evidence(format, attacker_datacron_signature, observed_at desc);
+create index if not exists gac_dc_battle_exact_matchup_idx
+  on public.gac_datacron_battle_evidence(
+    format,
+    enemy_leader_base_id,
+    defender_datacron_signature,
+    counter_leader_base_id,
+    attacker_datacron_signature
+  );
 
 alter table public.gac_datacron_battle_evidence enable row level security;
 revoke all on public.gac_datacron_battle_evidence from anon, authenticated;
