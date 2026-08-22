@@ -7,24 +7,27 @@ import {
   unitCategoryKeys,
 } from '../guild-tb-readiness-roster-service.mjs';
 
-test('compact TB category normalization accepts prefixed game faction tags', () => {
+test('compact TB category normalization accepts actual prefixed game faction tags', () => {
   assert.equal(normalizeCategory('Mandalorian'), 'mandalorian');
   assert.equal(normalizeCategory('affiliation_mandalorian'), 'mandalorian');
+  assert.equal(normalizeCategory('affiliation_ls_mandalorian'), 'mandalorian');
+  assert.equal(normalizeCategory('affiliation_ds_mandalorian'), 'mandalorian');
   assert.equal(normalizeCategory({ id: 'faction_mandalorian' }), 'mandalorian');
   assert.equal(normalizeCategory('category_inquisitorius'), 'inquisitorius');
+  assert.equal(normalizeCategory('affiliation_ds_inquisitorius'), 'inquisitorius');
 });
 
-test('compact TB selector sees categories, factions and tags', () => {
-  assert.deepEqual(unitCategoryKeys({ categories: ['affiliation_mandalorian'] }), ['mandalorian']);
+test('compact TB selector sees categories, factions and tags across ls/ds decorators', () => {
+  assert.deepEqual(unitCategoryKeys({ categories: ['affiliation_ls_mandalorian'] }), ['mandalorian']);
   assert.deepEqual(unitCategoryKeys({ factions: ['Mandalorian'] }), ['mandalorian']);
-  assert.deepEqual(unitCategoryKeys({ tags: [{ categoryId: 'category_inquisitorius' }] }), ['inquisitorius']);
+  assert.deepEqual(unitCategoryKeys({ tags: [{ categoryId: 'affiliation_ds_inquisitorius' }] }), ['inquisitorius']);
 });
 
 test('category-only Mandalorians and Inquisitors are included in compact TB roster definition set', () => {
   const catalog = [
-    { baseId: 'SABINEWRENS3', categories: ['affiliation_mandalorian'] },
-    { baseId: 'SECONDINQ', categories: [{ id: 'category_inquisitorius' }] },
-    { baseId: 'UNRELATED', categories: ['affiliation_jedi'] },
+    { baseId: 'SABINEWRENS3', categories: ['affiliation_ls_mandalorian'] },
+    { baseId: 'SECONDINQ', categories: [{ id: 'affiliation_ds_inquisitorius' }] },
+    { baseId: 'UNRELATED', categories: ['affiliation_ls_jedi'] },
   ];
   const relevant = relevantCatalogRows(catalog).map((row) => row.baseId);
   assert.ok(relevant.includes('SABINEWRENS3'));
