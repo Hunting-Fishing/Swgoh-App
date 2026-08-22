@@ -56,7 +56,7 @@ function injectOverviewCard() {
   const article = document.createElement("article");
   article.id = "guildZeffoOverviewCard";
   article.className = "guild-capability-card";
-  article.innerHTML = `<div class="kicker">TB OFFICER TOOL</div><div class="guild-capability-title"><h3>TB Mission Readiness</h3><span>LIVE GUILD</span></div><p>Profile-first readiness boards for special Territory Battle missions. Zeffo / Bracca and Mandalore are live; Reva, Wat Tambor and more plug into the same layout.</p><a class="guild-zeffo-card-link" href="${escapeAttr(routeUrl())}">Open TB Readiness →</a>`;
+  article.innerHTML = `<div class="kicker">TB OFFICER TOOL</div><div class="guild-capability-title"><h3>TB Mission Readiness</h3><span>LIVE GUILD</span></div><p>Profile-first readiness boards for Zeffo / Bracca, Mandalore, Reva and Wat Tambor, with exact member requirements and officer action lists.</p><a class="guild-zeffo-card-link" href="${escapeAttr(routeUrl())}">Open TB Readiness →</a>`;
   const tbCard = [...grid.children].find((row) => row.textContent?.includes("TB Command"));
   if (tbCard?.nextSibling) grid.insertBefore(article, tbCard.nextSibling); else grid.appendChild(article);
 }
@@ -85,13 +85,11 @@ async function renderRoute(force = false) {
   target.dataset.guildZeffoMounted = "true";
   target.innerHTML = '<section class="guild-page-card"><div class="workspace-note">Loading live TB mission readiness…</div></section>';
   try {
-    const [guildBody, catalogBody, module] = await Promise.all([
+    const [guildBody, module] = await Promise.all([
       fetchJson(`/api/guild/by-player/${allyCode}/roster`),
-      fetchJson("/data/catalog.json?tb-readiness=1"),
-      import("./guild-zeffo-readiness-page.js"),
+      import("./guild-tb-readiness-page.js"),
     ]);
-    const catalog = Array.isArray(catalogBody?.units) ? catalogBody.units : [];
-    await module.renderGuildZeffoReadinessPage({ target, guildBody, catalog, allyCode });
+    await module.renderGuildTbReadinessPage({ target, guildBody, allyCode });
     state.renderedKey = key;
   } catch (error) {
     target.innerHTML = `<section class="guild-page-card"><div class="workspace-error">${escapeHtml(error?.message || "TB mission readiness is unavailable.")}</div></section>`;
