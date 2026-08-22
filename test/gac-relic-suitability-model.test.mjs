@@ -29,10 +29,12 @@ test('relic suitability bands call out deep undergear separately', () => {
   assert.equal(fit.band, 'deep-underdog');
 });
 
-test('relic delta formatting is explicit about sign', () => {
+test('relic delta formatting is explicit about sign and keeps missing data unknown', () => {
   assert.equal(formatRelicDelta(1.25), '+1.3');
   assert.equal(formatRelicDelta(-2), '-2');
   assert.equal(formatRelicDelta(null), '—');
+  assert.equal(formatRelicDelta(undefined), '—');
+  assert.equal(formatRelicDelta(''), '—');
 });
 
 test('allocation relic rows preserve historical win evidence as a separate field', () => {
@@ -46,4 +48,17 @@ test('allocation relic rows preserve historical win evidence as a separate field
   assert.equal(rows[0].winRate, .88);
   assert.equal(rows[0].battles, 42);
   assert.equal(rows[0].averageBanners, 53);
+  assert.equal(rows[0].historicalAverageRelicDelta, null);
+  assert.equal(rows[0].historicalRelicEvidenceAvailable, false);
+});
+
+test('missing historical percentages and banners remain unknown rather than synthetic zeroes', () => {
+  const rows = relicSuitabilityForAllocation([
+    { rowKey:'FRONT-TOP|0', counterLeaderBaseId:'A', counterMembers:['A','B','C'] },
+  ], [
+    { zone:'FRONT-TOP', slot:0, leaderBaseId:'D', members:['D','E','F'] },
+  ], ownRoster, opponentRoster);
+  assert.equal(rows[0].winRate, null);
+  assert.equal(rows[0].averageBanners, null);
+  assert.equal(rows[0].historicalAverageRelicDelta, null);
 });
