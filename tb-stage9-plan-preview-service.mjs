@@ -3,6 +3,7 @@ import { discordHardReservationStore } from './discord-hard-reservation-store.mj
 import { discordStateStore } from './discord-state-store.mjs';
 import { createDiscordTbLiveServices } from './discord-tb-live.mjs';
 import { discordTbConfig } from './discord-tb.mjs';
+import { planGuildTbOperationsParity } from './public/guild-operations-parity-planner.js';
 import { supabaseCoreStore } from './supabase-core-store.mjs';
 import {
   canonicalJson,
@@ -14,6 +15,7 @@ const text = (value) => String(value ?? '').trim();
 const array = (value) => Array.isArray(value) ? value : [];
 const object = (value) => value && typeof value === 'object' && !Array.isArray(value) ? value : {};
 const first = (value) => array(value)[0] || null;
+const upper = (value) => text(value).toUpperCase();
 
 function serviceError(message, status, code) {
   const error = new Error(message);
@@ -60,20 +62,141 @@ function compactReservationState(state = {}) {
   return Object.freeze({ reservations: object(state.reservations) });
 }
 
-function nonEmptyObject(value) {
-  return Object.keys(object(value)).length > 0;
+function memberIdentity(row = {}) {
+  return text(
+    row?.memberId
+    || row?.playerId
+    || row?.swgoh_player_id
+    || row?.swgohPlayerId
+    || row?.swgohAllyCode
+    || row?.allyCode
+    || row?.ally_code
+    || row?.name,
+  );
 }
 
-function unsupportedPlanCustomization(plan = {}, rules = [], preassignments = []) {
-  const custom = [];
-  if (nonEmptyObject(plan.phase_layout)) custom.push('phase layout');
-  if (nonEmptyObject(plan.requirement_overrides)) custom.push('requirement overrides');
-  if (array(plan.ignored_missions).length) custom.push('ignored missions');
-  if (array(plan.ignored_platoons).length) custom.push('ignored platoons');
-  if (array(plan.ignored_slots).length) custom.push('ignored slots');
-  if (array(rules).length) custom.push('grouping rules');
-  if (array(preassignments).length) custom.push('preassignments');
-  return Object.freeze(custom);
+function normalizedPreference(value) {
+  const candidate = text(value).toLowerCase();
+  return candidate === 'give' || candidate === 'keep' ? candidate : '';
+}
+
+function normalizedBaseId(value) {
+  const candidate = upper(value);
+  return /^[A-Z0-9_:-]{2,80}$/.test(candidate) ? candidate : '';
+}
+
+function normalizedPhase(value) {
+  const candidate = upper(value);
+  return /^P[1-6]$/.test(candidate) ? candidate : '';
+}
+
+function normalizedSnowflake(value) {
+  const candidate = text(value);
+  return /^\d{16,22}$/.test(candidate) ? candidate : '';
+}
+
+function playerMemberId(row = {}) {
+  return text(row?.swgoh_player_id || row?.ally_code || row?.name);
+}
+
+function guildAliasMap(guildSnapshot = {}) {
+  const aliases = new Map();
+  for (const member of array(guildSnapshot?.members)) {
+    const canonical = text(member?.playerId || member?.allyCode || member?.name);
+    if (!canonical) continue;
+    for (const alias of [member?.playerId, member?.allyCode, member?.name]) {
+      if (text(alias)) aliases.set(text(alias), canonical);
+    }
+  }
+  return aliases;
+}
+
+function resolveMemberId(value, aliases, dbPlayers) {
+  const raw = text(value);
+  if (!raw) return '';
+  const dbResolved = dbPlayers.get(raw);
+  if (dbResolved) return aliases.get(dbResolved) || dbResolved;
+  return aliases.get(raw) || raw;
+}
+
+function normalizePlanningControls(snapshot = {}, guildSnapshot = {}, nowMs = Date.now()) {
+  const aliases = guildAliasMap(guildSnapshot);
+  const dbPlayers = new Map(array(snapshot?.players)
+    .map((row) => [text(row?.id), playerMemberId(row)])
+    .filter(([id, memberId]) => id && memberId));
+  const resolve = (value) => resolveMemberId(value, aliases, dbPlayers);
+
+  const preferenceMap = new Map();
+  for (const row of Object.values(object(snapshot?.discordGuild?.memberPreferences))) {
+    const memberId = resolve(memberIdentity(row));
+    const baseId = normalizedBaseId(row?.baseId || row?.base_id);
+    const preference = normalizedPreference(row?.preference);
+    if (memberId && baseId && preference) preferenceMap.set(`${memberId}|${baseId}`, { memberId, baseId, preference, source: 'discord-state' });
+  }
+  for (const row of array(snapshot?.donationPreferences)) {
+    const memberId = resolve(row?.player_id);
+    const baseId = normalizedBaseId(row?.base_id);
+    const preference = normalizedPreference(row?.preference);
+    if (memberId && baseId && preference) preferenceMap.set(`${memberId}|${baseId}`, { memberId, baseId, preference, source: text(row?.source) || 'command-center' });
+  }
+
+  const ignored = new Set();
+  for (const row of Object.values(object(snapshot?.discordGuild?.memberAvailability))) {
+    if (text(row?.availability).toLowerCase() !== 'unavailable') continue;
+    const memberId = resolve(memberIdentity(row));
+    if (memberId) ignored.add(memberId);
+  }
+  for (const row of array(snapshot?.memberControls)) {
+    const until = Date.parse(text(row?.ignored_until));
+    if (row?.available !== false && !(Number.isFinite(until) && until > nowMs)) continue;
+    const memberId = resolve(row?.player_id);
+    if (memberId) ignored.add(memberId);
+  }
+
+  const reservations = [];
+  const userLinks = object(snapshot?.discordGuild?.userLinks);
+  for (const row of Object.values(object(snapshot?.hardReservations?.reservations))) {
+    if (row?.reserved !== true) continue;
+    const discordUserId = normalizedSnowflake(row?.discordUserId || row?.discord_user_id);
+    const memberId = resolve(memberIdentity(row));
+    const linkedMemberId = discordUserId ? resolve(memberIdentity(userLinks[discordUserId])) : '';
+    const phase = normalizedPhase(row?.phase);
+    const baseId = normalizedBaseId(row?.baseId || row?.base_id);
+    if (!discordUserId || !memberId || linkedMemberId !== memberId || !phase || !baseId) continue;
+    reservations.push({ memberId, phase, baseId, source: 'discord-hard-reservation' });
+  }
+
+  return Object.freeze({
+    preferences: Object.freeze(stableRows([...preferenceMap.values()])),
+    ignoredMembers: Object.freeze([...ignored].sort()),
+    reservations: Object.freeze(stableRows(reservations)),
+    playerIdMap: Object.freeze(Object.fromEntries([...dbPlayers.entries()].sort((a, b) => a[0].localeCompare(b[0])))),
+  });
+}
+
+function normalizePreassignments(rows = [], controls = {}, guildSnapshot = {}) {
+  const aliases = guildAliasMap(guildSnapshot);
+  const dbPlayers = new Map(array(controls?.players)
+    .map((row) => [text(row?.id), playerMemberId(row)])
+    .filter(([id, memberId]) => id && memberId));
+  return Object.freeze(array(rows).map((row) => ({
+    slotId: text(row?.slot_id || row?.slotId),
+    memberId: resolveMemberId(row?.player_id || row?.playerId || row?.memberId, aliases, dbPlayers),
+  })).filter((row) => row.slotId && row.memberId));
+}
+
+function planCustomizationSummary(plan = {}, rules = [], preassignments = []) {
+  const layout = object(plan?.phase_layout);
+  const overrides = object(plan?.requirement_overrides);
+  return Object.freeze({
+    phaseLayout: Object.keys(layout).length > 0,
+    requirementOverrides: Object.keys(overrides).length,
+    ignoredMissions: array(plan?.ignored_missions).length,
+    ignoredPlatoons: array(plan?.ignored_platoons).length,
+    ignoredSlots: array(plan?.ignored_slots).length,
+    groupingRules: array(rules).length,
+    preassignments: array(preassignments).length,
+  });
 }
 
 export function createTbStage9PlanPreviewService(options = {}) {
@@ -81,8 +204,10 @@ export function createTbStage9PlanPreviewService(options = {}) {
   const stateStore = options.stateStore || discordStateStore;
   const reservationStore = options.reservationStore || discordHardReservationStore;
   const versionService = options.versionService || tbAssignmentVersionService;
+  const parityPlanner = options.parityPlanner || planGuildTbOperationsParity;
   const env = options.env || process.env;
   const config = options.discordConfig || discordTbConfig(env);
+  const now = typeof options.now === 'function' ? options.now : () => new Date();
   const live = options.live || createDiscordTbLiveServices(env, {
     stateStore,
     reservationStore,
@@ -108,7 +233,12 @@ export function createTbStage9PlanPreviewService(options = {}) {
       reservationState = await reservationStore.readGuild(context.discordGuildId) || {};
     }
 
-    const [memberControls, donationPreferences] = await Promise.all([
+    const [players, memberControls, donationPreferences] = await Promise.all([
+      store.select('players', {
+        select: 'id,ally_code,swgoh_player_id,name,current_guild_id',
+        current_guild_id: `eq.${context.guildId}`,
+        limit: 100,
+      }),
       store.select('guild_member_operation_controls', {
         select: 'guild_id,player_id,available,ignored_until,ignore_reason,source,updated_at',
         guild_id: `eq.${context.guildId}`,
@@ -124,6 +254,7 @@ export function createTbStage9PlanPreviewService(options = {}) {
     return Object.freeze({
       discordGuild: compactGuildState(guildState),
       hardReservations: compactReservationState(reservationState),
+      players: Object.freeze(stableRows(players)),
       memberControls: Object.freeze(stableRows(memberControls)),
       donationPreferences: Object.freeze(stableRows(donationPreferences)),
     });
@@ -144,36 +275,38 @@ export function createTbStage9PlanPreviewService(options = {}) {
 
     const [rules, preassignments] = await Promise.all([
       store.select('guild_tb_grouping_rules', {
-        select: 'id,rule_type,priority',
+        select: 'id,rule_type,priority,when_spec,then_spec,enabled',
         plan_id: `eq.${plan.id}`,
         guild_id: `eq.${context.guildId}`,
         enabled: 'eq.true',
-        limit: 1,
+        order: 'priority.asc',
+        limit: 500,
       }),
       store.select('guild_tb_plan_preassignments', {
         select: 'id,slot_id,player_id',
         plan_id: `eq.${plan.id}`,
-        limit: 1,
+        limit: 500,
       }),
     ]);
-    const unsupported = unsupportedPlanCustomization(plan, rules, preassignments);
-    if (unsupported.length) {
-      throw serviceError(
-        `The persisted ROTE plan contains ${unsupported.join(', ')}. Discord immutable preview cannot safely ignore saved web-plan configuration, so preview creation is blocked until the same planner path materializes those settings.`,
-        409,
-        'TB_ASSIGNMENT_PLAN_CUSTOMIZATION_UNSUPPORTED',
-      );
-    }
-    return plan;
+    return Object.freeze({
+      plan,
+      groupingRules: Object.freeze(stableRows(rules)),
+      preassignments: Object.freeze(stableRows(preassignments)),
+    });
   }
 
   async function createPreview(contextInput = {}, input = {}) {
     const context = requireContext(contextInput);
     const phase = normalizeRotePhase(input.rotePhase || input.phase);
-    const sourcePlan = await requirePlan(context, input.planId);
+    const source = await requirePlan(context, input.planId);
+    const sourcePlan = source.plan;
     const controlsBefore = await readControlSnapshot(context);
     const controlsBeforeHash = digest(controlsBefore);
 
+    // Stage 8 remains the authoritative live source hydration path for the Guild roster,
+    // current Operations requirements and mission-safety protections. Stage 9 then reruns
+    // the shared web parity planner with the persisted web-plan configuration instead of
+    // silently discarding or rejecting those officer controls.
     const planner = await live.buildPlan({
       allyCode: context.seedAllyCode,
       interaction: input.interaction,
@@ -190,21 +323,49 @@ export function createTbStage9PlanPreviewService(options = {}) {
       );
     }
 
-    const assignments = array(planner?.plan?.assignments).filter((row) => text(row?.phase).toUpperCase() === phase);
-    const unfilled = array(planner?.plan?.unfilled).filter((row) => text(row?.phase).toUpperCase() === phase);
+    const effectiveControls = normalizePlanningControls(controlsBefore, planner?.guild, now().getTime());
+    const preAssignments = normalizePreassignments(source.preassignments, controlsBefore, planner?.guild);
+    const parityPlan = parityPlanner(planner?.guild, planner?.operations, {
+      phaseLayout: object(sourcePlan.phase_layout),
+      requirementOverrides: object(sourcePlan.requirement_overrides),
+      ignoredMissions: array(sourcePlan.ignored_missions),
+      ignoredPlatoons: array(sourcePlan.ignored_platoons),
+      ignoredSlots: array(sourcePlan.ignored_slots),
+      groupingRules: source.groupingRules,
+      preAssignments,
+      reservations: effectiveControls.reservations,
+      preferences: effectiveControls.preferences,
+      ignoredMembers: effectiveControls.ignoredMembers,
+      protections: array(planner?.safety?.protections),
+      maxPerTerritory: Number(planner?.plan?.maxPerTerritory || 10),
+    });
+
+    if (parityPlan?.parity?.previewReady === false) {
+      throw serviceError(
+        `The persisted ROTE plan has ${array(parityPlan?.parity?.unresolvedRequirements).length} unresolved requirement override(s). Resolve or ignore those slots before immutable preview creation.`,
+        409,
+        'TB_ASSIGNMENT_PARITY_PREVIEW_NOT_READY',
+      );
+    }
+
+    const assignments = array(parityPlan?.assignments).filter((row) => text(row?.phase).toUpperCase() === phase);
+    const unfilled = array(parityPlan?.unfilled).filter((row) => text(row?.phase).toUpperCase() === phase);
     const phaseProtections = array(planner?.safety?.protections).filter((row) => text(row?.phase).toUpperCase() === phase);
-    const phaseRow = array(planner?.plan?.phases).find((row) => text(row?.phase).toUpperCase() === phase) || {};
+    const phaseRow = array(parityPlan?.phases).find((row) => text(row?.phase).toUpperCase() === phase) || {};
+    const customization = planCustomizationSummary(sourcePlan, source.groupingRules, preAssignments);
 
     const plannerInputs = Object.freeze({
-      contract: 'stage8-discord-mission-safe-v1',
+      contract: 'stage9-web-discord-parity-v2',
+      sourceHydrationContract: 'stage8-discord-mission-safe-v1',
       phase,
       guildBindingSource: text(planner?.guildBindingSource),
       redundancyTarget: Number(config?.redundancyTarget || 2),
-      maxPerTerritory: Number(planner?.plan?.maxPerTerritory || 10),
+      maxPerTerritory: Number(parityPlan?.maxPerTerritory || planner?.plan?.maxPerTerritory || 10),
       guildSnapshotHash: digest(planner?.guild || {}),
       operationRequirementsHash: digest(planner?.operations || {}),
       missionProtectionsHash: digest(array(planner?.safety?.protections)),
       durableControlsHash: controlsBeforeHash,
+      effectivePlanningControlsHash: digest(effectiveControls),
       sourcePlanHash: digest({
         id: sourcePlan.id,
         updatedAt: sourcePlan.updated_at,
@@ -214,12 +375,21 @@ export function createTbStage9PlanPreviewService(options = {}) {
         ignoredPlatoons: array(sourcePlan.ignored_platoons),
         ignoredSlots: array(sourcePlan.ignored_slots),
       }),
+      groupingRulesHash: digest(source.groupingRules),
+      preassignmentsHash: digest(preAssignments),
+      parityOutputHash: digest({
+        assignments,
+        unfilled,
+        lockIssues: array(parityPlan?.lockIssues),
+        parity: object(parityPlan?.parity),
+      }),
     });
     const inputFingerprint = digest(plannerInputs);
     const diagnostics = Object.freeze({
       plannerContract: plannerInputs.contract,
+      sourceHydrationContract: plannerInputs.sourceHydrationContract,
       requestedPhase: phase,
-      strategy: text(planner?.plan?.strategy),
+      strategy: text(parityPlan?.strategy || planner?.plan?.strategy),
       phaseSummary: Object.freeze({
         total: Number(phaseRow?.total || assignments.length + unfilled.length),
         assigned: assignments.length,
@@ -231,7 +401,15 @@ export function createTbStage9PlanPreviewService(options = {}) {
         criticalProtections: phaseProtections.filter((row) => Number(row?.severity || 0) >= 80).length,
         helpAssignments: helpCount(assignments),
       }),
-      planningControls: Object.freeze({ ...(planner?.planningControls || {}) }),
+      customization,
+      parity: Object.freeze({ ...object(parityPlan?.parity) }),
+      planningControls: Object.freeze({
+        preferences: effectiveControls.preferences.length,
+        unavailableMembers: effectiveControls.ignoredMembers.length,
+        hardReservations: effectiveControls.reservations.length,
+        preassignments: preAssignments.length,
+        sourceStage8: Object.freeze({ ...object(planner?.planningControls) }),
+      }),
       source: Object.freeze({
         guildBindingSource: text(planner?.guildBindingSource),
         rosterCache: text(planner?.cache),
@@ -251,7 +429,7 @@ export function createTbStage9PlanPreviewService(options = {}) {
     });
 
     return Object.freeze({
-      source: 'stage9-immutable-stage8-mission-safe-preview',
+      source: 'stage9-immutable-web-discord-parity-preview',
       plan: Object.freeze({
         id: text(sourcePlan.id),
         name: text(sourcePlan.name),
@@ -264,11 +442,19 @@ export function createTbStage9PlanPreviewService(options = {}) {
       verification: created.verification,
       attempt: created.attempt,
       summary: diagnostics.phaseSummary,
+      customization,
+      parity: diagnostics.parity,
       controlsStable: true,
     });
   }
 
-  return Object.freeze({ createPreview, readControlSnapshot, requirePlan });
+  return Object.freeze({
+    createPreview,
+    normalizePlanningControls,
+    normalizePreassignments,
+    readControlSnapshot,
+    requirePlan,
+  });
 }
 
 export const tbStage9PlanPreviewService = createTbStage9PlanPreviewService();
