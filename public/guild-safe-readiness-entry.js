@@ -96,13 +96,13 @@ async function hydrateTbGuildRoster(guildBody, target) {
 
     if (target && completed % 4 === 0) {
       const note = target.querySelector("[data-tb-hydration-progress]");
-      if (note) note.textContent = `Loading member progression… ${completed}/${members.length}`;
+      if (note) note.textContent = `Fallback roster hydration… ${completed}/${members.length}`;
     }
 
     return {
       ...member,
       units,
-      rosterAvailable: units.length > 0,
+      rosterAvailable: member?.rosterAvailable === true || units.length > 0,
       tbRosterError: baseline?.__error || "",
       lastSyncedAt: baseline?.player?.updatedAt || baseline?.fetchedAt || member?.lastSyncedAt || "",
     };
@@ -119,12 +119,28 @@ async function hydrateTbGuildRoster(guildBody, target) {
       complete: members.length > 0 && hydrated === members.length,
     },
     tbReadinessHydration: {
-      source: "persisted-player-baselines",
+      source: "persisted-player-baselines-fallback",
       requested: members.length,
       hydrated,
       failed: Math.max(0, members.length - hydrated),
     },
   };
+}
+
+async function loadCompactTbGuildRoster(allyCode, target) {
+  try {
+    const overlay = await fetchJson(`/api/guild/by-player/${allyCode}/planning-overlay`);
+    const compact = overlay?.tbReadinessRoster;
+    if (Array.isArray(compact?.members) && compact.members.length) {
+      const note = target?.querySelector("[data-tb-hydration-progress]");
+      if (note) note.textContent = `Loaded compact TB progression for ${compact.members.length} guild members.`;
+      return compact;
+    }
+    throw new Error("Compact Guild TB roster was not included in the planning response.");
+  } catch {
+    const summaryBody = await fetchJson(`/api/guild/by-player/${allyCode}/roster`);
+    return hydrateTbGuildRoster(summaryBody, target);
+  }
 }
 
 async function renderReadiness(force = false) {
@@ -135,13 +151,12 @@ async function renderReadiness(force = false) {
   const key = `${allyCode}|${location.search}`;
   if (!force && renderedKey === key) return;
   rendering = true;
-  target.innerHTML = '<section class="guild-page-card"><div class="workspace-note" data-tb-hydration-progress>Loading guild roster and member progression…</div></section>';
+  target.innerHTML = '<section class="guild-page-card"><div class="workspace-note" data-tb-hydration-progress>Loading compact Guild TB progression…</div></section>';
   try {
-    const [summaryBody, module] = await Promise.all([
-      fetchJson(`/api/guild/by-player/${allyCode}/roster`),
+    const [guildBody, module] = await Promise.all([
+      loadCompactTbGuildRoster(allyCode, target),
       import("./guild-tb-readiness-page.js"),
     ]);
-    const guildBody = await hydrateTbGuildRoster(summaryBody, target);
     await module.renderGuildTbReadinessPage({ target, guildBody, allyCode });
     renderedKey = key;
   } catch (error) {
