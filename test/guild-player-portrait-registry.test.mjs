@@ -12,7 +12,7 @@ import {
   resolvePlayerPortraitUrl,
   trustedPortraitUrl,
 } from '../public/guild-player-portrait-registry.js';
-import { normalizePortrait } from '../scripts/sync-player-portraits.mjs';
+import { normalizePortrait, usablePortraitRegistry } from '../scripts/sync-player-portraits.mjs';
 
 test('build-time portrait normalization maps game portrait ID to dedicated asset CDN', () => {
   const row = normalizePortrait({
@@ -30,6 +30,20 @@ test('portrait normalization rejects malformed IDs and texture keys', () => {
   assert.equal(normalizePortrait({ id: 'bad', icon: 'tex.vanity_yoda' }), null);
   assert.equal(normalizePortrait({ id: 'PLAYERPORTRAIT_TEST', icon: 'javascript:alert(1)' }), null);
   assert.equal(normalizeGameDataPortrait({ id: 'PLAYERPORTRAIT_TEST', icon: 'javascript:alert(1)' }), null);
+});
+
+test('empty or malformed committed portrait registries are not accepted as usable stale cache', () => {
+  assert.equal(usablePortraitRegistry({ count: 0, portraits: [] }), false);
+  assert.equal(usablePortraitRegistry({ count: 1, portraits: [] }), false);
+  assert.equal(usablePortraitRegistry({ count: 1, portraits: [{ id: 'bad', icon: 'bad' }] }), false);
+  assert.equal(usablePortraitRegistry({
+    count: 1,
+    portraits: [{ id: 'PLAYERPORTRAIT_JEDIMASTER', icon: 'tex.vanity_yoda' }],
+  }), true);
+  assert.equal(usablePortraitRegistry({
+    count: 2,
+    portraits: [{ id: 'PLAYERPORTRAIT_JEDIMASTER', icon: 'tex.vanity_yoda' }],
+  }), false);
 });
 
 test('browser portrait registry resolves only trusted same-origin or game-asset URLs', () => {
