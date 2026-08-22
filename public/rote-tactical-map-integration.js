@@ -1,6 +1,7 @@
 import { buildRoteTacticalPlanetModel } from './rote-tactical-node-model.js';
 import { hydrateRoteTacticalNodeButtons } from './rote-tactical-node-renderer.js';
 import { roteTacticalReadinessMarkup } from './rote-tactical-readiness-ui.js';
+import { buildRoteObservedMissionResults, roteObservedMissionResultsMarkup } from './rote-observed-results-ui.js';
 import './guild-rote-tactical-readiness-matrix-ui.js';
 
 let catalogPromise = null;
@@ -8,6 +9,10 @@ let scheduled = false;
 
 function liveSnapshot() {
   return typeof window === 'undefined' ? null : window.__swgohLiveSnapshot || null;
+}
+
+function tbAttemptSnapshot() {
+  return typeof window === 'undefined' ? null : window.__swgohTbMissionAttemptSnapshot || null;
 }
 
 function ensureStylesheet(selector, href, datasetKey) {
@@ -22,6 +27,7 @@ function ensureStylesheet(selector, href, datasetKey) {
 function ensureStylesheets() {
   ensureStylesheet('link[data-rote-tactical-node-css]', '/rote-tactical-node-v2.css?v=20260820-tactical1', 'roteTacticalNodeCss');
   ensureStylesheet('link[data-rote-tactical-readiness-css]', '/rote-tactical-readiness-v2.css?v=20260820-tactical2', 'roteTacticalReadinessCss');
+  ensureStylesheet('link[data-rote-observed-results-css]', '/rote-observed-results-ui.css?v=20260822-n6', 'roteObservedResultsCss');
 }
 
 async function loadCatalog() {
@@ -36,14 +42,32 @@ async function loadCatalog() {
   return catalogPromise;
 }
 
+function attemptSnapshotSignature(snapshot = null) {
+  if (!snapshot) return 'no-attempt-snapshot';
+  const explicit = String(snapshot?.signature || snapshot?.version || snapshot?.fetchedAt || '').trim();
+  if (explicit) return explicit;
+  const attempts = Array.isArray(snapshot?.attempts) ? snapshot.attempts : [];
+  return attempts.map((row) => [
+    row?.id || '',
+    row?.eventId || row?.event_id || '',
+    row?.missionId || row?.mission_id || '',
+    row?.playerId || row?.player_id || row?.allyCode || row?.ally_code || '',
+    row?.outcome || row?.result || '',
+    row?.reportedAt || row?.reported_at || '',
+  ].join(':')).join('|');
+}
+
 function tacticalSignature(root, catalog) {
   const snapshot = liveSnapshot();
+  const attempts = tbAttemptSnapshot();
   return [
     root?.dataset?.signature || '',
     root?.dataset?.roteZoomPlanet || '',
     snapshot?.allyCode || '',
     snapshot?.fetchedAt || 0,
     Array.isArray(catalog?.units) ? catalog.units.length : 0,
+    attempts?.eventId || attempts?.event?.id || 'no-active-event',
+    attemptSnapshotSignature(attempts),
   ].join('|');
 }
 
@@ -52,6 +76,15 @@ function selectedTacticalNode(root, model) {
   const nodeId = String(button?.dataset?.roteZoomNode || '').trim();
   if (!nodeId) return null;
   return model?.nodes?.find((node) => String(node?.id || '') === nodeId) || null;
+}
+
+function currentPlayerIdentity() {
+  const snapshot = liveSnapshot();
+  const body = snapshot?.body || {};
+  return Object.freeze({
+    playerId: String(body?.playerId || body?.player_id || body?.id || '').trim(),
+    allyCode: String(snapshot?.allyCode || body?.allyCode || body?.ally_code || '').replace(/\D/g, '').slice(0, 9),
+  });
 }
 
 export function hydrateSelectedMissionReadiness(root, model) {
@@ -74,15 +107,27 @@ export function hydrateSelectedMissionReadiness(root, model) {
     inspector.appendChild(host);
   }
 
+  const attemptSnapshot = tbAttemptSnapshot();
+  const observed = buildRoteObservedMissionResults({
+    missionId: selectedNode.missionId,
+    activeEventId: attemptSnapshot?.eventId || attemptSnapshot?.event?.id || '',
+    attempts: Array.isArray(attemptSnapshot?.attempts) ? attemptSnapshot.attempts : null,
+    player: currentPlayerIdentity(),
+  });
+
   host.dataset.tacticalMissionId = String(selectedNode.missionId || '');
   host.dataset.tacticalVerdict = String(selectedNode?.readiness?.verdict || 'ROSTER NOT LOADED');
-  host.innerHTML = roteTacticalReadinessMarkup(selectedNode.readiness || null);
+  host.dataset.tacticalObservedEvidence = String(observed?.evidenceLabel || 'ACTIVE EVENT EVIDENCE NOT LOADED');
+  host.dataset.tacticalObservedRecorded = String(observed?.guild?.recorded ?? '');
+  host.innerHTML = `${roteTacticalReadinessMarkup(selectedNode.readiness || null)}${roteObservedMissionResultsMarkup(observed)}`;
 
   return Object.freeze({
     hydrated: true,
     reason: selectedNode.readiness ? 'evaluated' : 'roster-not-loaded',
     missionId: String(selectedNode.missionId || ''),
     verdict: String(selectedNode?.readiness?.verdict || 'ROSTER NOT LOADED'),
+    observedEvidence: observed?.evidenceLabel || 'ACTIVE EVENT EVIDENCE NOT LOADED',
+    observedRecorded: Number(observed?.guild?.recorded || 0),
   });
 }
 
@@ -111,6 +156,7 @@ export async function enhanceRoteTacticalOverlay(root) {
   root.dataset.roteTacticalMissing = nodeResult.missingButtons.join(',');
   root.dataset.roteTacticalReadinessMission = readinessResult.missionId || '';
   root.dataset.roteTacticalReadinessVerdict = readinessResult.verdict || '';
+  root.dataset.roteTacticalObservedEvidence = readinessResult.observedEvidence || '';
 
   return Object.freeze({
     ...nodeResult,
@@ -140,6 +186,7 @@ export function installRoteTacticalMapIntegration() {
   observer.observe(document.body, { childList: true, subtree: true });
 
   window.addEventListener('swgoh:workspace-activated', scheduleEnhance);
+  window.addEventListener('swgoh:tb-mission-attempts-updated', scheduleEnhance);
   document.getElementById('allyForm')?.addEventListener('submit', () => setTimeout(scheduleEnhance, 650));
 
   return Object.freeze({ observer, scheduleEnhance });
