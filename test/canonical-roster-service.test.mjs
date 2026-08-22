@@ -40,14 +40,17 @@ function seedFixture({ memberCount = 50, unitCount = 394 } = {}) {
     ship_power: 5_000_000,
     current_guild_id: guildId,
     last_synced_at: "2026-08-17T17:55:08.229Z",
-    metadata: {},
+    metadata: index === 0
+      ? { playerTitle: "The Warmest Bacon", playerPortrait: "PLAYERPORTRAIT_JEDIMASTER" }
+      : {},
   }));
   players[0].ally_code = "732764286";
-  const members = players.map((player) => ({
+  const members = players.map((player, index) => ({
     guild_id: guildId, player_id: player.id, member_name: player.name,
     member_galactic_power: player.galactic_power, member_character_power: player.character_power,
     member_ship_power: player.ship_power, first_seen_in_guild_at: "2026-08-16T00:00:00Z",
-    last_seen_in_guild_at: "2026-08-17T17:55:08.229Z", last_synced_at: "2026-08-17T17:55:08.229Z", metadata: {},
+    last_seen_in_guild_at: "2026-08-17T17:55:08.229Z", last_synced_at: "2026-08-17T17:55:08.229Z",
+    metadata: { memberLevel: index === 0 ? 4 : index < 4 ? 3 : 2 },
   }));
   const playerSnapshots = players.map((player) => ({
     player_id: player.id, captured_at: "2026-08-17T17:55:08.229Z",
@@ -89,6 +92,25 @@ test("canonical Guild read returns all current members without shipping every un
   assert.equal(body.members[0].shipCount, 69);
   assert.equal(body.members[0].zetaCount, 282);
   assert.equal(body.members[0].omicronCount, 28);
+});
+
+test("canonical Guild read preserves in-game rank, title and portrait identity metadata", async () => {
+  const seed = seedFixture({ memberCount: 50 });
+  const service = createCanonicalRosterService({ store: fakeStore(seed), pageSize: 10 });
+  const body = await service.getGuildRosterByPlayer("732764286");
+  const leader = body.members.find((row) => row.allyCode === "732764286");
+  assert.equal(leader.memberLevel, 4);
+  assert.equal(leader.profileTitle, "The Warmest Bacon");
+  assert.equal(leader.playerPortrait, "PLAYERPORTRAIT_JEDIMASTER");
+  assert.equal(body.members.filter((row) => row.memberLevel === 3).length, 3);
+});
+
+test("canonical player read preserves profile identity metadata", async () => {
+  const seed = seedFixture({ unitCount: 394 });
+  const service = createCanonicalRosterService({ store: fakeStore(seed), pageSize: 200 });
+  const body = await service.getPlayerRoster("732764286");
+  assert.equal(body.player.profileTitle, "The Warmest Bacon");
+  assert.equal(body.player.playerPortrait, "PLAYERPORTRAIT_JEDIMASTER");
 });
 
 test("canonical player read pages internally but returns every owned unit", async () => {
