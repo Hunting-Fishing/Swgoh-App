@@ -14,6 +14,7 @@ test('team relic snapshot requires every battle member to resolve', () => {
   const partial = teamRelicSnapshot(['A','MISSING'], { units:[{baseId:'A',gear:13,relic:7}] });
   assert.equal(partial.complete, false);
   assert.equal(partial.averageRelic, null);
+  assert.equal(partial.members.find((row) => row.baseId === 'MISSING')?.effectiveRelic, null);
 });
 
 test('historical relic context computes attacker minus defender average relic', () => {
@@ -27,6 +28,18 @@ test('historical relic context computes attacker minus defender average relic', 
   assert.equal(context.attacker.averageRelic, 6);
   assert.equal(context.defender.averageRelic, 5);
   assert.equal(context.relicDelta, 1);
+});
+
+test('incomplete roster snapshots cannot generate historical relic delta evidence', () => {
+  const context = historicalRelicContext(
+    { attacker_members:['A','MISSING'], defender_members:['D'] },
+    { units:[{baseId:'A',gear:13,relic:7}] },
+    { units:[{baseId:'D',gear:13,relic:5}] },
+  );
+  assert.equal(context.attacker.complete, false);
+  assert.equal(context.complete, false);
+  assert.equal(context.attacker.averageRelic, null);
+  assert.equal(context.relicDelta, null);
 });
 
 test('enricher patches the already-saved battle and supplemental DC evidence metadata', async () => {
