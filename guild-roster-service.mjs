@@ -11,6 +11,10 @@ function positiveFinite(value) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
 }
 
+function clean(value) {
+  return String(value ?? "").trim();
+}
+
 function trimUrl(value) {
   return String(value || "").trim().replace(/\/+$/, "");
 }
@@ -39,14 +43,50 @@ function normalizedMemberGalacticPower(member = {}) {
   return combined > 0 ? Math.round(combined) : 0;
 }
 
+function profileIdentityValue(value, fields = []) {
+  if (typeof value === "string" || typeof value === "number") return clean(value);
+  if (!value || typeof value !== "object" || Array.isArray(value)) return "";
+  for (const field of fields) {
+    const candidate = clean(value?.[field]);
+    if (candidate) return candidate;
+  }
+  return "";
+}
+
+function normalizedMemberPortrait(member = {}) {
+  for (const candidate of [member.playerPortrait, member.selectedPlayerPortrait, member.profilePortrait, member.portrait]) {
+    const value = profileIdentityValue(candidate, ["id", "portraitId", "definitionId", "key", "name"]);
+    if (/^PLAYERPORTRAIT_[A-Z0-9_]+$/i.test(value)) return value.toUpperCase();
+  }
+  return "";
+}
+
+function normalizedMemberTitle(member = {}) {
+  for (const candidate of [member.playerTitle, member.selectedPlayerTitle, member.profileTitle, member.title]) {
+    const value = profileIdentityValue(candidate, ["name", "id", "titleId", "definitionId", "key"]);
+    if (value && value !== "[object Object]") return value;
+  }
+  return "";
+}
+
 function normalizeGuildRoster(body) {
   const sourceMembers = Array.isArray(body?.members) ? body.members : [];
   let membersChanged = false;
   const members = sourceMembers.map((member) => {
     const gp = normalizedMemberGalacticPower(member);
-    if (!gp || positiveFinite(member?.galacticPower) === gp) return member;
+    const portrait = normalizedMemberPortrait(member);
+    const title = normalizedMemberTitle(member);
+    const gpChanged = Boolean(gp && positiveFinite(member?.galacticPower) !== gp);
+    const portraitChanged = Boolean(portrait && clean(member?.playerPortrait) !== portrait);
+    const titleChanged = Boolean(title && clean(member?.playerTitle) !== title);
+    if (!gpChanged && !portraitChanged && !titleChanged) return member;
     membersChanged = true;
-    return { ...member, galacticPower: gp };
+    return {
+      ...member,
+      ...(gpChanged ? { galacticPower: gp } : {}),
+      ...(portrait ? { playerPortrait: portrait } : {}),
+      ...(title ? { playerTitle: title } : {}),
+    };
   });
 
   const currentGuildGp = positiveFinite(body?.guild?.galacticPower);
@@ -221,3 +261,10 @@ export function createGuildRosterService(env = process.env, options = {}) {
 // activity-rich Discord reads stay live, with public reads failing open to Comlink when a
 // Guild has not yet been persisted.
 export const guildRosterService = createGuildRosterService(process.env);
+
+export {
+  normalizeGuildRoster,
+  normalizedMemberPortrait,
+  normalizedMemberTitle,
+  profileIdentityValue,
+};

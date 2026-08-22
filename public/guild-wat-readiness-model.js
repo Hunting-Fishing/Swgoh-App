@@ -1,11 +1,13 @@
 import { guildMemberRole, playerPortraitId, playerPortraitUrl, playerProfileTitle } from './guild-member-identity.js';
+import { potentialMissionReward, tbSpecialMissionFact } from './tb-special-mission-facts.js';
 
 const asArray = (value) => Array.isArray(value) ? value : [];
 const finite = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
 const text = (value) => String(value ?? "").trim();
 
-export const WAT_REQUIRED_POWER = 16500;
-export const WAT_REQUIRED_STARS = 7;
+const WAT_FACT = tbSpecialMissionFact('wat');
+export const WAT_REQUIRED_POWER = WAT_FACT.gate.minimumCharacterPower;
+export const WAT_REQUIRED_STARS = WAT_FACT.gate.stars;
 export const WAT_CLOSE_POWER = 14000;
 export const WAT_CLOSE_STARS = 6;
 
@@ -104,11 +106,14 @@ export function buildGuildWatReadiness(guildBody = {}) {
   const ready = sorted.filter((row) => row.status === "READY");
   const almost = sorted.filter((row) => row.status === "ALMOST");
   const far = sorted.filter((row) => row.status === "FAR");
+  const rewardOpportunity = potentialMissionReward('wat', ready.length);
   return Object.freeze({
     missionId: "wat",
     missionName: "Wat Tambor Shard Mission",
     planetName: "Geonosis: Separatist Might · Phase 3",
     rewardMode: "shards",
+    rewardPerSuccessfulClear: WAT_FACT.reward,
+    source: WAT_FACT.source,
     gateText: "Five Geonosians at 7★ and at least 16,500 character power each, with Geonosian Brood Alpha required. Each successful guild member earns 1 Wat Tambor shard for the guild reward; up to 50 shards can be earned per Territory Battle.",
     closeText: "Yellow ALMOST is an officer-planning heuristic only: every required Geonosian is at least 6★ and 14,000 GP. The actual game gate remains 7★ and 16,500 GP on all five.",
     guild: Object.freeze({
@@ -124,7 +129,8 @@ export function buildGuildWatReadiness(guildBody = {}) {
       ready: ready.length,
       almost: almost.length,
       far: far.length,
-      potentialShards: ready.length,
+      potentialShards: rewardOpportunity?.amount || 0,
+      theoreticalShardMaximum: rewardOpportunity?.theoreticalGuildMaximum || 0,
       rosterUnavailable: sorted.filter((row) => !row.rosterAvailable).length,
       gbaReady: sorted.filter((row) => row.geonosians[0]?.state?.ready).length,
       allSevenStar: sorted.filter((row) => row.geonosians.every((geo) => geo.state.stars >= WAT_REQUIRED_STARS)).length,

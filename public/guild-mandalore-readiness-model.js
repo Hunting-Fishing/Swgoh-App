@@ -1,12 +1,14 @@
 import { normalizeZeffoUnitState } from "./guild-zeffo-readiness-model.js";
 import { normalizedTag, stripFactionDecorators, unitHasFaction, unitTags } from "./guild-tb-faction-tags.js";
+import { potentialMissionReward, tbSpecialMissionFact } from './tb-special-mission-facts.js';
 
 const asArray = (value) => Array.isArray(value) ? value : [];
 const finite = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
 const text = (value) => String(value ?? "").trim();
 
-export const MANDALORE_UNLOCK_TARGET = 25;
-export const MANDALORE_GET2_PER_CLEAR = 50;
+const MANDALORE_FACT = tbSpecialMissionFact('mandalore');
+export const MANDALORE_UNLOCK_TARGET = MANDALORE_FACT.unlockTarget;
+export const MANDALORE_GET2_PER_CLEAR = MANDALORE_FACT.reward.perSuccessfulClear;
 export const MANDALORE_UNLOCK_UNITS = Object.freeze({
   boKatanMandalor: "MANDALORBOKATAN",
   beskarMando: "THEMANDALORIANBESKARARMOR",
@@ -102,6 +104,7 @@ export function buildMandaloreMemberReadiness(member = {}, catalog = [], index =
     rosterAvailable: member.rosterAvailable === true || asArray(member.units).length > 0,
     profileTitle: text(member.profileTitle || member.title || member.playerTitle),
     playerPortrait: text(member.playerPortrait || member.profilePortrait),
+    playerPortraitUrl: text(member.playerPortraitUrl || member.profilePortraitUrl),
     memberLevel: finite(member.memberLevel, 0),
     memberRole: text(member.memberRole || member.guildRole || member.role),
     boKatanMandalor,
@@ -127,13 +130,15 @@ export function buildGuildMandaloreReadiness(guildBody = {}, catalog = []) {
   const rosterUnavailable = sorted.filter((row) => !row.rosterAvailable).length;
   const potentialSuccessfulClears = ready.length;
   const unlockShortfall = Math.max(0, MANDALORE_UNLOCK_TARGET - potentialSuccessfulClears);
+  const rewardOpportunity = potentialMissionReward('mandalore', potentialSuccessfulClears);
 
   return Object.freeze({
     missionId: "mandalore",
     missionName: "Mandalore Unlock",
     planetName: "Tatooine · Krayt Dragon",
     unlockTarget: MANDALORE_UNLOCK_TARGET,
-    rewardPerSuccessfulClear: Object.freeze({ currency: "GET2", amount: MANDALORE_GET2_PER_CLEAR }),
+    rewardPerSuccessfulClear: MANDALORE_FACT.reward,
+    source: MANDALORE_FACT.source,
     gateText: "Bo-Katan (Mand'alor) R7 + The Mandalorian (Beskar Armor) R7 + any additional Mandalorian R7. 25 successful guild clears unlock Mandalore for that Territory Battle instance.",
     guild: Object.freeze({
       id: text(guildBody?.guild?.id),
@@ -153,7 +158,8 @@ export function buildGuildMandaloreReadiness(guildBody = {}, catalog = []) {
       buffer: ready.length - MANDALORE_UNLOCK_TARGET,
       unlockShortfall,
       potentialSuccessfulClears,
-      potentialGet2: potentialSuccessfulClears * MANDALORE_GET2_PER_CLEAR,
+      potentialGet2: rewardOpportunity?.amount || 0,
+      theoreticalGet2Maximum: rewardOpportunity?.theoreticalGuildMaximum || 0,
       canFieldUnlockCount: ready.length >= MANDALORE_UNLOCK_TARGET,
     }),
   });

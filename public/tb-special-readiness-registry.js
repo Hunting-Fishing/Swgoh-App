@@ -2,35 +2,45 @@ import { buildZeffoMemberReadiness } from "./guild-zeffo-readiness-model.js";
 import { buildMandaloreMemberReadiness } from "./guild-mandalore-readiness-model.js";
 import { buildRevaMemberReadiness } from "./guild-reva-readiness-model.js";
 import { buildWatMemberReadiness } from "./guild-wat-readiness-model.js";
+import { TB_SPECIAL_MISSION_FACTS, tbSpecialMissionFact } from './tb-special-mission-facts.js';
 
 const array = (value) => Array.isArray(value) ? value : [];
 const text = (value) => String(value ?? "").trim();
 const finite = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
 
+const z = TB_SPECIAL_MISSION_FACTS.zeffo;
+const m = TB_SPECIAL_MISSION_FACTS.mandalore;
+const r = TB_SPECIAL_MISSION_FACTS.reva;
+const w = TB_SPECIAL_MISSION_FACTS.wat;
+
 export const TB_SPECIAL_MISSIONS = Object.freeze([
   Object.freeze({
-    id: "zeffo", label: "Zeffo / Bracca", shortLabel: "Zeffo", tbId: "rote", phase: 2,
-    territoryId: "bracca", territoryName: "Bracca", missionId: "bracca-zeffo-unlock",
-    rewardMode: "unlock", officerTarget: 30, officerRouteMission: "zeffo",
-    gateText: "Cere Junda R7+ and either JKCK R7+ or Baby Cal R7+.",
+    id: "zeffo", label: "Zeffo / Bracca", shortLabel: "Zeffo", tbId: z.tbId, phase: z.phase,
+    territoryId: z.territoryId, territoryName: "Bracca", missionId: "bracca-zeffo-unlock",
+    rewardMode: "unlock", officerTarget: z.unlockTarget, officerRouteMission: "zeffo",
+    reward: z.reward, source: z.source,
+    gateText: "Cere Junda R7+ and either Cal Kestis R7+ or Jedi Knight Cal Kestis R7+.",
   }),
   Object.freeze({
-    id: "mandalore", label: "Mandalore Unlock", shortLabel: "Mandalore", tbId: "rote", phase: 3,
-    territoryId: "tatooine", territoryName: "Tatooine", missionId: "tatooine-mandalore-unlock",
-    rewardMode: "unlock", officerTarget: 25, officerRouteMission: "mandalore",
+    id: "mandalore", label: "Mandalore Unlock", shortLabel: "Mandalore", tbId: m.tbId, phase: m.phase,
+    territoryId: m.territoryId, territoryName: "Tatooine", missionId: "tatooine-mandalore-unlock",
+    rewardMode: "unlock", officerTarget: m.unlockTarget, officerRouteMission: "mandalore",
+    reward: m.reward, source: m.source,
     gateText: "Bo-Katan (Mand'alor) R7+ + Beskar Mando R7+ + any additional Mandalorian R7+.",
   }),
   Object.freeze({
-    id: "reva", label: "Reva Shard Mission", shortLabel: "Reva", tbId: "rote", phase: 3,
-    territoryId: "tatooine", territoryName: "Tatooine", missionId: "tatooine-reva",
+    id: "reva", label: "Reva Shard Mission", shortLabel: "Reva", tbId: r.tbId, phase: r.phase,
+    territoryId: r.territoryId, territoryName: "Tatooine", missionId: "tatooine-reva",
     rewardMode: "shards", officerTarget: null, officerRouteMission: "reva",
+    reward: r.reward, source: r.source,
     gateText: "Grand Inquisitor R7+ plus four additional Inquisitorius R7+.",
   }),
   Object.freeze({
-    id: "wat", label: "Wat Tambor Shard Mission", shortLabel: "Wat", tbId: "geo-separatist", phase: 3,
-    territoryId: "p3-middle", territoryName: "Battleground", missionId: "s3",
+    id: "wat", label: "Wat Tambor Shard Mission", shortLabel: "Wat", tbId: w.tbId, phase: w.phase,
+    territoryId: w.territoryId, territoryName: "Battleground", missionId: "s3",
     rewardMode: "shards", officerTarget: null, officerRouteMission: "wat",
-    gateText: "All five Geonosians at 7★ and at least 16,500 character GP each.",
+    reward: w.reward, source: w.source,
+    gateText: "Geonosian Brood Alpha, Soldier, Spy, Poggle and Sun Fac at 7★ and at least 16,500 character GP each.",
   }),
 ]);
 
@@ -87,8 +97,10 @@ function watRequirements(row) {
 }
 
 function missionResult(definition, row, requirements) {
+  const facts = tbSpecialMissionFact(definition.id);
   return Object.freeze({
     ...definition,
+    facts,
     status: row.status,
     upgradeText: row.upgradeText,
     priorityScore: finite(row.priorityScore, 0),
