@@ -1,10 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  FALLBACK_GAMEDATA_URL,
+  installGameDataRegistry,
   installRegistry,
+  normalizeGameDataPortrait,
   normalizePortraitId,
   playerPortraitTexture,
   portraitRegistrySize,
+  portraitRegistryStatus,
   resolvePlayerPortraitUrl,
   trustedPortraitUrl,
 } from '../public/guild-player-portrait-registry.js';
@@ -25,6 +29,7 @@ test('build-time portrait normalization maps game portrait ID to dedicated asset
 test('portrait normalization rejects malformed IDs and texture keys', () => {
   assert.equal(normalizePortrait({ id: 'bad', icon: 'tex.vanity_yoda' }), null);
   assert.equal(normalizePortrait({ id: 'PLAYERPORTRAIT_TEST', icon: 'javascript:alert(1)' }), null);
+  assert.equal(normalizeGameDataPortrait({ id: 'PLAYERPORTRAIT_TEST', icon: 'javascript:alert(1)' }), null);
 });
 
 test('browser portrait registry resolves only trusted same-origin or game-asset URLs', () => {
@@ -39,4 +44,17 @@ test('browser portrait registry resolves only trusted same-origin or game-asset 
   assert.equal(resolvePlayerPortraitUrl('PLAYERPORTRAIT_EVIL'), '');
   assert.equal(trustedPortraitUrl('/assets/local.png'), '/assets/local.png');
   assert.equal(trustedPortraitUrl('https://example.com/nope.png'), '');
+});
+
+test('public gamedata fallback can build the same trusted portrait registry when local cache is empty', () => {
+  installGameDataRegistry({ data: [
+    { id: 'PLAYERPORTRAIT_DEFAULT', icon: 'tex.vanity_clonesergeant' },
+    { id: 'PLAYERPORTRAIT_JEDIMASTER', icon: 'tex.vanity_yoda' },
+    { id: 'bad', icon: 'tex.vanity_bad' },
+  ] });
+  assert.equal(portraitRegistrySize(), 2);
+  assert.equal(resolvePlayerPortraitUrl('PLAYERPORTRAIT_DEFAULT'), 'https://game-assets.swgoh.gg/tex.vanity_clonesergeant.png');
+  assert.equal(playerPortraitTexture('PLAYERPORTRAIT_JEDIMASTER'), 'tex.vanity_yoda');
+  assert.equal(portraitRegistryStatus().source, 'public-gamedata-fallback');
+  assert.match(FALLBACK_GAMEDATA_URL, /^https:\/\/raw\.githubusercontent\.com\/swgoh-utils\/gamedata\//);
 });
