@@ -1,6 +1,13 @@
 const PATH = '/guild/operations';
 const ALLY_STORAGE_KEY = 'swgoh:guild-route-ally-code';
-const state = { catalog: null, roster: null, workspace: null, timer: 0, enhancing: false };
+const state = {
+  catalog: null,
+  roster: null,
+  workspace: null,
+  timer: 0,
+  enhancing: false,
+  immutable: { phase: 'P1', planId: '', versions: [], loading: false, loaded: false, error: '' },
+};
 
 const text = (value) => String(value ?? '').trim();
 const digits = (value) => text(value).replace(/\D/g, '').slice(0, 9);
@@ -54,7 +61,7 @@ function ensureStyle() {
   if (document.querySelector('link[data-guild-ops-professional-style]')) return;
   const link = document.createElement('link');
   link.rel = 'stylesheet';
-  link.href = '/guild-operations-professional.css?v=20260818-ops2';
+  link.href = '/guild-operations-professional.css?v=20260822-immutable1';
   link.dataset.guildOpsProfessionalStyle = 'true';
   document.head.appendChild(link);
 }
@@ -138,6 +145,207 @@ function ensureUnitDatalist() {
 
 function currentPlanId() {
   return text(document.getElementById('opsTbPlanSelect')?.value);
+}
+
+function immutableStatus(version = {}) {
+  if (text(version.status).toLowerCase() === 'cancelled' || version.cancelledAt) return { label: 'CANCELLED', tone: 'risk' };
+  if (version.supersededByRunId) return { label: 'SUPERSEDED', tone: 'warn' };
+  if (version.approvedAt && text(version.approvedPlanHash).toLowerCase() === text(version.planHash).toLowerCase()) return { label: 'APPROVED', tone: 'ready' };
+  return { label: 'REVIEW REQUIRED', tone: 'warn' };
+}
+
+function immutableSummary(version = {}) {
+  const phase = version?.diagnostics?.phaseSummary || {};
+  const assigned = Number(phase.assigned ?? version?.assignments?.length ?? 0);
+  const unfilled = Number(phase.unfilled ?? version?.unfilled?.length ?? 0);
+  const help = Number(phase.helpAssignments ?? 0);
+  return `${assigned} assigned · ${unfilled} unfilled · ${help} HELP/risk`;
+}
+
+function immutableVersionMarkup(entry = {}) {
+  const version = entry?.version || {};
+  const verification = entry?.verification || {};
+  const status = immutableStatus(version);
+  const id = text(version.id);
+  const hash = text(version.planHash);
+  const approved = status.label === 'APPROVED';
+  const actionable = !approved && status.label !== 'CANCELLED' && status.label !== 'SUPERSEDED';
+  return `<article class="guild-ops-immutable-version" data-immutable-version="${escapeHtml(id)}">
+    <header>
+      <div><span class="guild-ops-chip ${status.tone}">${escapeHtml(status.label)}</span><strong>v${Number(version.versionNumber || 0)} · ${escapeHtml(version.rotePhase || state.immutable.phase)}</strong></div>
+      <small>${escapeHtml(version.createdAt ? new Date(version.createdAt).toLocaleString() : '')}</small>
+    </header>
+    <div class="guild-ops-immutable-metrics"><span>${escapeHtml(immutableSummary(version))}</span><span>Hash verification: <b>${verification.valid === true ? 'VALID' : 'FAILED'}</b></span></div>
+    <label class="guild-ops-immutable-hash-label"><span>IMMUTABLE PLAN HASH · FULL 64 CHARACTERS</span><code>${escapeHtml(hash || 'hash unavailable')}</code></label>
+    ${actionable ? `<label class="guild-ops-immutable-review"><input type="checkbox" data-immutable-review="${escapeHtml(id)}"> <span>I reviewed this exact v${Number(version.versionNumber || 0)} artifact and hash.</span></label>` : ''}
+    <div class="guild-ops-actions">
+      ${actionable ? `<button type="button" data-immutable-approve="${escapeHtml(id)}" data-plan-hash="${escapeHtml(hash)}" disabled>Approve Exact Artifact</button><button type="button" class="secondary" data-immutable-cancel="${escapeHtml(id)}">Cancel Version</button>` : ''}
+      ${approved ? '<button type="button" class="secondary" disabled data-immutable-publish-placeholder>Approved · Stage 10 Web Publish Next</button>' : ''}
+    </div>
+  </article>`;
+}
+
+function renderImmutablePanel() {
+  const root = document.querySelector('[data-ops-immutable-review]');
+  if (!root) return;
+  const planId = currentPlanId();
+  const binding = state.workspace?.discordBinding;
+  const versions = state.immutable.versions || [];
+  root.innerHTML = `
+    <div class="kicker">IMMUTABLE OFFICER ASSIGNMENT REVIEW</div>
+    <div class="guild-ops-immutable-head">
+      <div><h3>Website approval for the exact assignment artifact</h3><p>Generate from the saved web plan, inspect the exact immutable hash, then approve. Approval never publishes automatically.</p></div>
+      <span class="guild-ops-chip ${binding?.verified ? 'ready' : 'warn'}">${binding?.verified ? 'VERIFIED GUILD BINDING' : 'BINDING REQUIRED'}</span>
+    </div>
+    <div class="guild-ops-grid three">
+      <label class="guild-ops-field"><span>Saved ROTE plan</span><strong>${escapeHtml(planId ? document.getElementById('opsTbPlanSelect')?.selectedOptions?.[0]?.textContent || planId : 'Select a saved plan')}</strong></label>
+      <label class="guild-ops-field"><span>ROTE phase</span><select id="opsImmutablePhase">${['P1','P2','P3','P4','P5','P6'].map((phase) => `<option value="${phase}"${phase === state.immutable.phase ? ' selected' : ''}>${phase}</option>`).join('')}</select></label>
+      <div class="guild-ops-field"><span>Version state</span><strong>${state.immutable.loading ? 'Working…' : `${versions.length} version(s) loaded`}</strong></div>
+    </div>
+    <div class="guild-ops-actions">
+      <button type="button" id="opsImmutableGenerate" ${!planId || state.immutable.loading ? 'disabled' : ''}>Generate Immutable Version</button>
+      <button type="button" id="opsImmutableRefresh" class="secondary" ${!planId || state.immutable.loading ? 'disabled' : ''}>Refresh Version History</button>
+    </div>
+    ${state.immutable.error ? `<div class="guild-ops-inline-result"><span class="guild-ops-chip risk">${escapeHtml(state.immutable.error)}</span></div>` : ''}
+    <div class="guild-ops-immutable-history">${versions.length ? versions.map(immutableVersionMarkup).join('') : `<div class="guild-ops-inline-result">${state.immutable.loaded ? 'No immutable versions exist for this plan and phase yet.' : 'Select a plan and load its immutable history.'}</div>`}</div>`;
+}
+
+async function loadImmutableVersions(force = false) {
+  const planId = currentPlanId();
+  if (!planId) {
+    state.immutable.planId = '';
+    state.immutable.versions = [];
+    state.immutable.loaded = true;
+    renderImmutablePanel();
+    return;
+  }
+  if (!force && state.immutable.loaded && state.immutable.planId === planId) {
+    renderImmutablePanel();
+    return;
+  }
+  state.immutable.loading = true;
+  state.immutable.error = '';
+  state.immutable.planId = planId;
+  renderImmutablePanel();
+  try {
+    const body = await fetchJson(api(`/tb/plans/${planId}/assignment-versions?phase=${encodeURIComponent(state.immutable.phase)}`));
+    state.immutable.versions = Array.isArray(body?.versions) ? body.versions : [];
+    state.immutable.loaded = true;
+  } catch (error) {
+    state.immutable.versions = [];
+    state.immutable.loaded = true;
+    state.immutable.error = error?.message || 'Immutable version history is unavailable.';
+  } finally {
+    state.immutable.loading = false;
+    renderImmutablePanel();
+  }
+}
+
+async function generateImmutableVersion() {
+  const planId = currentPlanId();
+  if (!planId || state.immutable.loading) return;
+  state.immutable.loading = true;
+  state.immutable.error = '';
+  renderImmutablePanel();
+  try {
+    await fetchJson(api(`/tb/plans/${planId}/immutable-preview`), {
+      method: 'POST',
+      body: JSON.stringify({ phase: state.immutable.phase }),
+    });
+    state.immutable.loaded = false;
+    await loadImmutableVersions(true);
+  } catch (error) {
+    state.immutable.error = error?.message || 'Immutable preview creation failed.';
+    state.immutable.loading = false;
+    renderImmutablePanel();
+  }
+}
+
+async function approveImmutableVersion(runId, planHash) {
+  if (!runId || !/^[0-9a-f]{64}$/i.test(planHash) || state.immutable.loading) return;
+  state.immutable.loading = true;
+  state.immutable.error = '';
+  renderImmutablePanel();
+  try {
+    await fetchJson(api(`/tb/assignment-versions/${runId}/approve`), {
+      method: 'POST',
+      body: JSON.stringify({ planHash }),
+    });
+    state.immutable.loaded = false;
+    await loadImmutableVersions(true);
+  } catch (error) {
+    state.immutable.error = error?.message || 'Immutable artifact approval failed.';
+    state.immutable.loading = false;
+    renderImmutablePanel();
+  }
+}
+
+async function cancelImmutableVersion(runId) {
+  if (!runId || state.immutable.loading) return;
+  const reason = window.prompt('Optional cancellation reason for the immutable audit log:', 'Officer replaced this assignment version');
+  if (reason === null) return;
+  state.immutable.loading = true;
+  state.immutable.error = '';
+  renderImmutablePanel();
+  try {
+    await fetchJson(api(`/tb/assignment-versions/${runId}/cancel`), {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    });
+    state.immutable.loaded = false;
+    await loadImmutableVersions(true);
+  } catch (error) {
+    state.immutable.error = error?.message || 'Immutable artifact cancellation failed.';
+    state.immutable.loading = false;
+    renderImmutablePanel();
+  }
+}
+
+function immutableReviewPanel() {
+  let root = document.querySelector('[data-ops-immutable-review]');
+  if (!root) {
+    const anchor = document.getElementById('guildOpsRequirements') || document.querySelector('.guild-ops-shell .guild-ops-card');
+    if (!anchor) return;
+    root = document.createElement('section');
+    root.className = 'guild-ops-card guild-ops-immutable-review-card';
+    root.dataset.opsImmutableReview = 'true';
+    anchor.insertAdjacentElement('beforebegin', root);
+    root.addEventListener('change', (event) => {
+      if (event.target?.id === 'opsImmutablePhase') {
+        state.immutable.phase = event.target.value || 'P1';
+        state.immutable.loaded = false;
+        state.immutable.versions = [];
+        void loadImmutableVersions(true);
+        return;
+      }
+      const reviewed = event.target?.closest?.('[data-immutable-review]');
+      if (reviewed) {
+        const button = root.querySelector(`[data-immutable-approve="${CSS.escape(reviewed.dataset.immutableReview || '')}"]`);
+        if (button) button.disabled = !reviewed.checked;
+      }
+    });
+    root.addEventListener('click', (event) => {
+      if (event.target?.closest?.('#opsImmutableGenerate')) { void generateImmutableVersion(); return; }
+      if (event.target?.closest?.('#opsImmutableRefresh')) { void loadImmutableVersions(true); return; }
+      const approve = event.target?.closest?.('[data-immutable-approve]');
+      if (approve) { void approveImmutableVersion(approve.dataset.immutableApprove, approve.dataset.planHash); return; }
+      const cancel = event.target?.closest?.('[data-immutable-cancel]');
+      if (cancel) void cancelImmutableVersion(cancel.dataset.immutableCancel);
+    });
+  }
+  const select = document.getElementById('opsTbPlanSelect');
+  if (select && select.dataset.immutableReviewBound !== 'true') {
+    select.dataset.immutableReviewBound = 'true';
+    select.addEventListener('change', () => {
+      state.immutable.planId = '';
+      state.immutable.loaded = false;
+      state.immutable.versions = [];
+      state.immutable.error = '';
+      void loadImmutableVersions(true);
+    });
+  }
+  renderImmutablePanel();
+  if (!state.immutable.loading && (!state.immutable.loaded || state.immutable.planId !== currentPlanId())) void loadImmutableVersions();
 }
 
 async function mutateTbPlan(mutator) {
@@ -318,6 +526,7 @@ async function enhance() {
     if (!state.workspace || !state.catalog || !state.roster) await loadReferenceData();
     injectFreshnessBar();
     ensureUnitDatalist();
+    immutableReviewPanel();
     enhanceIgnoreField('opsIgnoredMissions', 'missions');
     enhanceIgnoreField('opsIgnoredPlatoons', 'Operations');
     requirementEditor();
@@ -347,6 +556,7 @@ function install() {
   window.addEventListener('swgoh:guild-command-snapshot', () => {
     state.workspace = null;
     state.roster = null;
+    state.immutable.loaded = false;
     schedule();
   });
 }
