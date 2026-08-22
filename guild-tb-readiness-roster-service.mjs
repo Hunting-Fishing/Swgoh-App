@@ -1,5 +1,6 @@
 import { canonicalRosterService } from "./canonical-roster-service.mjs";
 import { supabaseCoreStore } from "./supabase-core-store.mjs";
+import { stripFactionDecorators, unitFactionKeys } from "./public/guild-tb-faction-tags.js";
 
 const PAGE_SIZE = 1000;
 const MAX_ROWS = 5000;
@@ -37,27 +38,8 @@ function normalizeAllyCode(value) {
   return allyCode;
 }
 
-function tagText(value) {
-  if (value && typeof value === "object") return clean(value.name || value.label || value.displayName || value.id || value.categoryId || value.tag);
-  return clean(value);
-}
-
-function normalizeCategory(value) {
-  let key = tagText(value).toLowerCase().replace(/[^a-z0-9]+/g, "");
-  for (const prefix of ["affiliation", "faction", "category", "tag"]) {
-    if (key.startsWith(prefix)) {
-      key = key.slice(prefix.length);
-      break;
-    }
-  }
-  return key;
-}
-
-function unitCategoryKeys(unit = {}) {
-  return [...asArray(unit.categories), ...asArray(unit.factions), ...asArray(unit.tags)]
-    .map(normalizeCategory)
-    .filter(Boolean);
-}
+const normalizeCategory = stripFactionDecorators;
+const unitCategoryKeys = unitFactionKeys;
 
 function relevantCatalogRows(catalog = []) {
   const explicit = new Set(TB_READINESS_EXPLICIT_BASE_IDS);
