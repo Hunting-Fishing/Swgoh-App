@@ -40,13 +40,19 @@ function helpCount(assignments) {
 function requireContext(context = {}) {
   const guildId = text(context?.guild?.id || context?.guildId);
   const actorUserId = text(context?.userId);
-  const discordGuildId = text(context?.discordGuildId);
+  const discordCandidate = text(context?.discordGuildId);
+  const discordGuildId = /^\d{16,22}$/.test(discordCandidate) ? discordCandidate : '';
   const seedAllyCode = text(context?.seedAllyCode).replace(/\D/g, '');
   if (!guildId) throw serviceError('Guild context is required.', 400, 'GUILD_CONTEXT_REQUIRED');
   if (!actorUserId) throw serviceError('Officer user context is required.', 401, 'OFFICER_CONTEXT_REQUIRED');
-  if (!/^\d{16,22}$/.test(discordGuildId)) throw serviceError('Bound Discord Guild context is required.', 409, 'DISCORD_GUILD_REQUIRED');
-  if (!/^\d{9}$/.test(seedAllyCode)) throw serviceError('Bound SWGOH Guild Ally Code is required.', 409, 'SWGOH_GUILD_BINDING_REQUIRED');
-  return Object.freeze({ guildId, actorUserId, discordGuildId, seedAllyCode });
+  if (!/^\d{9}$/.test(seedAllyCode)) throw serviceError('A current SWGOH Guild member Ally Code is required.', 409, 'SWGOH_GUILD_BINDING_REQUIRED');
+  return Object.freeze({
+    guildId,
+    actorUserId,
+    discordGuildId,
+    discordBound: Boolean(discordGuildId),
+    seedAllyCode,
+  });
 }
 
 function compactGuildState(guild = {}) {
@@ -217,20 +223,24 @@ export function createTbStage9PlanPreviewService(options = {}) {
   });
 
   async function readControlSnapshot(context) {
-    const stateStatus = typeof stateStore?.status === 'function' ? stateStore.status() : null;
-    if (!stateStatus?.enabled || !stateStatus?.durable || typeof stateStore?.readGuild !== 'function') {
-      throw serviceError('Durable Discord planning state is unavailable.', 503, 'DISCORD_PLANNING_STATE_UNAVAILABLE');
-    }
-    const guildState = await stateStore.readGuild(context.discordGuildId);
-    if (!guildState) throw serviceError('Durable Discord Guild state was not found.', 409, 'DISCORD_GUILD_STATE_NOT_FOUND');
-
+    let guildState = {};
     let reservationState = {};
-    const reservationStatus = typeof reservationStore?.status === 'function' ? reservationStore.status() : null;
-    if (reservationStatus?.enabled || reservationStatus?.durable) {
-      if (!reservationStatus?.enabled || !reservationStatus?.durable || typeof reservationStore?.readGuild !== 'function') {
-        throw serviceError('Durable hard-reservation state is configured but unavailable.', 503, 'HARD_RESERVATION_STATE_UNAVAILABLE');
+
+    if (context.discordBound) {
+      const stateStatus = typeof stateStore?.status === 'function' ? stateStore.status() : null;
+      if (!stateStatus?.enabled || !stateStatus?.durable || typeof stateStore?.readGuild !== 'function') {
+        throw serviceError('A verified Discord Guild is bound, but its durable planning state is unavailable.', 503, 'DISCORD_PLANNING_STATE_UNAVAILABLE');
       }
-      reservationState = await reservationStore.readGuild(context.discordGuildId) || {};
+      guildState = await stateStore.readGuild(context.discordGuildId);
+      if (!guildState) throw serviceError('Verified Discord Guild state was not found.', 409, 'DISCORD_GUILD_STATE_NOT_FOUND');
+
+      const reservationStatus = typeof reservationStore?.status === 'function' ? reservationStore.status() : null;
+      if (reservationStatus?.enabled || reservationStatus?.durable) {
+        if (!reservationStatus?.enabled || !reservationStatus?.durable || typeof reservationStore?.readGuild !== 'function') {
+          throw serviceError('Durable hard-reservation state is configured but unavailable.', 503, 'HARD_RESERVATION_STATE_UNAVAILABLE');
+        }
+        reservationState = await reservationStore.readGuild(context.discordGuildId) || {};
+      }
     }
 
     const [players, memberControls, donationPreferences] = await Promise.all([
@@ -252,6 +262,7 @@ export function createTbStage9PlanPreviewService(options = {}) {
     ]);
 
     return Object.freeze({
+      discordBound: context.discordBound === true,
       discordGuild: compactGuildState(guildState),
       hardReservations: compactReservationState(reservationState),
       players: Object.freeze(stableRows(players)),
@@ -303,13 +314,15 @@ export function createTbStage9PlanPreviewService(options = {}) {
     const controlsBefore = await readControlSnapshot(context);
     const controlsBeforeHash = digest(controlsBefore);
 
-    // Stage 8 remains the authoritative live source hydration path for the Guild roster,
-    // current Operations requirements and mission-safety protections. Stage 9 then reruns
-    // the shared web parity planner with the persisted web-plan configuration instead of
-    // silently discarding or rejecting those officer controls.
+    // The live service is reused only for canonical Guild roster, Operation requirements,
+    // mission-safety protections and source freshness. A website-only request supplies no
+    // Discord interaction and resolves through the explicit Ally Code fallback. If a verified
+    // Discord Guild is bound, its durable controls are included and remain fail-closed.
     const planner = await live.buildPlan({
       allyCode: context.seedAllyCode,
-      interaction: input.interaction,
+      interaction: context.discordBound
+        ? { ...object(input.interaction), guild_id: context.discordGuildId }
+        : {},
       redundancyTarget: Number(config?.redundancyTarget || 2),
     });
 
@@ -357,6 +370,8 @@ export function createTbStage9PlanPreviewService(options = {}) {
     const plannerInputs = Object.freeze({
       contract: 'stage9-web-discord-parity-v2',
       sourceHydrationContract: 'stage8-discord-mission-safe-v1',
+      planningMode: context.discordBound ? 'website-plus-discord-controls' : 'website-only',
+      discordBound: context.discordBound,
       phase,
       guildBindingSource: text(planner?.guildBindingSource),
       redundancyTarget: Number(config?.redundancyTarget || 2),
@@ -388,6 +403,8 @@ export function createTbStage9PlanPreviewService(options = {}) {
     const diagnostics = Object.freeze({
       plannerContract: plannerInputs.contract,
       sourceHydrationContract: plannerInputs.sourceHydrationContract,
+      planningMode: plannerInputs.planningMode,
+      discordBound: plannerInputs.discordBound,
       requestedPhase: phase,
       strategy: text(parityPlan?.strategy || planner?.plan?.strategy),
       phaseSummary: Object.freeze({
@@ -408,6 +425,7 @@ export function createTbStage9PlanPreviewService(options = {}) {
         unavailableMembers: effectiveControls.ignoredMembers.length,
         hardReservations: effectiveControls.reservations.length,
         preassignments: preAssignments.length,
+        discordBound: context.discordBound,
         sourceStage8: Object.freeze({ ...object(planner?.planningControls) }),
       }),
       source: Object.freeze({
@@ -437,6 +455,8 @@ export function createTbStage9PlanPreviewService(options = {}) {
         updatedAt: text(sourcePlan.updated_at),
       }),
       phase,
+      planningMode: diagnostics.planningMode,
+      discordBound: diagnostics.discordBound,
       inputFingerprint,
       version: created.version,
       verification: created.verification,
