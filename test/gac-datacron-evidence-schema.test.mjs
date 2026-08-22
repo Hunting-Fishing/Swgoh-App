@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const sql = await readFile(new URL('../supabase/migrations/20260822070000_gac_datacron_battle_evidence.sql', import.meta.url), 'utf8');
+const hardening = await readFile(new URL('../supabase/migrations/20260823012000_gac_datacron_battle_evidence_least_privilege.sql', import.meta.url), 'utf8');
 
 test('Datacron evidence schema preserves UNKNOWN/NONE separation and validates JSON payload shapes', () => {
   assert.match(sql, /create table if not exists public\.gac_datacron_battle_evidence/i);
@@ -15,12 +16,20 @@ test('Datacron evidence schema preserves UNKNOWN/NONE separation and validates J
   assert.match(sql, /jsonb_typeof\(metadata\) = 'object'/i);
 });
 
-test('Datacron evidence schema exposes only required service-role write capabilities', () => {
+test('Datacron evidence foundation clears inherited privileges before minimal server grants', () => {
   assert.match(sql, /enable row level security/i);
-  assert.match(sql, /revoke all on table public\.gac_datacron_battle_evidence from anon, authenticated/i);
+  assert.match(sql, /revoke all on table public\.gac_datacron_battle_evidence from anon, authenticated, service_role/i);
   assert.match(sql, /grant select, insert, update on table public\.gac_datacron_battle_evidence to service_role/i);
-  assert.match(sql, /revoke delete, truncate on table public\.gac_datacron_battle_evidence from service_role/i);
+  assert.match(sql, /revoke all on sequence public\.gac_datacron_battle_evidence_id_seq from anon, authenticated, service_role/i);
   assert.match(sql, /grant usage, select on sequence public\.gac_datacron_battle_evidence_id_seq to service_role/i);
+  assert.doesNotMatch(sql, /grant[^;]*(?:delete|truncate|references|trigger)[^;]*service_role/i);
+});
+
+test('additive least-privilege migration hardens already-created warehouses', () => {
+  assert.match(hardening, /revoke all on table public\.gac_datacron_battle_evidence from anon, authenticated, service_role/i);
+  assert.match(hardening, /grant select, insert, update on table public\.gac_datacron_battle_evidence to service_role/i);
+  assert.match(hardening, /revoke all on sequence public\.gac_datacron_battle_evidence_id_seq from anon, authenticated, service_role/i);
+  assert.match(hardening, /grant usage, select on sequence public\.gac_datacron_battle_evidence_id_seq to service_role/i);
 });
 
 test('Datacron evidence indexes support enemy, defender DC, counter and exact matchup lookup', () => {
