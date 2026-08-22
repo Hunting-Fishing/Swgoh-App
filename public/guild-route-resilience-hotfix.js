@@ -64,13 +64,13 @@ function renderDegradedRoute(pathname = location.pathname) {
   if (!route || !target) return;
   const [kicker, title] = route;
   const signature = `degraded:${normalizedPath(pathname)}`;
-  if (target.dataset.guildRouteDegraded === signature) return;
+  if (target.dataset.guildRouteDegraded === signature && target.querySelector("[data-guild-resilience-panel]")) return;
   target.dataset.guildRouteDegraded = signature;
   target.innerHTML = `
     <section class="guild-route-page-heading">
       <div><div class="kicker">${escapeHtml(kicker)}</div><h2>${escapeHtml(title)}</h2><p>The Guild shell is available, but live roster data has not loaded successfully yet.</p></div>
     </section>
-    <section class="guild-page-card">
+    <section class="guild-page-card" data-guild-resilience-panel>
       <div class="workspace-error">
         <strong>Guild data is temporarily unavailable.</strong>
         <span>You can continue moving between Guild sections. Retry the live guild load without reloading the whole site.</span>
